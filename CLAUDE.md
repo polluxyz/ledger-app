@@ -28,15 +28,15 @@
 
 ## 2. 技術選型（已定案，勿擅自更換）
 
-| 層 | 技術 |
-|---|---|
-| 資料庫 | PostgreSQL |
-| 後端框架 | NestJS (TypeScript) |
-| ORM | Prisma |
+| 層       | 技術                                         |
+| -------- | -------------------------------------------- |
+| 資料庫   | PostgreSQL                                   |
+| 後端框架 | NestJS (TypeScript)                          |
+| ORM      | Prisma                                       |
 | 資料驗證 | Zod 與 / 或 NestJS class-validator（DTO 層） |
-| Web 前端 | React + TypeScript + Vite |
-| 行動 App | React Native + Expo (TypeScript) |
-| API 規格 | OpenAPI（由後端產生 / 維護） |
+| Web 前端 | React + TypeScript + Vite                    |
+| 行動 App | React Native + Expo (TypeScript)             |
+| API 規格 | OpenAPI（由後端產生 / 維護）                 |
 
 整個系統以 **TypeScript** 為統一語言，盡量共用型別定義（API 的 request / response 型別應可供前端與 App 重用）。
 
@@ -70,16 +70,19 @@
 
 ### 專案結構（Monorepo）
 
-本專案採 **monorepo**，後端、Web、App 同處一個 repo，便於共用型別與統一管理。建議結構：
+本專案採 **monorepo**，後端、Web、App 同處一個 repo，便於共用型別與統一管理。目前實際結構：
 
 ```
 /
 ├── apps/
-│   ├── api/        # NestJS 後端
-│   ├── web/        # React + Vite 前端
-│   └── mobile/     # React Native + Expo App
+│   ├── api/        # NestJS 後端（已建立）
+│   ├── web/        # React + Vite 前端（待建立）
+│   └── mobile/     # React Native + Expo App（待建立）
 ├── packages/
-│   └── shared/     # 共用 TypeScript 型別、常數、工具（API 型別共享於此）
+│   └── shared/     # 共用 TypeScript 型別、常數、工具（已建立；API 型別共享於此）
+├── docs/
+│   └── specs/      # 功能規格（spec）文件（隨功能開發逐步建立，見「開發工作流程」）
+├── tasks/          # 實作計畫 plan.md 與任務清單 todo.md（隨功能開發建立）
 ├── .github/        # workflows、PR/issue template
 ├── CLAUDE.md
 └── README.md
@@ -88,6 +91,22 @@
 - 跨端共用的型別（特別是 API 的 request / response 型別）放在 `packages/shared`，由各 app 引用，確保前後端型別一致。
 - Workspace 管理使用 **pnpm workspaces**（安裝快、磁碟效率高、monorepo 支援佳）。若專案成長後需要建置快取與任務編排，再評估加入 Turborepo，現階段不引入以免過度複雜。
 - 各 app 可有自己的子 `CLAUDE.md` 補充該層特定約定；根目錄這份負責全局。
+
+### 常用指令
+
+於 repo 根目錄執行（透過 pnpm workspaces 遞迴執行各 package 的對應 script）：
+
+```bash
+pnpm lint          # ESLint 檢查（所有 packages）
+pnpm typecheck     # TypeScript 型別檢查
+pnpm test          # 執行測試
+pnpm build         # 建置
+pnpm format        # Prettier 格式化所有檔案
+pnpm format:check  # 檢查格式（CI 用，不寫入）
+```
+
+- 只針對單一 package 執行：`pnpm --filter <package-name> <script>`（package 名稱以各自 `package.json` 的 `name` 欄位為準）。
+- commit 前至少跑過 `pnpm lint`、`pnpm typecheck`、`pnpm test`（對齊 CI 要求）。
 
 ### AI 功能的擴充設計（重要）
 
@@ -114,7 +133,47 @@ AI 記帳分三段：STT（語音→文字）、NLU（文字→結構化草稿�
 
 ---
 
-## 5. 資料模型原則
+## 5. 開發工作流程（Spec-Driven + Step 門控）
+
+本專案採 **spec 先行**的開發方式，並以「Step 門控」控制節奏。這是學習型專案：開發者要親自理解並掌控每一步，Claude Code 的角色是說明、產出與陪跑，**不是自動完成一切**。
+
+### Spec-Driven 四階段（每階段須經開發者審核通過才前進）
+
+```
+Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──→ Implement（實作）
+     │                │               │                │
+     ▼                ▼               ▼                ▼
+  開發者審核       開發者審核      開發者審核        逐 Step 驗收
+```
+
+1. **Specify**：新功能或重大變更動工前，先在 `docs/specs/` 撰寫 spec，涵蓋：目標與成功樣貌、相關指令、對專案結構的影響、測試策略、界線（Always / Ask first / Never）、**可驗證的成功條件**。動筆前先列出**假設清單**請開發者確認——未說出口的假設是最危險的誤解來源。
+2. **Plan**：spec 核可後，產出技術實作計畫存至 `tasks/plan.md`：主要元件與相依關係、實作順序、風險與對策、各階段驗證點。
+3. **Tasks**：計畫拆成離散任務存至 `tasks/todo.md`；每個任務有明確驗收條件與驗證方式（測試指令、build、手動檢查），依相依順序排列。
+4. **Implement**：依任務清單逐一實作，遵守下方 Step 門控規則。
+
+補充原則：
+
+- **模糊需求必須先轉譯成可驗證的成功條件**（例：「查詢要快」→「交易列表 API 回應 < 500ms」），確認目標正確後才實作。
+- **spec 是活文件**：需求或設計變更時，先更新 spec 再改程式；spec 與程式碼一起進版本控制；PR 描述連回對應的 spec 章節。
+- 單行修正、錯字等自足的小變更不需完整 spec，但仍需先說清楚驗收條件。
+
+### Step 門控規則（必遵守）
+
+1. **絕對不要一次做完所有東西。** 整個專案切分為多個 Phase（見「開發階段」），每個 Phase 再切分為多個 Step。一次只處理一個 Step。
+2. **每個 Step 開工前，必須先向開發者完整說明：**
+   - 這一步要做什麼、為什麼要做
+   - 打算怎麼做（技術方案、要建立 / 修改哪些檔案、要安裝哪些套件）
+   - 預期產出與驗收方式
+   - 有哪些替代方案、為什麼選這個
+3. **說明完後，停下來等開發者明確同意**（例如回覆「同意」「開始」「OK」）**才能動手寫程式。** 若開發者提出修改意見，先更新方案再重新確認。
+4. **每個 Step 完成後：** 展示成果、說明如何測試驗證、列出已知限制，然後詢問是否進入下一步。
+5. **遇到計畫外的問題或需要偏離原方案時，先停下來說明狀況並徵求開發者決定，不要自行變更方向。**
+6. **不要預先建立未來 Phase 才需要的檔案或程式碼**，除非該 Phase 明確要求預留擴充點（如 `LLMProvider` 介面）。
+7. **Git 版本控管（必遵守，詳見「Git / GitHub 開發流程」一節）：** 每個 Step 經開發者驗收同意後才 commit；commit 前先展示 `git status` 與變更摘要。**嚴禁未經同意就 commit，嚴禁自行執行 push、rebase、reset --hard、force push 等操作。**
+
+---
+
+## 6. 資料模型原則
 
 > 詳細 schema 尚在設計中。以下為必須遵守的原則。
 
@@ -126,7 +185,7 @@ AI 記帳分三段：STT（語音→文字）、NLU（文字→結構化草稿�
 
 ---
 
-## 6. 程式碼規範
+## 7. 程式碼規範
 
 ### 通則
 
@@ -148,7 +207,7 @@ AI 記帳分三段：STT（語音→文字）、NLU（文字→結構化草稿�
 
 ---
 
-## 7. 安全性要求（不可妥協）
+## 8. 安全性要求（不可妥協）
 
 - **授權檢查必做**：每個存取帳本 / 交易的端點，都必須驗證當前使用者對該帳本有對應權限。預設拒絕（deny by default）。
 - **資料隔離**：使用者永遠不能讀寫不屬於自己帳本的資料。撰寫查詢時主動以帳本權限過濾。
@@ -159,7 +218,7 @@ AI 記帳分三段：STT（語音→文字）、NLU（文字→結構化草稿�
 
 ---
 
-## 8. API 設計規範
+## 9. API 設計規範
 
 本系統採 **RESTful 風格**，並以 **OpenAPI** 描述（由 NestJS 自動產生）。REST 是設計風格，OpenAPI 是描述該 API 的規格文件，兩者搭配使用。
 
@@ -181,15 +240,18 @@ AI 記帳分三段：STT（語音→文字）、NLU（文字→結構化草稿�
 
 ---
 
-## 9. 測試
+## 10. 測試
 
+- 測試框架：**Jest**（NestJS 內建整合）。
+- 測試位置：單元測試 `*.spec.ts` 與被測程式碼同目錄存放（NestJS 慣例）；e2e 測試放各 app 的 `test/` 目錄（如 `apps/api/test/`）。
+- 執行方式：`pnpm test`（全部）或 `pnpm --filter <package-name> test`（單一 package）。
 - 核心業務邏輯（交易、授權、帳本權限）需有單元測試。
 - 授權與資料隔離邏輯**必須有測試覆蓋**，這是安全性的防線。
 - 新增功能時一併補上測試，勿事後補。
 
 ---
 
-## 10. Git / GitHub 開發流程（企業級標準）
+## 11. Git / GitHub 開發流程（企業級標準）
 
 本專案全程透過 GitHub 進行版本控管，採企業級流程。未來可能開源或商業化，故文件與流程需完整、規範。**即使單人開發也完整走完整流程**——這是練習與展現專業度的核心。
 
@@ -245,8 +307,45 @@ CI 放在 `.github/workflows/`。考量未來開源 / 商業化，預留可擴�
 
 ---
 
-## 11. 與 Claude Code 協作的約定
+## 12. 界線總表（Always / Ask first / Never）
 
+彙總全文規範的快速對照表，方便每次任務快速檢核；細節以各章節為準。
+
+### Always（每次都做）
+
+- 每個 Step 開工前先完整說明並取得同意（見「開發工作流程」）。
+- Commit 前跑 lint、typecheck、測試（對齊 CI）。
+- 對外輸入經 DTO 驗證；帳本相關端點做授權檢查（deny by default）。
+- 資料庫 schema 變更走 Prisma migration。
+- 新增環境變數時同步更新 `.env.example`。
+- 新增功能一併補上測試。
+
+### Ask first（先問過、取得同意才做）
+
+- 任何 git commit（先展示 `git status` 與變更摘要，經驗收同意）。
+- 變更資料庫 schema / 資料模型。
+- 新增相依套件。
+- 修改 CI 設定或 GitHub workflows。
+- 變更 API 介面（並同步提醒前端 / App 受影響之處）。
+- 偏離已核可的 spec 或方案。
+- 技術選型的替換建議（提出理由，不直接替換）。
+
+### Never（絕不做）
+
+- 自行執行 push、rebase、reset --hard、force push。
+- 未經同意就 commit。
+- 提交 `.env`、API key、密鑰等機敏資訊。
+- 金額使用浮點數。
+- 在前端實作業務邏輯。
+- AI 解析結果未經使用者確認直接寫入帳本。
+- 直接 push `main`；手動改資料庫（不走 migration）。
+- 錯誤訊息或日誌洩漏內部細節 / 機敏資訊。
+
+---
+
+## 13. 與 Claude Code 協作的約定
+
+- **依「開發工作流程」章節進行**：spec 先行、一次一個 Step、先說明等同意再動手。
 - 進行任何變更前，先理解相關模組的現有結構，**與既有慣例保持一致**。
 - 涉及架構決策、選型變更、資料模型重大調整時，**先說明方案與取捨，取得確認後再實作**。
 - 一次專注完成一件事；大型任務先拆解步驟再執行。
