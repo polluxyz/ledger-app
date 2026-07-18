@@ -1,0 +1,6 @@
+node_modules
+dist
+build
+coverage
+.expo
+pnpm-lock.yaml
