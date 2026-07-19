@@ -169,7 +169,7 @@ Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──�
 4. **每個 Step 完成後：** 展示成果、說明如何測試驗證、列出已知限制，然後詢問是否進入下一步。
 5. **遇到計畫外的問題或需要偏離原方案時，先停下來說明狀況並徵求開發者決定，不要自行變更方向。**
 6. **不要預先建立未來 Phase 才需要的檔案或程式碼**，除非該 Phase 明確要求預留擴充點（如 `LLMProvider` 介面）。
-7. **Git 版本控管（必遵守，詳見「Git / GitHub 開發流程」一節）：** 每個 Step 經開發者驗收同意後才 commit；commit 前先展示 `git status` 與變更摘要。**嚴禁未經同意就 commit，嚴禁自行執行 push、rebase、reset --hard、force push 等操作。**
+7. **Git 版本控管（必遵守，詳見「Git / GitHub 開發流程」一節）：** 每個 Step 經開發者驗收同意後，即可直接 commit（無需另行展示 `git status` 與變更摘要）。**嚴禁未經驗收同意就 commit，嚴禁自行執行 push、rebase、reset --hard、force push 等操作。**
 
 ---
 
@@ -322,7 +322,7 @@ CI 放在 `.github/workflows/`。考量未來開源 / 商業化，預留可擴�
 
 ### Ask first（先問過、取得同意才做）
 
-- 任何 git commit（先展示 `git status` 與變更摘要，經驗收同意）。
+- 任何 git commit（Step 經驗收同意後即可直接 commit，無需另行展示變更摘要）。
 - 變更資料庫 schema / 資料模型。
 - 新增相依套件。
 - 修改 CI 設定或 GitHub workflows。
