@@ -5,7 +5,9 @@
   "description": "Shared TypeScript types, constants and utilities for api / web / mobile",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
