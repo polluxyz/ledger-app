@@ -34,7 +34,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 5.~9. 由快到慢、由淺到深，任一步失敗就中止並回報
+      # 5. 先建置 shared：它的型別宣告在 dist/，api 的 typecheck 與 test 都依賴它
+      - name: Build shared package
+        run: pnpm --filter @ledger/shared build
+
+      # 6.~10. 由快到慢、由淺到深，任一步失敗就中止並回報
       - name: Check formatting
         run: pnpm format:check
 
