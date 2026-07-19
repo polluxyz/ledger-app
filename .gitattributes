@@ -1,0 +1,2 @@
+# 所有文字檔在任何平台 checkout 一律使用 LF，與 Prettier 及 CI（Linux）一致
+* text=auto eol=lf
