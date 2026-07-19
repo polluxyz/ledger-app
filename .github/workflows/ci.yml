@@ -1,0 +1,51 @@
+name: CI
+
+# 何時觸發這個 workflow
+on:
+  pull_request:
+    branches: [main] # 任何指向 main 的 PR
+  push:
+    branches: [main] # 合併進 main 之後再驗一次
+
+jobs:
+  ci:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest # GitHub 提供的 Linux runner
+
+    steps:
+      # 1. 把這個 repo 的程式碼抓進 runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 安裝 pnpm（版本與 package.json 的 packageManager 一致）
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+
+      # 3. 安裝 Node（版本讀 .node-version），並開啟 pnpm 相依快取
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      # 4. 依 lockfile 安裝相依（--frozen-lockfile：lockfile 與 package.json 不符就直接失敗）
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 5.~9. 由快到慢、由淺到深，任一步失敗就中止並回報
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
