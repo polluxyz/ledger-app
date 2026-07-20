@@ -92,14 +92,14 @@ PrismaModule ──┼──> AuthModule ──> 全域 JWT Guard
 
 ## 4. 風險與對策
 
-| 風險                                                 | 對策                                                                                              |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `bcrypt` 原生模組在 Windows 編譯失敗                 | 優先用預編譯 binary；若仍失敗改用純 JS 的 `bcryptjs`（介面相容，屬 Ask first 的相依變更）         |
-| e2e 測試資料庫的重置與隔離（測試互相污染）           | 專用 `ledger_test` 庫；每輪測試前 `prisma migrate reset`／逐表清空；e2e 序列執行（`--runInBand`） |
-| 註冊流程非原子（建了 User 但帳本失敗）               | 一律包在 `prisma.$transaction` 內，任何一步失敗全部回滾；單元測試覆蓋                             |
-| 授權檢查有漏（某端點忘了掛 guard）                   | guard 全域註冊、以 decorator 豁免（deny by default 的實作形式）；e2e 逐端點驗證 401/403/404       |
-| 「最後一名 OWNER」規則的併發競態                     | 階段一以 DB transaction 內重查成員數處理；極端併發留待未來（單人使用場景風險低）                  |
-| Prisma Client 產生物與 monorepo typecheck 的整合問題 | Client 輸出走預設 `node_modules`；CI 與 typecheck 前先 `prisma generate`（納入 script）           |
+| 風險                                                 | 對策                                                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `bcrypt` 原生模組在 Windows 編譯失敗                 | 優先用預編譯 binary；若仍失敗改用純 JS 的 `bcryptjs`（介面相容，屬 Ask first 的相依變更）                                |
+| e2e 測試資料庫的重置與隔離（測試互相污染）           | 專用 `ledger_test` 庫；每輪測試前 `prisma migrate reset`／逐表清空；e2e 序列執行（`--runInBand`）                        |
+| 註冊流程非原子（建了 User 但帳本失敗）               | 一律包在 `prisma.$transaction` 內，任何一步失敗全部回滾；單元測試覆蓋                                                    |
+| 授權檢查有漏（某端點忘了掛 guard）                   | guard 全域註冊、以 decorator 豁免（deny by default 的實作形式）；e2e 逐端點驗證 401/403/404                              |
+| 「最後一名 OWNER」規則的併發競態                     | 階段一以 DB transaction 內重查成員數處理；極端併發留待未來（單人使用場景風險低）                                         |
+| Prisma Client 產生物與 monorepo typecheck 的整合問題 | Prisma 7 client 產於 `apps/api/src/generated/`（進 `.gitignore`）；CI 與 typecheck 前先 `prisma generate`（納入 script） |
 
 ## 5. 全程驗證節奏
 
