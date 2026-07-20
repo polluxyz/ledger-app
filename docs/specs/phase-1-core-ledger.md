@@ -260,7 +260,7 @@ JWT_EXPIRES_IN=7d
 PORT=3000
 ```
 
-開發環境：**本地安裝 PostgreSQL 17.x**（不用 Docker；由開發者親手安裝，Claude 陪跑說明）。程式僅透過 `DATABASE_URL` 連線，未來部署形態改變不影響程式碼。
+開發環境：**本地安裝 PostgreSQL 18.x**（不用 Docker；由開發者親手安裝，Claude 陪跑說明）。程式僅透過 `DATABASE_URL` 連線，未來部署形態改變不影響程式碼。
 
 ---
 

@@ -12,7 +12,7 @@
 
 ### Step 1：資料庫與 Prisma 地基
 
-- [ ] **1.1 👤 安裝 PostgreSQL 17.x 並建立資料庫**
+- [ ] **1.1 👤 安裝 PostgreSQL 18.x 並建立資料庫**
   - 內容：本機安裝 PostgreSQL；建立 `ledger_dev`、`ledger_test` 兩個資料庫與開發用帳號。
   - 驗收：`psql` 可連線兩個資料庫。
 - [ ] **1.2 安裝 Prisma 並初始化**

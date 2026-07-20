@@ -50,7 +50,7 @@ PrismaModule ──┼──> AuthModule ──> 全域 JWT Guard
 
 ### Step 1：資料庫與 Prisma 地基
 
-- **開發者親手**：安裝 PostgreSQL 17.x、建立 `ledger_dev` 與 `ledger_test` 資料庫（Claude 提供逐步說明）。
+- **開發者親手**：安裝 PostgreSQL 18.x、建立 `ledger_dev` 與 `ledger_test` 資料庫（Claude 提供逐步說明）。
 - 安裝 `prisma` / `@prisma/client`；建立 `apps/api/prisma/schema.prisma`（依 spec §3）；設定 `.env` 與 `.env.example`。
 - 產生首次 migration 與 Prisma Client。
 - **驗證點**：`npx prisma migrate dev` 成功；`npx prisma studio` 可看到空表；`pnpm typecheck` 通過。
