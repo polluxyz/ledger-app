@@ -1,0 +1,92 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum LedgerRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  LedgerMember[]
+  transactions Transaction[]  @relation("TransactionCreator")
+}
+
+model Ledger {
+  id        String   @id @default(uuid())
+  name      String
+  currency  String   @default("TWD") // ISO 4217，階段一僅開放 TWD
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      LedgerMember[]
+  categories   Category[]
+  transactions Transaction[]
+}
+
+model LedgerMember {
+  ledgerId  String
+  userId    String
+  role      LedgerRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([ledgerId, userId])
+}
+
+model Category {
+  id        String          @id @default(uuid())
+  ledgerId  String
+  name      String
+  type      TransactionType
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  ledger       Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([ledgerId, type, name])
+}
+
+model Transaction {
+  id         String          @id @default(uuid())
+  ledgerId   String
+  categoryId String
+  creatorId  String
+  type       TransactionType
+  amount     Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
+  date       DateTime // 消費日期（含時間，查詢以日期區間篩選）
+  note       String?
+  deletedAt  DateTime? // 軟刪除標記
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  ledger   Ledger   @relation(fields: [ledgerId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+  creator  User     @relation("TransactionCreator", fields: [creatorId], references: [id])
+
+  @@index([ledgerId, date])
+  @@index([ledgerId, categoryId])
+}

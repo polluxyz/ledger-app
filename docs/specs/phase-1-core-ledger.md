@@ -243,7 +243,9 @@ Base path：`/api`（版本化留待未來，擴充點見 §9）。標「🔒」
 
 | 套件                                    | 用途                                                                                        |
 | --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `prisma`（dev）/ `@prisma/client`       | ORM 與 migration                                                                            |
+| `prisma`（dev）/ `@prisma/client`       | ORM 與 migration（Prisma 7）                                                                |
+| `@prisma/adapter-pg`                    | Prisma 7 驅動介面卡：執行期 client 經 `pg` 連線 PostgreSQL                                  |
+| `dotenv`（dev）                         | 供 `prisma.config.ts` 載入 `.env`（Prisma 7 不再自動載入）                                  |
 | `@nestjs/config`                        | 環境變數載入與驗證                                                                          |
 | `@nestjs/jwt`                           | JWT 簽發與驗證（採官方現行教學做法：`@nestjs/jwt` + 自訂 Guard，不引入 passport，減少相依） |
 | `bcrypt`（+ `@types/bcrypt`）           | 密碼雜湊                                                                                    |

@@ -4,4 +4,7 @@ packages:
 # Dependency postinstall scripts are blocked by default (supply-chain safety);
 # only explicitly approved packages below may run build scripts.
 allowBuilds:
+  '@prisma/engines': true
+  '@scarf/scarf': false # telemetry-only; no functional build step to run
+  prisma: true
   unrs-resolver: true
