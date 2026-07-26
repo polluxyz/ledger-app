@@ -1,10 +1,14 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // All routes are served under /api; Swagger UI stays at /docs (see below).
+  app.setGlobalPrefix('api');
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -18,6 +22,17 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Ledger API')
+    .setDescription('Personal & family expense tracking API')
+    .setVersion('0.1.0')
+    // Named bearer scheme so controllers can opt in with @ApiBearerAuth('jwt').
+    .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'jwt')
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  // Mounted at /docs (outside the /api prefix), the conventional docs location.
+  SwaggerModule.setup('docs', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
 }

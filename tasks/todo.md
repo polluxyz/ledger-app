@@ -15,25 +15,25 @@
 - [x] **1.1 👤 安裝 PostgreSQL 18.x 並建立資料庫**（2026-07-20 完成：PostgreSQL 18.4）
   - 內容：本機安裝 PostgreSQL；建立 `ledger_dev`、`ledger_test` 兩個資料庫與開發用帳號。
   - 驗收：`psql` 可連線兩個資料庫。
-- [ ] **1.2 安裝 Prisma 並初始化**
+- [x] **1.2 安裝 Prisma 並初始化**（Prisma 7 + pg adapter；含 `prisma.config.ts`）
   - 內容：`apps/api` 加入 `prisma`（dev）與 `@prisma/client`；建立 `prisma/schema.prisma`；`.env`（不入版控）與 `.env.example` 加入 `DATABASE_URL`。
   - 驗收：`npx prisma validate` 通過；`.env.example` 有鍵無值。
-- [ ] **1.3 撰寫 schema 並產生首次 migration**
+- [x] **1.3 撰寫 schema 並產生首次 migration**
   - 內容：依 spec §3 完整定義 enum 與 5 個 model；`prisma migrate dev` 產生首次 migration。
   - 驗收：migration 檔進版控；`prisma studio` 可見全部資料表；重跑 `prisma migrate dev` 無 pending 變更。
 
 ### Step 2：API 基礎設施
 
-- [ ] **2.1 ConfigModule 與環境變數驗證**
+- [x] **2.1 ConfigModule 與環境變數驗證**（Zod；並鎖定 build rootDir 至 src）
   - 內容：`@nestjs/config` 全域載入；以 schema 驗證 `DATABASE_URL`、`JWT_SECRET`、`JWT_EXPIRES_IN`、`PORT`，缺漏即啟動失敗；`.env.example` 同步補齊。
   - 驗收：缺 `JWT_SECRET` 時 `start:dev` 啟動報錯且訊息明確。
-- [ ] **2.2 PrismaModule / PrismaService**
+- [x] **2.2 PrismaModule / PrismaService**（postinstall 自動 `prisma generate`）
   - 內容：全域 PrismaModule；PrismaService 管理連線生命週期（`onModuleInit` 連線、關閉時斷線）。
   - 驗收：`start:dev` 啟動成功且連上 DB（連線失敗有清楚錯誤）。
-- [ ] **2.3 全域 ValidationPipe 與統一錯誤 filter**
+- [x] **2.3 全域 ValidationPipe 與統一錯誤 filter**（含 `forbidNonWhitelisted`）
   - 內容：`class-validator`/`class-transformer`；`ValidationPipe({ whitelist: true, transform: true })`；exception filter 輸出 spec §4 錯誤格式；`packages/shared` 建 `constants/error-codes.ts` 骨架；未知例外一律回 500 通用訊息（不洩漏內部細節）。
   - 驗收：打不存在路徑回統一格式 404；單元測試覆蓋 filter 的格式輸出。
-- [ ] **2.4 Swagger 與 `/api` 前綴，移除 Hello World**
+- [x] **2.4 Swagger 與 `/api` 前綴，移除 Hello World**
   - 內容：全域前綴 `/api`；`@nestjs/swagger` 於 `/docs`；刪除 `app.controller.ts`/`app.service.ts` 與對應測試。
   - 驗收：`/docs` 可開且顯示（目前為空的）API 文件；舊 Hello World 路由消失。
 - [ ] **2.5 👤 PR①：自我 review 後合併**
