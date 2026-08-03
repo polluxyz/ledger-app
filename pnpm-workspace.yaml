@@ -6,5 +6,6 @@ packages:
 allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': false # telemetry-only; no functional build step to run
+  bcrypt: true # native addon; needs its install script to fetch/build the binary
   prisma: true
   unrs-resolver: true

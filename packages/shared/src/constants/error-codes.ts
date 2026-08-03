@@ -19,6 +19,8 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   /** Request conflicts with the current state (duplicate, invariant broken). */
   CONFLICT: 'CONFLICT',
+  /** Registration attempted with an email that is already taken. */
+  EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
   /** Too many requests (rate limited). */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** Unexpected server-side failure; details are never exposed to clients. */
