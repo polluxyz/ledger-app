@@ -1,8 +1,10 @@
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
+import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
 interface CreateArgs {
@@ -16,6 +18,7 @@ describe('AuthService', () => {
     $transaction: jest.Mock;
   };
   let ledgers: { createLedgerForUser: jest.Mock };
+  let jwt: { signAsync: jest.Mock };
   /** Captured argument passed to user.create, so tests avoid `any` on mock.calls. */
   let createArgs: CreateArgs | undefined;
 
@@ -46,7 +49,12 @@ describe('AuthService', () => {
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb({ user: prisma.user })),
     };
     ledgers = { createLedgerForUser: jest.fn() };
-    service = new AuthService(prisma as unknown as PrismaService, ledgers);
+    jwt = { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') };
+    service = new AuthService(
+      prisma as unknown as PrismaService,
+      ledgers,
+      jwt as unknown as JwtService,
+    );
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -127,5 +135,45 @@ describe('AuthService', () => {
     await service.register(dto);
 
     expect(createArgs?.data.passwordHash).toHaveLength(60);
+  });
+
+  describe('login', () => {
+    const loginDto: LoginDto = { email: dto.email, password: dto.password };
+
+    it('issues a JWT (sub + email) for valid credentials', async () => {
+      const passwordHash = await bcrypt.hash(loginDto.password, 10);
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, passwordHash });
+
+      const result = await service.login(loginDto);
+
+      expect(jwt.signAsync).toHaveBeenCalledWith({
+        sub: dbUser.id,
+        email: dbUser.email,
+      });
+      expect(result).toEqual({ accessToken: 'signed.jwt.token' });
+    });
+
+    it('rejects a wrong password with 401 INVALID_CREDENTIALS', async () => {
+      const passwordHash = await bcrypt.hash('the-real-password', 10);
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, passwordHash });
+
+      await expect(
+        service.login({ ...loginDto, password: 'wrong-password' }),
+      ).rejects.toMatchObject({
+        constructor: AppException,
+        errorCode: 'INVALID_CREDENTIALS',
+      });
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown email with the same 401 (no user enumeration)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.login(loginDto)).rejects.toMatchObject({
+        constructor: AppException,
+        errorCode: 'INVALID_CREDENTIALS',
+      });
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
   });
 });

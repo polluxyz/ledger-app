@@ -13,6 +13,8 @@ export const ErrorCode = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   /** No authentication, or the credentials/token are invalid. */
   UNAUTHORIZED: 'UNAUTHORIZED',
+  /** Login failed: wrong email or password (never says which). */
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   /** Authenticated, but not allowed to perform this action. */
   FORBIDDEN: 'FORBIDDEN',
   /** Resource does not exist, or the caller may not know that it does. */
