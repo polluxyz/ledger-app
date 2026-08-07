@@ -6,6 +6,7 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { LedgersService } from '../ledgers/ledgers.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { toAuthUser } from '../users/user.mapper';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
@@ -55,7 +56,7 @@ export class AuthService {
         return created;
       });
 
-      return this.toAuthUser(user);
+      return toAuthUser(user);
     } catch (error) {
       // Unique-constraint race: two concurrent registrations for one email.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -93,14 +94,5 @@ export class AuthService {
 
     const payload: JwtPayload = { sub: user.id, email: user.email };
     return { accessToken: await this.jwt.signAsync(payload) };
-  }
-
-  private toAuthUser(user: { id: string; email: string; name: string; createdAt: Date }): AuthUser {
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      createdAt: user.createdAt.toISOString(),
-    };
   }
 }

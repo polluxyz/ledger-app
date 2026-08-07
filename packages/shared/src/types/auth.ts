@@ -37,3 +37,8 @@ export interface AuthUser {
   /** ISO 8601 timestamp. */
   createdAt: string;
 }
+
+/** Body of PATCH /users/me. */
+export interface UpdateUserRequest {
+  name: string;
+}
