@@ -43,18 +43,18 @@
 
 ## PR② `feature/auth-and-users`（Step 3）
 
-- [ ] **3.1 註冊端點（含自動建個人帳本）**
+- [x] **3.1 註冊端點（含自動建個人帳本）**
   - 內容：`POST /auth/register`；bcrypt 雜湊；`prisma.$transaction` 內完成 User＋個人 Ledger＋OWNER 成員＋預設分類（常數放 shared）；email 重複回 409 `EMAIL_ALREADY_EXISTS`。
   - 驗收：單元測試覆蓋雜湊與原子性（模擬中途失敗全回滾）；回應不含 `passwordHash`。
-- [ ] **3.2 登入端點與 JWT 簽發**
+- [x] **3.2 登入端點與 JWT 簽發**
   - 內容：`POST /auth/login`；驗證密碼、簽發 JWT（`@nestjs/jwt`）；回 `{ accessToken }`；帳密錯誤一律回 401 同一訊息（不洩漏 email 是否存在）。
   - 驗收：單元測試覆蓋成功/失敗路徑。
-- [ ] **3.3 全域 JWT guard 與 `@Public()` decorator**
+- [x] **3.3 全域 JWT guard 與 `@Public()` decorator**
   - 內容：全域 guard 驗 JWT、掛 `request.user`；`@Public()` 豁免 auth 端點；Swagger 加 bearer auth 設定。
-  - 驗收：e2e——無 token 打受保護端點 401；有效 token 通過；auth 端點免 token。
-- [ ] **3.4 Users：`GET/PATCH /users/me`**
+  - 驗收：e2e——無 token 打受保護端點 401；有效 token 通過；auth 端點免 token。（以實際發請求驗證；正式 jest-e2e 併入 Step 7）
+- [x] **3.4 Users：`GET/PATCH /users/me`**
   - 內容：取得/更新（name）自己的資料；DTO 與 shared 型別。
-  - 驗收：e2e——註冊→登入→查me→改名全流程。
+  - 驗收：e2e——註冊→登入→查me→改名全流程。（以實際發請求驗證；正式 jest-e2e 併入 Step 7）
 - [ ] **3.5 👤 PR②：自我 review 後合併**
   - 驗收：CI 全綠；squash merge。
 
