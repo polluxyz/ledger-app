@@ -1,6 +1,7 @@
 import {
   ArgumentsHost,
   BadRequestException,
+  HttpException,
   HttpStatus,
   Logger,
   NotFoundException,
@@ -81,6 +82,21 @@ describe('AllExceptionsFilter', () => {
       errorCode: ErrorCode.VALIDATION_FAILED,
       message: 'Validation failed',
       details: ['amount must be an integer', 'date should not be empty'],
+    });
+  });
+
+  it('replaces the leaky 429 message with a clean one', () => {
+    // ThrottlerException's message is "ThrottlerException: Too Many Requests".
+    filter.catch(
+      new HttpException('ThrottlerException: Too Many Requests', HttpStatus.TOO_MANY_REQUESTS),
+      host,
+    );
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.TOO_MANY_REQUESTS);
+    expect(json).toHaveBeenCalledWith({
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      errorCode: ErrorCode.TOO_MANY_REQUESTS,
+      message: 'Too many requests. Please try again later.',
     });
   });
 
