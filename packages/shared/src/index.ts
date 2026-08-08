@@ -9,3 +9,5 @@ export * from './constants/error-codes';
 export * from './constants/default-categories';
 export * from './types/transaction';
 export * from './types/auth';
+export * from './types/ledger';
+export * from './types/category';

@@ -2,6 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
+import type { LedgersService } from '../ledgers/ledgers.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import type { LoginDto } from './dto/login.dto';
@@ -52,7 +53,7 @@ describe('AuthService', () => {
     jwt = { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') };
     service = new AuthService(
       prisma as unknown as PrismaService,
-      ledgers,
+      ledgers as unknown as LedgersService,
       jwt as unknown as JwtService,
     );
   });

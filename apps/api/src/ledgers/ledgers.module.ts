@@ -1,14 +1,19 @@
 import { Module } from '@nestjs/common';
+import { LedgersController } from './ledgers.controller';
+import { MembersController } from './members.controller';
 import { LedgersService } from './ledgers.service';
+import { LedgerAccessGuard } from './guards/ledger-access.guard';
 
 /**
- * Ledger CRUD endpoints arrive in a later step. For now this module exposes
- * LedgersService so AuthModule can seed a personal ledger at registration
- * time — keeping ledger-creation logic out of AuthService and avoiding a
- * circular dependency.
+ * Owns ledger CRUD, member management, and the ledger authorization guard.
+ * LedgersService is exported so other modules (e.g. AuthModule at
+ * registration) can seed a personal ledger.
  */
 @Module({
-  providers: [LedgersService],
-  exports: [LedgersService],
+  controllers: [LedgersController, MembersController],
+  providers: [LedgersService, LedgerAccessGuard],
+  // LedgerAccessGuard is exported so ledger-scoped modules (categories,
+  // transactions) can reuse the same authorization guard.
+  exports: [LedgersService, LedgerAccessGuard],
 })
 export class LedgersModule {}
