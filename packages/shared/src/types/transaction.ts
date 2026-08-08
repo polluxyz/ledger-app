@@ -6,3 +6,28 @@
  */
 export const TRANSACTION_TYPES = ['EXPENSE', 'INCOME'] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+/** A transaction as returned by the API. */
+export interface Transaction {
+  id: string;
+  type: TransactionType;
+  /** Amount in the ledger currency's minor unit; always a positive integer. */
+  amount: number;
+  /** ISO 8601 timestamp of when the money moved. */
+  date: string;
+  note: string | null;
+  category: { id: string; name: string };
+  /** Who recorded it (display/audit only; any editor may edit any entry). */
+  creator: { id: string; name: string };
+  /** ISO 8601 timestamp of when the row was created. */
+  createdAt: string;
+}
+
+/** Body of POST /ledgers/{ledgerId}/transactions. */
+export interface CreateTransactionRequest {
+  type: TransactionType;
+  amount: number;
+  date: string;
+  categoryId: string;
+  note?: string;
+}

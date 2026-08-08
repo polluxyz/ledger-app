@@ -35,6 +35,8 @@ export const ErrorCode = {
   CATEGORY_NAME_TAKEN: 'CATEGORY_NAME_TAKEN',
   /** A category cannot be deleted while transactions reference it. */
   CATEGORY_IN_USE: 'CATEGORY_IN_USE',
+  /** The chosen category's type does not match the transaction's type. */
+  CATEGORY_TYPE_MISMATCH: 'CATEGORY_TYPE_MISMATCH',
   /** Too many requests (rate limited). */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** Unexpected server-side failure; details are never exposed to clients. */

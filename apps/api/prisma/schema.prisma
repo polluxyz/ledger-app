@@ -83,7 +83,9 @@ model Transaction {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
-  ledger   Ledger   @relation(fields: [ledgerId], references: [id])
+  // Cascade: deleting a ledger removes its transactions. Category stays
+  // Restrict (default) — the app blocks deleting a category still in use.
+  ledger   Ledger   @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id])
   creator  User     @relation("TransactionCreator", fields: [creatorId], references: [id])
 
