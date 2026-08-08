@@ -23,6 +23,14 @@ export const ErrorCode = {
   CONFLICT: 'CONFLICT',
   /** Registration attempted with an email that is already taken. */
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
+  /** Adding a member by an email that no registered user has. */
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  /** The user is already a member of the ledger. */
+  ALREADY_MEMBER: 'ALREADY_MEMBER',
+  /** Action would leave the ledger without any owner. */
+  LAST_OWNER_CANNOT_LEAVE: 'LAST_OWNER_CANNOT_LEAVE',
+  /** A non-owner tried to remove or modify another member. */
+  CANNOT_MANAGE_OTHER_MEMBER: 'CANNOT_MANAGE_OTHER_MEMBER',
   /** Too many requests (rate limited). */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** Unexpected server-side failure; details are never exposed to clients. */
