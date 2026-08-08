@@ -81,19 +81,19 @@
 
 ## PR④ `feature/transactions`（Step 6–7）
 
-- [ ] **6.1 交易新增與明細**
+- [x] **6.1 交易新增與明細**（含 `Transaction→Ledger` cascade migration）
   - 內容：`POST`（EDITOR；金額正整數、`categoryId` 屬同帳本且 type 一致，違者 400/404）；`GET` 明細；`creatorId` 記錄記帳者；shared 型別。
   - 驗收：單元測試——金額與分類一致性驗證；e2e——跨帳本 categoryId 被拒。
-- [ ] **6.2 交易列表（分頁/篩選/排序）**
+- [x] **6.2 交易列表（分頁/篩選/排序）**
   - 內容：`page`/`limit`（預設 1/20、上限 100）、`from`/`to`/`categoryId`/`type` 篩選；`date` 新→舊；回 `{ items, page, limit, total }`。
   - 驗收：e2e——分頁邊界（超出頁數回空陣列）、日期區間與分類篩選正確。
-- [ ] **6.3 交易更新與軟刪除**
+- [x] **6.3 交易更新與軟刪除**
   - 內容：`PATCH` 部分更新（同 6.1 驗證規則）；`DELETE` 設 `deletedAt`；所有查詢過濾 `deletedAt: null`；5.1 的分類引用檢查納入軟刪除交易。
   - 驗收：e2e——軟刪除後列表與明細均不可見；再刪回 404。
-- [ ] **7.1 Rate limiting**
+- [x] **7.1 Rate limiting**（auth 60 秒 5 次；429 訊息清乾淨）
   - 內容：`@nestjs/throttler`；auth 端點收緊（如 60 秒 5 次），其餘寬鬆全域限制。
   - 驗收：e2e——連打登入超限回 429。
-- [ ] **7.2 e2e 全情境補完與最終驗收**
+- [x] **7.2 e2e 全情境補完與最終驗收**（jest-e2e vs `ledger_test`＋CI Postgres service；README 更新）
   - 內容：比對 spec §2 成功條件逐條補齊缺漏的 e2e；README 更新（環境需求、本地啟動步驟、常用指令）；Swagger 標註總檢查（每個 DTO 欄位有型別與範例）。
   - 驗收：spec §2 全部條件逐條打勾＝**階段一完成**。
 - [ ] **7.3 👤 PR④：自我 review 後合併**

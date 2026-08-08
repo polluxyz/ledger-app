@@ -17,7 +17,12 @@ import { TransactionsModule } from './transactions/transactions.module';
       validate: validateEnv,
     }),
     // Lenient site-wide default; auth endpoints tighten this with @Throttle.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    // Disabled under NODE_ENV=test (jest) so e2e's rapid auth calls aren't
+    // throttled; rate limiting is verified separately.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 100 }],
+      skipIf: () => process.env.NODE_ENV === 'test',
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
