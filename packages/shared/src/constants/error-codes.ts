@@ -31,6 +31,10 @@ export const ErrorCode = {
   LAST_OWNER_CANNOT_LEAVE: 'LAST_OWNER_CANNOT_LEAVE',
   /** A non-owner tried to remove or modify another member. */
   CANNOT_MANAGE_OTHER_MEMBER: 'CANNOT_MANAGE_OTHER_MEMBER',
+  /** A category with the same name and type already exists in the ledger. */
+  CATEGORY_NAME_TAKEN: 'CATEGORY_NAME_TAKEN',
+  /** A category cannot be deleted while transactions reference it. */
+  CATEGORY_IN_USE: 'CATEGORY_IN_USE',
   /** Too many requests (rate limited). */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** Unexpected server-side failure; details are never exposed to clients. */

@@ -12,6 +12,8 @@ import { LedgerAccessGuard } from './guards/ledger-access.guard';
 @Module({
   controllers: [LedgersController, MembersController],
   providers: [LedgersService, LedgerAccessGuard],
-  exports: [LedgersService],
+  // LedgerAccessGuard is exported so ledger-scoped modules (categories,
+  // transactions) can reuse the same authorization guard.
+  exports: [LedgersService, LedgerAccessGuard],
 })
 export class LedgersModule {}

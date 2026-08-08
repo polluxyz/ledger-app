@@ -62,16 +62,16 @@
 
 ## PR③ `feature/ledgers-and-categories`（Step 4–5）
 
-- [ ] **4.1 帳本 CRUD**
+- [x] **4.1 帳本 CRUD**（與 4.2 合併實作，對稱 owner 模型）
   - 內容：建立（自動 OWNER＋預設分類，重用 3.1 的 `createLedgerForUser()`）、列表（含自己角色）、明細（含成員）、改名、刪除（`?confirm=名稱`，Cascade）。
   - 驗收：e2e——建立/列表/明細/改名/刪除；confirm 不符回 400。
-- [ ] **4.2 LedgerAccessGuard ＋ `@RequireLedgerRole()`**
+- [x] **4.2 LedgerAccessGuard ＋ `@RequireLedgerRole()`**
   - 內容：查成員資格——非成員 404、角色不足 403；角色層級 OWNER > EDITOR > VIEWER；掛上所有 `/ledgers/{ledgerId}/**` 端點。
   - 驗收：單元測試覆蓋角色判定矩陣；e2e——非成員存取他人帳本 404。
-- [ ] **4.3 成員管理**
+- [x] **4.3 成員管理**（對稱 owner + 最後 owner 保護；決策見 spec §4）
   - 內容：成員列表；以 email 加入已註冊使用者（查無 404、已是成員 409）；改角色；移除/退出；最後 OWNER 保護（409 `LAST_OWNER_CANNOT_LEAVE`，DB transaction 內重查）。
   - 驗收：單元測試覆蓋最後 OWNER 各情境（退出/降級/被移除）；e2e——owner 管理成員、editor/viewer 被拒 403。
-- [ ] **5.1 分類 CRUD 與預設分類補完**
+- [x] **5.1 分類 CRUD 與預設分類補完**（獨立 CategoriesModule）
   - 內容：列表（`?type=` 篩選）、新增/改名（EDITOR，同帳本同型別名稱唯一 409）、刪除（有交易引用 409——引用檢查先行，交易表此時尚空）。
   - 驗收：e2e——新帳本自帶預設分類；viewer 寫入 403；重複名稱 409。
 - [ ] **5.2 👤 PR③：自我 review 後合併**
