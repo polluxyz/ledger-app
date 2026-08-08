@@ -32,6 +32,19 @@ export interface CreateTransactionRequest {
   note?: string;
 }
 
+/**
+ * Body of PATCH /ledgers/{ledgerId}/transactions/{transactionId}.
+ * All fields optional; only the supplied ones are updated. The resulting
+ * type and category must still be consistent.
+ */
+export interface UpdateTransactionRequest {
+  type?: TransactionType;
+  amount?: number;
+  date?: string;
+  categoryId?: string;
+  note?: string;
+}
+
 /** Query parameters for GET /ledgers/{ledgerId}/transactions. */
 export interface ListTransactionsQuery {
   /** 1-based page number (default 1). */

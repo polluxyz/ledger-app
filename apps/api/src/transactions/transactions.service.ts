@@ -39,6 +39,14 @@ interface CreateTransactionInput {
   note?: string;
 }
 
+interface UpdateTransactionInput {
+  type?: TransactionType;
+  amount?: number;
+  date?: string;
+  categoryId?: string;
+  note?: string;
+}
+
 @Injectable()
 export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -52,20 +60,7 @@ export class TransactionsService {
     creatorId: string,
     input: CreateTransactionInput,
   ): Promise<Transaction> {
-    const category = await this.prisma.category.findUnique({
-      where: { id: input.categoryId },
-    });
-    // 404 (not 400) for a category outside this ledger: do not leak its existence.
-    if (!category || category.ledgerId !== ledgerId) {
-      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Category not found.');
-    }
-    if (category.type !== input.type) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.CATEGORY_TYPE_MISMATCH,
-        "The category's type does not match the transaction type.",
-      );
-    }
+    await this.assertCategoryConsistent(ledgerId, input.categoryId, input.type);
 
     const transaction = await this.prisma.transaction.create({
       data: {
@@ -123,6 +118,84 @@ export class TransactionsService {
         ...(to ? { lte: new Date(to) } : {}),
       },
     };
+  }
+
+  /**
+   * Partially updates a transaction (shared-ledger model: any editor may edit
+   * any entry). The resulting type/category pair is re-validated so an update
+   * can never leave a transaction pointing at a mismatched category.
+   */
+  async update(
+    ledgerId: string,
+    transactionId: string,
+    input: UpdateTransactionInput,
+  ): Promise<Transaction> {
+    const existing = await this.findActive(ledgerId, transactionId);
+
+    // Only re-check consistency when type or category could have changed.
+    if (input.type !== undefined || input.categoryId !== undefined) {
+      const finalType = input.type ?? existing.type;
+      const finalCategoryId = input.categoryId ?? existing.categoryId;
+      await this.assertCategoryConsistent(ledgerId, finalCategoryId, finalType);
+    }
+
+    const updated = await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        ...(input.note !== undefined ? { note: input.note } : {}),
+      },
+      include: TRANSACTION_INCLUDE,
+    });
+    return this.toTransaction(updated);
+  }
+
+  /** Soft-deletes a transaction (sets deletedAt); the row is kept for audit. */
+  async remove(ledgerId: string, transactionId: string): Promise<void> {
+    await this.findActive(ledgerId, transactionId);
+    await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /**
+   * Loads a non-deleted transaction in the ledger or throws 404. Shared by
+   * update/remove so a missing, soft-deleted, or cross-ledger id is uniformly
+   * invisible.
+   */
+  private async findActive(ledgerId: string, transactionId: string) {
+    const existing = await this.prisma.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
+    if (!existing) {
+      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
+    }
+    return existing;
+  }
+
+  private async assertCategoryConsistent(
+    ledgerId: string,
+    categoryId: string,
+    type: TransactionType,
+  ): Promise<void> {
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+    });
+    // 404 (not 400) for a category outside this ledger: do not leak its existence.
+    if (!category || category.ledgerId !== ledgerId) {
+      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Category not found.');
+    }
+    if (category.type !== type) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.CATEGORY_TYPE_MISMATCH,
+        "The category's type does not match the transaction type.",
+      );
+    }
   }
 
   /** Returns one non-deleted transaction that belongs to the ledger. */

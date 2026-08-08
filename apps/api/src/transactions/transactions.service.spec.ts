@@ -11,6 +11,7 @@ describe('TransactionsService', () => {
       findFirst: jest.Mock;
       findMany: jest.Mock;
       count: jest.Mock;
+      update: jest.Mock;
     };
   };
 
@@ -42,6 +43,7 @@ describe('TransactionsService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
+        update: jest.fn().mockResolvedValue(joined),
       },
     };
     service = new TransactionsService(prisma as unknown as PrismaService);
@@ -153,6 +155,80 @@ describe('TransactionsService', () => {
         limit: 20,
         total: 1,
       });
+    });
+  });
+
+  describe('update', () => {
+    const existing = {
+      id: 'txn-1',
+      ledgerId,
+      type: 'EXPENSE' as const,
+      categoryId: 'cat-1',
+    };
+
+    it('404s when the transaction is missing or soft-deleted', async () => {
+      prisma.transaction.findFirst.mockResolvedValue(null);
+
+      await expect(service.update(ledgerId, 'txn-1', { amount: 999 })).rejects.toMatchObject({
+        constructor: AppException,
+        errorCode: 'NOT_FOUND',
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('re-validates consistency against the final type when only type changes', async () => {
+      prisma.transaction.findFirst.mockResolvedValue(existing);
+      // Existing category cat-1 is EXPENSE; changing type to INCOME clashes.
+      prisma.category.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        ledgerId,
+        type: 'EXPENSE',
+      });
+
+      await expect(service.update(ledgerId, 'txn-1', { type: 'INCOME' })).rejects.toMatchObject({
+        constructor: AppException,
+        errorCode: 'CATEGORY_TYPE_MISMATCH',
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('skips the consistency check when neither type nor category changes', async () => {
+      prisma.transaction.findFirst.mockResolvedValue(existing);
+
+      await service.update(ledgerId, 'txn-1', { amount: 500, note: 'x' });
+
+      expect(prisma.category.findUnique).not.toHaveBeenCalled();
+      expect(prisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'txn-1' },
+          data: { amount: 500, note: 'x' },
+        }),
+      );
+    });
+  });
+
+  describe('remove (soft delete)', () => {
+    it('sets deletedAt for an active transaction', async () => {
+      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId });
+
+      await service.remove(ledgerId, 'txn-1');
+
+      expect(prisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'txn-1' },
+          data: { deletedAt: expect.any(Date) as Date },
+        }),
+      );
+    });
+
+    it('404s when the transaction is already deleted/missing', async () => {
+      prisma.transaction.findFirst.mockResolvedValue(null);
+
+      await expect(service.remove(ledgerId, 'txn-1')).rejects.toMatchObject({
+        constructor: AppException,
+        errorCode: 'NOT_FOUND',
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
     });
   });
 

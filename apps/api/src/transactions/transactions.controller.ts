@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload, Paginated, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -6,6 +18,7 @@ import { RequireLedgerRole } from '../common/decorators/require-ledger-role.deco
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionsService } from './transactions.service';
 
 @ApiTags('transactions')
@@ -41,5 +54,25 @@ export class TransactionsController {
     @Param('transactionId') transactionId: string,
   ): Promise<Transaction> {
     return this.transactions.getById(ledgerId, transactionId);
+  }
+
+  @Patch(':transactionId')
+  @RequireLedgerRole('EDITOR')
+  update(
+    @Param('ledgerId') ledgerId: string,
+    @Param('transactionId') transactionId: string,
+    @Body() dto: UpdateTransactionDto,
+  ): Promise<Transaction> {
+    return this.transactions.update(ledgerId, transactionId, dto);
+  }
+
+  @Delete(':transactionId')
+  @RequireLedgerRole('EDITOR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(
+    @Param('ledgerId') ledgerId: string,
+    @Param('transactionId') transactionId: string,
+  ): Promise<void> {
+    return this.transactions.remove(ledgerId, transactionId);
   }
 }
