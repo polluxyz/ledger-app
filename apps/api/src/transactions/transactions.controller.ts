@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { JwtPayload, Transaction } from '@ledger/shared';
+import type { JwtPayload, Paginated, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { TransactionsService } from './transactions.service';
 
 @ApiTags('transactions')
@@ -13,6 +14,15 @@ import { TransactionsService } from './transactions.service';
 @Controller('ledgers/:ledgerId/transactions')
 export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
+
+  @Get()
+  @RequireLedgerRole('VIEWER')
+  list(
+    @Param('ledgerId') ledgerId: string,
+    @Query() query: ListTransactionsQueryDto,
+  ): Promise<Paginated<Transaction>> {
+    return this.transactions.list(ledgerId, query);
+  }
 
   @Post()
   @RequireLedgerRole('EDITOR')

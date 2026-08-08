@@ -6,7 +6,12 @@ describe('TransactionsService', () => {
   let service: TransactionsService;
   let prisma: {
     category: { findUnique: jest.Mock };
-    transaction: { create: jest.Mock; findFirst: jest.Mock };
+    transaction: {
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
+    };
   };
 
   const ledgerId = 'ledger-1';
@@ -32,7 +37,12 @@ describe('TransactionsService', () => {
   beforeEach(() => {
     prisma = {
       category: { findUnique: jest.fn() },
-      transaction: { create: jest.fn(), findFirst: jest.fn() },
+      transaction: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
     };
     service = new TransactionsService(prisma as unknown as PrismaService);
   });
@@ -83,6 +93,67 @@ describe('TransactionsService', () => {
       errorCode: 'CATEGORY_TYPE_MISMATCH',
     });
     expect(prisma.transaction.create).not.toHaveBeenCalled();
+  });
+
+  describe('list', () => {
+    it('applies defaults (page 1, limit 20), filters soft-deleted, sorts newest first', async () => {
+      await service.list(ledgerId, {});
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { ledgerId, deletedAt: null },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+          skip: 0,
+          take: 20,
+        }),
+      );
+    });
+
+    it('caps limit at 100 and paginates with skip', async () => {
+      await service.list(ledgerId, { page: 3, limit: 500 });
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 200, take: 100 }),
+      );
+    });
+
+    it('builds a where clause from type, category and date range', async () => {
+      await service.list(ledgerId, {
+        type: 'EXPENSE',
+        categoryId: 'cat-1',
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-31T23:59:59.999Z',
+      });
+
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            ledgerId,
+            deletedAt: null,
+            type: 'EXPENSE',
+            categoryId: 'cat-1',
+            date: {
+              gte: new Date('2026-08-01T00:00:00.000Z'),
+              lte: new Date('2026-08-31T23:59:59.999Z'),
+            },
+          },
+        }),
+      );
+    });
+
+    it('returns items with the pagination envelope', async () => {
+      prisma.transaction.findMany.mockResolvedValue([joined]);
+      prisma.transaction.count.mockResolvedValue(1);
+
+      const result = await service.list(ledgerId, { page: 1, limit: 20 });
+
+      expect(result).toEqual({
+        items: [expect.objectContaining({ id: 'txn-1' })],
+        page: 1,
+        limit: 20,
+        total: 1,
+      });
+    });
   });
 
   it('404s for a missing or soft-deleted transaction on detail', async () => {

@@ -31,3 +31,17 @@ export interface CreateTransactionRequest {
   categoryId: string;
   note?: string;
 }
+
+/** Query parameters for GET /ledgers/{ledgerId}/transactions. */
+export interface ListTransactionsQuery {
+  /** 1-based page number (default 1). */
+  page?: number;
+  /** Page size (default 20, capped at 100). */
+  limit?: number;
+  /** Inclusive lower bound on the transaction date (ISO 8601). */
+  from?: string;
+  /** Inclusive upper bound on the transaction date (ISO 8601). */
+  to?: string;
+  categoryId?: string;
+  type?: TransactionType;
+}
