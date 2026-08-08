@@ -11,3 +11,4 @@ export * from './types/transaction';
 export * from './types/auth';
 export * from './types/ledger';
 export * from './types/category';
+export * from './types/pagination';

@@ -12,6 +12,23 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest # GitHub 提供的 Linux runner
 
+    # e2e 測試需要真的 PostgreSQL；用 service container 起一顆，附帶 ledger_test 資料庫
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ledger
+          POSTGRES_PASSWORD: ledger
+          POSTGRES_DB: ledger_test
+        ports:
+          - 5432:5432
+        # 等 Postgres 就緒再往下跑
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       # 1. 把這個 repo 的程式碼抓進 runner
       - name: Checkout repository
@@ -53,3 +70,11 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # e2e：對上面的 Postgres service 跑真實 API 流程。globalSetup 會先套用
+      # migration；DATABASE_URL / JWT_SECRET 由此步注入（本地則讀 .env.test）。
+      - name: E2E test
+        run: pnpm --filter @ledger/api test:e2e
+        env:
+          DATABASE_URL: postgresql://ledger:ledger@localhost:5432/ledger_test
+          JWT_SECRET: ci-e2e-secret-not-used-in-production

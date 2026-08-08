@@ -1,10 +1,15 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiConflictResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthTokenResponse, AuthUser } from '@ledger/shared';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+
+// Tighter limit on unauthenticated auth endpoints to blunt brute-force and
+// account-enumeration attempts: 5 requests per minute per IP.
+const AUTH_THROTTLE = { default: { ttl: 60_000, limit: 5 } };
 
 @ApiTags('auth')
 @Controller('auth')
@@ -12,6 +17,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('register')
   @ApiConflictResponse({ description: 'Email is already registered.' })
   register(@Body() dto: RegisterDto): Promise<AuthUser> {
@@ -19,6 +25,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   // POST defaults to 201; login creates no resource, so return 200.
   @HttpCode(HttpStatus.OK)

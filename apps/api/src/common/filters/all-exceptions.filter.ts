@@ -21,6 +21,15 @@ const STATUS_TO_ERROR_CODE: Record<number, string> = {
 };
 
 /**
+ * Clean, client-safe messages for framework exceptions whose default message
+ * leaks internals (e.g. ThrottlerException prefixes its class name). Only
+ * applied to non-AppException errors — AppException messages are intentional.
+ */
+const SAFE_STATUS_MESSAGE: Record<number, string> = {
+  [HttpStatus.TOO_MANY_REQUESTS]: 'Too many requests. Please try again later.',
+};
+
+/**
  * Renders every error as the single response shape defined in the API spec.
  *
  * Security: only messages from deliberate HttpExceptions reach the client.
@@ -64,13 +73,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? payload.message.map(String)
         : undefined;
 
+    const isAppException = exception instanceof AppException;
+    const safeMessage = isAppException
+      ? exception.message
+      : (SAFE_STATUS_MESSAGE[statusCode] ?? exception.message);
+
     return {
       statusCode,
-      errorCode:
-        exception instanceof AppException
-          ? exception.errorCode
-          : (STATUS_TO_ERROR_CODE[statusCode] ?? ErrorCode.INTERNAL_ERROR),
-      message: details ? 'Validation failed' : exception.message,
+      errorCode: isAppException
+        ? exception.errorCode
+        : (STATUS_TO_ERROR_CODE[statusCode] ?? ErrorCode.INTERNAL_ERROR),
+      message: details ? 'Validation failed' : safeMessage,
       ...(details ? { details } : {}),
     };
   }
