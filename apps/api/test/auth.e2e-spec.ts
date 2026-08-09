@@ -4,10 +4,15 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createE2EApp, httpServer, PASSWORD, resetDb } from './e2e-utils';
 
+/**
+ * 認證與使用者流程的 e2e：涵蓋註冊（含自動建立個人帳本與預設分類）、重複 email、
+ * 登入取 token 讀 profile、帳密錯誤不洩漏帳號是否存在、未認證存取受保護路由。
+ */
 describe('Auth & Users (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
+  // 整個套件共用一個 app 實例；每個 it 之前清空資料庫確保互不干擾。
   beforeAll(async () => {
     ({ app, prisma } = await createE2EApp());
   });
@@ -25,7 +30,7 @@ describe('Auth & Users (e2e)', () => {
     expect(body).toMatchObject({ email: alice.email, name: 'Alice' });
     expect(body.passwordHash).toBeUndefined();
 
-    // Exactly one ledger, owned by the user, seeded with 12 categories.
+    // 恰好一個帳本、由該使用者擁有（OWNER），並灌入 12 個預設分類。
     const memberships = await prisma.ledgerMember.findMany({
       where: { userId: body.id },
     });

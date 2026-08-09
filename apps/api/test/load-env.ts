@@ -1,8 +1,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 
-// Runs in every jest worker before the app boots. Loads .env.test so the app
-// connects to ledger_test. dotenv does not override variables already present,
-// so in CI (where DATABASE_URL/JWT_SECRET come from the environment) this is a
-// no-op and the CI values win.
+// 在每個 jest worker 啟動 app 之前執行。載入 .env.test，讓 app 連到 ledger_test。
+// dotenv 不會覆蓋「已存在」的環境變數，因此在 CI（DATABASE_URL／JWT_SECRET 來自
+// 環境）中這行等同無作用，CI 的值優先。
 config({ path: resolve(__dirname, '../.env.test') });

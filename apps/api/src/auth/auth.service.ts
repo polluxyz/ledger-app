@@ -10,13 +10,19 @@ import { toAuthUser } from '../users/user.mapper';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
-/** Cost factor for bcrypt; ~100ms per hash on typical hardware. */
+/**
+ * 認證的業務邏輯：註冊、登入、簽發 JWT。所有與安全相關的取捨都集中在這裡，因此
+ * 特別著重兩件事——密碼絕不明文外流（一律經 bcrypt 雜湊），以及登入回應不洩漏
+ * 「某個 email 是否已註冊」。
+ */
+
+/** bcrypt 的成本因子；在一般硬體上每次雜湊約 100ms。 */
 const BCRYPT_ROUNDS = 10;
 
 /**
- * A valid bcrypt hash of a throwaway value, compared against when no user is
- * found so login takes similar time whether or not the email exists — closing
- * a timing side-channel that would reveal which emails are registered.
+ * 一個對隨手字串算出的合法 bcrypt 雜湊。當查無使用者時拿它來比對，好讓登入
+ * 不論 email 是否存在都花費相近的時間——藉此堵住一條會洩漏「哪些 email 已註冊」
+ * 的計時側信道（timing side-channel）。
  */
 const DUMMY_HASH = bcrypt.hashSync('timing-attack-mitigation', BCRYPT_ROUNDS);
 
@@ -29,9 +35,9 @@ export class AuthService {
   ) {}
 
   /**
-   * Registers a user and, in the same database transaction, provisions their
-   * personal ledger (owner membership + default categories). Either everything
-   * commits or nothing does — a user is never left without a ledger.
+   * 註冊使用者，並在同一個資料庫交易（transaction）內，一併備妥他的個人帳本
+   * （owner 成員身分＋預設分類）。整批要嘛全部提交、要嘛全部回滾——絕不會讓
+   * 使用者落在「有帳號卻沒帳本」的狀態。
    */
   async register(dto: RegisterDto): Promise<AuthUser> {
     const existing = await this.prisma.user.findUnique({
@@ -58,7 +64,7 @@ export class AuthService {
 
       return toAuthUser(user);
     } catch (error) {
-      // Unique-constraint race: two concurrent registrations for one email.
+      // 唯一性約束的競態：同一個 email 幾乎同時被兩個註冊請求搶用。
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new AppException(
           HttpStatus.CONFLICT,
@@ -71,17 +77,16 @@ export class AuthService {
   }
 
   /**
-   * Verifies credentials and issues a JWT. A wrong password and an unknown
-   * email fail identically (same 401, same message, similar timing) so the
-   * endpoint never reveals which emails are registered.
+   * 驗證帳密並簽發 JWT。密碼錯誤與 email 不存在的失敗表現完全一致（同樣 401、
+   * 同樣訊息、相近耗時），因此這個端點不會洩漏哪些 email 已註冊。
    */
   async login(dto: LoginDto): Promise<AuthTokenResponse> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
-    // Always run a compare (against a dummy hash when the user is missing) to
-    // keep response time independent of whether the email exists.
+    // 一律執行一次比對（查無使用者時就比對 dummy 雜湊），讓回應時間與
+    // 「email 是否存在」無關。
     const passwordMatches = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_HASH);
 
     if (!user || !passwordMatches) {

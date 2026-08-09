@@ -7,8 +7,12 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
-// Tighter limit on unauthenticated auth endpoints to blunt brute-force and
-// account-enumeration attempts: 5 requests per minute per IP.
+/**
+ * 認證端點：註冊與登入。兩者都用 `@Public()` 豁免全域 JWT guard（尚未登入的人
+ * 本來就無 token），並套用比全域更嚴的流量限制。
+ */
+
+// 對未認證的 auth 端點收緊流量，鈍化暴力破解與帳號枚舉：每個 IP 每分鐘 5 次。
 const AUTH_THROTTLE = { default: { ttl: 60_000, limit: 5 } };
 
 @ApiTags('auth')
@@ -27,7 +31,7 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('login')
-  // POST defaults to 201; login creates no resource, so return 200.
+  // POST 預設回 201；登入不建立任何資源，故改回 200。
   @HttpCode(HttpStatus.OK)
   @ApiUnauthorizedResponse({ description: 'Invalid email or password.' })
   login(@Body() dto: LoginDto): Promise<AuthTokenResponse> {

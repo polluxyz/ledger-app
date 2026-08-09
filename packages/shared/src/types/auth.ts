@@ -1,44 +1,42 @@
-/** Body of POST /auth/register. */
+/** POST /auth/register 的請求 body。 */
 export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
 }
 
-/** Body of POST /auth/login. */
+/** POST /auth/login 的請求 body。 */
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
 /**
- * Successful login/auth response. Wrapped in an object (rather than a bare
- * token string) so future fields such as a refresh token can be added without
- * breaking the contract.
+ * 登入／認證成功的回應。刻意包成物件（而非光禿禿的 token 字串），日後要加入
+ * 例如 refresh token 之類的欄位時，才不會破壞既有契約。
  */
 export interface AuthTokenResponse {
   accessToken: string;
 }
 
-/** Decoded JWT payload. `sub` is the user id (JWT standard claim). */
+/** 解出的 JWT payload。`sub` 是使用者 id（JWT 標準 claim）。 */
 export interface JwtPayload {
   sub: string;
   email: string;
 }
 
 /**
- * A user as returned by the API. Never includes the password hash or any
- * other sensitive field.
+ * API 回傳的使用者形狀。絕不包含密碼雜湊或其他機敏欄位。
  */
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  /** ISO 8601 timestamp. */
+  /** ISO 8601 時間戳。 */
   createdAt: string;
 }
 
-/** Body of PATCH /users/me. */
+/** PATCH /users/me 的請求 body。 */
 export interface UpdateUserRequest {
   name: string;
 }

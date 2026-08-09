@@ -1,6 +1,9 @@
 import { AuthUser } from '@ledger/shared';
 
-/** Projects a DB user row onto the public AuthUser shape (no passwordHash). */
+/**
+ * 把資料庫的 user 資料列投影成對外的 AuthUser 形狀（不含 passwordHash）。
+ * 集中在這一處，避免任何端點不小心把密碼雜湊回傳給客戶端。
+ */
 export function toAuthUser(user: {
   id: string;
   email: string;

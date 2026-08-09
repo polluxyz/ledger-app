@@ -20,6 +20,10 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { ListCategoriesQueryDto } from './dto/list-categories-query.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
+/**
+ * 分類端點，巢狀在 `/ledgers/:ledgerId/categories`。讀取需 VIEWER；
+ * 新增／改名／刪除需 EDITOR。授權由 LedgerAccessGuard + @RequireLedgerRole 把關。
+ */
 @ApiTags('categories')
 @ApiBearerAuth('jwt')
 @UseGuards(LedgerAccessGuard)

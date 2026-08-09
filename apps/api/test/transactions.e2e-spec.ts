@@ -4,6 +4,10 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createE2EApp, firstLedgerId, httpServer, registerAndLogin, resetDb } from './e2e-utils';
 
+/**
+ * 交易的 e2e：建立並驗證分類型別一致性、分頁／日期區間篩選／軟刪除後不可見、
+ * viewer 不得記帳（403）。對照 spec §2 的成功條件逐條驗證。
+ */
 describe('Transactions (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -78,7 +82,7 @@ describe('Transactions (e2e)', () => {
         .send({ type: 'EXPENSE', amount: (i + 1) * 100, date, categoryId: cat });
     }
 
-    // Page 1 of size 2, newest first.
+    // 第 1 頁、每頁 2 筆，新到舊。
     const page1 = await request(server())
       .get(`/api/ledgers/${ledgerId}/transactions?page=1&limit=2`)
       .set(auth(alice.token));
@@ -86,7 +90,7 @@ describe('Transactions (e2e)', () => {
     expect(paged.total).toBe(3);
     expect(paged.items.map((t) => t.amount)).toEqual([300, 200]);
 
-    // Date range filter.
+    // 日期區間篩選。
     const ranged = await request(server())
       .get(
         `/api/ledgers/${ledgerId}/transactions?from=2026-08-04T00:00:00.000Z&to=2026-08-07T00:00:00.000Z`,
@@ -94,7 +98,7 @@ describe('Transactions (e2e)', () => {
       .set(auth(alice.token));
     expect((ranged.body as Paginated<Transaction>).total).toBe(1);
 
-    // Soft-delete the newest, then confirm it disappears from list and detail.
+    // 軟刪除最新一筆，接著確認它從列表與明細都消失。
     const newestId = paged.items[0]!.id;
     const del = await request(server())
       .delete(`/api/ledgers/${ledgerId}/transactions/${newestId}`)

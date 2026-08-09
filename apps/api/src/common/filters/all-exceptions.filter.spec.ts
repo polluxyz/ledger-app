@@ -10,12 +10,17 @@ import { ErrorCode } from '@ledger/shared';
 import { AppException } from '../exceptions/app.exception';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
+/**
+ * AllExceptionsFilter 的單元測試。用假的 response（攔截 status/json）驗證統一錯誤
+ * 格式：AppException 帶自己的 errorCode、內建例外依狀態碼給備援碼、驗證失敗附
+ * details、429 換成乾淨訊息，以及最關鍵的——非預期錯誤絕不外洩內部細節。
+ */
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
   let json: jest.Mock;
   let status: jest.Mock;
   let host: ArgumentsHost;
-  /** Body handed to res.json(), captured with a real type instead of `any`. */
+  /** 交給 res.json() 的 body，用實際型別攔下來（避免 `any`）。 */
   let sentBody: unknown;
 
   beforeEach(() => {
@@ -29,7 +34,7 @@ describe('AllExceptionsFilter', () => {
       switchToHttp: () => ({ getResponse: () => ({ status }) }),
     } as unknown as ArgumentsHost;
 
-    // The filter logs unhandled exceptions; keep test output clean.
+    // filter 會 log 未處理的例外；這裡把 log 靜音，保持測試輸出乾淨。
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
   });
 
@@ -86,7 +91,7 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('replaces the leaky 429 message with a clean one', () => {
-    // ThrottlerException's message is "ThrottlerException: Too Many Requests".
+    // ThrottlerException 的原始訊息是 "ThrottlerException: Too Many Requests"。
     filter.catch(
       new HttpException('ThrottlerException: Too Many Requests', HttpStatus.TOO_MANY_REQUESTS),
       host,

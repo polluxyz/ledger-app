@@ -4,7 +4,13 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** A category row as selected from the database. */
+/**
+ * 分類的業務邏輯。分類永遠隸屬某個帳本，且與交易共用同一種型別（INCOME／
+ * EXPENSE）。兩條主要規則：同一帳本、同一型別下名稱唯一；只要有交易（含已軟
+ * 刪除者）引用，就不得刪除該分類。
+ */
+
+/** 從資料庫選出的分類資料列。 */
 interface CategoryRow {
   id: string;
   ledgerId: string;
@@ -17,7 +23,7 @@ interface CategoryRow {
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Lists a ledger's categories, optionally filtered by type. */
+  /** 列出帳本的分類，可選擇以型別篩選。 */
   async list(ledgerId: string, type?: TransactionType): Promise<Category[]> {
     const categories = await this.prisma.category.findMany({
       where: { ledgerId, ...(type ? { type } : {}) },
@@ -26,7 +32,7 @@ export class CategoriesService {
     return categories.map((category) => this.toCategory(category));
   }
 
-  /** Creates a category. Name must be unique within (ledger, type). */
+  /** 新增分類。名稱在（帳本, 型別）範圍內必須唯一（靠 DB 唯一索引擋重複）。 */
   async create(ledgerId: string, name: string, type: TransactionType): Promise<Category> {
     try {
       const category = await this.prisma.category.create({
@@ -41,7 +47,7 @@ export class CategoriesService {
     }
   }
 
-  /** Renames a category (type is immutable). */
+  /** 分類改名（型別不可變——避免既有交易的型別對應被打亂）。 */
   async rename(ledgerId: string, categoryId: string, name: string): Promise<Category> {
     await this.getOwned(ledgerId, categoryId);
     try {
@@ -58,11 +64,11 @@ export class CategoriesService {
     }
   }
 
-  /** Deletes a category, unless any transaction references it. */
+  /** 刪除分類，除非有任何交易引用它。 */
   async remove(ledgerId: string, categoryId: string): Promise<void> {
     await this.getOwned(ledgerId, categoryId);
 
-    // Count includes soft-deleted transactions: history must stay attributable.
+    // 計數包含已軟刪除的交易：歷史紀錄必須保持可追溯（分類名不能憑空消失）。
     const referencing = await this.prisma.transaction.count({
       where: { categoryId },
     });
@@ -78,8 +84,8 @@ export class CategoriesService {
   }
 
   /**
-   * Loads a category and asserts it belongs to the given ledger. A mismatch is
-   * reported as 404 so callers cannot probe categories in other ledgers.
+   * 載入分類並確認它屬於指定帳本。不符時一律回 404，避免呼叫者藉此探測其他帳本
+   * 裡有哪些分類。
    */
   private async getOwned(ledgerId: string, categoryId: string): Promise<CategoryRow> {
     const category = await this.prisma.category.findUnique({

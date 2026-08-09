@@ -6,9 +6,8 @@ export interface DefaultCategory {
 }
 
 /**
- * Seed categories copied into every new ledger. They are treated as user data
- * (renameable, deletable) rather than fixed system values, which keeps the door
- * open for future i18n and per-ledger customisation.
+ * 每個新帳本都會複製一份的預設分類。它們被視為「使用者資料」（可改名、可刪除），
+ * 而非固定的系統值——如此便為未來的 i18n 與各帳本自訂保留了彈性。
  */
 export const DEFAULT_CATEGORIES: readonly DefaultCategory[] = [
   { name: '餐飲', type: 'EXPENSE' },

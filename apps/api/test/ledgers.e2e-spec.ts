@@ -4,6 +4,11 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createE2EApp, firstLedgerId, httpServer, registerAndLogin, resetDb } from './e2e-utils';
 
+/**
+ * 帳本與成員的 e2e：資料隔離（非成員一律 404）、owner 加成員並依角色把關寫入、
+ * 加入未知／重複 email、最後 owner 保護、刪除需 confirm 相符。此檔集中驗證安全性
+ * 防線的「對外實際表現」。
+ */
 describe('Ledgers & members (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -43,14 +48,14 @@ describe('Ledgers & members (e2e)', () => {
     expect(added.status).toBe(201);
     expect((added.body as LedgerMemberInfo).role).toBe('VIEWER');
 
-    // Viewer cannot rename the ledger.
+    // viewer 不能改帳本名稱（需 OWNER）。
     const denied = await request(server())
       .patch(`/api/ledgers/${ledgerId}`)
       .set(auth(bob.token))
       .send({ name: 'Hacked' });
     expect(denied.status).toBe(403);
 
-    // Owner can.
+    // owner 可以。
     const renamed = await request(server())
       .patch(`/api/ledgers/${ledgerId}`)
       .set(auth(alice.token))

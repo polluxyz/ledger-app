@@ -10,11 +10,23 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * 交易的業務邏輯——整個記帳系統的核心。呼叫進來之前，controller 已完成身分驗證
+ * 與帳本角色授權，因此這裡每個方法拿到的 `ledgerId` 都是呼叫者有權使用的，且所有
+ * 查詢都限定在該帳本內；交易絕不會被跨帳本讀寫。
+ *
+ * 以下貫穿全檔的規則：
+ *   - 金額為正整數（在 DTO 驗證），絕不用浮點數。
+ *   - 刪除採軟刪除（設 `deletedAt`）；每個讀取都以 `deletedAt: null` 過濾。
+ *   - 交易的分類必須屬於同一帳本、且型別一致——新增與更新時都會重新檢查。
+ */
+
+// 分頁預設值與每頁筆數上限（客戶端要求超過 MAX_LIMIT 時會被夾住，而非報錯）。
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-/** A transaction row joined with its category and creator. */
+/** 一筆交易資料列，已 join 其分類與建立者。 */
 interface TransactionRow {
   id: string;
   type: TransactionType;
@@ -26,6 +38,8 @@ interface TransactionRow {
   creator: { id: string; name: string };
 }
 
+// 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀：分類與建立者，
+// 各自只取 id + name（絕不回傳整列）。
 const TRANSACTION_INCLUDE = {
   category: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
@@ -52,8 +66,7 @@ export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Records a transaction in the ledger. The category must belong to the same
-   * ledger and match the transaction's type.
+   * 在帳本中記下一筆交易。分類必須屬於同一帳本、且型別與交易一致。
    */
   async create(
     ledgerId: string,
@@ -78,8 +91,8 @@ export class TransactionsService {
   }
 
   /**
-   * Returns a page of the ledger's non-deleted transactions, newest first,
-   * filtered by the optional date range / category / type.
+   * 回傳帳本中未刪除交易的其中一頁，新到舊排序，並套用可選的日期區間／分類／
+   * 型別篩選。
    */
   async list(ledgerId: string, query: ListTransactionsQuery): Promise<Paginated<Transaction>> {
     const page = query.page ?? DEFAULT_PAGE;
@@ -97,7 +110,7 @@ export class TransactionsService {
       this.prisma.transaction.findMany({
         where,
         include: TRANSACTION_INCLUDE,
-        // Stable order: by date, then creation time to break same-day ties.
+        // 穩定排序：先依日期，再用建立時間打破同一天的並列。
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -121,9 +134,8 @@ export class TransactionsService {
   }
 
   /**
-   * Partially updates a transaction (shared-ledger model: any editor may edit
-   * any entry). The resulting type/category pair is re-validated so an update
-   * can never leave a transaction pointing at a mismatched category.
+   * 部分更新一筆交易（共享帳本模型：任何 editor 都可編輯任何一筆）。合併後會重新
+   * 驗證 type／category 的組合，確保更新不會讓交易指向型別不符的分類。
    */
   async update(
     ledgerId: string,
@@ -132,7 +144,7 @@ export class TransactionsService {
   ): Promise<Transaction> {
     const existing = await this.findActive(ledgerId, transactionId);
 
-    // Only re-check consistency when type or category could have changed.
+    // 只有在 type 或 category 可能被改動時，才重新檢查一致性。
     if (input.type !== undefined || input.categoryId !== undefined) {
       const finalType = input.type ?? existing.type;
       const finalCategoryId = input.categoryId ?? existing.categoryId;
@@ -153,7 +165,7 @@ export class TransactionsService {
     return this.toTransaction(updated);
   }
 
-  /** Soft-deletes a transaction (sets deletedAt); the row is kept for audit. */
+  /** 軟刪除一筆交易（設 deletedAt）；資料列保留以利稽核。 */
   async remove(ledgerId: string, transactionId: string): Promise<void> {
     await this.findActive(ledgerId, transactionId);
     await this.prisma.transaction.update({
@@ -163,9 +175,8 @@ export class TransactionsService {
   }
 
   /**
-   * Loads a non-deleted transaction in the ledger or throws 404. Shared by
-   * update/remove so a missing, soft-deleted, or cross-ledger id is uniformly
-   * invisible.
+   * 載入帳本中某筆未刪除的交易，找不到就丟 404。由 update／remove 共用，讓
+   * 「不存在」「已軟刪除」「屬於別的帳本」這三種 id 一律同樣不可見。
    */
   private async findActive(ledgerId: string, transactionId: string) {
     const existing = await this.prisma.transaction.findFirst({
@@ -185,7 +196,7 @@ export class TransactionsService {
     const category = await this.prisma.category.findUnique({
       where: { id: categoryId },
     });
-    // 404 (not 400) for a category outside this ledger: do not leak its existence.
+    // 分類不屬於此帳本時回 404（而非 400）：不洩漏它是否存在。
     if (!category || category.ledgerId !== ledgerId) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Category not found.');
     }
@@ -198,7 +209,7 @@ export class TransactionsService {
     }
   }
 
-  /** Returns one non-deleted transaction that belongs to the ledger. */
+  /** 回傳帳本中某一筆未刪除的交易。 */
   async getById(ledgerId: string, transactionId: string): Promise<Transaction> {
     const transaction = await this.prisma.transaction.findFirst({
       where: { id: transactionId, ledgerId, deletedAt: null },

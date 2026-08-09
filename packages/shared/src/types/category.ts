@@ -1,24 +1,24 @@
 import type { TransactionType } from './transaction';
 
-/** A category as returned by the API. */
+/** API 回傳的分類形狀。 */
 export interface Category {
   id: string;
   name: string;
   type: TransactionType;
-  /** ISO 8601 timestamp. */
+  /** ISO 8601 時間戳。 */
   createdAt: string;
 }
 
-/** Body of POST /ledgers/{ledgerId}/categories. */
+/** POST /ledgers/{ledgerId}/categories 的請求 body。 */
 export interface CreateCategoryRequest {
   name: string;
   type: TransactionType;
 }
 
 /**
- * Body of PATCH /ledgers/{ledgerId}/categories/{categoryId}.
- * Only the name is editable; changing type would break the type consistency
- * of existing transactions, so a retype means delete + recreate.
+ * PATCH /ledgers/{ledgerId}/categories/{categoryId} 的請求 body。
+ * 只有名稱可改；變更型別會破壞既有交易的型別一致性，因此要「換型別」等同於
+ * 刪除後重建。
  */
 export interface UpdateCategoryRequest {
   name: string;

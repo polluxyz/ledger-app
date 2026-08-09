@@ -25,10 +25,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
   controllers: [AuthController],
   providers: [
     AuthService,
-    // Registered globally: protects every route unless marked @Public().
+    // 以 APP_GUARD 全域註冊：除非標了 @Public()，否則保護每一個路由。
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
-  // Export so JwtService is available to the globally-registered guard.
+  // 匯出 JwtModule，讓全域註冊的 guard 也能取得 JwtService。
   exports: [JwtModule],
 })
 export class AuthModule {}

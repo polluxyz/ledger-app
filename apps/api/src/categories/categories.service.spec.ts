@@ -3,6 +3,11 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CategoriesService } from './categories.service';
 
+/**
+ * CategoriesService 的單元測試（Prisma 全程 mock）：建立、重複名稱對應
+ * CATEGORY_NAME_TAKEN、跨帳本改名回 404、有交易引用時不可刪、無引用可刪、
+ * 列表依型別篩選。
+ */
 describe('CategoriesService', () => {
   let service: CategoriesService;
   let prisma: {

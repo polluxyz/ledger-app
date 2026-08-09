@@ -12,6 +12,11 @@ interface CreateArgs {
   data: { email: string; name: string; passwordHash: string };
 }
 
+/**
+ * AuthService 的單元測試。這裡把 Prisma、LedgersService、JwtService 全部 mock 掉
+ * （不碰真實資料庫），聚焦在服務本身的邏輯：密碼有雜湊、註冊與建帳本的原子性、
+ * 各種失敗如何對應到錯誤碼、登入不做帳號枚舉。
+ */
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
@@ -20,7 +25,7 @@ describe('AuthService', () => {
   };
   let ledgers: { createLedgerForUser: jest.Mock };
   let jwt: { signAsync: jest.Mock };
-  /** Captured argument passed to user.create, so tests avoid `any` on mock.calls. */
+  /** 攔截傳給 user.create 的參數，讓測試不必對 mock.calls 用 `any`。 */
   let createArgs: CreateArgs | undefined;
 
   const dto: RegisterDto = {
@@ -46,7 +51,7 @@ describe('AuthService', () => {
     });
     prisma = {
       user: { findUnique: jest.fn(), create },
-      // Default: run the callback with a tx client that mirrors prisma.user.
+      // 預設：以一個「行為等同 prisma.user」的 tx client 執行 callback。
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb({ user: prisma.user })),
     };
     ledgers = { createLedgerForUser: jest.fn() };
@@ -65,20 +70,20 @@ describe('AuthService', () => {
 
     const result = await service.register(dto);
 
-    // Password was hashed (not stored in plaintext).
+    // 密碼有經過雜湊（不是明文儲存）。
     expect(createArgs?.data.passwordHash).not.toBe(dto.password);
     await expect(bcrypt.compare(dto.password, createArgs?.data.passwordHash ?? '')).resolves.toBe(
       true,
     );
 
-    // Ledger provisioned inside the same transaction.
+    // 帳本在同一個 transaction 內一併備妥。
     expect(ledgers.createLedgerForUser).toHaveBeenCalledWith(
       expect.anything(),
       dbUser.id,
       expect.stringContaining('Alice'),
     );
 
-    // Response contract carries no sensitive fields.
+    // 回應契約不帶任何機敏欄位。
     expect(result).toEqual({
       id: dbUser.id,
       email: dbUser.email,
@@ -102,8 +107,8 @@ describe('AuthService', () => {
     prisma.user.findUnique.mockResolvedValue(null);
     ledgers.createLedgerForUser.mockRejectedValue(new Error('seed failed'));
 
-    // The whole register call rejects; because the work is wrapped in
-    // $transaction, the user insert is rolled back with it.
+    // 整個 register 呼叫會 reject；因為工作包在 $transaction 裡，先前的建立
+    // 使用者也會一起被回滾。
     await expect(service.register(dto)).rejects.toThrow('seed failed');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
