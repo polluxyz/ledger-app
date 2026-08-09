@@ -4,8 +4,7 @@ import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 
 /**
- * Imports LedgersModule to reuse LedgerAccessGuard for its ledger-scoped
- * routes.
+ * 匯入 LedgersModule，以便在帳本範圍的路由上重用 LedgerAccessGuard。
  */
 @Module({
   imports: [LedgersModule],

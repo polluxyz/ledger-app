@@ -5,7 +5,7 @@ import { AppException } from '../../common/exceptions/app.exception';
 import { REQUIRE_LEDGER_ROLE_KEY } from '../../common/decorators/require-ledger-role.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 
-/** Higher number = more privilege. */
+/** 數字越大權限越高，用來比較角色是否達到門檻。 */
 const ROLE_RANK: Record<LedgerRole, number> = {
   VIEWER: 1,
   EDITOR: 2,
@@ -19,13 +19,11 @@ interface LedgerScopedRequest {
 }
 
 /**
- * Enforces ledger membership and role for routes annotated with
- * @RequireLedgerRole(). Runs after the global JwtAuthGuard, so request.user
- * is already set.
+ * 為標了 @RequireLedgerRole() 的路由把關「帳本成員資格與角色」。它在全域
+ * JwtAuthGuard 之後執行，因此 request.user 已就緒。
  *
- * Security: a non-member gets 404 (not 403) so the API never reveals that a
- * ledger they cannot access exists. Deny by default — routes without the
- * decorator are treated as not ledger-scoped and pass through untouched.
+ * 安全性：非成員回 404（而非 403），讓 API 絕不洩漏「有一個你無權存取的帳本
+ * 存在」。預設拒絕——沒標這個裝飾器的路由，視為與帳本無關，直接放行不檢查。
  */
 @Injectable()
 export class LedgerAccessGuard implements CanActivate {
@@ -39,6 +37,7 @@ export class LedgerAccessGuard implements CanActivate {
       REQUIRE_LEDGER_ROLE_KEY,
       [context.getHandler(), context.getClass()],
     );
+    // 沒有 @RequireLedgerRole 的路由＝非帳本範圍，直接放行（此 guard 不管）。
     if (!required) {
       return true;
     }
@@ -47,7 +46,7 @@ export class LedgerAccessGuard implements CanActivate {
     const userId = request.user.sub;
     const ledgerId = request.params.ledgerId;
     if (!ledgerId) {
-      // A @RequireLedgerRole route must have a :ledgerId param; misconfiguration.
+      // 標了 @RequireLedgerRole 的路由一定要有 :ledgerId 參數；走到這裡代表設定錯了。
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
     }
 
@@ -55,7 +54,7 @@ export class LedgerAccessGuard implements CanActivate {
       where: { ledgerId_userId: { ledgerId, userId } },
     });
 
-    // Non-member: 404, not 403 — do not reveal the ledger exists.
+    // 非成員：回 404 而非 403——不洩漏這個帳本存在。
     if (!membership) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
     }
@@ -68,7 +67,7 @@ export class LedgerAccessGuard implements CanActivate {
       );
     }
 
-    // Expose the resolved role to downstream handlers if they need it.
+    // 把解析出的角色掛回 request，供後續 handler 需要時取用。
     request.ledgerRole = membership.role;
     return true;
   }

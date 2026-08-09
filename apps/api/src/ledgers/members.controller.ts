@@ -19,6 +19,11 @@ import { UpdateMemberDto } from './dto/update-member.dto';
 import { LedgerAccessGuard } from './guards/ledger-access.guard';
 import { LedgersService } from './ledgers.service';
 
+/**
+ * 帳本成員管理，巢狀在 `/ledgers/:ledgerId/members`。查看成員需 VIEWER；
+ * 加入／改角色需 OWNER。刪除較特別（見下方 remove）——門檻設 VIEWER，
+ * 好讓任何成員都能退出，是否能移除「他人」則由 service 進一步判斷。
+ */
 @ApiTags('ledger-members')
 @ApiBearerAuth('jwt')
 @UseGuards(LedgerAccessGuard)
@@ -48,8 +53,8 @@ export class MembersController {
     return this.ledgers.updateMemberRole(ledgerId, userId, dto.role);
   }
 
-  // VIEWER is the floor so any member can remove *themselves* (leave);
-  // removing someone else is checked in the service and requires OWNER.
+  // 門檻設 VIEWER，讓任何成員都能移除「自己」（退出）；移除他人則在 service
+  // 內另行檢查，需 OWNER。
   @Delete(':userId')
   @RequireLedgerRole('VIEWER')
   @HttpCode(HttpStatus.NO_CONTENT)

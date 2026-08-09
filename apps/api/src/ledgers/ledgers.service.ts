@@ -11,7 +11,16 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** A ledger row as selected from the database. */
+/**
+ * 帳本與成員的業務邏輯——授權與資料隔離的重心。個人模式與家庭模式共用同一套
+ * 帳本模型，差別只在成員數與角色。
+ *
+ * 這裡的方法本身「不做」成員資格檢查（那由 LedgerAccessGuard 在上游把關），
+ * 專注在跨成員的規則上，其中最關鍵的是「一個帳本永遠至少保留一位 owner」——
+ * 降級或移除最後一位 owner 都會被擋下，且在交易內重查以避開競態。
+ */
+
+/** 從資料庫選出的帳本資料列。 */
 interface LedgerRow {
   id: string;
   name: string;
@@ -19,7 +28,7 @@ interface LedgerRow {
   createdAt: Date;
 }
 
-/** A membership row joined with its user, as selected for member responses. */
+/** 一筆成員關聯資料列，已 join 其 user，供成員相關回應使用。 */
 interface MemberRow {
   userId: string;
   role: LedgerRole;
@@ -31,9 +40,8 @@ export class LedgersService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Creates a ledger owned by the given user, seeded with the default
-   * categories. Runs on a caller-provided transaction client so it can be
-   * composed atomically with other writes (e.g. user registration).
+   * 建立一個由指定使用者擁有的帳本，並灌入預設分類。它跑在「呼叫端傳入的」
+   * 交易 client 上，因此能與其他寫入（例如註冊使用者）組成同一個原子交易。
    */
   async createLedgerForUser(tx: Prisma.TransactionClient, userId: string, name: string) {
     const ledger = await tx.ledger.create({ data: { name } });
@@ -53,7 +61,7 @@ export class LedgersService {
     return ledger;
   }
 
-  /** Creates a standalone ledger; the creator becomes its OWNER. */
+  /** 建立一個獨立帳本；建立者即成為 OWNER。 */
   async create(userId: string, name: string): Promise<LedgerSummary> {
     const ledger = await this.prisma.$transaction((tx) =>
       this.createLedgerForUser(tx, userId, name),
@@ -61,7 +69,7 @@ export class LedgersService {
     return this.toSummary(ledger, 'OWNER');
   }
 
-  /** Lists the ledgers the user belongs to, each with their own role. */
+  /** 列出使用者所屬的帳本，每筆附上他在該帳本的角色。 */
   async listForUser(userId: string): Promise<LedgerSummary[]> {
     const memberships = await this.prisma.ledgerMember.findMany({
       where: { userId },
@@ -71,7 +79,7 @@ export class LedgersService {
     return memberships.map((membership) => this.toSummary(membership.ledger, membership.role));
   }
 
-  /** Returns a ledger with its full member list. Access is enforced upstream. */
+  /** 回傳帳本及其完整成員清單。存取權限在上游（guard）把關。 */
   async getDetail(ledgerId: string): Promise<LedgerDetail> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
@@ -87,16 +95,15 @@ export class LedgersService {
     };
   }
 
-  /** Renames a ledger and returns its refreshed detail. */
+  /** 改帳本名稱，並回傳更新後的明細。 */
   async rename(ledgerId: string, name: string): Promise<LedgerDetail> {
     await this.prisma.ledger.update({ where: { id: ledgerId }, data: { name } });
     return this.getDetail(ledgerId);
   }
 
   /**
-   * Deletes a ledger (cascading to members and categories). Requires the
-   * caller to echo the ledger name in `confirm` as a guard against accidental
-   * deletion of shared data.
+   * 刪除帳本（連帶 cascade 刪除成員與分類）。要求呼叫端在 `confirm` 回填帳本
+   * 名稱，作為誤刪共享資料的防呆關卡。
    */
   async remove(ledgerId: string, confirm: string | undefined): Promise<void> {
     const ledger = await this.prisma.ledger.findUnique({
@@ -115,7 +122,7 @@ export class LedgersService {
     await this.prisma.ledger.delete({ where: { id: ledgerId } });
   }
 
-  /** Lists all members of a ledger. Access is enforced upstream. */
+  /** 列出帳本的所有成員。存取權限在上游把關。 */
   async listMembers(ledgerId: string): Promise<LedgerMemberInfo[]> {
     const members = await this.prisma.ledgerMember.findMany({
       where: { ledgerId },
@@ -125,7 +132,7 @@ export class LedgersService {
     return members.map((member) => this.toMemberInfo(member));
   }
 
-  /** Adds an already-registered user (looked up by email) to the ledger. */
+  /** 以 email 查出「已註冊」的使用者並加入帳本（查無此人或已是成員都會擋下）。 */
   async addMember(ledgerId: string, email: string, role: LedgerRole): Promise<LedgerMemberInfo> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -155,9 +162,8 @@ export class LedgersService {
   }
 
   /**
-   * Changes a member's role. Demoting the ledger's last owner is rejected so a
-   * ledger always keeps at least one owner. The owner count is re-checked
-   * inside the transaction to avoid a race with concurrent changes.
+   * 變更成員角色。降級帳本最後一位 owner 會被拒絕，以確保帳本永遠至少有一位
+   * owner。owner 數量在交易內重查，避免與並行變更發生競態。
    */
   async updateMemberRole(
     ledgerId: string,
@@ -186,9 +192,8 @@ export class LedgersService {
   }
 
   /**
-   * Removes a member. A user may always remove themselves (leave); removing
-   * anyone else requires the acting user to be an owner. The last owner cannot
-   * be removed.
+   * 移除成員。使用者永遠可以移除自己（退出）；移除他人則要求操作者是 owner。
+   * 最後一位 owner 不可被移除。
    */
   async removeMember(ledgerId: string, targetUserId: string, actingUserId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
@@ -222,6 +227,7 @@ export class LedgersService {
     });
   }
 
+  // 帳本永遠至少一位 owner 的守門：owner 數 <= 1 時擋下降級／移除動作。
   private async assertNotLastOwner(tx: Prisma.TransactionClient, ledgerId: string): Promise<void> {
     const owners = await tx.ledgerMember.count({
       where: { ledgerId, role: 'OWNER' },

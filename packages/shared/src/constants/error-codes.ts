@@ -1,55 +1,53 @@
 /**
- * Stable, machine-readable error codes returned by the API.
+ * API 回傳的、穩定且機器可讀的錯誤代碼。
  *
- * Clients should branch on these rather than on the human-readable `message`,
- * which is advisory only and may change. This is also the extension point for
- * future i18n: the frontend maps a code to a localized string.
+ * 客戶端應以這些代碼分支判斷，而非依賴人類可讀的 `message`——後者僅供參考、
+ * 可能隨時變動。這也是未來 i18n 的擴充點：前端把代碼對應到在地化字串。
  *
- * Feature-specific codes (ledger membership, transactions, ...) are added
- * alongside these as those modules are built.
+ * 功能專屬的代碼（帳本成員、交易……）會隨著各模組開發，陸續加到這裡。
  */
 export const ErrorCode = {
-  /** Request body / query failed DTO validation. */
+  /** 請求 body／query 未通過 DTO 驗證。 */
   VALIDATION_FAILED: 'VALIDATION_FAILED',
-  /** No authentication, or the credentials/token are invalid. */
+  /** 未認證，或憑證／token 無效。 */
   UNAUTHORIZED: 'UNAUTHORIZED',
-  /** Login failed: wrong email or password (never says which). */
+  /** 登入失敗：email 或密碼錯誤（絕不說明是哪一個）。 */
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
-  /** Authenticated, but not allowed to perform this action. */
+  /** 已認證，但無權執行此動作。 */
   FORBIDDEN: 'FORBIDDEN',
-  /** Resource does not exist, or the caller may not know that it does. */
+  /** 資源不存在，或呼叫者本就不該知道它存在。 */
   NOT_FOUND: 'NOT_FOUND',
-  /** Request conflicts with the current state (duplicate, invariant broken). */
+  /** 請求與目前狀態衝突（重複、破壞不變量）。 */
   CONFLICT: 'CONFLICT',
-  /** Registration attempted with an email that is already taken. */
+  /** 註冊時用了已被占用的 email。 */
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
-  /** Adding a member by an email that no registered user has. */
+  /** 以某 email 加入成員，但沒有已註冊的使用者用該 email。 */
   USER_NOT_FOUND: 'USER_NOT_FOUND',
-  /** The user is already a member of the ledger. */
+  /** 該使用者已是此帳本的成員。 */
   ALREADY_MEMBER: 'ALREADY_MEMBER',
-  /** Action would leave the ledger without any owner. */
+  /** 此動作會讓帳本失去所有 owner。 */
   LAST_OWNER_CANNOT_LEAVE: 'LAST_OWNER_CANNOT_LEAVE',
-  /** A non-owner tried to remove or modify another member. */
+  /** 非 owner 試圖移除或修改其他成員。 */
   CANNOT_MANAGE_OTHER_MEMBER: 'CANNOT_MANAGE_OTHER_MEMBER',
-  /** A category with the same name and type already exists in the ledger. */
+  /** 同帳本、同型別下已存在同名分類。 */
   CATEGORY_NAME_TAKEN: 'CATEGORY_NAME_TAKEN',
-  /** A category cannot be deleted while transactions reference it. */
+  /** 仍有交易引用該分類時，不可刪除。 */
   CATEGORY_IN_USE: 'CATEGORY_IN_USE',
-  /** The chosen category's type does not match the transaction's type. */
+  /** 所選分類的型別與交易型別不符。 */
   CATEGORY_TYPE_MISMATCH: 'CATEGORY_TYPE_MISMATCH',
-  /** Too many requests (rate limited). */
+  /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
-  /** Unexpected server-side failure; details are never exposed to clients. */
+  /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
-/** Shape of every error response the API returns. */
+/** API 回傳的每個錯誤回應的統一形狀。 */
 export interface ApiErrorResponse {
   statusCode: number;
   errorCode: string;
   message: string;
-  /** Field-level messages; present for validation failures only. */
+  /** 欄位層級的錯誤訊息；僅在驗證失敗時出現。 */
   details?: string[];
 }

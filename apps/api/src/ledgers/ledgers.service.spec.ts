@@ -3,8 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgersService } from './ledgers.service';
 
 /**
- * Focused on member-management invariants (the security-critical logic).
- * Prisma is mocked; $transaction runs its callback with the same mock client.
+ * 聚焦成員管理的不變量（最具安全性關鍵的邏輯）：加入成員的查無／重複、最後一位
+ * owner 不可降級或移除、非 owner 不可移除他人、可自行退出。Prisma 全程 mock；
+ * $transaction 直接以同一個 mock client 執行其 callback。
  */
 describe('LedgersService (members)', () => {
   let service: LedgersService;
@@ -115,8 +116,8 @@ describe('LedgersService (members)', () => {
 
     it('forbids a non-owner from removing someone else', async () => {
       prisma.ledgerMember.findUnique
-        .mockResolvedValueOnce({ role: 'EDITOR' }) // target
-        .mockResolvedValueOnce({ role: 'EDITOR' }); // acting user
+        .mockResolvedValueOnce({ role: 'EDITOR' }) // 被移除者（target）
+        .mockResolvedValueOnce({ role: 'EDITOR' }); // 操作者（acting user）
 
       await expect(service.removeMember(ledgerId, 'user-2', 'user-3')).rejects.toMatchObject({
         constructor: AppException,
@@ -138,8 +139,8 @@ describe('LedgersService (members)', () => {
 
     it('lets an owner remove another member', async () => {
       prisma.ledgerMember.findUnique
-        .mockResolvedValueOnce({ role: 'EDITOR' }) // target
-        .mockResolvedValueOnce({ role: 'OWNER' }); // acting user
+        .mockResolvedValueOnce({ role: 'EDITOR' }) // 被移除者（target）
+        .mockResolvedValueOnce({ role: 'OWNER' }); // 操作者（acting user）
 
       await service.removeMember(ledgerId, 'user-2', 'owner-1');
 

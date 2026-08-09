@@ -20,6 +20,13 @@ import { UpdateLedgerDto } from './dto/update-ledger.dto';
 import { LedgerAccessGuard } from './guards/ledger-access.guard';
 import { LedgersService } from './ledgers.service';
 
+/**
+ * 帳本本身的 CRUD。此 controller 掛了 LedgerAccessGuard，但只有標了
+ * @RequireLedgerRole 的路由才真的做角色檢查：
+ *   - create／list 不標——建立時還沒有帳本可檢查；列表只回「你自己是成員」的
+ *     帳本（由 service 依 user.sub 過濾），本身就是隔離的。
+ *   - detail 需 VIEWER；rename／remove 需 OWNER。
+ */
 @ApiTags('ledgers')
 @ApiBearerAuth('jwt')
 @UseGuards(LedgerAccessGuard)
@@ -32,6 +39,7 @@ export class LedgersController {
     return this.ledgers.create(user.sub, dto.name);
   }
 
+  // 只回傳呼叫者自己所屬的帳本——資料隔離靠 service 以 user.sub 過濾達成。
   @Get()
   list(@CurrentUser() user: JwtPayload): Promise<LedgerSummary[]> {
     return this.ledgers.listForUser(user.sub);

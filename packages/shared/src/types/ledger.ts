@@ -1,27 +1,26 @@
 /**
- * A user's role within a ledger. Mirrors the Prisma `LedgerRole` enum.
- * Declared as a const tuple so the values can be reused for runtime
- * validation (e.g. class-validator @IsIn).
+ * 使用者在某帳本中的角色。與 Prisma 的 `LedgerRole` enum 對應。宣告成 const
+ * tuple，好讓這組值也能重用於執行期驗證（例如 class-validator 的 @IsIn）。
  */
 export const LEDGER_ROLES = ['OWNER', 'EDITOR', 'VIEWER'] as const;
 export type LedgerRole = (typeof LEDGER_ROLES)[number];
 
-/** Core ledger fields shared by every ledger response shape. */
+/** 每種帳本回應形狀都共用的核心欄位。 */
 export interface Ledger {
   id: string;
   name: string;
-  /** ISO 4217 currency code (phase 1: always TWD). */
+  /** ISO 4217 幣別代碼（階段一：一律 TWD）。 */
   currency: string;
-  /** ISO 8601 timestamp. */
+  /** ISO 8601 時間戳。 */
   createdAt: string;
 }
 
-/** A ledger plus the requesting user's role in it (used in list endpoints). */
+/** 帳本＋請求者在其中的角色（列表端點使用）。 */
 export interface LedgerSummary extends Ledger {
   role: LedgerRole;
 }
 
-/** One member of a ledger, with enough user detail for display. */
+/** 帳本的一位成員，附帶足以顯示的使用者資訊。 */
 export interface LedgerMemberInfo {
   userId: string;
   email: string;
@@ -29,28 +28,28 @@ export interface LedgerMemberInfo {
   role: LedgerRole;
 }
 
-/** A ledger with its full member list (ledger detail endpoint). */
+/** 帳本＋其完整成員清單（帳本明細端點）。 */
 export interface LedgerDetail extends Ledger {
   members: LedgerMemberInfo[];
 }
 
-/** Body of POST /ledgers. */
+/** POST /ledgers 的請求 body。 */
 export interface CreateLedgerRequest {
   name: string;
 }
 
-/** Body of PATCH /ledgers/{ledgerId}. */
+/** PATCH /ledgers/{ledgerId} 的請求 body。 */
 export interface UpdateLedgerRequest {
   name: string;
 }
 
-/** Body of POST /ledgers/{ledgerId}/members: add a registered user by email. */
+/** POST /ledgers/{ledgerId}/members 的請求 body：以 email 加入已註冊的使用者。 */
 export interface AddMemberRequest {
   email: string;
   role: LedgerRole;
 }
 
-/** Body of PATCH /ledgers/{ledgerId}/members/{userId}: change a member's role. */
+/** PATCH /ledgers/{ledgerId}/members/{userId} 的請求 body：變更成員角色。 */
 export interface UpdateMemberRequest {
   role: LedgerRole;
 }

@@ -5,11 +5,11 @@ import type { Env } from '../config/env.validation';
 import { PrismaClient } from '../generated/prisma/client';
 
 /**
- * Wraps the generated Prisma Client as an injectable NestJS provider and
- * ties its connection lifecycle to the application lifecycle.
+ * 把產生出來的 Prisma Client 包成可注入的 NestJS provider，並把它的連線生命週期
+ * 綁到應用程式的生命週期（啟動時連線、關閉時斷線）。
  *
- * Prisma 7 connects through a driver adapter (pg) instead of a bundled
- * engine, so the connection string is passed via PrismaPg here.
+ * Prisma 7 改用 driver adapter（pg）連線，而非內建引擎，因此連線字串在這裡透過
+ * PrismaPg 傳入。
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

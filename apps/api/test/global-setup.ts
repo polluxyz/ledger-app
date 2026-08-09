@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { config } from 'dotenv';
 
 /**
- * Runs once before the e2e suite. Loads .env.test and applies migrations to the
- * test database so its schema matches the current Prisma schema.
+ * 在整個 e2e 測試套件開始前執行一次。載入 .env.test，並對測試資料庫套用
+ * migration，讓它的 schema 與目前的 Prisma schema 一致。
  */
 export default function globalSetup(): void {
   config({ path: resolve(__dirname, '../.env.test') });

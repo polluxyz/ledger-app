@@ -2,6 +2,11 @@ import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from './transactions.service';
 
+/**
+ * TransactionsService 的單元測試（Prisma 全程 mock）：建立時的分類一致性
+ * （跨帳本 404、型別不符 400）、列表的預設值／上限／篩選／分頁信封、更新時
+ * 依最終型別重驗一致性、軟刪除設 deletedAt 且查詢一律過濾。
+ */
 describe('TransactionsService', () => {
   let service: TransactionsService;
   let prisma: {
@@ -178,7 +183,7 @@ describe('TransactionsService', () => {
 
     it('re-validates consistency against the final type when only type changes', async () => {
       prisma.transaction.findFirst.mockResolvedValue(existing);
-      // Existing category cat-1 is EXPENSE; changing type to INCOME clashes.
+      // 既有分類 cat-1 是 EXPENSE；把型別改成 INCOME 就會衝突。
       prisma.category.findUnique.mockResolvedValue({
         id: 'cat-1',
         ledgerId,
@@ -239,7 +244,7 @@ describe('TransactionsService', () => {
       constructor: AppException,
       errorCode: 'NOT_FOUND',
     });
-    // The query filters deletedAt: null, so soft-deleted rows are invisible.
+    // 查詢以 deletedAt: null 過濾，因此軟刪除的資料列不可見。
     expect(prisma.transaction.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'txn-x', ledgerId, deletedAt: null },

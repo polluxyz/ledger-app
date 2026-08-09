@@ -10,7 +10,7 @@ import { ApiErrorResponse, ErrorCode } from '@ledger/shared';
 import { Response } from 'express';
 import { AppException } from '../exceptions/app.exception';
 
-/** Fallback error codes for the built-in Nest exceptions, which carry no code. */
+/** 內建 Nest 例外本身不帶 errorCode，這裡依 HTTP 狀態碼給它們一個備援代碼。 */
 const STATUS_TO_ERROR_CODE: Record<number, string> = {
   [HttpStatus.BAD_REQUEST]: ErrorCode.VALIDATION_FAILED,
   [HttpStatus.UNAUTHORIZED]: ErrorCode.UNAUTHORIZED,
@@ -21,20 +21,19 @@ const STATUS_TO_ERROR_CODE: Record<number, string> = {
 };
 
 /**
- * Clean, client-safe messages for framework exceptions whose default message
- * leaks internals (e.g. ThrottlerException prefixes its class name). Only
- * applied to non-AppException errors — AppException messages are intentional.
+ * 針對「預設訊息會洩漏內部細節」的框架例外，提供乾淨、對客戶端安全的替代訊息
+ * （例如 ThrottlerException 會把類別名稱塞進訊息）。只套用在非 AppException 的
+ * 錯誤上——AppException 的訊息是我們刻意寫的，保留不動。
  */
 const SAFE_STATUS_MESSAGE: Record<number, string> = {
   [HttpStatus.TOO_MANY_REQUESTS]: 'Too many requests. Please try again later.',
 };
 
 /**
- * Renders every error as the single response shape defined in the API spec.
+ * 把每個錯誤都渲染成 API spec 定義的「單一」回應形狀。
  *
- * Security: only messages from deliberate HttpExceptions reach the client.
- * Anything else is logged server-side and reported as a generic 500, so
- * stack traces, SQL and other internals are never leaked.
+ * 安全性：只有刻意拋出的 HttpException 的訊息會送達客戶端。其餘一律在伺服器端
+ * 記 log，並以通用的 500 回應，絕不外洩堆疊、SQL 等內部細節。
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -64,7 +63,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const statusCode = exception.getStatus();
     const payload = exception.getResponse();
 
-    // ValidationPipe puts its field-level messages in an array on `message`.
+    // ValidationPipe 會把欄位層級的錯誤訊息放成 `message` 上的陣列。
     const details =
       typeof payload === 'object' &&
       payload !== null &&

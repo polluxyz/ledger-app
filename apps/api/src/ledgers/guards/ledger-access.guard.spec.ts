@@ -14,6 +14,11 @@ function contextFor(ledgerId: string | undefined): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+/**
+ * LedgerAccessGuard 的單元測試。核心是那張「角色門檻矩陣」（用 it.each 逐格驗證），
+ * 外加：無 @RequireLedgerRole 的路由直接放行、非成員回 404（不洩漏存在）、
+ * 缺 :ledgerId 參數視為設定錯誤回 404。
+ */
 describe('LedgerAccessGuard', () => {
   let guard: LedgerAccessGuard;
   let reflector: { getAllAndOverride: jest.Mock };
@@ -45,7 +50,7 @@ describe('LedgerAccessGuard', () => {
     });
   });
 
-  // Role hierarchy: OWNER(3) > EDITOR(2) > VIEWER(1).
+  // 角色層級：OWNER(3) > EDITOR(2) > VIEWER(1)。逐格檢查「持有角色 vs 所需角色」。
   const cases: Array<{
     required: LedgerRole;
     has: LedgerRole;

@@ -12,6 +12,10 @@ import {
 import { TRANSACTION_TYPES } from '@ledger/shared';
 import type { TransactionType, UpdateTransactionRequest } from '@ledger/shared';
 
+/**
+ * PATCH body 的驗證形狀：每個欄位都可選，呼叫端只需送要變更的欄位。有出現的
+ * 欄位仍套用與建立時相同的規則；合併後由 service 再驗一次 type／category 的一致性。
+ */
 export class UpdateTransactionDto implements UpdateTransactionRequest {
   @ApiPropertyOptional({ enum: TRANSACTION_TYPES })
   @IsOptional()

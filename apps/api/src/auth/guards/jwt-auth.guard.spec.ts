@@ -16,6 +16,11 @@ function contextFor(request: MockRequest): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+/**
+ * JwtAuthGuard 的單元測試。用假的 ExecutionContext／Reflector／JwtService 驗證：
+ * @Public 路由免 token、缺標頭或非 Bearer 一律拒絕、無效／過期 token 拒絕、
+ * 有效 token 才放行並只把 sub+email 掛到 request（不讓 iat/exp 滲入）。
+ */
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
   let reflector: { getAllAndOverride: jest.Mock };
@@ -68,7 +73,7 @@ describe('JwtAuthGuard', () => {
     const request: MockRequest = { headers: { authorization: 'Bearer good' } };
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
-    // Only sub + email are copied onto the request (no iat/exp bleed-through).
+    // 只有 sub + email 會被複製到 request（iat/exp 不會滲漏進去）。
     expect(request.user).toEqual({ sub: 'user-1', email: 'alice@example.com' });
   });
 });

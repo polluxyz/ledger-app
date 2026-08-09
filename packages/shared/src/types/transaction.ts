@@ -1,29 +1,28 @@
 /**
- * Whether a transaction (and the category it belongs to) records money going
- * out or coming in. Mirrors the Prisma `TransactionType` enum by value, kept
- * here so the frontend can share it without importing backend-generated code.
- * Declared as a const tuple so the values can be reused for runtime validation.
+ * 一筆交易（以及它所屬的分類）是「支出」還是「收入」。與 Prisma 的
+ * `TransactionType` enum 值對應，放在這裡是為了讓前端也能共用，而不必 import
+ * 後端產生的程式碼。宣告成 const tuple，好讓這組值也能重用於執行期驗證。
  */
 export const TRANSACTION_TYPES = ['EXPENSE', 'INCOME'] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
-/** A transaction as returned by the API. */
+/** API 回傳的交易形狀。 */
 export interface Transaction {
   id: string;
   type: TransactionType;
-  /** Amount in the ledger currency's minor unit; always a positive integer. */
+  /** 以帳本幣別最小單位表示的金額；恆為正整數。 */
   amount: number;
-  /** ISO 8601 timestamp of when the money moved. */
+  /** 這筆錢發生的時間（ISO 8601）。 */
   date: string;
   note: string | null;
   category: { id: string; name: string };
-  /** Who recorded it (display/audit only; any editor may edit any entry). */
+  /** 由誰記下（僅供顯示／稽核；共享帳本下任何 editor 都可編輯任何一筆）。 */
   creator: { id: string; name: string };
-  /** ISO 8601 timestamp of when the row was created. */
+  /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }
 
-/** Body of POST /ledgers/{ledgerId}/transactions. */
+/** POST /ledgers/{ledgerId}/transactions 的請求 body。 */
 export interface CreateTransactionRequest {
   type: TransactionType;
   amount: number;
@@ -33,9 +32,8 @@ export interface CreateTransactionRequest {
 }
 
 /**
- * Body of PATCH /ledgers/{ledgerId}/transactions/{transactionId}.
- * All fields optional; only the supplied ones are updated. The resulting
- * type and category must still be consistent.
+ * PATCH /ledgers/{ledgerId}/transactions/{transactionId} 的請求 body。
+ * 所有欄位皆可選，只有送出的欄位會被更新。更新後 type 與 category 仍須一致。
  */
 export interface UpdateTransactionRequest {
   type?: TransactionType;
@@ -45,15 +43,15 @@ export interface UpdateTransactionRequest {
   note?: string;
 }
 
-/** Query parameters for GET /ledgers/{ledgerId}/transactions. */
+/** GET /ledgers/{ledgerId}/transactions 的查詢參數。 */
 export interface ListTransactionsQuery {
-  /** 1-based page number (default 1). */
+  /** 以 1 為起始的頁碼（預設 1）。 */
   page?: number;
-  /** Page size (default 20, capped at 100). */
+  /** 每頁筆數（預設 20，上限 100）。 */
   limit?: number;
-  /** Inclusive lower bound on the transaction date (ISO 8601). */
+  /** 交易日期的下界，包含此值（ISO 8601）。 */
   from?: string;
-  /** Inclusive upper bound on the transaction date (ISO 8601). */
+  /** 交易日期的上界，包含此值（ISO 8601）。 */
   to?: string;
   categoryId?: string;
   type?: TransactionType;
