@@ -38,6 +38,11 @@ export class UpdateTransactionDto implements UpdateTransactionRequest {
   @IsUUID()
   categoryId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  paymentMethodId?: string;
+
   @ApiPropertyOptional({ maxLength: 500 })
   @IsOptional()
   @IsString()

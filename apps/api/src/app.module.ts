@@ -8,12 +8,13 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { LedgersModule } from './ledgers/ledgers.module';
 import { CategoriesModule } from './categories/categories.module';
+import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { TransactionsModule } from './transactions/transactions.module';
 
 /**
  * 根模組：組裝整個應用程式。載入全域設定（環境變數驗證）、全站流量限制、
  * 資料庫（PrismaModule），以及各功能模組（auth／users／ledgers／categories／
- * transactions）。
+ * payment-methods／transactions）。
  */
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     UsersModule,
     LedgersModule,
     CategoriesModule,
+    PaymentMethodsModule,
     TransactionsModule,
   ],
   // 以 APP_GUARD 全域套用限流；JWT 認證 guard 則在 AuthModule 內註冊。

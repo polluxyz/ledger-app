@@ -11,6 +11,7 @@ describe('TransactionsService', () => {
   let service: TransactionsService;
   let prisma: {
     category: { findUnique: jest.Mock };
+    paymentMethod: { findUnique: jest.Mock };
     transaction: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -37,12 +38,15 @@ describe('TransactionsService', () => {
     note: 'Lunch',
     createdAt: new Date('2026-08-08T12:00:00.000Z'),
     category: { id: 'cat-1', name: '餐飲' },
+    // 未指定付款方式的交易：join 結果為 null，對外也回傳 null。
+    paymentMethod: null,
     creator: { id: 'user-1', name: 'Alice' },
   };
 
   beforeEach(() => {
     prisma = {
       category: { findUnique: jest.fn() },
+      paymentMethod: { findUnique: jest.fn() },
       transaction: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -69,6 +73,7 @@ describe('TransactionsService', () => {
       date: joined.date.toISOString(),
       note: 'Lunch',
       category: { id: 'cat-1', name: '餐飲' },
+      paymentMethod: null,
       creator: { id: 'user-1', name: 'Alice' },
       createdAt: joined.createdAt.toISOString(),
     });
@@ -86,6 +91,65 @@ describe('TransactionsService', () => {
       errorCode: 'NOT_FOUND',
     });
     expect(prisma.transaction.create).not.toHaveBeenCalled();
+  });
+
+  it('records an optional payment method that belongs to the ledger', async () => {
+    prisma.category.findUnique.mockResolvedValue({
+      id: 'cat-1',
+      ledgerId,
+      type: 'EXPENSE',
+    });
+    prisma.paymentMethod.findUnique.mockResolvedValue({ id: 'pm-1', ledgerId });
+    prisma.transaction.create.mockResolvedValue({
+      ...joined,
+      paymentMethod: { id: 'pm-1', name: '現金' },
+    });
+
+    const result = await service.create(ledgerId, creatorId, {
+      ...input,
+      paymentMethodId: 'pm-1',
+    });
+
+    expect(result.paymentMethod).toEqual({ id: 'pm-1', name: '現金' });
+    expect(prisma.transaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paymentMethodId: 'pm-1' }) as unknown,
+      }),
+    );
+  });
+
+  it('404s when the payment method belongs to another ledger', async () => {
+    prisma.category.findUnique.mockResolvedValue({
+      id: 'cat-1',
+      ledgerId,
+      type: 'EXPENSE',
+    });
+    prisma.paymentMethod.findUnique.mockResolvedValue({
+      id: 'pm-1',
+      ledgerId: 'other-ledger',
+    });
+
+    await expect(
+      service.create(ledgerId, creatorId, { ...input, paymentMethodId: 'pm-1' }),
+    ).rejects.toMatchObject({
+      constructor: AppException,
+      errorCode: 'NOT_FOUND',
+    });
+    expect(prisma.transaction.create).not.toHaveBeenCalled();
+  });
+
+  it('skips the payment method lookup when none is given', async () => {
+    prisma.category.findUnique.mockResolvedValue({
+      id: 'cat-1',
+      ledgerId,
+      type: 'EXPENSE',
+    });
+    prisma.transaction.create.mockResolvedValue(joined);
+
+    const result = await service.create(ledgerId, creatorId, input);
+
+    expect(prisma.paymentMethod.findUnique).not.toHaveBeenCalled();
+    expect(result.paymentMethod).toBeNull();
   });
 
   it('400s when the category type does not match', async () => {

@@ -38,9 +38,10 @@ model Ledger {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members      LedgerMember[]
-  categories   Category[]
-  transactions Transaction[]
+  members        LedgerMember[]
+  categories     Category[]
+  paymentMethods PaymentMethod[]
+  transactions   Transaction[]
 }
 
 model LedgerMember {
@@ -70,25 +71,44 @@ model Category {
   @@unique([ledgerId, type, name])
 }
 
+model PaymentMethod {
+  id        String   @id @default(uuid())
+  ledgerId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledger       Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([ledgerId, name]) // 同帳本內名稱唯一（付款方式不綁 type）
+}
+
 model Transaction {
-  id         String          @id @default(uuid())
-  ledgerId   String
-  categoryId String
-  creatorId  String
-  type       TransactionType
-  amount     Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
-  date       DateTime // 消費日期（含時間，查詢以日期區間篩選）
-  note       String?
-  deletedAt  DateTime? // 軟刪除標記
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id              String          @id @default(uuid())
+  ledgerId        String
+  categoryId      String
+  paymentMethodId String? // 選填：交易的付款方式
+  creatorId       String
+  type            TransactionType
+  amount          Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
+  date            DateTime // 消費日期（含時間，查詢以日期區間篩選）
+  note            String?
+  deletedAt       DateTime? // 軟刪除標記
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   // Cascade: deleting a ledger removes its transactions. Category stays
   // Restrict (default) — the app blocks deleting a category still in use.
-  ledger   Ledger   @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id])
-  creator  User     @relation("TransactionCreator", fields: [creatorId], references: [id])
+  // PaymentMethod is optional and uses SetNull: the app blocks deleting a
+  // payment method still in use (409); SetNull is only the DB-level fallback
+  // and keeps ledger-delete cascade safe (never a FK conflict).
+  ledger        Ledger         @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  category      Category       @relation(fields: [categoryId], references: [id])
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  creator       User           @relation("TransactionCreator", fields: [creatorId], references: [id])
 
   @@index([ledgerId, date])
   @@index([ledgerId, categoryId])
+  @@index([paymentMethodId])
 }

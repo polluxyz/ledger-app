@@ -35,6 +35,10 @@ export const ErrorCode = {
   CATEGORY_IN_USE: 'CATEGORY_IN_USE',
   /** 所選分類的型別與交易型別不符。 */
   CATEGORY_TYPE_MISMATCH: 'CATEGORY_TYPE_MISMATCH',
+  /** 同帳本下已存在同名付款方式。 */
+  PAYMENT_METHOD_NAME_TAKEN: 'PAYMENT_METHOD_NAME_TAKEN',
+  /** 仍有交易引用該付款方式時，不可刪除。 */
+  PAYMENT_METHOD_IN_USE: 'PAYMENT_METHOD_IN_USE',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
