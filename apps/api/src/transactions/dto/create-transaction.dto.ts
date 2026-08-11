@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsInt,
   IsISO8601,
@@ -46,6 +46,12 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   categoryId!: string;
+
+  // 付款方式為選填（並非每筆交易都有，尤其收入）；若有給，須屬同一帳本。
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  paymentMethodId?: string;
 
   @ApiProperty({ required: false, example: 'Lunch with team', maxLength: 500 })
   @IsOptional()

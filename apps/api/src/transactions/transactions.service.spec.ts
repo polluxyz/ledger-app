@@ -11,6 +11,7 @@ describe('TransactionsService', () => {
   let service: TransactionsService;
   let prisma: {
     category: { findUnique: jest.Mock };
+    paymentMethod: { findUnique: jest.Mock };
     transaction: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -37,12 +38,15 @@ describe('TransactionsService', () => {
     note: 'Lunch',
     createdAt: new Date('2026-08-08T12:00:00.000Z'),
     category: { id: 'cat-1', name: '餐飲' },
+    // 未指定付款方式的交易：join 結果為 null，對外也回傳 null。
+    paymentMethod: null,
     creator: { id: 'user-1', name: 'Alice' },
   };
 
   beforeEach(() => {
     prisma = {
       category: { findUnique: jest.fn() },
+      paymentMethod: { findUnique: jest.fn() },
       transaction: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -69,6 +73,7 @@ describe('TransactionsService', () => {
       date: joined.date.toISOString(),
       note: 'Lunch',
       category: { id: 'cat-1', name: '餐飲' },
+      paymentMethod: null,
       creator: { id: 'user-1', name: 'Alice' },
       createdAt: joined.createdAt.toISOString(),
     });

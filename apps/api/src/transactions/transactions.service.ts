@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
  *   - 金額為正整數（在 DTO 驗證），絕不用浮點數。
  *   - 刪除採軟刪除（設 `deletedAt`）；每個讀取都以 `deletedAt: null` 過濾。
  *   - 交易的分類必須屬於同一帳本、且型別一致——新增與更新時都會重新檢查。
+ *   - 付款方式為選填，只需屬於同一帳本即可（不綁 type）。
  */
 
 // 分頁預設值與每頁筆數上限（客戶端要求超過 MAX_LIMIT 時會被夾住，而非報錯）。
@@ -26,7 +27,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-/** 一筆交易資料列，已 join 其分類與建立者。 */
+/** 一筆交易資料列，已 join 其分類、付款方式與建立者。 */
 interface TransactionRow {
   id: string;
   type: TransactionType;
@@ -35,13 +36,15 @@ interface TransactionRow {
   note: string | null;
   createdAt: Date;
   category: { id: string; name: string };
+  paymentMethod: { id: string; name: string } | null;
   creator: { id: string; name: string };
 }
 
-// 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀：分類與建立者，
-// 各自只取 id + name（絕不回傳整列）。
+// 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀：分類、付款方式與
+// 建立者，各自只取 id + name（絕不回傳整列）。
 const TRANSACTION_INCLUDE = {
   category: { select: { id: true, name: true } },
+  paymentMethod: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
 } as const;
 
@@ -50,6 +53,7 @@ interface CreateTransactionInput {
   amount: number;
   date: string;
   categoryId: string;
+  paymentMethodId?: string;
   note?: string;
 }
 
@@ -58,6 +62,7 @@ interface UpdateTransactionInput {
   amount?: number;
   date?: string;
   categoryId?: string;
+  paymentMethodId?: string;
   note?: string;
 }
 
@@ -66,7 +71,8 @@ export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 在帳本中記下一筆交易。分類必須屬於同一帳本、且型別與交易一致。
+   * 在帳本中記下一筆交易。分類必須屬於同一帳本、且型別與交易一致；付款方式為
+   * 選填，若有給則須屬於同一帳本。
    */
   async create(
     ledgerId: string,
@@ -74,12 +80,14 @@ export class TransactionsService {
     input: CreateTransactionInput,
   ): Promise<Transaction> {
     await this.assertCategoryConsistent(ledgerId, input.categoryId, input.type);
+    await this.assertPaymentMethodOwned(ledgerId, input.paymentMethodId);
 
     const transaction = await this.prisma.transaction.create({
       data: {
         ledgerId,
         creatorId,
         categoryId: input.categoryId,
+        paymentMethodId: input.paymentMethodId ?? null,
         type: input.type,
         amount: input.amount,
         date: new Date(input.date),
@@ -136,6 +144,9 @@ export class TransactionsService {
   /**
    * 部分更新一筆交易（共享帳本模型：任何 editor 都可編輯任何一筆）。合併後會重新
    * 驗證 type／category 的組合，確保更新不會讓交易指向型別不符的分類。
+   *
+   * 註：目前無法把付款方式「清回未指定」——請求型別只表達得出「給新值」或
+   * 「不動」。此限制與 categoryId 一致；若日後需要清空，再另行設計。
    */
   async update(
     ledgerId: string,
@@ -151,6 +162,8 @@ export class TransactionsService {
       await this.assertCategoryConsistent(ledgerId, finalCategoryId, finalType);
     }
 
+    await this.assertPaymentMethodOwned(ledgerId, input.paymentMethodId);
+
     const updated = await this.prisma.transaction.update({
       where: { id: transactionId },
       data: {
@@ -158,6 +171,7 @@ export class TransactionsService {
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
         ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
         ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+        ...(input.paymentMethodId !== undefined ? { paymentMethodId: input.paymentMethodId } : {}),
         ...(input.note !== undefined ? { note: input.note } : {}),
       },
       include: TRANSACTION_INCLUDE,
@@ -209,6 +223,29 @@ export class TransactionsService {
     }
   }
 
+  /**
+   * 付款方式為選填：未給就直接放行。有給時只確認它屬於同一帳本——付款方式不綁
+   * type，故無型別檢查。不屬本帳本或不存在時一律回 404（比照分類，不洩漏存在性）。
+   */
+  private async assertPaymentMethodOwned(
+    ledgerId: string,
+    paymentMethodId: string | undefined,
+  ): Promise<void> {
+    if (paymentMethodId === undefined) {
+      return;
+    }
+    const paymentMethod = await this.prisma.paymentMethod.findUnique({
+      where: { id: paymentMethodId },
+    });
+    if (!paymentMethod || paymentMethod.ledgerId !== ledgerId) {
+      throw new AppException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        'Payment method not found.',
+      );
+    }
+  }
+
   /** 回傳帳本中某一筆未刪除的交易。 */
   async getById(ledgerId: string, transactionId: string): Promise<Transaction> {
     const transaction = await this.prisma.transaction.findFirst({
@@ -229,6 +266,9 @@ export class TransactionsService {
       date: row.date.toISOString(),
       note: row.note,
       category: { id: row.category.id, name: row.category.name },
+      paymentMethod: row.paymentMethod
+        ? { id: row.paymentMethod.id, name: row.paymentMethod.name }
+        : null,
       creator: { id: row.creator.id, name: row.creator.name },
       createdAt: row.createdAt.toISOString(),
     };
