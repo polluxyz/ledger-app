@@ -53,7 +53,7 @@ export async function createE2EApp(): Promise<E2EContext> {
 /** 清空每張資料表，讓每個測試都從乾淨狀態開始（CASCADE 一併清掉關聯資料）。 */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "Transaction", "Category", "LedgerMember", "Ledger", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE "Transaction", "Category", "PaymentMethod", "LedgerMember", "Ledger", "User" RESTART IDENTITY CASCADE',
   );
 }
 

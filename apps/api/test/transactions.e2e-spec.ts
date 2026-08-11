@@ -65,6 +65,71 @@ describe('Transactions (e2e)', () => {
     expect((mismatch.body as { errorCode: string }).errorCode).toBe('CATEGORY_TYPE_MISMATCH');
   });
 
+  it('records a transaction with and without a payment method', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+    const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
+
+    const pms = await request(server())
+      .get(`/api/ledgers/${ledgerId}/payment-methods`)
+      .set(auth(alice.token));
+    const paymentMethod = (pms.body as Array<{ id: string; name: string }>)[0]!;
+
+    const withPm = await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send({
+        type: 'EXPENSE',
+        amount: 250,
+        date: '2026-08-11T12:00:00.000Z',
+        categoryId: cat,
+        paymentMethodId: paymentMethod.id,
+      });
+    expect(withPm.status).toBe(201);
+    expect((withPm.body as Transaction).paymentMethod).toEqual({
+      id: paymentMethod.id,
+      name: paymentMethod.name,
+    });
+
+    // 省略付款方式時仍可建立，回應為 null（欄位恆存在）。
+    const withoutPm = await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send({
+        type: 'EXPENSE',
+        amount: 60,
+        date: '2026-08-11T13:00:00.000Z',
+        categoryId: cat,
+      });
+    expect(withoutPm.status).toBe(201);
+    expect((withoutPm.body as Transaction).paymentMethod).toBeNull();
+  });
+
+  it('rejects a payment method from another ledger (404)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
+    const ledgerId = await firstLedgerId(app, alice.token);
+    const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
+
+    const bobLedger = await firstLedgerId(app, bob.token);
+    const bobPms = await request(server())
+      .get(`/api/ledgers/${bobLedger}/payment-methods`)
+      .set(auth(bob.token));
+    const foreignPmId = (bobPms.body as Array<{ id: string }>)[0]!.id;
+
+    const res = await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send({
+        type: 'EXPENSE',
+        amount: 100,
+        date: '2026-08-11T12:00:00.000Z',
+        categoryId: cat,
+        paymentMethodId: foreignPmId,
+      });
+    expect(res.status).toBe(404);
+  });
+
   it('paginates, filters by date range, and hides soft-deleted rows', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const ledgerId = await firstLedgerId(app, alice.token);
