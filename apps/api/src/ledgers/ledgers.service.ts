@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   DEFAULT_CATEGORIES,
+  DEFAULT_PAYMENT_METHODS,
   ErrorCode,
   LedgerDetail,
   LedgerMemberInfo,
@@ -40,8 +41,8 @@ export class LedgersService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 建立一個由指定使用者擁有的帳本，並灌入預設分類。它跑在「呼叫端傳入的」
-   * 交易 client 上，因此能與其他寫入（例如註冊使用者）組成同一個原子交易。
+   * 建立一個由指定使用者擁有的帳本，並灌入預設分類與付款方式。它跑在「呼叫端
+   * 傳入的」交易 client 上，因此能與其他寫入（例如註冊使用者）組成同一個原子交易。
    */
   async createLedgerForUser(tx: Prisma.TransactionClient, userId: string, name: string) {
     const ledger = await tx.ledger.create({ data: { name } });
@@ -55,6 +56,13 @@ export class LedgersService {
         ledgerId: ledger.id,
         name: category.name,
         type: category.type,
+      })),
+    });
+
+    await tx.paymentMethod.createMany({
+      data: DEFAULT_PAYMENT_METHODS.map((name) => ({
+        ledgerId: ledger.id,
+        name,
       })),
     });
 
