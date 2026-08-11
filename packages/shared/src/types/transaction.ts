@@ -16,6 +16,8 @@ export interface Transaction {
   date: string;
   note: string | null;
   category: { id: string; name: string };
+  /** 付款方式（選填）；未指定時為 null。 */
+  paymentMethod: { id: string; name: string } | null;
   /** 由誰記下（僅供顯示／稽核；共享帳本下任何 editor 都可編輯任何一筆）。 */
   creator: { id: string; name: string };
   /** 這筆資料列被建立的時間（ISO 8601）。 */
@@ -28,6 +30,8 @@ export interface CreateTransactionRequest {
   amount: number;
   date: string;
   categoryId: string;
+  /** 付款方式 id（選填）；須屬同一帳本。 */
+  paymentMethodId?: string;
   note?: string;
 }
 
@@ -40,6 +44,7 @@ export interface UpdateTransactionRequest {
   amount?: number;
   date?: string;
   categoryId?: string;
+  paymentMethodId?: string;
   note?: string;
 }
 
