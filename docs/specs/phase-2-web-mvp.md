@@ -150,7 +150,8 @@ apps/
 
 ## 8. 擴充點（未來如何接上，現在不實作）
 
-- **行動 App**：RN + Expo 重用同一組 API 與 `@ledger/shared`，UI 層另寫。Web 的 `features/` 領域切分刻意與平台無關，便於心智模型搬移。
+- **Google OAuth 登入**：已確定要做，排在 Slice 0 完成後的獨立小步。前端只是登入頁多一顆按鈕；後端需 `googleId` 欄位與 `/auth/google` 流程（`passwordHash` 屆時改選填）。本階段先不預留任何程式碼。詳見《專案決策脈絡》對應章節。
+- **行動 App**：RN + Expo 重用同一組 API 與 `@ledger/shared`，UI 層另寫。Web 的 `features/` 領域切分刻意與平台無關，便於心智模型搬移。未來 App 若走**離線優先**（資料存手機、登入才同步），現有的 UUID 主鍵 / 軟刪除 / `updatedAt` 已是有利基礎；本階段的 Web 維持連線模式，不受影響。詳見《專案決策脈絡》「離線優先與同步的立場」。
 - **好友 / 借還帳（階段三）**：預留 `features/` 可新增 `friends` / `debts` 領域夾；不預先建檔。
 - **AI 記帳（階段四）**：預留一個「新增交易」入口日後可並列「AI 輸入」分頁；現在只做手動表單。
 - **OpenAPI codegen**：第二版可由後端 OpenAPI 產生 typed client 取代手寫 fetch；現階段用 `@ledger/shared` 足矣。
