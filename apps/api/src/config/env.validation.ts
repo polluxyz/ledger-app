@@ -9,6 +9,12 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
   PORT: z.coerce.number().int().positive().default(3000),
+  /**
+   * 允許跨來源存取本 API 的前端網址（CORS）。Web 前端與 API 跑在不同的 port／
+   * 網域，屬不同來源，瀏覽器預設會擋下請求，必須由後端明示放行。
+   * 預設值為 Vite 開發伺服器；正式部署時改成實際的前端網域。
+   */
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 });
 
 export type Env = z.infer<typeof envSchema>;
