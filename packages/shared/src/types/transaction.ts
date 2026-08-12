@@ -10,7 +10,7 @@ export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 export interface Transaction {
   id: string;
   type: TransactionType;
-  /** 以帳本幣別最小單位表示的金額；恆為正整數。 */
+  /** 以帳本幣別最小單位表示的金額；恆為正整數。TWD 的最小單位即為「元」。 */
   amount: number;
   /** 這筆錢發生的時間（ISO 8601）。 */
   date: string;

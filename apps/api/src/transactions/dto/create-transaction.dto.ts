@@ -29,8 +29,9 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   @IsIn(TRANSACTION_TYPES)
   type!: TransactionType;
 
-  // 金額以貨幣最小單位表示的正整數（例如 120＝1.20 TWD）。絕不用浮點數——
-  // 整數可避免金額運算的精度誤差。
+  // 金額以帳本幣別的「最小單位」表示的正整數；TWD 的最小單位即為「元」，
+  // 故 120 就是 120 元。絕不用浮點數——整數可避免金額運算的精度誤差。
+  // （未來支援有輔幣的幣別時，於 packages/shared 加「幣別→小數位數」對照表。）
   @ApiProperty({
     description: "Amount in the currency's minor unit; positive integer.",
     example: 120,

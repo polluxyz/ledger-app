@@ -1,15 +1,29 @@
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import type { Env } from './config/env.validation';
 
 /**
- * 應用程式進入點（bootstrap）。在這裡把「全域」設定一次裝好：路由前綴、
+ * 應用程式進入點（bootstrap）。在這裡把「全域」設定一次裝好：CORS、路由前綴、
  * 輸入驗證管線、統一錯誤 filter、Swagger 文件，最後開始監聽埠口。
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const config = app.get(ConfigService<Env, true>);
+
+  /**
+   * 只放行設定中的前端來源。Web 前端與 API 位於不同 port／網域（不同來源），
+   * 瀏覽器預設會擋下跨來源請求，需由後端明示允許。
+   *
+   * 不開 `credentials`：認證走 Authorization 標頭的 Bearer token，不使用
+   * cookie，因此毋須允許跨來源夾帶憑證——維持較嚴的設定。
+   */
+  app.enableCors({
+    origin: config.get('CORS_ORIGIN', { infer: true }),
+  });
 
   // 所有路由都掛在 /api 之下；Swagger UI 另外放在 /docs（見下方）。
   app.setGlobalPrefix('api');

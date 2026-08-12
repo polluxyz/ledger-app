@@ -1,0 +1,26 @@
+.form {
+  margin-bottom: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-md);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.types {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
