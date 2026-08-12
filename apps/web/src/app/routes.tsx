@@ -2,23 +2,28 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
-import { ProtectedRoute } from './ProtectedRoute';
+import { GuestOnlyRoute } from './GuestOnlyRoute';
 
 /**
- * 路由表。公開路由（登入／註冊）與受保護路由分開，後者一律包在
- * ProtectedRoute 之下，新增頁面時不會漏掉權限檢查。
+ * 路由表。
+ *
+ * `/` 刻意是**公開**的：未登入者看得到介面預覽（空狀態），登入後同一頁顯示
+ * 真實資料。要「記帳」時才需要登入。
+ *
+ * 登入 / 註冊頁包在 GuestOnlyRoute 之下，已登入者會被送回首頁。
+ * 之後需要真正受保護的頁面（帳本管理、分類…）時，再包上 ProtectedRoute。
  */
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/" element={<HomePage />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<HomePage />} />
+      <Route element={<GuestOnlyRoute />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
       </Route>
 
-      {/* 未知路徑導回首頁；未登入時 ProtectedRoute 會再轉到 /login。 */}
+      {/* 未知路徑導回首頁。 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
