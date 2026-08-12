@@ -1,6 +1,7 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
+import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { useCurrentLedger } from '../features/ledgers/use-ledgers';
 import { TransactionForm } from '../features/transactions/TransactionForm';
@@ -21,7 +22,8 @@ import styles from './HomePage.module.css';
  */
 export default function HomePage() {
   const { isAuthenticated, logout } = useAuth();
-  const navigate = useNavigate();
+  // null = 彈窗關閉；登入 / 註冊共用同一個彈窗，只是預設顯示哪張表單不同。
+  const [authDialog, setAuthDialog] = useState<AuthDialogMode | null>(null);
 
   return (
     <>
@@ -46,13 +48,16 @@ export default function HomePage() {
         <section className={styles.panel}>
           <p className={styles.panelText}>登入後即可開始記帳，並在這裡看到你的收支。</p>
           <div className={styles.actions}>
-            <Button onClick={() => void navigate('/login')}>登入</Button>
-            <Button variant="secondary" onClick={() => void navigate('/register')}>
+            <Button onClick={() => setAuthDialog('login')}>登入</Button>
+            <Button variant="secondary" onClick={() => setAuthDialog('register')}>
               註冊
             </Button>
           </div>
         </section>
       )}
+
+      {/* 登入成功後彈窗關閉，本頁就地換成已登入狀態——使用者不會被跳走。 */}
+      <AuthDialog mode={authDialog} onClose={() => setAuthDialog(null)} />
     </>
   );
 }
