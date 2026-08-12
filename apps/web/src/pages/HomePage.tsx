@@ -1,6 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
+import { FormError } from '../components/FormError';
 import { useAuth } from '../features/auth/use-auth';
+import { useCurrentLedger } from '../features/ledgers/use-ledgers';
+import { TransactionForm } from '../features/transactions/TransactionForm';
+import { TransactionList } from '../features/transactions/TransactionList';
+import { useTransactions } from '../features/transactions/use-transactions';
 import styles from './HomePage.module.css';
 
 /**
@@ -36,9 +41,7 @@ export default function HomePage() {
       </div>
 
       {isAuthenticated ? (
-        <section className={styles.panel}>
-          <p className={styles.panelText}>交易列表與記帳表單建置中。</p>
-        </section>
+        <LedgerView />
       ) : (
         <section className={styles.panel}>
           <p className={styles.panelText}>登入後即可開始記帳，並在這裡看到你的收支。</p>
@@ -50,6 +53,41 @@ export default function HomePage() {
           </div>
         </section>
       )}
+    </>
+  );
+}
+
+/**
+ * 已登入者的記帳畫面：新增表單 + 交易列表。
+ *
+ * Slice 0 固定使用第一本帳本（註冊時自動建立的個人帳本）；帳本切換屬 Slice 1。
+ */
+function LedgerView() {
+  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useCurrentLedger();
+  const transactions = useTransactions(ledger?.id ?? null);
+
+  if (ledgerLoading) {
+    return <p className={styles.panelText}>載入中…</p>;
+  }
+  if (ledgerError) {
+    return <FormError error={ledgerError} />;
+  }
+  if (!ledger) {
+    return (
+      <section className={styles.panel}>
+        <p className={styles.panelText}>找不到任何帳本。</p>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <TransactionForm ledgerId={ledger.id} />
+      <TransactionList
+        transactions={transactions.data?.items ?? []}
+        isLoading={transactions.isLoading}
+        error={transactions.error}
+      />
     </>
   );
 }

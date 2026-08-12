@@ -46,8 +46,10 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
     expect(localStorage.getItem('ledger.accessToken')).toBe('jwt-new');
-    // 兩次呼叫：先註冊，再以同一組帳密登入。
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 先打註冊，再以同一組帳密打登入（登入後首頁還會去抓帳本，故不斷言總次數）。
+    const calledPaths = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calledPaths[0]).toContain('/auth/register');
+    expect(calledPaths[1]).toContain('/auth/login');
   });
 
   it('shows the conflict message when the email is taken', async () => {
