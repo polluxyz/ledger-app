@@ -1,10 +1,11 @@
-import type { TransactionType } from './transaction';
+import type { CategoryType } from './transaction';
 
 /** API 回傳的分類形狀。 */
 export interface Category {
   id: string;
   name: string;
-  type: TransactionType;
+  /** 只會是 `EXPENSE` 或 `INCOME`——轉帳不使用分類。 */
+  type: CategoryType;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }
@@ -12,7 +13,7 @@ export interface Category {
 /** POST /ledgers/{ledgerId}/categories 的請求 body。 */
 export interface CreateCategoryRequest {
   name: string;
-  type: TransactionType;
+  type: CategoryType;
 }
 
 /**

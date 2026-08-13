@@ -11,6 +11,22 @@ export interface Ledger {
   name: string;
   /** ISO 4217 幣別代碼（階段一：一律 TWD）。 */
   currency: string;
+  /**
+   * 這本帳本的交易是否計入我的帳戶餘額。**建立後不可變更**（事後改會讓餘額突然跳動）。
+   *
+   * - `true`（預設）：一般的個人／家庭帳本，記帳同時扣減對應帳戶。交易必須指定帳戶。
+   * - `false`：臨時性、「錢不是我的」的帳本，例如出遊分帳、社團公款。交易不指定
+   *   帳戶，也不影響任何餘額。
+   */
+  tracksBalance: boolean;
+  /**
+   * 封存時間；未封存為 `null`。封存後帳本轉為唯讀（不可再記帳），且預設不出現在
+   * 帳本列表中。
+   *
+   * 之所以用封存取代刪除：共享帳本一旦被別人刪掉，你先前記在裡面的交易也會消失，
+   * 你的帳戶餘額就被「回溯性」改變了——那是不可接受的。
+   */
+  archivedAt: string | null;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }
@@ -33,12 +49,26 @@ export interface LedgerDetail extends Ledger {
   members: LedgerMemberInfo[];
 }
 
+/** GET /ledgers 的查詢參數。 */
+export interface ListLedgersQuery {
+  /** 是否一併列出已封存的帳本（預設 false）。 */
+  includeArchived?: boolean;
+}
+
 /** POST /ledgers 的請求 body。 */
 export interface CreateLedgerRequest {
   name: string;
+  /** 是否與我的帳戶餘額連動（預設 true）。**建立後就定案，之後不可更改。** */
+  tracksBalance?: boolean;
 }
 
-/** PATCH /ledgers/{ledgerId} 的請求 body。 */
+/**
+ * PATCH /ledgers/{ledgerId} 的請求 body。
+ *
+ * 只有名稱可改。`tracksBalance` 刻意**不在**這裡——它建立後即定案；後端仍會明確
+ * 接住並回 400 `TRACKS_BALANCE_IMMUTABLE`，好讓誤送的人得到說得出原因的錯誤訊息，
+ * 而不是一句籠統的「欄位不被允許」。
+ */
 export interface UpdateLedgerRequest {
   name: string;
 }
