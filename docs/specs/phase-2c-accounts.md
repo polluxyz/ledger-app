@@ -49,6 +49,7 @@
 | 12  | 跨帳本統計預設只計**連動帳本**                         | 非連動帳本的金額不代表你的支出                                                     |
 | 13  | 破壞性遷移，移除 `PaymentMethod`                       | 付款方式綁帳本、帳戶綁使用者，對不起來；保留只會產生大量重複帳戶待手動合併         |
 | 14  | 帳戶**不帶幣別**                                       | 沿用階段一「只支援 TWD」前提                                                       |
+| 15  | 預設帳戶**只有「現金」**                               | 「銀行」「信用卡」是帳戶的*種類*不是帳戶；預設它們只會逼使用者改名或把多家銀行混成一格 |
 
 ### 已知的近似（刻意接受）
 
@@ -60,7 +61,7 @@
 
 ## 3. 可驗證的成功條件
 
-- **SC-C1**：註冊後自動取得預設帳戶（現金 / 銀行 / 信用卡）。
+- **SC-C1**：註冊後自動取得預設的「現金」帳戶（**只有這一個**——見 §2 決策 15）。
 - **SC-C2**：`GET /accounts` 只回傳自己的帳戶，且每筆附帶**即時計算**的餘額。
 - **SC-C3**：帳戶可新增 / 改名 / 調整初始餘額 / 刪除；同一使用者下名稱唯一（重複 409）。
 - **SC-C4**：有交易引用（含軟刪除交易）的帳戶不可刪除（409）。
@@ -128,7 +129,10 @@ model Transaction {
 ```
 
 - `PaymentMethod` model 與 `Transaction.paymentMethodId` **移除**。
-- 帳戶對交易採預設的 `Restrict`：有引用時不可刪（由 service 先行檢查並回 409，DB 為後盾）。
+- 帳戶（與分類）對交易**明確指定 `onDelete: Restrict`**：有引用時不可刪（由 service 先行
+  檢查並回 409，DB 為後盾）。**不可依賴預設值**——Prisma 對「選填關聯」的預設是
+  `SetNull`，那會讓刪掉仍被引用的帳戶悄悄把交易的 `accountId` 清成 null，餘額隨之
+  出錯卻毫無跡象。`categoryId` 由必填改為選填時也踩同一個陷阱。
 - `Account → User` 用 `Cascade`：使用者刪除時其帳戶一併移除。
 
 ### 餘額計算
@@ -192,7 +196,7 @@ model Transaction {
 
 1. 建立 `Account` 表；`Ledger` 加 `tracksBalance`、`archivedAt`；`TransactionType` 加 `TRANSFER`。
 2. `Transaction` 加 `accountId`、`toAccountId`；`categoryId` 改為 nullable。
-3. **資料轉換**：為每位既有使用者建立預設帳戶（現金 / 銀行 / 信用卡）；把既有交易的 `accountId` 指向**其 `creatorId` 所對應使用者的「現金」帳戶**（既有帳本 `tracksBalance` 皆為預設 `true`）。
+3. **資料轉換**：為每位既有使用者建立預設的「現金」帳戶；把既有交易的 `accountId` 指向**其 `creatorId` 所對應使用者的「現金」帳戶**（既有帳本 `tracksBalance` 皆為預設 `true`）。末尾以 `RAISE EXCEPTION` 斷言沒有交易被漏掉，寧可整個 migration 回滾也不留壞資料。
 4. 移除 `Transaction.paymentMethodId` 與 `PaymentMethod` 表。
 5. 移除 `PaymentMethodsModule` 與相關 shared 型別 / 錯誤碼 / 測試。
 
