@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Category, ErrorCode, TransactionType } from '@ledger/shared';
+import { Category, CategoryType, ErrorCode, TransactionType } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,7 +24,7 @@ export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** 列出帳本的分類，可選擇以型別篩選。 */
-  async list(ledgerId: string, type?: TransactionType): Promise<Category[]> {
+  async list(ledgerId: string, type?: CategoryType): Promise<Category[]> {
     const categories = await this.prisma.category.findMany({
       where: { ledgerId, ...(type ? { type } : {}) },
       orderBy: { createdAt: 'asc' },
@@ -33,7 +33,7 @@ export class CategoriesService {
   }
 
   /** 新增分類。名稱在（帳本, 型別）範圍內必須唯一（靠 DB 唯一索引擋重複）。 */
-  async create(ledgerId: string, name: string, type: TransactionType): Promise<Category> {
+  async create(ledgerId: string, name: string, type: CategoryType): Promise<Category> {
     try {
       const category = await this.prisma.category.create({
         data: { ledgerId, name, type },
@@ -109,7 +109,9 @@ export class CategoriesService {
     return {
       id: category.id,
       name: category.name,
-      type: category.type,
+      // DB 的欄位與交易共用同一個 enum（含 TRANSFER），但分類永遠不會是轉帳：
+      // 唯二的寫入路徑——DTO 與預設種子——都只接受 EXPENSE / INCOME。
+      type: category.type as CategoryType,
       createdAt: category.createdAt.toISOString(),
     };
   }
