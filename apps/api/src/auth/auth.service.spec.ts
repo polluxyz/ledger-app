@@ -1,4 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
+import { DEFAULT_ACCOUNTS } from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
@@ -21,6 +22,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
     user: { findUnique: jest.Mock; create: jest.Mock };
+    account: { createMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let ledgers: { createLedgerForUser: jest.Mock };
@@ -51,8 +53,11 @@ describe('AuthService', () => {
     });
     prisma = {
       user: { findUnique: jest.fn(), create },
-      // 預設：以一個「行為等同 prisma.user」的 tx client 執行 callback。
-      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb({ user: prisma.user })),
+      account: { createMany: jest.fn() },
+      // 預設：以一個「行為等同 prisma 本身」的 tx client 執行 callback。
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
+        cb({ user: prisma.user, account: prisma.account }),
+      ),
     };
     ledgers = { createLedgerForUser: jest.fn() };
     jwt = { signAsync: jest.fn().mockResolvedValue('signed.jwt.token') };
@@ -65,7 +70,7 @@ describe('AuthService', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('hashes the password and provisions a ledger, returning no passwordHash', async () => {
+  it('hashes the password and provisions accounts and a ledger, returning no passwordHash', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     const result = await service.register(dto);
@@ -76,7 +81,11 @@ describe('AuthService', () => {
       true,
     );
 
-    // 帳本在同一個 transaction 內一併備妥。
+    // 預設帳戶與帳本都在同一個 transaction 內一併備妥。少了帳戶的話，使用者
+    // 一登入就記不了任何一筆帳（連動帳本必須指定帳戶），而且畫面上毫無線索。
+    expect(prisma.account.createMany).toHaveBeenCalledWith({
+      data: DEFAULT_ACCOUNTS.map((name) => ({ userId: dbUser.id, name })),
+    });
     expect(ledgers.createLedgerForUser).toHaveBeenCalledWith(
       expect.anything(),
       dbUser.id,
