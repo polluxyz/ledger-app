@@ -1,7 +1,7 @@
 import { Server } from 'node:http';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { AuthTokenResponse, AuthUser } from '@ledger/shared';
+import { Account, AuthTokenResponse, AuthUser } from '@ledger/shared';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -50,10 +50,15 @@ export async function createE2EApp(): Promise<E2EContext> {
   return { app, prisma: app.get(PrismaService) };
 }
 
-/** 清空每張資料表，讓每個測試都從乾淨狀態開始（CASCADE 一併清掉關聯資料）。 */
+/**
+ * 清空每張資料表，讓每個測試都從乾淨狀態開始（CASCADE 一併清掉關聯資料）。
+ *
+ * **新增資料表時務必補進這份清單**——漏掉的症狀很難認：單獨跑會過，整套跑才爛，
+ * 因為前一個測試留下的資料汙染了後面的。
+ */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "Transaction", "Category", "PaymentMethod", "LedgerMember", "Ledger", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE "Transaction", "Category", "Account", "LedgerMember", "Ledger", "User" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -83,4 +88,18 @@ export async function firstLedgerId(app: INestApplication, token: string): Promi
     .get('/api/ledgers')
     .set('Authorization', `Bearer ${token}`);
   return (res.body as Array<{ id: string }>)[0]!.id;
+}
+
+/** 取得使用者的帳戶清單（註冊時自動建立的預設「現金」會是第一筆）。 */
+export async function listAccounts(app: INestApplication, token: string): Promise<Account[]> {
+  const res = await request(httpServer(app))
+    .get('/api/accounts')
+    .set('Authorization', `Bearer ${token}`);
+  return res.body as Account[];
+}
+
+/** 取得使用者預設「現金」帳戶的 id——連動帳本記帳時的必填欄位。 */
+export async function firstAccountId(app: INestApplication, token: string): Promise<string> {
+  const accounts = await listAccounts(app, token);
+  return accounts[0]!.id;
 }
