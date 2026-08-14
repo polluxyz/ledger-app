@@ -17,6 +17,7 @@ enum LedgerRole {
 enum TransactionType {
   EXPENSE
   INCOME
+  TRANSFER // 帳戶之間的資金移動：不計入收入也不計入支出
 }
 
 model User {
@@ -29,19 +30,47 @@ model User {
 
   memberships  LedgerMember[]
   transactions Transaction[]  @relation("TransactionCreator")
+  accounts     Account[]
+}
+
+/// 錢實際放在哪裡（現金、某家銀行、某張信用卡）。
+/// 帳戶屬於「使用者」而非帳本：同一張信用卡若綁帳本，在多本帳本要各建一次、
+/// 餘額各算各的，必定是錯的。因此帳戶跨帳本共用。
+model Account {
+  id             String   @id @default(uuid())
+  userId         String
+  name           String
+  /// 開始使用本系統時該帳戶已有的金額；可為負（例如信用卡既有欠款）
+  initialBalance Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Cascade: 使用者被刪除時，其帳戶一併移除。
+  // 對 Transaction 則採預設的 Restrict——仍被引用的帳戶不可刪（app 層先擋並回 409，
+  // DB 為最後一道防線）。
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions      Transaction[] @relation("TransactionAccount")
+  incomingTransfers Transaction[] @relation("TransactionToAccount")
+
+  @@unique([userId, name]) // 同一使用者下名稱唯一
 }
 
 model Ledger {
-  id        String   @id @default(uuid())
-  name      String
-  currency  String   @default("TWD") // ISO 4217，階段一僅開放 TWD
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  currency      String    @default("TWD") // ISO 4217，階段一僅開放 TWD
+  /// 此帳本的交易是否計入我的帳戶餘額。建立後不可變更（事後改會讓餘額突然跳動）。
+  /// false 用於臨時性、「錢不是我的」的帳本，例如出遊分帳、社團公款。
+  tracksBalance Boolean   @default(true)
+  /// 封存時間；封存後轉為唯讀，且預設不列於帳本清單。
+  /// 用封存取代刪除，是因為別人刪掉共享帳本會讓你的餘額被回溯性改變。
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  members        LedgerMember[]
-  categories     Category[]
-  paymentMethods PaymentMethod[]
-  transactions   Transaction[]
+  members      LedgerMember[]
+  categories   Category[]
+  transactions Transaction[]
 }
 
 model LedgerMember {
@@ -71,44 +100,37 @@ model Category {
   @@unique([ledgerId, type, name])
 }
 
-model PaymentMethod {
-  id        String   @id @default(uuid())
-  ledgerId  String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  ledger       Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-
-  @@unique([ledgerId, name]) // 同帳本內名稱唯一（付款方式不綁 type）
-}
-
 model Transaction {
-  id              String          @id @default(uuid())
-  ledgerId        String
-  categoryId      String
-  paymentMethodId String? // 選填：交易的付款方式
-  creatorId       String
-  type            TransactionType
-  amount          Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
-  date            DateTime // 消費日期（含時間，查詢以日期區間篩選）
-  note            String?
-  deletedAt       DateTime? // 軟刪除標記
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id          String          @id @default(uuid())
+  ledgerId    String
+  /// 可空：TRANSFER 沒有分類。EXPENSE / INCOME 則由 service 強制必填。
+  categoryId  String?
+  /// 錢從哪個帳戶出去（INCOME 則是進到哪個帳戶）。
+  /// 連動帳本必填、非連動帳本必為 null——條件必填由 service 把關。
+  accountId   String?
+  /// 僅 TRANSFER 使用：轉入的帳戶。
+  toAccountId String?
+  creatorId   String
+  type        TransactionType
+  amount      Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
+  date        DateTime // 消費日期（含時間，查詢以日期區間篩選）
+  note        String?
+  deletedAt   DateTime? // 軟刪除標記
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  // Cascade: deleting a ledger removes its transactions. Category stays
-  // Restrict (default) — the app blocks deleting a category still in use.
-  // PaymentMethod is optional and uses SetNull: the app blocks deleting a
-  // payment method still in use (409); SetNull is only the DB-level fallback
-  // and keeps ledger-delete cascade safe (never a FK conflict).
-  ledger        Ledger         @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
-  category      Category       @relation(fields: [categoryId], references: [id])
-  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
-  creator       User           @relation("TransactionCreator", fields: [creatorId], references: [id])
+  // Cascade：刪除帳本會一併刪掉它的交易。
+  // Category / Account 明確指定 Restrict——**選填關聯的 Prisma 預設是 SetNull**，
+  // 那會讓「刪掉仍被引用的分類／帳戶」悄悄把交易的欄位清成 null，而不是報錯。
+  // app 層本來就會先擋下並回 409，這裡的 Restrict 是最後一道防線。
+  ledger    Ledger    @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  account   Account?  @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccount Account?  @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  creator   User      @relation("TransactionCreator", fields: [creatorId], references: [id])
 
   @@index([ledgerId, date])
   @@index([ledgerId, categoryId])
-  @@index([paymentMethodId])
+  @@index([accountId])
+  @@index([toAccountId])
 }

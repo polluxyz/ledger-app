@@ -10,9 +10,16 @@ import App from '../../App';
 describe('Transactions on the home page', () => {
   const fetchMock = vi.fn();
 
-  const ledger = { id: 'ledger-1', name: '我的帳本', currency: 'TWD', role: 'OWNER' };
+  const ledger = {
+    id: 'ledger-1',
+    name: '我的帳本',
+    currency: 'TWD',
+    tracksBalance: true,
+    archivedAt: null,
+    role: 'OWNER',
+  };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const paymentMethod = { id: 'pm-1', name: '現金' };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
@@ -20,7 +27,8 @@ describe('Transactions on the home page', () => {
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
     category: expenseCategory,
-    paymentMethod,
+    account: { id: account.id, name: account.name },
+    toAccount: null,
     creator: { id: 'u1', name: 'Alice' },
     createdAt: '2026-08-12T04:00:00.000Z',
   };
@@ -45,10 +53,12 @@ describe('Transactions on the home page', () => {
   }
 
   /** 依請求路徑回應，讓測試不必在意 react-query 的呼叫順序。 */
-  function routeFetch(overrides: { transactions?: unknown } = {}) {
+  function routeFetch(overrides: { transactions?: unknown; createResponse?: () => Response } = {}) {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/transactions') && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse(201, { ...lunch, id: 'txn-new' }));
+        return Promise.resolve(
+          overrides.createResponse?.() ?? jsonResponse(201, { ...lunch, id: 'txn-new' }),
+        );
       }
       if (url.includes('/transactions')) {
         return Promise.resolve(
@@ -58,8 +68,9 @@ describe('Transactions on the home page', () => {
       if (url.includes('/categories')) {
         return Promise.resolve(jsonResponse(200, [expenseCategory]));
       }
-      if (url.includes('/payment-methods')) {
-        return Promise.resolve(jsonResponse(200, [paymentMethod]));
+      // 帳戶是使用者範圍的頂層端點，路徑裡沒有帳本。
+      if (url.includes('/accounts')) {
+        return Promise.resolve(jsonResponse(200, [account]));
       }
       if (url.includes('/ledgers')) {
         return Promise.resolve(jsonResponse(200, [ledger]));
@@ -80,6 +91,36 @@ describe('Transactions on the home page', () => {
     expect(within(item).getByText(/現金/)).toBeInTheDocument();
   });
 
+  it("shows no account for another member's transaction", async () => {
+    // 共享帳本中，別人的帳戶會被後端遮成 null；列表只是不顯示，其餘照舊。
+    const someoneElses = { ...lunch, account: null, creator: { id: 'u2', name: 'Bob' } };
+    routeFetch({ transactions: { items: [someoneElses], page: 1, limit: 20, total: 1 } });
+
+    render(<App />);
+
+    const item = await screen.findByRole('listitem');
+    expect(within(item).getByText('餐飲')).toBeInTheDocument();
+    expect(within(item).queryByText(/現金/)).not.toBeInTheDocument();
+  });
+
+  it('shows a transfer without a sign and without a category', async () => {
+    // 轉帳沒有分類，也不該顯示正負號——錢只是換了帳戶，沒有花掉也沒有賺到。
+    const transfer = {
+      ...lunch,
+      type: 'TRANSFER',
+      category: null,
+      toAccount: { id: 'acc-2', name: '國泰世華' },
+    };
+    routeFetch({ transactions: { items: [transfer], page: 1, limit: 20, total: 1 } });
+
+    render(<App />);
+
+    const item = await screen.findByRole('listitem');
+    expect(within(item).getByText('轉帳')).toBeInTheDocument();
+    expect(within(item).getByText('$120')).toBeInTheDocument();
+    expect(within(item).getByText(/國泰世華/)).toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no transactions', async () => {
     routeFetch();
 
@@ -90,6 +131,8 @@ describe('Transactions on the home page', () => {
 
   it('adds a transaction and refreshes the list without a reload', async () => {
     const user = userEvent.setup();
+    // 這個案例不能用 routeFetch：要驗證「建立後列表自動重取」，交易清單必須
+    // 隨著 `created` 改變回應內容。
     let created = false;
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/transactions') && init?.method === 'POST') {
@@ -109,8 +152,8 @@ describe('Transactions on the home page', () => {
       if (url.includes('/categories')) {
         return Promise.resolve(jsonResponse(200, [expenseCategory]));
       }
-      if (url.includes('/payment-methods')) {
-        return Promise.resolve(jsonResponse(200, [paymentMethod]));
+      if (url.includes('/accounts')) {
+        return Promise.resolve(jsonResponse(200, [account]));
       }
       return Promise.resolve(jsonResponse(200, [ledger]));
     });
@@ -133,35 +176,24 @@ describe('Transactions on the home page', () => {
       string,
       unknown
     >;
-    // 金額原樣送出（整數、不換算）；未選付款方式時該欄位不送。
+    // 金額原樣送出（整數、不換算）。
     expect(body.amount).toBe(120);
     expect(body.type).toBe('EXPENSE');
-    expect(body.paymentMethodId).toBeUndefined();
+    // 帳戶為必填：使用者沒動下拉，仍會帶上預設（第一個）帳戶——否則後端會回
+    // 400 ACCOUNT_REQUIRED，而使用者根本不知道自己漏了什麼。
+    expect(body.accountId).toBe('acc-1');
   });
 
   it('surfaces a validation error from the backend', async () => {
     const user = userEvent.setup();
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      if (url.includes('/transactions') && init?.method === 'POST') {
-        return Promise.resolve(
-          jsonResponse(400, {
-            statusCode: 400,
-            errorCode: 'VALIDATION_FAILED',
-            message: 'Validation failed',
-            details: ['amount must be a positive number'],
-          }),
-        );
-      }
-      if (url.includes('/transactions')) {
-        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
-      }
-      if (url.includes('/categories')) {
-        return Promise.resolve(jsonResponse(200, [expenseCategory]));
-      }
-      if (url.includes('/payment-methods')) {
-        return Promise.resolve(jsonResponse(200, [paymentMethod]));
-      }
-      return Promise.resolve(jsonResponse(200, [ledger]));
+    routeFetch({
+      createResponse: () =>
+        jsonResponse(400, {
+          statusCode: 400,
+          errorCode: 'VALIDATION_FAILED',
+          message: 'Validation failed',
+          details: ['amount must be a positive number'],
+        }),
     });
 
     render(<App />);

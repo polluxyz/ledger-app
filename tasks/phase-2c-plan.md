@@ -65,7 +65,7 @@ Prisma schema + 破壞性 migration
   `categoryId` 改選填。
 - `types/ledger.ts`：`Ledger` 加 `tracksBalance`、`archivedAt`；`CreateLedgerRequest`
   加 `tracksBalance?`；`ListLedgersQuery`（`includeArchived?`）。
-- `constants/default-accounts.ts`：`DEFAULT_ACCOUNTS = ['現金', '銀行', '信用卡']`。
+- `constants/default-accounts.ts`：`DEFAULT_ACCOUNTS = ['現金']`。
 - `constants/error-codes.ts`：加 8 個新碼、**移除** 2 個 `PAYMENT_METHOD_*`。
 - 刪除 `types/payment-method.ts`、`constants/default-payment-methods.ts`，並更新 `index.ts`。
 - **驗證**：`pnpm --filter @ledger/shared build` 綠（api / web 此時會紅，屬預期）。
@@ -82,7 +82,7 @@ Prisma schema + 破壞性 migration
   2. `CREATE TABLE "Account"` ＋ 索引 ＋ FK
   3. `ALTER TABLE "Ledger" ADD tracksBalance/archivedAt`
   4. `ALTER TABLE "Transaction" ADD accountId/toAccountId`；`categoryId` DROP NOT NULL
-  5. **資料轉換**：`INSERT INTO "Account" ... SELECT` 為每位使用者建三個帳戶；
+  5. **資料轉換**：`INSERT INTO "Account" ... SELECT` 為每位使用者建一個「現金」帳戶；
      `UPDATE "Transaction" SET "accountId" = (該筆 creatorId 的「現金」帳戶)`
   6. `ALTER TABLE "Transaction" DROP COLUMN "paymentMethodId"`；`DROP TABLE "PaymentMethod"`
 - 再 `prisma migrate dev` 套用 ＋ 重新產生 client。

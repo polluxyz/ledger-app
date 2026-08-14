@@ -15,15 +15,22 @@ const ROLE_RANK: Record<LedgerRole, number> = {
 interface LedgerScopedRequest {
   user: JwtPayload;
   params: { ledgerId?: string };
+  method: string;
   ledgerRole?: LedgerRole;
 }
 
 /**
- * 為標了 @RequireLedgerRole() 的路由把關「帳本成員資格與角色」。它在全域
- * JwtAuthGuard 之後執行，因此 request.user 已就緒。
+ * 為標了 @RequireLedgerRole() 的路由把關「帳本成員資格與角色」，並在同一處
+ * 攔下對**已封存帳本**的寫入。它在全域 JwtAuthGuard 之後執行，因此
+ * request.user 已就緒。
  *
  * 安全性：非成員回 404（而非 403），讓 API 絕不洩漏「有一個你無權存取的帳本
  * 存在」。預設拒絕——沒標這個裝飾器的路由，視為與帳本無關，直接放行不檢查。
+ *
+ * 封存檢查為什麼放在 guard 而不是各 service：帳本範圍的寫入端點散布在交易、
+ * 分類、成員、帳本本身等多個 controller，逐一加檢查等於為「日後新增端點時忘記
+ * 加」留了一道門，而那種疏漏不會拋錯，只會讓封存的帳本悄悄可寫。集中在這裡，
+ * 任何標了 @RequireLedgerRole 的新端點都自動受保護。
  */
 @Injectable()
 export class LedgerAccessGuard implements CanActivate {
@@ -65,6 +72,21 @@ export class LedgerAccessGuard implements CanActivate {
         ErrorCode.FORBIDDEN,
         'You do not have permission to perform this action on this ledger.',
       );
+    }
+
+    // 封存的帳本轉為唯讀：GET 一律放行（歷史紀錄必須看得到），其餘方法擋下。
+    if (request.method !== 'GET') {
+      const ledger = await this.prisma.ledger.findUnique({
+        where: { id: ledgerId },
+        select: { archivedAt: true },
+      });
+      if (ledger?.archivedAt) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.LEDGER_ARCHIVED,
+          'This ledger is archived and can no longer be modified.',
+        );
+      }
     }
 
     // 把解析出的角色掛回 request，供後續 handler 需要時取用。

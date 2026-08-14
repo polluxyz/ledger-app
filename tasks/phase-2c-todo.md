@@ -25,7 +25,7 @@
 ## Step 1：shared 契約
 
 - [ ] **1.1 新增帳戶型別與常數**
-  - 內容：`types/account.ts`——`Account`（`id` / `name` / `initialBalance` / `balance` / `createdAt`）、`CreateAccountRequest`（`name`、`initialBalance?`）、`UpdateAccountRequest`（皆選填）；`constants/default-accounts.ts`——`DEFAULT_ACCOUNTS = ['現金', '銀行', '信用卡'] as const`。
+  - 內容：`types/account.ts`——`Account`（`id` / `name` / `initialBalance` / `balance` / `createdAt`）、`CreateAccountRequest`（`name`、`initialBalance?`）、`UpdateAccountRequest`（皆選填）；`constants/default-accounts.ts`——`DEFAULT_ACCOUNTS = ['現金'] as const`（只預設現金；銀行 / 信用卡是帳戶的*種類*而非帳戶，由使用者自行新增）。
   - 驗收：型別可被 import；`balance` 有註解說明是「即時計算、不儲存」。
 - [ ] **1.2 交易與帳本型別調整（破壞性）**
   - 內容：`TRANSACTION_TYPES` 加 `'TRANSFER'`；`Transaction` 的 `category` 改 `{ id, name } | null`、**移除 `paymentMethod`**、新增 `account` / `toAccount`（`{ id, name } | null`）；`CreateTransactionRequest` / `UpdateTransactionRequest` 的 `categoryId` 改選填、加 `accountId?` / `toAccountId?`、移除 `paymentMethodId`；`Ledger` 加 `tracksBalance: boolean` / `archivedAt: string | null`；`CreateLedgerRequest` 加 `tracksBalance?`；新增 `ListLedgersQuery`（`includeArchived?`）。
@@ -43,8 +43,9 @@
   - 內容：新增 `Account` model（`@@unique([userId, name])`、對 `User` `onDelete: Cascade`）；`TransactionType` 加 `TRANSFER`；`Ledger` 加 `tracksBalance Boolean @default(true)` / `archivedAt DateTime?`；`Transaction` 加 `accountId String?` / `toAccountId String?` 與兩條具名關聯、`categoryId` 改 `String?`、加兩個 `@@index`；**移除** `PaymentMethod` model 與 `Transaction.paymentMethodId`。
   - 驗收：`prisma validate` 通過；關聯名稱為 `TransactionAccount` / `TransactionToAccount`。
 - [ ] **2.2 ⚠️ 手寫資料轉換 migration 並套用**
-  - 內容：`prisma migrate dev --create-only` 產出 SQL 後**手動編輯**，依 Plan §2 的六段順序補上資料轉換：為每位使用者 `INSERT` 三個預設帳戶；`UPDATE "Transaction" SET "accountId" = 其 creatorId 的現金帳戶`；末尾加斷言（若仍有 `accountId IS NULL` 則 `RAISE EXCEPTION`）；最後 `DROP` 付款方式相關結構。**SQL 先給開發者過目，同意後才套用。**
-  - 驗收：migration 檔進版控；`prisma migrate dev` 無 pending；Prisma Studio 中——`Account` 表每位使用者三筆、舊交易 `accountId` 全部有值且對應正確使用者、`PaymentMethod` 表已消失；`prisma generate` 後 client 型別更新。
+  - 內容：`prisma migrate dev --create-only` 產出 SQL 後**手動編輯**，依 Plan §2 的六段順序補上資料轉換：為每位使用者 `INSERT` 一個「現金」帳戶；`UPDATE "Transaction" SET "accountId" = 其 creatorId 的現金帳戶`；末尾加斷言（若仍有 `accountId IS NULL` 則 `RAISE EXCEPTION`）；最後 `DROP` 付款方式相關結構。**SQL 先給開發者過目，同意後才套用。**
+  - 驗收：migration 檔進版控；`prisma migrate dev` 無 pending；Prisma Studio 中——`Account` 表每位使用者一筆現金、舊交易 `accountId` 全部有值且對應正確使用者、`PaymentMethod` 表已消失；`prisma generate` 後 client 型別更新。
+  - 註：因 `ALTER TYPE ... ADD VALUE` 的交易限制，實際拆成**兩個** migration 檔（`add_transfer_transaction_type` 與 `accounts_and_balances`）。
 
 ## Step 3：AccountsModule（CRUD ＋ 餘額）
 
@@ -56,7 +57,7 @@
   - 驗收：手動打四個端點成功；帶別人的 accountId → 404；`initialBalance: -5000` 可建立。
 - [ ] **3.3 預設帳戶種子搬家**
   - 內容：`AuthService.register` 的 `$transaction` 內以 `DEFAULT_ACCOUNTS` 建立帳戶；`LedgersService.createLedgerForUser` **移除** `paymentMethod.createMany`；同步更新 `auth.service.spec.ts` 的 mock 期望。
-  - 驗收：新註冊使用者 `GET /accounts` 回三筆、餘額皆為 0（SC-C1）。
+  - 驗收：新註冊使用者 `GET /accounts` 回一筆「現金」、餘額為 0（SC-C1）。
 
 ## Step 4：交易整合
 
