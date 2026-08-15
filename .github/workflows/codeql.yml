@@ -1,0 +1,59 @@
+name: CodeQL
+
+# CodeQL 是 GitHub 的靜態應用程式安全測試（SAST）工具。它與 ci.yml 的 lint /
+# typecheck 不同：lint 看的是「寫法好不好」，CodeQL 追的是「不可信的輸入會不會
+# 一路流到危險的地方」（taint analysis），例如使用者傳入的字串最後被拿去組 SQL、
+# 讀檔路徑或執行指令。這類問題型別檢查與 ESLint 都抓不到。
+#
+# 本 workflow 刻意獨立於 ci.yml：兩者互不影響，要停用直接刪掉這個檔案即可。
+
+on:
+  pull_request:
+    branches: [main] # 任何指向 main 的 PR
+  push:
+    branches: [main] # 合併進 main 之後再驗一次
+  # 每週日 02:00（UTC 18:00 週日 = 台北時間週一 02:00）重跑一次。
+  # 目的是「程式碼沒變、但 CodeQL 新增了規則」的情況——定期重掃才會發現。
+  schedule:
+    - cron: '0 18 * * 0'
+
+# 同一分支若連續推送，取消還在跑的舊分析，避免浪費 runner 時間。
+# 但 main 上的分析不取消，確保預設分支的掃描結果始終完整。
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+
+    # 最小權限原則：只給這個 job 真正需要的授權。
+    permissions:
+      security-events: write # 把分析結果寫回 repo 的 Security 分頁
+      contents: read # 讀取原始碼
+      actions: read # 讀取 workflow 執行資訊（CodeQL 產生報告時需要）
+
+    steps:
+      # 1. 把 repo 的程式碼抓進 runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 初始化 CodeQL 資料庫
+      #    - javascript-typescript 是單一識別碼，同時涵蓋 .js 與 .ts，
+      #      所以 apps/api、apps/web、packages/shared 一次全掃。
+      #    - build-mode: none 表示不需要建置。CodeQL 對 JS/TS 是直接分析原始碼，
+      #      不必先 pnpm install 或 build，這也是它跑起來比 CI 快的原因。
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+      # 3. 執行分析並上傳結果
+      #    category 用來區分同一個 repo 內不同語言 / 不同設定的掃描結果，
+      #    未來若加入其他語言，各自的告警才不會互相覆蓋。
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
