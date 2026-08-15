@@ -1,6 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthTokenResponse, AuthUser, ErrorCode, JwtPayload } from '@ledger/shared';
+import {
+  AuthTokenResponse,
+  AuthUser,
+  DEFAULT_ACCOUNTS,
+  ErrorCode,
+  JwtPayload,
+} from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
@@ -35,9 +41,12 @@ export class AuthService {
   ) {}
 
   /**
-   * 註冊使用者，並在同一個資料庫交易（transaction）內，一併備妥他的個人帳本
-   * （owner 成員身分＋預設分類）。整批要嘛全部提交、要嘛全部回滾——絕不會讓
-   * 使用者落在「有帳號卻沒帳本」的狀態。
+   * 註冊使用者，並在同一個資料庫交易（transaction）內，一併備妥他的預設帳戶與
+   * 個人帳本（owner 成員身分＋預設分類）。整批要嘛全部提交、要嘛全部回滾。
+   *
+   * 帳戶為什麼要一起建：連動帳本的交易**必須**指定帳戶，所以「有帳號卻沒帳戶」
+   * 的使用者一登入就記不了任何一筆帳，而且畫面上不會有任何線索說明原因。原子性
+   * 在這裡不是潔癖，是功能能不能用的問題。
    */
   async register(dto: RegisterDto): Promise<AuthUser> {
     const existing = await this.prisma.user.findUnique({
@@ -57,6 +66,10 @@ export class AuthService {
       const user = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
           data: { email: dto.email, name: dto.name, passwordHash },
+        });
+        // 帳戶屬於使用者（不是帳本），所以種子放在這裡而非 createLedgerForUser。
+        await tx.account.createMany({
+          data: DEFAULT_ACCOUNTS.map((name) => ({ userId: created.id, name })),
         });
         await this.ledgers.createLedgerForUser(tx, created.id, `${created.name} 的帳本`);
         return created;

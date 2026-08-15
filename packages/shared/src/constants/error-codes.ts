@@ -35,10 +35,22 @@ export const ErrorCode = {
   CATEGORY_IN_USE: 'CATEGORY_IN_USE',
   /** 所選分類的型別與交易型別不符。 */
   CATEGORY_TYPE_MISMATCH: 'CATEGORY_TYPE_MISMATCH',
-  /** 同帳本下已存在同名付款方式。 */
-  PAYMENT_METHOD_NAME_TAKEN: 'PAYMENT_METHOD_NAME_TAKEN',
-  /** 仍有交易引用該付款方式時，不可刪除。 */
-  PAYMENT_METHOD_IN_USE: 'PAYMENT_METHOD_IN_USE',
+  /** 同一使用者下已存在同名帳戶。 */
+  ACCOUNT_NAME_TAKEN: 'ACCOUNT_NAME_TAKEN',
+  /** 仍有交易引用該帳戶時，不可刪除（含已軟刪除的交易，歷史須可追溯）。 */
+  ACCOUNT_IN_USE: 'ACCOUNT_IN_USE',
+  /** 在「與帳戶連動」的帳本記帳時，未指定帳戶。 */
+  ACCOUNT_REQUIRED: 'ACCOUNT_REQUIRED',
+  /** 在「不與帳戶連動」的帳本記帳時，卻指定了帳戶。 */
+  ACCOUNT_NOT_ALLOWED: 'ACCOUNT_NOT_ALLOWED',
+  /** 轉帳的轉出與轉入是同一個帳戶。 */
+  TRANSFER_SAME_ACCOUNT: 'TRANSFER_SAME_ACCOUNT',
+  /** 帳本已封存，僅可讀取，不可再寫入。 */
+  LEDGER_ARCHIVED: 'LEDGER_ARCHIVED',
+  /** 帳本內有其他成員記下的交易，因此不可刪除（請改用封存）。 */
+  LEDGER_HAS_OTHERS_TRANSACTIONS: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
+  /** 帳本的「是否與帳戶連動」建立後不可變更。 */
+  TRACKS_BALANCE_IMMUTABLE: 'TRACKS_BALANCE_IMMUTABLE',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

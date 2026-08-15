@@ -42,13 +42,16 @@ export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
 
   // 讀取只需 VIEWER；寫入（新增／更新／刪除）需要 EDITOR。
+  // 每個端點都要傳目前使用者：帳戶欄位只對它的主人顯示，因此 service 必須知道
+  // 「誰在看」。這個參數沒有預設值，漏傳會直接編譯失敗——遮蔽不會靜悄悄失效。
   @Get()
   @RequireLedgerRole('VIEWER')
   list(
     @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
     @Query() query: ListTransactionsQueryDto,
   ): Promise<Paginated<Transaction>> {
-    return this.transactions.list(ledgerId, query);
+    return this.transactions.list(ledgerId, user.sub, query);
   }
 
   @Post()
@@ -68,8 +71,9 @@ export class TransactionsController {
   detail(
     @Param('ledgerId') ledgerId: string,
     @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
   ): Promise<Transaction> {
-    return this.transactions.getById(ledgerId, transactionId);
+    return this.transactions.getById(ledgerId, transactionId, user.sub);
   }
 
   @Patch(':transactionId')
@@ -77,9 +81,10 @@ export class TransactionsController {
   update(
     @Param('ledgerId') ledgerId: string,
     @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateTransactionDto,
   ): Promise<Transaction> {
-    return this.transactions.update(ledgerId, transactionId, dto);
+    return this.transactions.update(ledgerId, transactionId, user.sub, dto);
   }
 
   // 軟刪除：成功時回 204 No Content（空 body）。資料列仍保留在資料庫，只是被

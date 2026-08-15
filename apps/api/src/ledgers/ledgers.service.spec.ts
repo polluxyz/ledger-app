@@ -11,6 +11,7 @@ describe('LedgersService (members)', () => {
   let service: LedgersService;
   let prisma: {
     user: { findUnique: jest.Mock };
+    ledger: { findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
     ledgerMember: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
@@ -19,14 +20,29 @@ describe('LedgersService (members)', () => {
       delete: jest.Mock;
       count: jest.Mock;
     };
+    transaction: { count: jest.Mock };
     $transaction: jest.Mock;
   };
 
   const ledgerId = 'ledger-1';
+  const ledgerRow = {
+    id: ledgerId,
+    name: '家庭帳本',
+    currency: 'TWD',
+    tracksBalance: true,
+    archivedAt: null as Date | null,
+    createdAt: new Date('2026-08-13T00:00:00.000Z'),
+    members: [],
+  };
 
   beforeEach(() => {
     prisma = {
       user: { findUnique: jest.fn() },
+      ledger: {
+        findUnique: jest.fn().mockResolvedValue(ledgerRow),
+        update: jest.fn().mockResolvedValue(ledgerRow),
+        delete: jest.fn(),
+      },
       ledgerMember: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -35,9 +51,113 @@ describe('LedgersService (members)', () => {
         delete: jest.fn(),
         count: jest.fn(),
       },
+      transaction: { count: jest.fn().mockResolvedValue(0) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     service = new LedgersService(prisma as unknown as PrismaService);
+  });
+
+  describe('tracksBalance', () => {
+    it('rejects any attempt to change it after creation', async () => {
+      // 事後翻轉會讓每位成員的餘額瞬間跳動，畫面上卻沒有任何線索。
+      await expect(service.rename(ledgerId, '新名字', false)).rejects.toMatchObject({
+        status: 400,
+        errorCode: 'TRACKS_BALANCE_IMMUTABLE',
+      });
+      expect(prisma.ledger.update).not.toHaveBeenCalled();
+    });
+
+    it('renames normally when it is not supplied', async () => {
+      await service.rename(ledgerId, '新名字');
+
+      expect(prisma.ledger.update).toHaveBeenCalledWith({
+        where: { id: ledgerId },
+        data: { name: '新名字' },
+      });
+    });
+  });
+
+  describe('archive', () => {
+    it('stamps archivedAt', async () => {
+      await service.archive(ledgerId);
+
+      expect(prisma.ledger.update).toHaveBeenCalledWith({
+        where: { id: ledgerId },
+        data: { archivedAt: expect.any(Date) as Date },
+      });
+    });
+
+    it('does not overwrite an existing archive time', async () => {
+      prisma.ledger.findUnique.mockResolvedValue({
+        ...ledgerRow,
+        archivedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await service.archive(ledgerId);
+
+      // 封存時間是稽核資訊，第二次呼叫不該把它抹掉。
+      expect(prisma.ledger.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listForUser', () => {
+    it('excludes archived ledgers by default', async () => {
+      prisma.ledgerMember.findMany.mockResolvedValue([]);
+
+      await service.listForUser('user-1');
+
+      expect(prisma.ledgerMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1', ledger: { archivedAt: null } },
+        }),
+      );
+    });
+
+    it('includes them when asked', async () => {
+      prisma.ledgerMember.findMany.mockResolvedValue([]);
+
+      await service.listForUser('user-1', true);
+
+      expect(prisma.ledgerMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'user-1' } }),
+      );
+    });
+  });
+
+  describe('remove', () => {
+    it('400s when confirm does not match the ledger name', async () => {
+      await expect(service.remove(ledgerId, 'user-1', '打錯的名字')).rejects.toMatchObject({
+        status: 400,
+        errorCode: 'VALIDATION_FAILED',
+      });
+      expect(prisma.ledger.delete).not.toHaveBeenCalled();
+    });
+
+    it('409s when other members have recorded transactions', async () => {
+      // 刪掉會讓別人的交易一起消失，他們的餘額被回溯性改變且無從察覺。
+      prisma.transaction.count.mockResolvedValue(3);
+
+      await expect(service.remove(ledgerId, 'user-1', ledgerRow.name)).rejects.toMatchObject({
+        status: 409,
+        errorCode: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
+      });
+      expect(prisma.ledger.delete).not.toHaveBeenCalled();
+    });
+
+    it('counts soft-deleted transactions as other members’ records too', async () => {
+      await service.remove(ledgerId, 'user-1', ledgerRow.name);
+
+      // 不過濾 deletedAt：軟刪除的仍是別人的紀錄，且仍佔著他的帳戶引用。
+      expect(prisma.transaction.count).toHaveBeenCalledWith({
+        where: { ledgerId, creatorId: { not: 'user-1' } },
+      });
+    });
+
+    it('deletes a ledger holding only the caller’s own transactions', async () => {
+      await service.remove(ledgerId, 'user-1', ledgerRow.name);
+
+      expect(prisma.ledger.delete).toHaveBeenCalledWith({ where: { id: ledgerId } });
+    });
   });
 
   describe('addMember', () => {

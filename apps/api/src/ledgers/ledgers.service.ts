@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   DEFAULT_CATEGORIES,
-  DEFAULT_PAYMENT_METHODS,
   ErrorCode,
   LedgerDetail,
   LedgerMemberInfo,
@@ -26,6 +25,8 @@ interface LedgerRow {
   id: string;
   name: string;
   currency: string;
+  tracksBalance: boolean;
+  archivedAt: Date | null;
   createdAt: Date;
 }
 
@@ -41,11 +42,18 @@ export class LedgersService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 建立一個由指定使用者擁有的帳本，並灌入預設分類與付款方式。它跑在「呼叫端
-   * 傳入的」交易 client 上，因此能與其他寫入（例如註冊使用者）組成同一個原子交易。
+   * 建立一個由指定使用者擁有的帳本，並灌入預設分類。它跑在「呼叫端傳入的」交易
+   * client 上，因此能與其他寫入（例如註冊使用者）組成同一個原子交易。
+   *
+   * 這裡**不建立帳戶**——帳戶屬於使用者、跨帳本共用，種子在註冊時就已備妥。
    */
-  async createLedgerForUser(tx: Prisma.TransactionClient, userId: string, name: string) {
-    const ledger = await tx.ledger.create({ data: { name } });
+  async createLedgerForUser(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    name: string,
+    tracksBalance = true,
+  ) {
+    const ledger = await tx.ledger.create({ data: { name, tracksBalance } });
 
     await tx.ledgerMember.create({
       data: { ledgerId: ledger.id, userId, role: 'OWNER' },
@@ -59,28 +67,27 @@ export class LedgersService {
       })),
     });
 
-    await tx.paymentMethod.createMany({
-      data: DEFAULT_PAYMENT_METHODS.map((name) => ({
-        ledgerId: ledger.id,
-        name,
-      })),
-    });
-
     return ledger;
   }
 
   /** 建立一個獨立帳本；建立者即成為 OWNER。 */
-  async create(userId: string, name: string): Promise<LedgerSummary> {
+  async create(userId: string, name: string, tracksBalance = true): Promise<LedgerSummary> {
     const ledger = await this.prisma.$transaction((tx) =>
-      this.createLedgerForUser(tx, userId, name),
+      this.createLedgerForUser(tx, userId, name, tracksBalance),
     );
     return this.toSummary(ledger, 'OWNER');
   }
 
-  /** 列出使用者所屬的帳本，每筆附上他在該帳本的角色。 */
-  async listForUser(userId: string): Promise<LedgerSummary[]> {
+  /**
+   * 列出使用者所屬的帳本，每筆附上他在該帳本的角色。
+   * 預設排除已封存的——封存的用意就是「從日常視野收起來」。
+   */
+  async listForUser(userId: string, includeArchived = false): Promise<LedgerSummary[]> {
     const memberships = await this.prisma.ledgerMember.findMany({
-      where: { userId },
+      where: {
+        userId,
+        ...(includeArchived ? {} : { ledger: { archivedAt: null } }),
+      },
       include: { ledger: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -103,17 +110,56 @@ export class LedgersService {
     };
   }
 
-  /** 改帳本名稱，並回傳更新後的明細。 */
-  async rename(ledgerId: string, name: string): Promise<LedgerDetail> {
+  /**
+   * 改帳本名稱，並回傳更新後的明細。
+   *
+   * `tracksBalance` 明確擋在這裡：它決定了帳本裡的交易算不算進餘額，事後翻轉會
+   * 讓每個成員的餘額瞬間跳動，而畫面上沒有任何線索說明數字為何變了。
+   */
+  async rename(ledgerId: string, name: string, tracksBalance?: boolean): Promise<LedgerDetail> {
+    if (tracksBalance !== undefined) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.TRACKS_BALANCE_IMMUTABLE,
+        'tracksBalance is fixed when the ledger is created and cannot be changed.',
+      );
+    }
     await this.prisma.ledger.update({ where: { id: ledgerId }, data: { name } });
     return this.getDetail(ledgerId);
   }
 
   /**
-   * 刪除帳本（連帶 cascade 刪除成員與分類）。要求呼叫端在 `confirm` 回填帳本
-   * 名稱，作為誤刪共享資料的防呆關卡。
+   * 封存帳本：轉為唯讀，且預設不再出現在帳本清單中。
+   *
+   * 這是「結束一本帳本」的正常途徑，刪除則是例外（見 `remove`）。
+   *
+   * 走 HTTP 進來時，重複封存會先被 `LedgerAccessGuard` 擋成 409（封存的帳本
+   * 一律不可寫入）；這裡仍保留「已封存就不覆寫時間」的判斷，讓 service 自身
+   * 不依賴 guard 也是安全的——封存時間是稽核資訊，不該被第二次呼叫抹掉。
    */
-  async remove(ledgerId: string, confirm: string | undefined): Promise<void> {
+  async archive(ledgerId: string): Promise<LedgerDetail> {
+    const ledger = await this.prisma.ledger.findUnique({ where: { id: ledgerId } });
+    if (!ledger) {
+      throw this.notFound();
+    }
+    if (!ledger.archivedAt) {
+      await this.prisma.ledger.update({
+        where: { id: ledgerId },
+        data: { archivedAt: new Date() },
+      });
+    }
+    return this.getDetail(ledgerId);
+  }
+
+  /**
+   * 刪除帳本（連帶 cascade 刪除成員、分類與交易）。有兩道關卡：
+   *
+   * 1. 呼叫端要在 `confirm` 回填帳本名稱，防手滑；
+   * 2. **帳本內若有其他成員記的交易，一律不准刪**——那些交易掛在對方的帳戶上，
+   *    刪掉會讓對方的餘額被回溯性改變，而他甚至不會知道發生了什麼事。這種情況
+   *    請改用封存。只有自己記的（或空的）帳本才收得掉，好讓人能清掉建錯的帳本。
+   */
+  async remove(ledgerId: string, actingUserId: string, confirm: string | undefined): Promise<void> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
     });
@@ -127,6 +173,19 @@ export class LedgersService {
         'confirm must exactly match the ledger name.',
       );
     }
+
+    // 計數不過濾 deletedAt：軟刪除的交易仍是別人的紀錄，且仍佔著他的帳戶引用。
+    const othersTransactions = await this.prisma.transaction.count({
+      where: { ledgerId, creatorId: { not: actingUserId } },
+    });
+    if (othersTransactions > 0) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.LEDGER_HAS_OTHERS_TRANSACTIONS,
+        'This ledger holds transactions recorded by other members; archive it instead.',
+      );
+    }
+
     await this.prisma.ledger.delete({ where: { id: ledgerId } });
   }
 
@@ -267,6 +326,8 @@ export class LedgersService {
       id: ledger.id,
       name: ledger.name,
       currency: ledger.currency,
+      tracksBalance: ledger.tracksBalance,
+      archivedAt: ledger.archivedAt?.toISOString() ?? null,
       createdAt: ledger.createdAt.toISOString(),
     };
   }
