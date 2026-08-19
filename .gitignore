@@ -144,3 +144,12 @@ apps/api/src/generated/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# HTML artifact（給人讀的衍生視圖，見 CLAUDE.md §14）——刻意不進版控，三個理由：
+# 1. 真相來源是 docs/specs 與 tasks 的 Markdown；HTML 只是隨時可重新生成的視圖，
+#    進版控等於製造第二份真相，正是 spec 一直在避免的事。
+# 2. 根目錄的 format:check 是 `prettier --check .`（無範圍限制，且是 CI 第一關），
+#    會連 HTML 一起檢查，並重排 inline SVG 與 <pre> 這類空白敏感的內容。
+# 3. codeql.yml 掃 javascript-typescript 且未限定 paths，展示用的 inline <script>
+#    會產生假的 XSS 告警，把 Security 分頁的真警訊淹掉。
+docs/artifacts/
