@@ -284,6 +284,8 @@ Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──�
 
 - 每個 feature / fix 開獨立 PR，**不可把無關變更混在一起**。
 - PR 描述需說明：改了什麼、為什麼、如何測試、影響範圍（特別是是否動到資料模型或 API 介面）。
+- **草擬 PR 時，標題與描述都要給，且整份輸出成一個可直接複製的 Markdown 區塊**，依 `.github/pull_request_template.md` 的四節填好——不要把內容拆散在對話的說明文字裡，那會逼開發者自己拼湊。內容若含程式碼圍欄，外層改用四個反引號。
+- **PR 標題**用 Conventional Commits 格式（`<type>: <簡述>`），與 commit 同慣例用英文；squash merge 後它就是 `main` 上的 commit 標題，必須能獨立看懂。標題與描述**分開列出**（GitHub 是兩個輸入框），別把標題埋在內文裡。
 - PR 必須通過 CI 才能合併。
 - 單人開發時亦進行**自我 code review**，把 PR 當成留給未來與審查者看的決策紀錄。
 - 合併建議用 squash merge，保持 `main` 歷史乾淨。
