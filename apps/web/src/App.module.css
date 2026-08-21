@@ -1,4 +1,5 @@
-.container {
+/* 頁首與頁面共用同一個外框，兩者的左右邊界才會對齊。 */
+.shell {
   max-width: 40rem;
   margin: 0 auto;
   padding: var(--space-lg);

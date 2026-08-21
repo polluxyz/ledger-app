@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LoginForm } from '../features/auth/LoginForm';
+import { toSafeRedirect } from '../lib/safe-redirect';
 import styles from './AuthPage.module.css';
 
 /**
@@ -11,11 +12,14 @@ export default function LoginPage() {
   const location = useLocation();
 
   // 轉址過來時會把來源頁夾帶在 state 裡，登入後送回原本想去的地方。
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
+  // state 可被任意寫入，因此**絕不原樣採信**——先收斂成站內路徑，否則就是一個
+  // 開放轉址漏洞（見 lib/safe-redirect.ts）。
+  const from = toSafeRedirect((location.state as { from?: unknown } | null)?.from);
 
   return (
     <section className={styles.page}>
-      <h1 className={styles.title}>登入</h1>
+      {/* h2：站名在 AppHeader 已經是 h1。 */}
+      <h2 className={styles.title}>登入</h2>
       <LoginForm
         onSuccess={() => navigate(from, { replace: true })}
         footer={

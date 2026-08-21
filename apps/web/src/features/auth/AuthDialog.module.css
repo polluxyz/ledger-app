@@ -1,45 +1,7 @@
-.dialog {
-  width: min(22rem, calc(100vw - 2 * var(--space-md)));
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
-  color: var(--color-text);
-}
-
-.dialog::backdrop {
-  background-color: rgb(0 0 0 / 0.4);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
-
-.title {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.close {
-  padding: var(--space-xs) var(--space-sm);
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.close:hover {
-  background-color: var(--color-bg);
-}
-
+/**
+ * 只剩「切換登入／註冊」那一行的樣式。彈窗外殼（.dialog / .header / .title /
+ * .close）已搬到 components/Dialog.module.css 供所有彈窗共用。
+ */
 .switch {
   margin: var(--space-md) 0 0;
   font-size: 0.875rem;

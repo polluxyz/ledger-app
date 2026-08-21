@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import type { CategoryType } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
@@ -74,6 +75,22 @@ export function TransactionForm({ ledgerId }: { ledgerId: string }) {
           setNote('');
         },
       },
+    );
+  }
+
+  /**
+   * 帳戶可以被刪光（後端只擋「有交易引用」的），但連動帳本的交易必須指定帳戶。
+   * 那時若照常渲染表單，使用者面對的是一個空的下拉，按下送出必定得到 400，
+   * 而畫面上沒有任何線索說明原因——解法還在另一個頁面。所以直接換成引導。
+   */
+  if (!accounts.isLoading && (accounts.data?.length ?? 0) === 0) {
+    return (
+      <section className={styles.form}>
+        <p className={styles.legend}>新增一筆交易</p>
+        <p className={styles.blocked}>
+          記帳前要先有一個帳戶。<Link to="/accounts">前往新增帳戶</Link>
+        </p>
+      </section>
     );
   }
 

@@ -24,3 +24,13 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--space-md);
 }
+
+/* 沒有任何帳戶時取代整張表單的引導文字（見 TransactionForm 的 early return）。 */
+.blocked {
+  margin: 0;
+  padding: var(--space-lg);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  text-align: center;
+}

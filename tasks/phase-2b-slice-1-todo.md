@@ -22,72 +22,85 @@
 
 ## Step 1：抽出通用 Dialog
 
-- [ ] **1.1 `components/Dialog.tsx`**
+- [x] **1.1 `components/Dialog.tsx`**
   - 內容：把 `AuthDialog` 的外殼抽成通用元件——原生 `<dialog>` + `showModal()`、標題列、關閉鈕、`onClose` 同步、**關閉時整個卸載**（`open` 為 false 時回傳 `null`）。props：`open` / `title` / `onClose` / `children`。
   - 驗收：元件本身有測試——`showModal` 有被呼叫；Esc 會觸發 `onClose`；關閉後內容從 DOM 消失（不是只隱藏）。
-- [ ] **1.2 `AuthDialog` 改用 `Dialog`**
+- [x] **1.2 `AuthDialog` 改用 `Dialog`**
   - 內容：只換外殼，登入／註冊表單與切換邏輯完全不動。
   - 驗收：**既有 `AuthDialog.test.tsx` 一字未改仍全綠**——這是這次重構唯一的正確性依據。
 
 ## Step 2：受保護路由
 
-- [ ] **2.1 `app/ProtectedRoute.tsx`**
+- [x] **2.1 `app/ProtectedRoute.tsx`**
   - 內容：未登入時 `<Navigate to="/login" state={{ from: location.pathname + location.search }} replace />`；已登入則 `<Outlet />`。
   - 驗收：測試——未登入存取受保護路徑會被導向 `/login`；已登入則正常渲染。
-- [ ] **2.2 `state.from` 限制為站內路徑（安全性）**
+- [x] **2.2 `state.from` 限制為站內路徑（安全性）**
   - 內容：新增純函式（例如 `lib/safe-redirect.ts`），只接受**以單一 `/` 開頭**的字串；`//`、`https://`、`javascript:` 等一律退回 `/`。`LoginPage` 改用它。
   - 驗收：測試逐一涵蓋 `/accounts`（通過）、`//evil.com`（擋下）、`https://evil.example`（擋下）、`javascript:alert(1)`（擋下）、`undefined`（退回 `/`）。**`//evil.com` 是最容易漏的形式，必須有獨立案例。**
-- [ ] **2.3 路由表接上**
+- [x] **2.3 路由表接上**
   - 內容：`/` 維持公開（首頁預覽模式不變）；新的 `/accounts` 包在 `ProtectedRoute` 之下。
   - 驗收：未登入直接開 `/accounts` 會被導向 `/login`，登入後回到 `/accounts`。
+- [x] **2.4（計畫外）修好 `GuestOnlyRoute` 的無條件轉址**
+  - 起因：2.3 的驗收測試失敗——登入後被送到首頁而非 `/accounts`。`GuestOnlyRoute` 原本無條件 `<Navigate to="/">`，且它在 token 設好的同一輪渲染就生效，**比 `LoginPage` 自己的 `navigate(from)` 更早**。也就是說 `from` 從 Slice 0 起就沒真正運作過，只是先前沒有任何地方寫入它，所以看不出來。
+  - 內容：`GuestOnlyRoute` 改為同樣讀 `state.from` 並經 `toSafeRedirect()` 收斂——把人送走的一方負責送對地方。
+  - 驗收：ProtectedRoute 的整合測試「登入後回到原本要去的頁面」轉綠。
 
 ## Step 3：帳戶的 mutation
 
-- [ ] **3.1 `use-accounts.ts` 補 create / update / remove**
-  - 內容：三個 `useMutation`，成功後 `invalidateQueries({ queryKey: ['accounts'] })`；沿用 `apiRequest`，錯誤原樣往上拋給 `FormError` 呈現。**在檔案註解寫明「任何會改變交易的操作也必須失效這個 key」**（呼應 D5）。
+- [x] **3.1 `use-accounts.ts` 補 create / update / remove**
+  - 內容：三個 `useMutation`，成功後 `invalidateQueries({ queryKey: ACCOUNTS_KEY })`；沿用 `apiRequest`，錯誤原樣往上拋給 `FormError` 呈現。**在檔案註解寫明「任何會改變交易的操作也必須失效這個 key」**（呼應 D5）。
   - 驗收：型別綠；`DELETE` 回 204 時不嘗試解析 JSON（`apiRequest` 已處理，確認沒有回歸）。
+  - 補充：query key 抽成 `ACCOUNTS_KEY` 常數匯出——Step 6 要在 `use-transactions.ts` 失效同一個 key，字串散在兩個檔案的話，哪天有人改成 `['account']` 會靜悄悄失效。
+  - 本步刻意**不寫測試**：三個 mutation 尚無呼叫者，測它們等於測 react-query；真正的驗證在 Step 4 的完整流程。
 
 ## Step 4：帳戶頁
 
-- [ ] **4.1 `AccountList` + `AccountsPage`**
+- [x] **4.1 `AccountList` + `AccountsPage`**
   - 內容：列表每列顯示名稱與餘額（負數紅色，D6），右側「編輯」「刪除」；載入中／錯誤／空狀態各有呈現。
   - 驗收：測試——餘額 `-12000` 顯示為負且套用 expense 樣式；空清單時顯示引導文案。
-- [ ] **4.2 `AccountDialog`（新增／編輯共用）**
+- [x] **4.2 `AccountDialog`（新增／編輯共用）**
   - 內容：以 `Dialog` 承載表單；欄位為名稱與初始餘額（`type="number"`，**不設 `min`**）。編輯時預填現值。送出成功後關閉並自動重取列表。
   - 驗收：測試兩條路徑——新增成功後彈窗關閉且列表出現新帳戶；重複名稱時後端回 409，**訊息顯示在彈窗內且彈窗不關閉**。
-- [ ] **4.3 刪除與 `ConfirmDialog`**
+- [x] **4.3 刪除與 `ConfirmDialog`**
   - 內容：`components/ConfirmDialog.tsx`（基於 `Dialog`）；刪除前確認。後端回 409 `ACCOUNT_IN_USE` 時，顯示「此帳戶已有交易紀錄，無法刪除」之類的可理解訊息。
   - 驗收：測試——確認後才送出 DELETE；取消則完全不發請求；409 有對應提示且帳戶仍在列表中。
-- [ ] **4.4 帳戶為零時的引導**
+- [x] **4.4 帳戶為零時的引導**
   - 內容：帳戶全部刪光時，列表顯示「至少保留一個帳戶才能記帳」的提示；`TransactionForm` 在無帳戶可選時顯示明確引導與前往 `/accounts` 的連結，**而不是一個空的下拉**。
   - 驗收：測試——`accounts` 回空陣列時，交易表單不會渲染出「送出必定 400」的狀態。
 
 ## Step 5：首頁與導覽
 
-- [ ] **5.1 `AccountBalances`（首頁餘額列）**
+- [x] **5.1 `AccountBalances`（首頁餘額列）**
   - 內容：依 D4 放在三張統計卡**下方**、自成一列；每個帳戶一小格（名稱 + 餘額），右側「管理」連結到 `/accounts`。未登入時不顯示（首頁預覽模式維持原樣）。
   - 驗收：測試——已登入顯示餘額；未登入不呼叫 `/accounts`。
-- [ ] **5.2 header 導覽**
+  - 補充（S5-C）：載入中 / 失敗 / 零帳戶各有呈現，共 5 條測試。失敗**不用 `FormError` 紅框**，改一行淡色小字，並保留「管理」入口。
+- [x] **5.2 header 導覽**
   - 內容：登入後 header 顯示「首頁 / 帳戶」連結與登出；未登入維持現狀。
   - 驗收：測試——已登入時「帳戶」連結存在且指向 `/accounts`。
+  - 補充（S5-A）：導覽抽成 `app/AppHeader.tsx` 放進 App 外殼。連帶把各頁標題由 `h1` 降為 `h2`（站名是全站唯一的 `h1`），影響 `AccountsPage`、`LoginPage`、`RegisterPage`。
 
 ## Step 6：快取一致性（D5）
 
-- [ ] **6.1 建立交易後一併失效 `['accounts']`**
+- [x] **6.1 建立交易後一併失效 `['accounts']`**
   - 內容：`useCreateTransaction` 的 `onSuccess` 加上 `invalidateQueries({ queryKey: ['accounts'] })`。
   - 驗收：**獨立測試**——記一筆交易後，`/accounts` 有被重新請求。這種錯誤不會拋例外、不會讓測試變紅，只會讓畫面停在舊數字，因此必須有專屬案例釘住。
+  - 補充：測試在 `use-transactions.test.tsx`，用 `ACCOUNTS_KEY` 常數而非字串。已實際驗證「拿掉那一行測試就紅」，確認它不是白寫的。
 
 ## Step 7：收尾與驗收
 
-- [ ] **7.1 全套指令**
+- [x] **7.1 全套指令**
   - 內容：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`。
   - 驗收：全綠。
-- [ ] **7.2 👤 瀏覽器實測**
+  - 結果：全綠（api 106 條測試、web 63 條）。`pnpm format:check` 亦通過。
+- [x] **7.2 👤 瀏覽器實測**
   - 內容：新增「國泰世華」（初始 5000）→ 用它記一筆 1200 支出 → 餘額變 3800 → 嘗試刪除得到 409 → 改名成功 → 未登入開 `/accounts` 被導向登入。
   - 驗收：逐項符合；對照 spec 的 **SC-14**、**SC-18**。
-- [ ] **7.3 回頭判斷「帳戶型別／分組」**
+  - 結果：8 條（原 6 條加上 Step 5 的 header 導覽與「記帳後首頁餘額不重整就更新」）全數符合。
+- [x] **7.3 回頭判斷「帳戶型別／分組」**
   - 內容：畫面做出來之後，重新評估 `phase-2c-accounts.md` §8 延後的「帳戶型別與型別專屬欄位」——列表只有三五個帳戶時是否真的需要分組。結論**寫回該 spec 的 §8**，不論做或不做。
+  - 一併評估：首頁餘額列在帳戶變多時改成**橫向滑動翻頁**（`overflow-x` + `scroll-snap`，類似手機分頁）。只動 CSS，`AccountBalances` 的資料與結構不變。
   - 驗收：spec §8 該列有更新（含判斷理由）。
+  - 結果：兩者都**維持不做**，理由與重評觸發條件已寫入 `phase-2c-accounts.md` §8。同一節另記入「初始餘額建立後不可更改」的決議，待 Slice 1 合併後另開分支實作。
 - [ ] **7.4 👤 PR `feature/accounts-ui`：自我 review 後合併**
   - 驗收：CI 全綠；squash merge 進 `main`。
 
