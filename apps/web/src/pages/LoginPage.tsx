@@ -18,7 +18,8 @@ export default function LoginPage() {
 
   return (
     <section className={styles.page}>
-      <h1 className={styles.title}>登入</h1>
+      {/* h2：站名在 AppHeader 已經是 h1。 */}
+      <h2 className={styles.title}>登入</h2>
       <LoginForm
         onSuccess={() => navigate(from, { replace: true })}
         footer={

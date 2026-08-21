@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import type { Account } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -39,13 +38,9 @@ export default function AccountsPage() {
   return (
     <section>
       <header className={styles.header}>
-        <h1 className={styles.title}>帳戶</h1>
-        <div className={styles.headerActions}>
-          <Link className={styles.back} to="/">
-            回首頁
-          </Link>
-          <Button onClick={() => setEditing('new')}>新增帳戶</Button>
-        </div>
+        {/* 站名是 AppHeader 的 h1，頁面標題往下一級。回首頁的連結也由頁首負責。 */}
+        <h2 className={styles.title}>帳戶</h2>
+        <Button onClick={() => setEditing('new')}>新增帳戶</Button>
       </header>
 
       <AccountList

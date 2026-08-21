@@ -1,16 +1,4 @@
-.header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
-
-.title {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
+/* 標題與登出移到共用的 AppHeader；這裡只剩頁面內容的樣式。 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

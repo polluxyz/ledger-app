@@ -1,0 +1,74 @@
+.section {
+  margin-bottom: var(--space-lg);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+
+.heading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.manage {
+  font-size: 0.8125rem;
+  color: var(--color-primary);
+}
+
+/*
+ * auto-fit：帳戶少的時候把寬度攤開，多的時候自動換行。
+ * 帳戶數量再成長時，改成橫向滑動翻頁只需要動這一段 CSS（見 plan 的 Step 5 決議）。
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--space-sm);
+}
+
+.cell {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  min-width: 0;
+}
+
+.name {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  /* 帳戶名可以很長，格子寬度是固定的——截斷比撐破版面好。 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.value {
+  display: block;
+  margin-top: var(--space-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 與帳戶頁、交易列表用同一個紅：負餘額是正常狀態，只是要一眼看得出來。 */
+.negative {
+  color: var(--color-danger);
+}
+
+/* 載入中 / 失敗 / 零帳戶共用。高度與一格資料相近，載完不會整頁跳動。 */
+.status {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}

@@ -10,7 +10,8 @@ export default function RegisterPage() {
 
   return (
     <section className={styles.page}>
-      <h1 className={styles.title}>註冊</h1>
+      {/* h2：站名在 AppHeader 已經是 h1。 */}
+      <h2 className={styles.title}>註冊</h2>
       <RegisterForm
         onSuccess={() => navigate('/', { replace: true })}
         footer={
