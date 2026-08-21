@@ -1,0 +1,18 @@
+.message {
+  margin: 0 0 var(--space-lg);
+  font-size: 0.9375rem;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.actions > * {
+  flex: 1;
+}
+
+.danger {
+  background-color: var(--color-danger);
+  color: #fff;
+}
