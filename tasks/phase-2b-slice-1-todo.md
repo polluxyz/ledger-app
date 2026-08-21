@@ -81,9 +81,10 @@
 
 ## Step 6：快取一致性（D5）
 
-- [ ] **6.1 建立交易後一併失效 `['accounts']`**
+- [x] **6.1 建立交易後一併失效 `['accounts']`**
   - 內容：`useCreateTransaction` 的 `onSuccess` 加上 `invalidateQueries({ queryKey: ['accounts'] })`。
   - 驗收：**獨立測試**——記一筆交易後，`/accounts` 有被重新請求。這種錯誤不會拋例外、不會讓測試變紅，只會讓畫面停在舊數字，因此必須有專屬案例釘住。
+  - 補充：測試在 `use-transactions.test.tsx`，用 `ACCOUNTS_KEY` 常數而非字串。已實際驗證「拿掉那一行測試就紅」，確認它不是白寫的。
 
 ## Step 7：收尾與驗收
 
