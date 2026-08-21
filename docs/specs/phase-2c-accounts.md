@@ -63,7 +63,7 @@
 
 - **SC-C1**：註冊後自動取得預設的「現金」帳戶（**只有這一個**——見 §2 決策 15）。
 - **SC-C2**：`GET /accounts` 只回傳自己的帳戶，且每筆附帶**即時計算**的餘額。
-- **SC-C3**：帳戶可新增 / 改名 / 調整初始餘額 / 刪除；同一使用者下名稱唯一（重複 409）。
+- **SC-C3**：帳戶可新增 / 改名 / 刪除；同一使用者下名稱唯一（重複 409）。初始餘額只在**建立時**填寫，之後不可更改——`PATCH` 帶著該欄位回 400（2026-08-22 變更，見 §8）。
 - **SC-C4**：有交易引用（含軟刪除交易）的帳戶不可刪除（409）。
 - **SC-C5**：在**連動**帳本建立交易時未給 `accountId` → 400；給了**別人的**帳戶 → 404（不洩漏存在性）。
 - **SC-C6**：在**非連動**帳本建立交易時給 `accountId` → 400。
@@ -157,7 +157,7 @@ model Transaction {
 | ------ | ---------------- | ------------------------------------------------ |
 | GET    | `/accounts`      | 自己的帳戶清單，每筆含即時餘額                   |
 | POST   | `/accounts`      | 新增 `{ name, initialBalance? }`（重複名稱 409） |
-| PATCH  | `/accounts/{id}` | 改名 / 調整初始餘額                              |
+| PATCH  | `/accounts/{id}` | 改名（**只有名稱**；帶 `initialBalance` 回 400） |
 | DELETE | `/accounts/{id}` | 刪除（有交易引用時 409）                         |
 
 - 授權：僅需 JWT；一律以 `userId = 目前使用者` 過濾，**存取他人帳戶一律 404**。不需要 `LedgerAccessGuard`。
@@ -245,11 +245,9 @@ model Transaction {
 
 ---
 
-### 待實作的變更：初始餘額建立後不可更改（2026-08-22 決議）
+### 已實作的變更：初始餘額建立後不可更改（2026-08-22 決議，同日實作）
 
-**現況**：`PATCH /accounts/{id}` 可以改 `initialBalance`，改了餘額整體平移；帳戶頁的列表也把初始餘額顯示出來。SC-C3 與 `phase-2-web-mvp.md` 的 SC-14 都寫著「可調整初始餘額」。
-
-**要改成**：初始餘額只在建立帳戶時填一次，之後不可更改。前端不再顯示這個欄位，`PATCH` 也不再接受它。
+**做法**：初始餘額只在建立帳戶時填一次，之後不可更改。`UpdateAccountRequest` 與 `UpdateAccountDto` 都不再有這個欄位；全域 `ValidationPipe` 開了 `forbidNonWhitelisted`，所以帶著它的 `PATCH` 會被退回 **400**，而不是被默默丟棄。前端的編輯彈窗不顯示這個欄位，帳戶列表也不再顯示初始餘額。
 
 **為什麼**：初始餘額是「導入系統那一刻的起點」，是一個歷史事實，不是設定值。開放事後修改，等於讓一個數字可以無聲地改變所有歷史餘額。
 
@@ -258,9 +256,9 @@ model Transaction {
 - 帳戶還沒有任何交易 → **刪掉重建**。後端本來就允許（只有被交易引用的帳戶才回 409）。
 - 帳戶已經有交易 → 需要上表的「批量修改交易的帳戶 / 分類」：把交易搬到新建的正確帳戶，舊帳戶就能刪掉。**這個功能沒做之前，這種情況無解**，是這個決議已知且接受的代價。
 
-**時機**：Slice 1 合併之後另開分支處理。它動的是後端規則與 spec，與「帳戶管理 UI」是兩件事，不併進同一個 PR。
+**測試**：e2e 一條（`PATCH` 帶 `initialBalance` 回 400，且值真的沒被改到）、service 單元一條（改名只寫入 `name`）、web 兩條（編輯彈窗沒有這個欄位；列表不顯示初始餘額）。
 
-**要一起改的地方**：`UpdateAccountDto`、`UpdateAccountRequest`（shared）、`AccountsService` 與其測試、`AccountDialog`（編輯時不顯示欄位）、`AccountList`（不顯示初始餘額）、SC-C3、SC-14。
+**在哪裡改的**：分支 `feature/lock-initial-balance`，於 Slice 1（PR #23）合併後另開。動到 `UpdateAccountRequest`（shared）、`UpdateAccountDto`、`AccountsService.update()`、`AccountDialog`、`AccountList`，以及 SC-C3、SC-14 與 §5 的 API 表。
 
 ---
 

@@ -34,12 +34,14 @@ export interface CreateAccountRequest {
 }
 
 /**
- * PATCH /accounts/{accountId} 的請求 body。兩個欄位都可單獨更新。
+ * PATCH /accounts/{accountId} 的請求 body。**只能改名**。
  *
- * 改 `initialBalance` 會連帶讓餘額整體平移——這正是使用者「一開始填錯、事後校正」
- * 時想要的行為。改名則不影響歷史交易（交易存的是 id，不是名稱快照）。
+ * 改名不影響歷史交易，因為交易存的是 id，不是名稱快照。
+ *
+ * `initialBalance` 刻意不在這裡：它是「開始使用本系統那一刻」的歷史事實，不是設定值。
+ * 開放事後修改，等於讓一個數字無聲地改變所有歷史餘額。填錯的補救方式是刪掉帳戶重建
+ * （沒有交易引用時後端允許）；已經有交易的帳戶則要等「批量修改交易的帳戶」功能。
  */
 export interface UpdateAccountRequest {
   name?: string;
-  initialBalance?: number;
 }

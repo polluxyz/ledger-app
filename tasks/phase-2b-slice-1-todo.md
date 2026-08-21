@@ -101,8 +101,9 @@
   - 一併評估：首頁餘額列在帳戶變多時改成**橫向滑動翻頁**（`overflow-x` + `scroll-snap`，類似手機分頁）。只動 CSS，`AccountBalances` 的資料與結構不變。
   - 驗收：spec §8 該列有更新（含判斷理由）。
   - 結果：兩者都**維持不做**，理由與重評觸發條件已寫入 `phase-2c-accounts.md` §8。同一節另記入「初始餘額建立後不可更改」的決議，待 Slice 1 合併後另開分支實作。
-- [ ] **7.4 👤 PR `feature/accounts-ui`：自我 review 後合併**
+- [x] **7.4 👤 PR `feature/accounts-ui`：自我 review 後合併**
   - 驗收：CI 全綠；squash merge 進 `main`。
+  - 結果：PR #23 已 squash merge（`8bb0766`）。**Slice 1 完成。**
 
 ---
 

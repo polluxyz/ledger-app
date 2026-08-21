@@ -122,12 +122,14 @@ export class AccountsService {
     }
   }
 
-  /** 更新帳戶的名稱與／或初始餘額；只有送出的欄位會被改動。 */
-  async update(
-    userId: string,
-    accountId: string,
-    input: { name?: string; initialBalance?: number },
-  ): Promise<Account> {
+  /**
+   * 改帳戶名稱。
+   *
+   * **初始餘額不可更改**：它是建立當下記錄的歷史事實，改了會讓所有歷史餘額一起平移。
+   * 帶著 `initialBalance` 的請求在 `ValidationPipe` 那一層就被退回 400（DTO 未宣告
+   * 該欄位，且全域開了 `forbidNonWhitelisted`），到不了這裡。
+   */
+  async update(userId: string, accountId: string, input: { name?: string }): Promise<Account> {
     await this.getOwned(userId, accountId);
 
     try {
@@ -135,7 +137,6 @@ export class AccountsService {
         where: { id: accountId },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.initialBalance !== undefined ? { initialBalance: input.initialBalance } : {}),
         },
       });
       const balances = await this.calculateBalances([account]);
