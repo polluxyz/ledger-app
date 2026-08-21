@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { Dialog } from '../../components/Dialog';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 import styles from './AuthDialog.module.css';
@@ -15,13 +16,12 @@ interface AuthDialogProps {
  * 登入 / 註冊彈窗。使用者停留在原本的頁面，登入完成後當場看到自己的資料，
  * 不必跳走再跳回來。
  *
- * 採用瀏覽器原生的 `<dialog showModal()>`，可直接獲得焦點鎖定（focus trap）、
- * Esc 關閉、背景遮罩與背景 inert——這些無障礙行為不必自行實作，也省下一個
- * 相依套件。
+ * 外殼（原生 `<dialog>`、標題列、關閉鈕、關閉時卸載）由共用的 `Dialog` 提供；
+ * 這裡只負責「顯示哪一張表單」與兩者之間的切換。
  */
 export function AuthDialog({ mode, onClose }: AuthDialogProps) {
-  // 關閉時整個卸載（而非只是隱藏），因此下次開啟的表單狀態必定是乾淨的——
-  // 不會殘留上一次輸入到一半的內容或錯誤訊息。
+  // 這一層的卸載決定的是「表單的狀態」：關閉後重開時 view 會回到呼叫端指定的
+  // 那一張，而不是停在上次切過去的那張。
   if (!mode) {
     return null;
   }
@@ -35,32 +35,11 @@ function AuthDialogContent({
   initialMode: AuthDialogMode;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<AuthDialogMode>(initialMode);
-
-  // 掛載後才開啟：必須呼叫 showModal() 才會有焦點鎖定與遮罩，
-  // 單純加上 open 屬性並不會。
-  useEffect(() => {
-    dialogRef.current?.showModal();
-  }, []);
-
   const title = view === 'login' ? '登入' : '註冊';
 
   return (
-    <dialog
-      className={styles.dialog}
-      ref={dialogRef}
-      aria-label={title}
-      // 使用者按 Esc（或其他方式）關閉時，讓父層狀態跟著同步。
-      onClose={onClose}
-    >
-      <div className={styles.header}>
-        <h2 className={styles.title}>{title}</h2>
-        <button type="button" className={styles.close} onClick={onClose} aria-label="關閉">
-          ×
-        </button>
-      </div>
-
+    <Dialog open title={title} onClose={onClose}>
       {view === 'login' ? (
         <LoginForm
           onSuccess={onClose}
@@ -86,6 +65,6 @@ function AuthDialogContent({
           }
         />
       )}
-    </dialog>
+    </Dialog>
   );
 }

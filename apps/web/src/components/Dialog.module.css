@@ -1,0 +1,45 @@
+/**
+ * 彈窗的外殼樣式。由 AuthDialog.module.css 搬移而來，內容未變——
+ * 抽出的目的是讓所有彈窗長得一樣，而不是趁機改設計。
+ */
+.dialog {
+  width: min(22rem, calc(100vw - 2 * var(--space-md)));
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+.dialog::backdrop {
+  background-color: rgb(0 0 0 / 0.4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.close {
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  background-color: var(--color-bg);
+}
