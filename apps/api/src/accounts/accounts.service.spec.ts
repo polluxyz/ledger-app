@@ -105,6 +105,21 @@ describe('AccountsService', () => {
     });
   });
 
+  it('only ever writes the name when renaming', async () => {
+    prisma.account.findUnique.mockResolvedValue(row);
+    prisma.account.update.mockResolvedValue({ ...row, name: '國泰' });
+    prisma.transaction.groupBy.mockResolvedValue([]);
+
+    await service.update(userId, accountId, { name: '國泰' });
+
+    // 初始餘額是歷史事實，改名這條路徑不該碰到它。DTO 已經擋掉外部送進來的值，
+    // 這條測試釘住的是「service 自己也不寫」——用 toEqual 而非 objectContaining，
+    // 多帶任何一個欄位都會讓它變紅。
+    expect(prisma.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { name: '國泰' } }),
+    );
+  });
+
   it("returns 404 for another user's account instead of 403", async () => {
     // 存在，但屬於別人——回 403 等於承認它存在，因此一律當作找不到。
     prisma.account.findUnique.mockResolvedValue({ ...row, userId: 'someone-else' });

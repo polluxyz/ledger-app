@@ -32,11 +32,6 @@
   font-weight: 500;
 }
 
-.initial {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
 .right {
   display: flex;
   align-items: center;

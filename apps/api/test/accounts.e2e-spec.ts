@@ -65,6 +65,28 @@ describe('Accounts (e2e)', () => {
     expect(await listAccounts(app, alice.token)).toHaveLength(1);
   });
 
+  it('refuses to change the initial balance after the account exists', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+
+    const created = await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '國泰世華', initialBalance: 5000 });
+    const account = created.body as Account;
+
+    // 初始餘額是建立當下的歷史事實。DTO 沒有這個欄位，而全域 ValidationPipe 開了
+    // forbidNonWhitelisted，所以請求會被退回，而不是把欄位默默丟掉。
+    const patched = await request(server())
+      .patch(`/api/accounts/${account.id}`)
+      .set(auth(alice.token))
+      .send({ initialBalance: 999 });
+    expect(patched.status).toBe(400);
+
+    // 真的沒被改到。
+    const accounts = await listAccounts(app, alice.token);
+    expect(accounts.find((item) => item.id === account.id)?.initialBalance).toBe(5000);
+  });
+
   it('accepts a negative initial balance (a credit card already in debt)', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
 

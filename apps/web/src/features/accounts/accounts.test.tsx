@@ -103,6 +103,47 @@ describe('Accounts page', () => {
     expect(body.name).toBe('國泰世華');
   });
 
+  it('renames without offering the initial balance', async () => {
+    const user = userEvent.setup();
+    routeFetch({ write: () => jsonResponse(200, { ...cash, name: '零錢包' }) });
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: '編輯現金' }));
+
+    // 初始餘額是建立當下的歷史事實，編輯時不該出現——顯示它等於暗示可以改。
+    expect(dialog().queryByLabelText('初始餘額')).not.toBeInTheDocument();
+
+    await user.clear(dialog().getByLabelText('名稱'));
+    await user.type(dialog().getByLabelText('名稱'), '零錢包');
+    await user.click(dialog().getByRole('button', { name: '儲存' }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    const patched = fetchMock.mock.calls.find(
+      (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+    );
+    const body = JSON.parse((patched?.[1] as RequestInit).body as string) as Record<
+      string,
+      unknown
+    >;
+    // 只送名稱。多送 initialBalance 會被後端退回 400。
+    expect(body).toEqual({ name: '零錢包' });
+  });
+
+  it('never shows the initial balance in the list', async () => {
+    routeFetch();
+
+    render(<App />);
+
+    // 現金的初始餘額是 0、信用卡是 -12000，兩者都不該出現在列表上。
+    const items = await screen.findAllByRole('listitem');
+    expect(within(items[0]!).queryByText(/初始/)).not.toBeInTheDocument();
+    expect(within(items[1]!).queryByText(/初始/)).not.toBeInTheDocument();
+  });
+
   it('keeps the dialog open and shows why when the name is taken', async () => {
     const user = userEvent.setup();
     routeFetch({

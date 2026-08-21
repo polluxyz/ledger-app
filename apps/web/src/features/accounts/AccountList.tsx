@@ -40,9 +40,9 @@ export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: Ac
       {accounts.map((account) => (
         <li className={styles.item} key={account.id}>
           <div className={styles.main}>
+            {/* 只顯示名稱與目前餘額。初始餘額建立後就不能改，列出來只是佔位置，
+                看的人真正在意的是「現在還有多少」。 */}
             <span className={styles.name}>{account.name}</span>
-            {/* 顯示初始餘額，才看得出「餘額為什麼是這個數字」。 */}
-            <span className={styles.initial}>初始 ${formatAmount(account.initialBalance)}</span>
           </div>
           <div className={styles.right}>
             <span

@@ -1,12 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { UpdateAccountRequest } from '@ledger/shared';
 
 /**
- * 更新帳戶的請求形狀。兩個欄位都可單獨送出。
+ * 更新帳戶的請求形狀。**只能改名**。
  *
- * 改 `initialBalance` 會讓餘額整體平移，這正是「一開始填錯、事後校正」時要的行為；
- * 改名不影響歷史交易，因為交易存的是 id 而非名稱快照。
+ * `initialBalance` 刻意不列在這裡。它是建立帳戶時記下的歷史事實，一旦開放事後修改，
+ * 所有歷史餘額都會跟著平移，而畫面上看不出發生過這件事。
+ *
+ * 全域 `ValidationPipe` 開了 `forbidNonWhitelisted`（見 `main.ts`），所以帶著
+ * `initialBalance` 的請求會被退回 400，而不是被默默丟棄——規則因此真的擋得住，
+ * 不只是前端不顯示欄位而已。
  */
 export class UpdateAccountDto implements UpdateAccountRequest {
   @ApiPropertyOptional({ example: '台灣銀行', minLength: 1, maxLength: 50 })
@@ -15,10 +19,4 @@ export class UpdateAccountDto implements UpdateAccountRequest {
   @MinLength(1)
   @MaxLength(50)
   name?: string;
-
-  /** 可為負（信用卡既有欠款）；理由同 CreateAccountDto。 */
-  @ApiPropertyOptional({ example: -12000 })
-  @IsOptional()
-  @IsInt()
-  initialBalance?: number;
 }
