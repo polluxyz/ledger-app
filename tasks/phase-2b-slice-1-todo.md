@@ -22,30 +22,36 @@
 
 ## Step 1：抽出通用 Dialog
 
-- [ ] **1.1 `components/Dialog.tsx`**
+- [x] **1.1 `components/Dialog.tsx`**
   - 內容：把 `AuthDialog` 的外殼抽成通用元件——原生 `<dialog>` + `showModal()`、標題列、關閉鈕、`onClose` 同步、**關閉時整個卸載**（`open` 為 false 時回傳 `null`）。props：`open` / `title` / `onClose` / `children`。
   - 驗收：元件本身有測試——`showModal` 有被呼叫；Esc 會觸發 `onClose`；關閉後內容從 DOM 消失（不是只隱藏）。
-- [ ] **1.2 `AuthDialog` 改用 `Dialog`**
+- [x] **1.2 `AuthDialog` 改用 `Dialog`**
   - 內容：只換外殼，登入／註冊表單與切換邏輯完全不動。
   - 驗收：**既有 `AuthDialog.test.tsx` 一字未改仍全綠**——這是這次重構唯一的正確性依據。
 
 ## Step 2：受保護路由
 
-- [ ] **2.1 `app/ProtectedRoute.tsx`**
+- [x] **2.1 `app/ProtectedRoute.tsx`**
   - 內容：未登入時 `<Navigate to="/login" state={{ from: location.pathname + location.search }} replace />`；已登入則 `<Outlet />`。
   - 驗收：測試——未登入存取受保護路徑會被導向 `/login`；已登入則正常渲染。
-- [ ] **2.2 `state.from` 限制為站內路徑（安全性）**
+- [x] **2.2 `state.from` 限制為站內路徑（安全性）**
   - 內容：新增純函式（例如 `lib/safe-redirect.ts`），只接受**以單一 `/` 開頭**的字串；`//`、`https://`、`javascript:` 等一律退回 `/`。`LoginPage` 改用它。
   - 驗收：測試逐一涵蓋 `/accounts`（通過）、`//evil.com`（擋下）、`https://evil.example`（擋下）、`javascript:alert(1)`（擋下）、`undefined`（退回 `/`）。**`//evil.com` 是最容易漏的形式，必須有獨立案例。**
-- [ ] **2.3 路由表接上**
+- [x] **2.3 路由表接上**
   - 內容：`/` 維持公開（首頁預覽模式不變）；新的 `/accounts` 包在 `ProtectedRoute` 之下。
   - 驗收：未登入直接開 `/accounts` 會被導向 `/login`，登入後回到 `/accounts`。
+- [x] **2.4（計畫外）修好 `GuestOnlyRoute` 的無條件轉址**
+  - 起因：2.3 的驗收測試失敗——登入後被送到首頁而非 `/accounts`。`GuestOnlyRoute` 原本無條件 `<Navigate to="/">`，且它在 token 設好的同一輪渲染就生效，**比 `LoginPage` 自己的 `navigate(from)` 更早**。也就是說 `from` 從 Slice 0 起就沒真正運作過，只是先前沒有任何地方寫入它，所以看不出來。
+  - 內容：`GuestOnlyRoute` 改為同樣讀 `state.from` 並經 `toSafeRedirect()` 收斂——把人送走的一方負責送對地方。
+  - 驗收：ProtectedRoute 的整合測試「登入後回到原本要去的頁面」轉綠。
 
 ## Step 3：帳戶的 mutation
 
-- [ ] **3.1 `use-accounts.ts` 補 create / update / remove**
-  - 內容：三個 `useMutation`，成功後 `invalidateQueries({ queryKey: ['accounts'] })`；沿用 `apiRequest`，錯誤原樣往上拋給 `FormError` 呈現。**在檔案註解寫明「任何會改變交易的操作也必須失效這個 key」**（呼應 D5）。
+- [x] **3.1 `use-accounts.ts` 補 create / update / remove**
+  - 內容：三個 `useMutation`，成功後 `invalidateQueries({ queryKey: ACCOUNTS_KEY })`；沿用 `apiRequest`，錯誤原樣往上拋給 `FormError` 呈現。**在檔案註解寫明「任何會改變交易的操作也必須失效這個 key」**（呼應 D5）。
   - 驗收：型別綠；`DELETE` 回 204 時不嘗試解析 JSON（`apiRequest` 已處理，確認沒有回歸）。
+  - 補充：query key 抽成 `ACCOUNTS_KEY` 常數匯出——Step 6 要在 `use-transactions.ts` 失效同一個 key，字串散在兩個檔案的話，哪天有人改成 `['account']` 會靜悄悄失效。
+  - 本步刻意**不寫測試**：三個 mutation 尚無呼叫者，測它們等於測 react-query；真正的驗證在 Step 4 的完整流程。
 
 ## Step 4：帳戶頁
 
