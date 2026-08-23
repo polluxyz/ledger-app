@@ -29,6 +29,8 @@ describe('LedgersService (members)', () => {
     id: ledgerId,
     name: '家庭帳本',
     currency: 'TWD',
+    // 這個測試檔的重心是成員管理，所以預設用共享帳本——私人帳本根本加不了人。
+    kind: 'SHARED' as const,
     tracksBalance: true,
     archivedAt: null as Date | null,
     createdAt: new Date('2026-08-13T00:00:00.000Z'),
@@ -157,6 +159,60 @@ describe('LedgersService (members)', () => {
       await service.remove(ledgerId, 'user-1', ledgerRow.name);
 
       expect(prisma.ledger.delete).toHaveBeenCalledWith({ where: { id: ledgerId } });
+    });
+  });
+
+  describe('kind', () => {
+    it('rejects any attempt to change it after creation', async () => {
+      // 事後翻轉等於讓「誰看得到我的帳」在使用者沒有心理準備時改變。
+      await expect(service.rename(ledgerId, '新名字', undefined, 'SHARED')).rejects.toMatchObject({
+        status: 400,
+        errorCode: 'LEDGER_KIND_IMMUTABLE',
+      });
+      expect(prisma.ledger.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks adding members to a personal ledger, even for the owner', async () => {
+      prisma.ledger.findUnique.mockResolvedValue({ ...ledgerRow, kind: 'PERSONAL' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+
+      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).rejects.toMatchObject({
+        constructor: AppException,
+        status: 409,
+        errorCode: 'PERSONAL_LEDGER_CANNOT_SHARE',
+      });
+      expect(prisma.ledgerMember.create).not.toHaveBeenCalled();
+    });
+
+    it('checks the ledger kind before looking the user up', async () => {
+      // 順序有意義：先查使用者的話，對私人帳本送一個沒註冊的 email 會回
+      // USER_NOT_FOUND，等於洩漏了該 email 未註冊——而呼叫者本就無權對這本
+      // 帳本做任何成員操作。
+      prisma.ledger.findUnique.mockResolvedValue({ ...ledgerRow, kind: 'PERSONAL' });
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.addMember(ledgerId, 'ghost@x.com', 'EDITOR')).rejects.toMatchObject({
+        errorCode: 'PERSONAL_LEDGER_CANNOT_SHARE',
+      });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('keeps a shared ledger shared even when only one member is left', async () => {
+      // 共享帳本不會因為其他人退光而變回私人，所以它加得回人。這正是「不能用
+      // 成員數推導 kind」的具體證據。
+      prisma.ledgerMember.count.mockResolvedValue(1);
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+      prisma.ledgerMember.create.mockResolvedValue({
+        userId: 'user-2',
+        role: 'EDITOR',
+        user: { email: 'bob@x.com', name: 'Bob' },
+      });
+
+      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).resolves.toMatchObject({
+        userId: 'user-2',
+      });
     });
   });
 

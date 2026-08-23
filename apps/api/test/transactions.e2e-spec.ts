@@ -4,6 +4,7 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
   createE2EApp,
+  createSharedLedger,
   firstAccountId,
   firstLedgerId,
   httpServer,
@@ -247,7 +248,8 @@ describe('Transactions (e2e)', () => {
   it("hides another member's account but keeps the rest (SC-C9)", async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
-    const ledgerId = await firstLedgerId(app, alice.token);
+    // 共享帳本才加得了成員——註冊自動建立的那本是私人的（2d）。
+    const ledgerId = await createSharedLedger(app, alice.token);
     const aliceAccount = await firstAccountId(app, alice.token);
     const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
 
@@ -282,7 +284,8 @@ describe('Transactions (e2e)', () => {
   it("lets an editor amend another member's transaction without owning its account", async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
-    const ledgerId = await firstLedgerId(app, alice.token);
+    // 共享帳本才加得了成員——註冊自動建立的那本是私人的（2d）。
+    const ledgerId = await createSharedLedger(app, alice.token);
     const aliceAccount = await firstAccountId(app, alice.token);
     const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
 
@@ -369,7 +372,8 @@ describe('Transactions (e2e)', () => {
   it('forbids a viewer from recording a transaction (403)', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
-    const ledgerId = await firstLedgerId(app, alice.token);
+    // 共享帳本才加得了成員——註冊自動建立的那本是私人的（2d）。
+    const ledgerId = await createSharedLedger(app, alice.token);
     const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
     const bobAccountId = await firstAccountId(app, bob.token);
 

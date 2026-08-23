@@ -3,6 +3,7 @@ import {
   DEFAULT_CATEGORIES,
   ErrorCode,
   LedgerDetail,
+  LedgerKind,
   LedgerMemberInfo,
   LedgerRole,
   LedgerSummary,
@@ -25,9 +26,23 @@ interface LedgerRow {
   id: string;
   name: string;
   currency: string;
+  kind: LedgerKind;
   tracksBalance: boolean;
   archivedAt: Date | null;
   createdAt: Date;
+}
+
+/**
+ * 建立帳本所需的欄位。用具名物件而非一串位置參數——`name` 之後接的是一個布林
+ * 與一個列舉，寫成 `create(userId, name, true, 'SHARED')` 的話，呼叫端讀起來
+ * 認不出哪個是哪個。
+ */
+interface CreateLedgerInput {
+  name: string;
+  /** 省略時為 `PERSONAL`。建立後不可變更。 */
+  kind?: LedgerKind;
+  /** 省略時為 `true`。建立後不可變更。 */
+  tracksBalance?: boolean;
 }
 
 /** 一筆成員關聯資料列，已 join 其 user，供成員相關回應使用。 */
@@ -50,10 +65,10 @@ export class LedgersService {
   async createLedgerForUser(
     tx: Prisma.TransactionClient,
     userId: string,
-    name: string,
-    tracksBalance = true,
+    input: CreateLedgerInput,
   ) {
-    const ledger = await tx.ledger.create({ data: { name, tracksBalance } });
+    const { name, tracksBalance = true, kind = 'PERSONAL' } = input;
+    const ledger = await tx.ledger.create({ data: { name, tracksBalance, kind } });
 
     await tx.ledgerMember.create({
       data: { ledgerId: ledger.id, userId, role: 'OWNER' },
@@ -71,9 +86,9 @@ export class LedgersService {
   }
 
   /** 建立一個獨立帳本；建立者即成為 OWNER。 */
-  async create(userId: string, name: string, tracksBalance = true): Promise<LedgerSummary> {
+  async create(userId: string, input: CreateLedgerInput): Promise<LedgerSummary> {
     const ledger = await this.prisma.$transaction((tx) =>
-      this.createLedgerForUser(tx, userId, name, tracksBalance),
+      this.createLedgerForUser(tx, userId, input),
     );
     return this.toSummary(ledger, 'OWNER');
   }
@@ -113,15 +128,31 @@ export class LedgersService {
   /**
    * 改帳本名稱，並回傳更新後的明細。
    *
-   * `tracksBalance` 明確擋在這裡：它決定了帳本裡的交易算不算進餘額，事後翻轉會
-   * 讓每個成員的餘額瞬間跳動，而畫面上沒有任何線索說明數字為何變了。
+   * `tracksBalance` 與 `kind` 明確擋在這裡，兩者都是建立後即定案的欄位：
+   *
+   * - `tracksBalance` 決定帳本裡的交易算不算進餘額，事後翻轉會讓每個成員的餘額
+   *   瞬間跳動，而畫面上沒有任何線索說明數字為何變了。
+   * - `kind` 決定這本帳本能不能加人。事後翻轉等於讓「誰看得到我的帳」在使用者
+   *   沒有心理準備的情況下改變。
    */
-  async rename(ledgerId: string, name: string, tracksBalance?: boolean): Promise<LedgerDetail> {
+  async rename(
+    ledgerId: string,
+    name: string,
+    tracksBalance?: boolean,
+    kind?: LedgerKind,
+  ): Promise<LedgerDetail> {
     if (tracksBalance !== undefined) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.TRACKS_BALANCE_IMMUTABLE,
         'tracksBalance is fixed when the ledger is created and cannot be changed.',
+      );
+    }
+    if (kind !== undefined) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.LEDGER_KIND_IMMUTABLE,
+        'kind is fixed when the ledger is created and cannot be changed.',
       );
     }
     await this.prisma.ledger.update({ where: { id: ledgerId }, data: { name } });
@@ -199,8 +230,30 @@ export class LedgersService {
     return members.map((member) => this.toMemberInfo(member));
   }
 
-  /** 以 email 查出「已註冊」的使用者並加入帳本（查無此人或已是成員都會擋下）。 */
+  /**
+   * 以 email 查出「已註冊」的使用者並加入帳本（查無此人或已是成員都會擋下）。
+   *
+   * **私人帳本一律擋下，owner 本人也不例外**——那不是權限不足，是帳本的類型不允許。
+   * 前端不會為私人帳本畫出「新增成員」的按鈕，但那只是體驗：Swagger UI 就開在
+   * `/docs`，規則若不寫在這裡就等於不存在。
+   *
+   * 檢查順序有意義：帳本類型排在「查詢目標使用者」之前。反過來的話，對私人帳本送
+   * 一個沒註冊的 email 會拿到 `USER_NOT_FOUND`，那洩漏了該 email 未註冊，而呼叫者
+   * 本就無權對這本帳本做任何成員操作。
+   */
   async addMember(ledgerId: string, email: string, role: LedgerRole): Promise<LedgerMemberInfo> {
+    const ledger = await this.prisma.ledger.findUnique({ where: { id: ledgerId } });
+    if (!ledger) {
+      throw this.notFound();
+    }
+    if (ledger.kind === 'PERSONAL') {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.PERSONAL_LEDGER_CANNOT_SHARE,
+        'This is a personal ledger; create a shared ledger to record with others.',
+      );
+    }
+
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new AppException(
@@ -326,6 +379,7 @@ export class LedgersService {
       id: ledger.id,
       name: ledger.name,
       currency: ledger.currency,
+      kind: ledger.kind,
       tracksBalance: ledger.tracksBalance,
       archivedAt: ledger.archivedAt?.toISOString() ?? null,
       createdAt: ledger.createdAt.toISOString(),

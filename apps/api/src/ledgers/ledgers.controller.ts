@@ -37,7 +37,7 @@ export class LedgersController {
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateLedgerDto): Promise<LedgerSummary> {
-    return this.ledgers.create(user.sub, dto.name, dto.tracksBalance);
+    return this.ledgers.create(user.sub, dto);
   }
 
   // 只回傳呼叫者自己所屬的帳本——資料隔離靠 service 以 user.sub 過濾達成。
@@ -58,7 +58,7 @@ export class LedgersController {
   @Patch(':ledgerId')
   @RequireLedgerRole('OWNER')
   rename(@Param('ledgerId') ledgerId: string, @Body() dto: UpdateLedgerDto): Promise<LedgerDetail> {
-    return this.ledgers.rename(ledgerId, dto.name, dto.tracksBalance);
+    return this.ledgers.rename(ledgerId, dto.name, dto.tracksBalance, dto.kind);
   }
 
   /**

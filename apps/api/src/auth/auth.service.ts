@@ -71,7 +71,11 @@ export class AuthService {
         await tx.account.createMany({
           data: DEFAULT_ACCOUNTS.map((name) => ({ userId: created.id, name })),
         });
-        await this.ledgers.createLedgerForUser(tx, created.id, `${created.name} 的帳本`);
+        // 註冊自動建立的帳本明確標成私人——這是「我自己的帳」，不是要共用的。
+        await this.ledgers.createLedgerForUser(tx, created.id, {
+          name: `${created.name} 的帳本`,
+          kind: 'PERSONAL',
+        });
         return created;
       });
 

@@ -90,6 +90,24 @@ export async function firstLedgerId(app: INestApplication, token: string): Promi
   return (res.body as Array<{ id: string }>)[0]!.id;
 }
 
+/**
+ * 建立一本**共享**帳本並回傳其 id。
+ *
+ * 任何要加入成員的測試都必須用它，不能用 `firstLedgerId`——註冊自動建立的帳本是
+ * `PERSONAL`，加成員會被擋成 409 `PERSONAL_LEDGER_CANNOT_SHARE`（2d）。
+ */
+export async function createSharedLedger(
+  app: INestApplication,
+  token: string,
+  name = 'Shared',
+): Promise<string> {
+  const res = await request(httpServer(app))
+    .post('/api/ledgers')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name, kind: 'SHARED' });
+  return (res.body as { id: string }).id;
+}
+
 /** 取得使用者的帳戶清單（註冊時自動建立的預設「現金」會是第一筆）。 */
 export async function listAccounts(app: INestApplication, token: string): Promise<Account[]> {
   const res = await request(httpServer(app))

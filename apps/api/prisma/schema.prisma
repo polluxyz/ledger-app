@@ -14,6 +14,12 @@ enum LedgerRole {
   VIEWER
 }
 
+/// 帳本是給自己記的，還是要與別人共用。建立後不可變更。
+enum LedgerKind {
+  PERSONAL
+  SHARED
+}
+
 enum TransactionType {
   EXPENSE
   INCOME
@@ -56,17 +62,21 @@ model Account {
 }
 
 model Ledger {
-  id            String    @id @default(uuid())
+  id            String     @id @default(uuid())
   name          String
-  currency      String    @default("TWD") // ISO 4217，階段一僅開放 TWD
+  currency      String     @default("TWD") // ISO 4217，階段一僅開放 TWD
+  /// 私人帳本不得加入成員；共享帳本即使只剩一位成員，仍然是共享帳本。
+  /// 建立後不可變更——轉換會讓「這本帳本誰看得到」在事後改變，而使用者未必察覺。
+  /// 也因為共享帳本可能只有一位成員，這件事無法從成員數推導，必須是一個真正的欄位。
+  kind          LedgerKind @default(PERSONAL)
   /// 此帳本的交易是否計入我的帳戶餘額。建立後不可變更（事後改會讓餘額突然跳動）。
   /// false 用於臨時性、「錢不是我的」的帳本，例如出遊分帳、社團公款。
-  tracksBalance Boolean   @default(true)
+  tracksBalance Boolean    @default(true)
   /// 封存時間；封存後轉為唯讀，且預設不列於帳本清單。
   /// 用封存取代刪除，是因為別人刪掉共享帳本會讓你的餘額被回溯性改變。
   archivedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   members      LedgerMember[]
   categories   Category[]

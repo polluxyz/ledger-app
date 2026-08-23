@@ -5,12 +5,28 @@
 export const LEDGER_ROLES = ['OWNER', 'EDITOR', 'VIEWER'] as const;
 export type LedgerRole = (typeof LEDGER_ROLES)[number];
 
+/**
+ * 帳本是給自己記的，還是要與別人共用。與 Prisma 的 `LedgerKind` enum 對應，
+ * 同樣宣告成 const tuple 好重用於執行期驗證。
+ *
+ * - `PERSONAL`：只有自己。**不得加入成員。**
+ * - `SHARED`：與他人共用。即使其他人都退出、只剩一位成員，它仍然是共享帳本。
+ *
+ * **建立後不可變更。** 想把私人帳本改成共享，請另建一本——轉換會讓「這本帳本誰
+ * 看得到」在事後改變，而使用者未必察覺。也因為共享帳本可能只有一位成員，這件事
+ * **無法從成員數推導**，必須是一個真正的欄位。
+ */
+export const LEDGER_KINDS = ['PERSONAL', 'SHARED'] as const;
+export type LedgerKind = (typeof LEDGER_KINDS)[number];
+
 /** 每種帳本回應形狀都共用的核心欄位。 */
 export interface Ledger {
   id: string;
   name: string;
   /** ISO 4217 幣別代碼（階段一：一律 TWD）。 */
   currency: string;
+  /** 私人或共享。**建立後不可變更**；詳見 `LEDGER_KINDS` 的說明。 */
+  kind: LedgerKind;
   /**
    * 這本帳本的交易是否計入我的帳戶餘額。**建立後不可變更**（事後改會讓餘額突然跳動）。
    *
@@ -58,6 +74,12 @@ export interface ListLedgersQuery {
 /** POST /ledgers 的請求 body。 */
 export interface CreateLedgerRequest {
   name: string;
+  /**
+   * 私人或共享，**省略時為 `PERSONAL`**。建立後就定案，之後不可更改。
+   *
+   * 選 `SHARED` 時可以先不加任何成員——對方也許還沒註冊，不該因此卡住建立。
+   */
+  kind?: LedgerKind;
   /** 是否與我的帳戶餘額連動（預設 true）。**建立後就定案，之後不可更改。** */
   tracksBalance?: boolean;
 }
@@ -65,9 +87,9 @@ export interface CreateLedgerRequest {
 /**
  * PATCH /ledgers/{ledgerId} 的請求 body。
  *
- * 只有名稱可改。`tracksBalance` 刻意**不在**這裡——它建立後即定案；後端仍會明確
- * 接住並回 400 `TRACKS_BALANCE_IMMUTABLE`，好讓誤送的人得到說得出原因的錯誤訊息，
- * 而不是一句籠統的「欄位不被允許」。
+ * 只有名稱可改。`tracksBalance` 與 `kind` 刻意**不在**這裡——兩者建立後即定案。
+ * 後端仍會明確接住它們並回 400（`TRACKS_BALANCE_IMMUTABLE` / `LEDGER_KIND_IMMUTABLE`），
+ * 好讓誤送的人得到說得出原因的錯誤訊息，而不是一句籠統的「欄位不被允許」。
  */
 export interface UpdateLedgerRequest {
   name: string;
