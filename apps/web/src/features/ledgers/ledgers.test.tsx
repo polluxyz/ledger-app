@@ -112,8 +112,8 @@ describe('Ledgers page', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('個人帳本')).toBeInTheDocument();
-    expect(screen.getByText('家庭帳本')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '個人帳本' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '家庭帳本' })).toBeInTheDocument();
     expect(screen.getByText('私人')).toBeInTheDocument();
     expect(screen.getByText('共享')).toBeInTheDocument();
     // 非連動帳本才標示；連動是預設，一律標會讓每列長出一堆標籤。
@@ -126,12 +126,12 @@ describe('Ledgers page', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('個人帳本')).toBeInTheDocument();
-    expect(screen.queryByText('舊帳本')).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '個人帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '舊帳本' })).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('顯示已封存的帳本'));
 
-    expect(await screen.findByText('舊帳本')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '舊帳本' })).toBeInTheDocument();
     expect(screen.getByText('已封存')).toBeInTheDocument();
     expect(requests().some((request) => request.url.includes('includeArchived=true'))).toBe(true);
   });
@@ -141,7 +141,7 @@ describe('Ledgers page', () => {
   async function openCreateDialog() {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText('個人帳本');
+    await screen.findByRole('link', { name: '個人帳本' });
     await user.click(screen.getByRole('button', { name: '建立帳本' }));
     return user;
   }

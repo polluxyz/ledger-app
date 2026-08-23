@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { useAuth } from '../features/auth/use-auth';
+import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import styles from './AppHeader.module.css';
 
 /**
@@ -26,6 +27,10 @@ export function AppHeader() {
       {/* 未登入時只顯示站名：登入 / 註冊的入口在首頁本身，頁首再放一次只是重複。 */}
       {isAuthenticated && (
         <nav className={styles.nav} aria-label="主要導覽">
+          {/* 切換器放在導覽最前面：它決定「現在在哪一本帳本裡」，是讀其他連結
+              之前該先知道的事。管理帳本的入口是隔壁的「帳本」連結，所以下拉
+              裡不再放一個「管理帳本」選項——那會讓選單同時做兩件事。 */}
+          <LedgerSwitcher />
           <NavLink to="/" className={navLinkClass} end>
             首頁
           </NavLink>
