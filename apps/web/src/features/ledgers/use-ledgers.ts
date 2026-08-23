@@ -24,12 +24,16 @@ function ledgersKey(includeArchived: boolean) {
  *
  * `includeArchived` 交給後端處理，前端不自行過濾——後端已經提供這個參數，
  * 在前端篩選等於把判斷搬到不該去的地方，帳本一多也是白拿資料。
+ *
+ * `enabled` 供 `ActiveLedgerProvider` 使用：它掛在路由之上、無法「未登入就不
+ * 渲染」，而訪客沒有 token，打這個端點必定 401。
  */
-export function useLedgers(includeArchived = false) {
+export function useLedgers(includeArchived = false, enabled = true) {
   return useQuery({
     queryKey: ledgersKey(includeArchived),
     queryFn: () =>
       apiRequest<LedgerSummary[]>(`/ledgers${includeArchived ? '?includeArchived=true' : ''}`),
+    enabled,
   });
 }
 
@@ -40,15 +44,6 @@ export function useLedger(ledgerId: string | null) {
     queryFn: () => apiRequest<LedgerDetail>(`/ledgers/${ledgerId as string}`),
     enabled: ledgerId !== null,
   });
-}
-
-/**
- * 目前作用中的帳本。Slice 0 先固定取第一本——註冊時自動建立的個人帳本；
- * 帳本切換與管理留到 Slice 2 Step 2（改由 ActiveLedgerProvider 提供）。
- */
-export function useCurrentLedger() {
-  const query = useLedgers();
-  return { ...query, ledger: query.data?.[0] ?? null };
 }
 
 /**

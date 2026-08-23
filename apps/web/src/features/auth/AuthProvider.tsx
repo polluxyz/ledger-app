@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthTokenResponse, AuthUser, LoginRequest, RegisterRequest } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { clearActiveLedgerId } from '../../lib/active-ledger-storage';
 import { clearToken, readToken, writeToken } from '../../lib/token-storage';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
@@ -40,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearToken();
     setToken(null);
+    // 作用中帳本只是偏好設定，但它是別人帳本的 id，沒有理由留在瀏覽器裡。
+    clearActiveLedgerId();
     // 清掉快取，避免下一位登入者看到上一位的資料。
     queryClient.clear();
   }, [queryClient]);
