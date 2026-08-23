@@ -43,10 +43,10 @@ export function useCreateAccount() {
 }
 
 /**
- * 改名或調整初始餘額。
+ * 帳戶改名。**只有名稱可改**——初始餘額在建立時就定案，帶著它送 PATCH 會被
+ * 後端退成 400（理由見 `docs/specs/phase-2c-accounts.md` §8）。
  *
- * 調整初始餘額會讓該帳戶的餘額整體平移——這正是「一開始填錯、事後校正」時想要的
- * 行為，也是為什麼這裡同樣要讓快取失效：交易一筆都沒變，餘額卻變了。
+ * 名稱不影響餘額，但仍要讓快取失效，列表上的名稱才會跟著更新。
  */
 export function useUpdateAccount() {
   const queryClient = useQueryClient();
