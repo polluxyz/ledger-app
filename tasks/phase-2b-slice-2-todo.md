@@ -1,0 +1,134 @@
+# 任務清單：階段二 (2b) Slice 2 — 帳本與成員（前端）
+
+> 狀態：**已核可**（2026-08-23）
+> 依據：`docs/specs/phase-2-web-mvp.md`、`tasks/phase-2b-slice-2-plan.md`（Plan 已核可）。
+> 用法：依序執行；每個任務有驗收條件。勾選＝「開發者已驗收」。
+> 通用驗收（每任務皆適用，不再重複）：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全綠。
+> 分支：於 `feature/ledgers-ui`（自 `main` 開）。**本步不改後端。**
+
+### 設計決策（已於 Plan §4 核可，實作時一律照此）
+
+| #   | 結論                                                                                    |
+| --- | --------------------------------------------------------------------------------------- |
+| D1  | 作用中帳本用 context + `localStorage`；`/ledgers/:id` 另有自己的網址。存的 id 必須驗證  |
+| D2  | 成員管理放明細頁，不放彈窗                                                              |
+| D3  | 封存不可逆，**接受**。封存前打字輸入帳本名稱；解除封存延後（記於 2c spec §8）           |
+| D4  | 刪除帳本要打字輸入名稱——這是後端 `?confirm=` 契約要求，不是選擇                         |
+| D5  | 連動設定用兩顆 radio，預設連動；下方註明建立後不可更改                                  |
+| D6  | `TransactionForm` 改收整個 `ledger` 物件，依 `tracksBalance` 決定帳戶欄位               |
+| D7  | 非 owner 隱藏管理操作。**這是體驗不是授權**，真正防線在後端                             |
+| D8  | 封存帳本不可設為作用中；切換器只列未封存的                                              |
+| D9  | 現有 query key 已帶 `ledgerId`，切換自然重取。只需補 `['ledgers']` 與 `['members', id]` |
+
+---
+
+## Step 0：分支與既有修正
+
+- [ ] **0.1 開分支並帶入 Slice 1 的勾選修正**
+  - 內容：自 `main` 開 `feature/ledgers-ui`。工作區已有 `docs/specs/phase-2-web-mvp.md:185` 的修正（Slice 1 打勾、刪掉「調初始餘額」），連同本切片的 plan 與 todo 一起做第一個 commit。
+  - 驗收：`git status` 乾淨；`main` 未被動到。
+
+## Step 1：資料層
+
+- [ ] **1.1 `use-ledgers.ts` 補四個 mutation**
+  - 內容：`useCreateLedger`（`POST /ledgers`，帶 `name` 與 `tracksBalance`）、`useRenameLedger`（`PATCH`，**只送 `name`**）、`useArchiveLedger`（`POST /ledgers/:id/archive`）、`useDeleteLedger`（`DELETE /ledgers/:id?confirm=<name>`）。成功後失效 `['ledgers']`。
+  - 補充：query key 抽成 `LEDGERS_KEY` 常數匯出，比照 `ACCOUNTS_KEY`。
+  - 注意：`useLedgers` 要能帶 `includeArchived`，key 必須包含它（`['ledgers', includeArchived]`），否則兩份清單會互相覆蓋。
+  - 驗收：型別綠；`DELETE` 回 204 時不解析 JSON。
+- [ ] **1.2 `use-members.ts` 新增**
+  - 內容：`useMembers(ledgerId)`（`GET /ledgers/:id/members`，key `['members', ledgerId]`）、`useAddMember`、`useUpdateMemberRole`、`useRemoveMember`。三個 mutation 成功後失效 `['members', ledgerId]`；移除自己時要一併失效 `['ledgers']`（帳本會從清單消失）。
+  - 驗收：型別綠。
+  - 本步刻意**不寫測試**：尚無呼叫者，測它們等於測 react-query。真正的驗證在 Step 6。
+
+## Step 2：作用中帳本
+
+- [ ] **2.1 `ActiveLedgerProvider`**
+  - 內容：context 提供 `{ ledger, ledgerId, setLedgerId, ledgers, isLoading, error }`。id 存 `localStorage`（key 例如 `ledger-app.activeLedgerId`）。
+  - **核心規則**：存的 id 一律要與 `/ledgers` 的結果對照。對不上（被刪、被移出成員、已封存）就退回**第一本未封存的帳本**，並把 `localStorage` 更新成新值。
+  - 驗收：測試四種情形——存的 id 有效則採用；id 不存在則退回第一本；id 指向已封存帳本則退回第一本；`localStorage` 是空的則取第一本。
+- [ ] **2.2 掛進 Providers 並改寫 `HomePage`**
+  - 內容：`useCurrentLedger()` 的「固定取第一本」邏輯移除，改由 context 提供。`HomePage` 的 `LedgerView` 改用 context。
+  - 驗收：既有的 HomePage / TransactionForm 測試全綠（行為不變，只換來源）。
+
+## Step 3：帳本列表與建立
+
+- [ ] **3.1 `LedgerList` + `LedgersPage`**
+  - 內容：每列顯示名稱、我的角色、是否連動、封存狀態；點名稱進明細頁。列表頂端一個「顯示已封存」的 checkbox（對應 `includeArchived`）。載入中／錯誤／空狀態各有呈現。
+  - 驗收：測試——勾選「顯示已封存」後會用 `includeArchived=true` 重新請求；封存帳本有明確標示。
+- [ ] **3.2 `LedgerDialog`（建立）**
+  - 內容：以 `Dialog` 承載。欄位：名稱、連動設定（兩顆 radio，預設連動，D5）。radio 下方一行灰字：「建立後不可更改」。送出成功後關閉、列表更新，並詢問是否切換過去（或直接切換，見驗收）。
+  - 驗收：測試——建立成功後彈窗關閉且新帳本出現在列表；radio 預設選中「與我的帳戶連動」；送出的 body 確實帶 `tracksBalance`。
+- [ ] **3.3 路由接上**
+  - 內容：`/ledgers` 掛進 `ProtectedRoute` 之下。
+  - 驗收：未登入開 `/ledgers` 被導向 `/login`，登入後回到 `/ledgers`。
+
+## Step 4：帳本切換器
+
+- [ ] **4.1 `LedgerSwitcher` 放進 `AppHeader`**
+  - 內容：下拉選單，**只列未封存的帳本**（D8）。選了就 `setLedgerId`。下拉最後一項是「管理帳本」，連到 `/ledgers`。
+  - 注意：只在已登入時渲染，比照 `AccountBalances` 的處理（hook 不能有條件呼叫）。
+  - 驗收：測試——已封存的帳本不出現在選項中；切換後首頁的交易列表跟著換（`['transactions', ledgerId]` 換 key 重取）。
+- [ ] **4.2 帳本只有一本時的呈現**
+  - 內容：只有一本帳本時，下拉沒有切換的意義。顯示帳本名稱即可，不畫成可展開的下拉。
+  - 驗收：測試——一本時不渲染 `<select>`；兩本以上才渲染。
+
+## Step 5：帳本明細與改名
+
+- [ ] **5.1 `LedgerDetailPage`**
+  - 內容：路由 `/ledgers/:ledgerId`，用 `GET /ledgers/:id` 取明細。顯示名稱、幣別、連動設定（唯讀，附「建立後不可更改」說明）、封存時間、我的角色。
+  - 注意：直接開一個沒有權限的 id，後端回 404。要顯示「找不到這本帳本」，**不可顯示「無權限」**——那會洩漏該帳本存在。
+  - 驗收：測試——404 時顯示找不到；不出現任何暗示帳本存在的字眼。
+- [ ] **5.2 改名**
+  - 內容：沿用 `LedgerDialog`（改名模式，不顯示連動 radio）。owner 才看得到入口（D7）。
+  - 驗收：測試——非 owner 看不到改名按鈕；改名成功後標題與列表都更新。
+
+## Step 6：成員管理
+
+- [ ] **6.1 `MemberList`**
+  - 內容：每列顯示名稱、email、角色。owner 才看得到「改角色」「移除」。**「退出帳本」對所有成員顯示**（D7）。
+  - 驗收：測試——以 EDITOR 身分渲染時，看不到改角色與移除他人的按鈕，但看得到「退出帳本」。
+- [ ] **6.2 加入成員**
+  - 內容：`MemberDialog`，欄位為 email 與角色。
+  - 驗收：測試三條路徑——成功後清單出現新成員；`USER_NOT_FOUND` 顯示「查無此使用者，對方需要先註冊」；`ALREADY_MEMBER` 顯示「這個人已經是成員」。**訊息不可只寫「找不到」或「衝突」。**
+- [ ] **6.3 改角色**
+  - 內容：`PATCH /ledgers/:id/members/:userId`。
+  - 驗收：測試——把最後一位 owner 降級時，後端回 409 `LAST_OWNER_CANNOT_LEAVE`，畫面顯示「帳本至少要有一位擁有者」且角色沒被改掉。
+- [ ] **6.4 移除與退出**
+  - 內容：移除他人與退出自己共用同一個端點，但確認文案不同（「移除 Bob？」vs「退出這本帳本？」）。用 `ConfirmDialog`，**不需要打字確認**（可以再被加回來，不是不可逆）。
+  - 驗收：測試——退出成功後導回 `/ledgers` 且該帳本從清單消失；`LAST_OWNER_CANNOT_LEAVE` 有對應提示。
+  - 注意：退出的若是作用中帳本，Step 2.1 的退回邏輯要接得住。這條要有測試。
+
+## Step 7：封存與刪除
+
+- [ ] **7.1 `ConfirmDialog` 加 `confirmText`**
+  - 內容：新增選用 prop。有值時多渲染一個輸入框，輸入內容與 `confirmText` 完全相符才啟用確認鈕。純加法。
+  - 驗收：**Slice 1 的三個既有呼叫點一字未改仍全綠**；新增測試——字串不符時確認鈕停用，相符時啟用。
+- [ ] **7.2 封存**
+  - 內容：owner 才看得到。用 `ConfirmDialog` 且 `confirmText` 設為帳本名稱。文案要明說**封存後無法復原**，並說明封存的效果（轉為唯讀、從切換器消失）。
+  - 驗收：測試——確認字串不符時送不出去；封存成功後帳本從切換器消失，且作用中帳本自動退回第一本未封存的。
+- [ ] **7.3 刪除**
+  - 內容：owner 才看得到。`DELETE /ledgers/:id?confirm=<帳本名稱>`，同樣用 `confirmText`。
+  - 驗收：測試兩條路徑——成功後導回 `/ledgers`；409 `LEDGER_HAS_OTHERS_TRANSACTIONS` 顯示「這本帳本有其他成員記的交易，請改用封存」並提供封存入口。
+
+## Step 8：交易表單依連動設定調整（SC-16）
+
+- [ ] **8.1 `TransactionForm` 改收整個 `ledger`**
+  - 內容：props 從 `ledgerId: string` 改為 `ledger: LedgerSummary`。`tracksBalance` 為 false 時**不渲染帳戶欄位**，送出的 body **不帶 `accountId`**。
+  - 驗收：測試兩種帳本——連動帳本有帳戶下拉且 body 帶 `accountId`；非連動帳本沒有帳戶欄位且 body 不帶該欄位。**這兩條要獨立寫，不改既有測試。**
+- [ ] **8.2 非連動帳本不顯示餘額提示**
+  - 內容：確認首頁的 `AccountBalances` 不受影響（帳戶屬於使用者，與帳本無關），但非連動帳本記帳後**餘額不會變**是正常的。在表單旁一行灰字說明「這本帳本不影響帳戶餘額」。
+  - 驗收：測試——非連動帳本時出現該說明；連動帳本時不出現。
+
+## Step 9：收尾與驗收
+
+- [ ] **9.1 全套指令綠**
+  - 驗收：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全綠。
+- [ ] **9.2 瀏覽器實測（對照 Plan §7）**
+  - 內容：需要兩個帳號才驗得了成員管理。用 `demo@example.com` 與第二個測試帳號。
+  - 驗收：Plan §7 的 6 條逐條走過，SC-7、SC-8、SC-16、SC-17 逐條核對。
+- [ ] **9.3 回寫文件**
+  - 內容：`docs/specs/phase-2-web-mvp.md` §9 第 5 項打勾；實作過程中偏離計畫的地方回寫本 todo 與 plan。
+  - 驗收：spec 與程式碼一致。
+- [ ] **9.4 PR**
+  - 內容：草擬 `feature/ledgers-ui` 的 PR 標題與描述（Markdown 區塊，依 `.github/pull_request_template.md`）。
+  - 驗收：CI 全綠後由開發者 squash merge。
