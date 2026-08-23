@@ -44,6 +44,28 @@ export function useAddMember(ledgerId: string) {
   });
 }
 
+/**
+ * 加入成員，但帳本 id 在**呼叫時**才給。
+ *
+ * 建立帳本的表單需要這個形狀：hook 建立的當下帳本還不存在，id 要等
+ * `POST /ledgers` 回來才知道。`useAddMember` 則適用於已經在某本帳本裡的畫面。
+ */
+export function useAddMemberTo() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ ledgerId, ...input }: AddMemberRequest & { ledgerId: string }) =>
+      apiRequest<LedgerMemberInfo>(`/ledgers/${ledgerId}/members`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: (_data, { ledgerId }) => {
+      void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
+      void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
+    },
+  });
+}
+
 /** 變更成員角色。把最後一位 owner 降級時後端回 409 `LAST_OWNER_CANNOT_LEAVE`。 */
 export function useUpdateMemberRole(ledgerId: string) {
   const queryClient = useQueryClient();

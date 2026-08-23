@@ -29,6 +29,9 @@ export function AppHeader() {
           <NavLink to="/" className={navLinkClass} end>
             首頁
           </NavLink>
+          <NavLink to="/ledgers" className={navLinkClass}>
+            帳本
+          </NavLink>
           <NavLink to="/accounts" className={navLinkClass}>
             帳戶
           </NavLink>

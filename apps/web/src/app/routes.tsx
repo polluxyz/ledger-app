@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AccountsPage from '../pages/AccountsPage';
 import HomePage from '../pages/HomePage';
+import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
 import { GuestOnlyRoute } from './GuestOnlyRoute';
@@ -28,6 +29,7 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/ledgers" element={<LedgersPage />} />
       </Route>
 
       {/* 未知路徑導回首頁。 */}

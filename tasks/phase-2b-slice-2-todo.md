@@ -4,7 +4,7 @@
 > 依據：`docs/specs/phase-2-web-mvp.md`、`tasks/phase-2b-slice-2-plan.md`（Plan 已核可）。
 > 用法：依序執行；每個任務有驗收條件。勾選＝「開發者已驗收」。
 > 通用驗收（每任務皆適用，不再重複）：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全綠。
-> 分支：於 `feature/ledgers-ui`（自 `main` 開）。**本步不改後端。**
+> 分支：Step 0～2 於 `feature/ledgers-ui`（已合併，PR #26）；Step 3 之後於 `feature/ledgers-ui-slice2`。**本切片不改後端。**
 
 ### 設計決策（已於 Plan §4 核可，實作時一律照此）
 
@@ -80,20 +80,21 @@
 
 ## Step 3：帳本列表與建立
 
-- [ ] **3.1 `LedgerList` + `LedgersPage`**
+- [x] **3.1 `LedgerList` + `LedgersPage`**
   - 內容：每列顯示名稱、**帳本類型（私人 / 共享）**、我的角色、是否連動、封存狀態；點名稱進明細頁。共享帳本另顯示成員數。列表頂端一個「顯示已封存」的 checkbox（對應 `includeArchived`）。載入中／錯誤／空狀態各有呈現。
   - **不做分組**（私人一區、共享一區）。帳本數量現階段個位數，分組只會把畫面切碎——與 2c 對帳戶分組的判斷一致。
   - 驗收：測試——勾選「顯示已封存」後會用 `includeArchived=true` 重新請求；封存帳本有明確標示；私人與共享各有可辨識的標籤。
-- [ ] **3.2 `LedgerDialog`（建立）**
+  - **未做：成員數（2026-08-23）**。`LedgerSummary` 沒有成員數，只有 `LedgerDetail` 帶完整成員清單。前端要顯示就得對每一本帳本各打一次 `GET /ledgers/{id}`，是 N+1 請求。要做的話得在後端替 `LedgerSummary` 加一個 `memberCount`，屬 API 變更，本步不動。成員數在 Step 5 的明細頁看得到。
+- [x] **3.2 `LedgerDialog`（建立）**
   - 內容：以 `Dialog` 承載。由上到下：名稱 → **帳本類型（radio，預設私人）** → 選共享才展開的參與者區塊 → 連動設定（radio，預設連動）。兩組 radio 下方各一行灰字：「建立後不可更改」。
   - 驗收：測試——建立成功後彈窗關閉且新帳本出現在列表；radio 預設選中「私人」與「與我的帳戶連動」；送出的 body 確實帶 `kind` 與 `tracksBalance`；選私人時參與者區塊不出現。
-- [ ] **3.3 `LedgerParticipants` + `MemberFields`（D10）**
+- [x] **3.3 `LedgerParticipants` + `MemberFields`（D10）**
   - 內容：`MemberFields` 是一列的 email 與角色（角色只給 `EDITOR` / `VIEWER`）；`LedgerParticipants` 擁有整份清單與增減列。email 欄位旁註明「對方需要已註冊；還沒註冊的話可以先建立帳本，之後再加」。
   - **送出流程**：先 `POST /ledgers`，再逐筆 `POST .../members`。全部成功才關閉彈窗；有失敗則**帳本照建、彈窗留著**，就地顯示失敗的那幾筆與原因，可改了重試，成功的不重送。**前端不做補償刪除。**
   - 驗收：測試四條——共享但一位都沒填時只送一個 `POST /ledgers`；兩位參與者其中一位 `USER_NOT_FOUND` 時帳本已建立、另一位已加入、彈窗留著顯示錯誤；修正 email 後重試只重送失敗的那筆；角色下拉沒有 `OWNER` 選項。
-- [ ] **3.4 路由接上**
+- [x] **3.4 路由接上**
   - 內容：`/ledgers` 掛進 `ProtectedRoute` 之下。
-  - 驗收：未登入開 `/ledgers` 被導向 `/login`，登入後回到 `/ledgers`。
+  - 驗收：未登入開 `/ledgers` 被導向 `/login`，登入後回到 `/ledgers`。頁首導覽一併加上「帳本」連結。
 
 ## Step 4：帳本切換器
 
