@@ -51,6 +51,10 @@ export const ErrorCode = {
   LEDGER_HAS_OTHERS_TRANSACTIONS: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
   /** 帳本的「是否與帳戶連動」建立後不可變更。 */
   TRACKS_BALANCE_IMMUTABLE: 'TRACKS_BALANCE_IMMUTABLE',
+  /** 帳本的「私人 / 共享」建立後不可變更。 */
+  LEDGER_KIND_IMMUTABLE: 'LEDGER_KIND_IMMUTABLE',
+  /** 私人帳本不得加入成員。想共享請另建一本共享帳本。 */
+  PERSONAL_LEDGER_CANNOT_SHARE: 'PERSONAL_LEDGER_CANNOT_SHARE',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

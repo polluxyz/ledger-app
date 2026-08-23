@@ -4,6 +4,7 @@ import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
   createE2EApp,
+  createSharedLedger,
   firstAccountId,
   firstLedgerId,
   httpServer,
@@ -46,7 +47,8 @@ describe('Ledgers & members (e2e)', () => {
   it('lets an owner add a member and enforces role on writes', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
-    const ledgerId = await firstLedgerId(app, alice.token);
+    // 共享帳本才加得了成員——註冊自動建立的那本是私人的（2d）。
+    const ledgerId = await createSharedLedger(app, alice.token, 'Household');
 
     const added = await request(server())
       .post(`/api/ledgers/${ledgerId}/members`)
@@ -73,7 +75,7 @@ describe('Ledgers & members (e2e)', () => {
   it('rejects adding an unknown email (404) or an existing member (409)', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     await registerAndLogin(app, 'bob@example.com', 'Bob');
-    const ledgerId = await firstLedgerId(app, alice.token);
+    const ledgerId = await createSharedLedger(app, alice.token);
 
     const unknown = await request(server())
       .post(`/api/ledgers/${ledgerId}/members`)
@@ -198,7 +200,7 @@ describe('Ledgers & members (e2e)', () => {
     const created = await request(server())
       .post('/api/ledgers')
       .set(auth(alice.token))
-      .send({ name: 'Family' });
+      .send({ name: 'Family', kind: 'SHARED' });
     const ledgerId = (created.body as LedgerSummary).id;
 
     await request(server())
@@ -231,5 +233,106 @@ describe('Ledgers & members (e2e)', () => {
     expect((blocked.body as { errorCode: string }).errorCode).toBe(
       'LEDGER_HAS_OTHERS_TRANSACTIONS',
     );
+  });
+
+  // ── 帳本類型（2d） ────────────────────────────────────────────────────────
+
+  it('defaults a new ledger to personal and honours an explicit kind (SC-D1)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+
+    const omitted = await request(server())
+      .post('/api/ledgers')
+      .set(auth(alice.token))
+      .send({ name: '沒說類型' });
+    expect(omitted.status).toBe(201);
+    expect((omitted.body as LedgerSummary).kind).toBe('PERSONAL');
+
+    const shared = await request(server())
+      .post('/api/ledgers')
+      .set(auth(alice.token))
+      .send({ name: '家庭帳本', kind: 'SHARED' });
+    expect((shared.body as LedgerSummary).kind).toBe('SHARED');
+  });
+
+  it('creates the registration ledger as personal (SC-D6)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+
+    const listed = await request(server()).get('/api/ledgers').set(auth(alice.token));
+    expect((listed.body as LedgerSummary[])[0]!.kind).toBe('PERSONAL');
+  });
+
+  it('refuses to change kind after creation (SC-D2)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+
+    const res = await request(server())
+      .patch(`/api/ledgers/${ledgerId}`)
+      .set(auth(alice.token))
+      .send({ name: '改個名', kind: 'SHARED' });
+    expect(res.status).toBe(400);
+    expect((res.body as { errorCode: string }).errorCode).toBe('LEDGER_KIND_IMMUTABLE');
+
+    // 名稱也不該被順手改掉——整個請求被拒絕，不是部分套用。
+    const after = await request(server()).get(`/api/ledgers/${ledgerId}`).set(auth(alice.token));
+    expect((after.body as LedgerSummary).kind).toBe('PERSONAL');
+    expect((after.body as LedgerSummary).name).not.toBe('改個名');
+  });
+
+  it('refuses to add a member to a personal ledger (SC-D3)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    await registerAndLogin(app, 'bob@example.com', 'Bob');
+    // owner 本人呼叫也一樣被擋：這不是權限問題，是帳本類型不允許。
+    const ledgerId = await firstLedgerId(app, alice.token);
+
+    const res = await request(server())
+      .post(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token))
+      .send({ email: 'bob@example.com', role: 'EDITOR' });
+    expect(res.status).toBe(409);
+    expect((res.body as { errorCode: string }).errorCode).toBe('PERSONAL_LEDGER_CANNOT_SHARE');
+
+    const members = await request(server())
+      .get(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token));
+    expect(members.body as LedgerMemberInfo[]).toHaveLength(1);
+  });
+
+  it('does not leak whether an email is registered on a personal ledger (SC-D3)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+
+    // 帳本類型的檢查排在查詢使用者之前，所以這裡不會回 USER_NOT_FOUND。
+    const res = await request(server())
+      .post(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token))
+      .send({ email: 'ghost@example.com', role: 'EDITOR' });
+    expect((res.body as { errorCode: string }).errorCode).toBe('PERSONAL_LEDGER_CANNOT_SHARE');
+  });
+
+  it('keeps a shared ledger shared after everyone else leaves (SC-D5)', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const bob = await registerAndLogin(app, 'bob@example.com', 'Bob');
+    const ledgerId = await createSharedLedger(app, alice.token, 'Trip');
+
+    await request(server())
+      .post(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token))
+      .send({ email: 'bob@example.com', role: 'EDITOR' });
+
+    // Bob 自行退出，帳本只剩 Alice 一個人。
+    const left = await request(server())
+      .delete(`/api/ledgers/${ledgerId}/members/${bob.userId}`)
+      .set(auth(bob.token));
+    expect(left.status).toBe(204);
+
+    const detail = await request(server()).get(`/api/ledgers/${ledgerId}`).set(auth(alice.token));
+    expect((detail.body as LedgerSummary).kind).toBe('SHARED');
+
+    // 而且還加得回人——這正是「不能用成員數推導 kind」的證據。
+    const readded = await request(server())
+      .post(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token))
+      .send({ email: 'bob@example.com', role: 'EDITOR' });
+    expect(readded.status).toBe(201);
   });
 });

@@ -86,11 +86,11 @@ describe('AuthService', () => {
     expect(prisma.account.createMany).toHaveBeenCalledWith({
       data: DEFAULT_ACCOUNTS.map((name) => ({ userId: dbUser.id, name })),
     });
-    expect(ledgers.createLedgerForUser).toHaveBeenCalledWith(
-      expect.anything(),
-      dbUser.id,
-      expect.stringContaining('Alice'),
-    );
+    // 註冊自動建立的帳本是私人的——這是「我自己的帳」，不是要共用的。
+    expect(ledgers.createLedgerForUser).toHaveBeenCalledWith(expect.anything(), dbUser.id, {
+      name: expect.stringContaining('Alice') as string,
+      kind: 'PERSONAL',
+    });
 
     // 回應契約不帶任何機敏欄位。
     expect(result).toEqual({
