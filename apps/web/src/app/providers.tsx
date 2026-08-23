@@ -1,11 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../features/auth/AuthProvider';
+import { ActiveLedgerProvider } from '../features/ledgers/ActiveLedgerProvider';
 import { ApiError } from '../lib/api-client';
 
 /**
- * 集中掛載全應用的 Provider。順序有意義：AuthProvider 內部用到 useQueryClient，
- * 因此必須在 QueryClientProvider 之內。
+ * 集中掛載全應用的 Provider。順序有意義：
+ *
+ * - AuthProvider 內部用到 useQueryClient，必須在 QueryClientProvider 之內。
+ * - ActiveLedgerProvider 要讀登入狀態才知道該不該去取帳本清單，必須在
+ *   AuthProvider 之內。
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   // 用 useState 建立，確保整個應用生命週期共用同一個 client 實例
@@ -29,7 +33,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <ActiveLedgerProvider>{children}</ActiveLedgerProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

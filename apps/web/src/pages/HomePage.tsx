@@ -4,7 +4,7 @@ import { FormError } from '../components/FormError';
 import { AccountBalances } from '../features/accounts/AccountBalances';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
-import { useCurrentLedger } from '../features/ledgers/use-ledgers';
+import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionForm } from '../features/transactions/TransactionForm';
 import { TransactionList } from '../features/transactions/TransactionList';
 import { useTransactions } from '../features/transactions/use-transactions';
@@ -63,10 +63,10 @@ export default function HomePage() {
 /**
  * 已登入者的記帳畫面：新增表單 + 交易列表。
  *
- * Slice 0 固定使用第一本帳本（註冊時自動建立的個人帳本）；帳本切換屬 Slice 1。
+ * 記進哪一本帳本由 ActiveLedgerProvider 決定（Slice 2 Step 2）；這裡只負責呈現。
  */
 function LedgerView() {
-  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useCurrentLedger();
+  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
   const transactions = useTransactions(ledger?.id ?? null);
 
   if (ledgerLoading) {
