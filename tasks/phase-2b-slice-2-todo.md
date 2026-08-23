@@ -20,35 +20,63 @@
 | D8  | 封存帳本不可設為作用中；切換器只列未封存的                                              |
 | D9  | 現有 query key 已帶 `ledgerId`，切換自然重取。只需補 `['ledgers']` 與 `['members', id]` |
 
+### 2026-08-23 需求變更：私人 / 共享帳本
+
+開發者在 Step 2 完成後提出：建立帳本時就要選「私人」或「共享」，而不是先建帳本、
+要共享再把人加進來。
+
+**定案的規則**：
+
+1. 建立時二選一，**建立後不可互轉**。
+2. 私人帳本不能加成員。想改成共享請另建一本帳本。
+3. 共享帳本移除成員到只剩自己，它仍然是共享帳本。
+4. 要把舊帳本的交易帶過去，靠「複製交易到其他帳本」——**該功能尚未存在**，
+   在它做出來之前這種情況無解。這是本決議已知且接受的代價。
+5. 加成員只認已註冊的使用者（現況）。真正的「好友清單」是階段三。
+
+**影響**：規則 2 與 3 讓「用成員數推導私人 / 共享」失效——共享帳本可能只有一個
+成員。因此帳本需要一個建立後不可變更的欄位，屬**資料模型變更**，另立後端小步 2d
+（`docs/specs/phase-2d-ledger-kind.md`）。
+
+本切片的 Step 3 與 Step 6 因此改動並延後，其餘各步不受影響。
+
 ---
 
 ## Step 0：分支與既有修正
 
-- [ ] **0.1 開分支並帶入 Slice 1 的勾選修正**
+- [x] **0.1 開分支並帶入 Slice 1 的勾選修正**
   - 內容：自 `main` 開 `feature/ledgers-ui`。工作區已有 `docs/specs/phase-2-web-mvp.md:185` 的修正（Slice 1 打勾、刪掉「調初始餘額」），連同本切片的 plan 與 todo 一起做第一個 commit。
   - 驗收：`git status` 乾淨；`main` 未被動到。
 
 ## Step 1：資料層
 
-- [ ] **1.1 `use-ledgers.ts` 補四個 mutation**
+- [x] **1.1 `use-ledgers.ts` 補四個 mutation**
   - 內容：`useCreateLedger`（`POST /ledgers`，帶 `name` 與 `tracksBalance`）、`useRenameLedger`（`PATCH`，**只送 `name`**）、`useArchiveLedger`（`POST /ledgers/:id/archive`）、`useDeleteLedger`（`DELETE /ledgers/:id?confirm=<name>`）。成功後失效 `['ledgers']`。
   - 補充：query key 抽成 `LEDGERS_KEY` 常數匯出，比照 `ACCOUNTS_KEY`。
   - 注意：`useLedgers` 要能帶 `includeArchived`，key 必須包含它（`['ledgers', includeArchived]`），否則兩份清單會互相覆蓋。
   - 驗收：型別綠；`DELETE` 回 204 時不解析 JSON。
-- [ ] **1.2 `use-members.ts` 新增**
+- [x] **1.2 `use-members.ts` 新增**
   - 內容：`useMembers(ledgerId)`（`GET /ledgers/:id/members`，key `['members', ledgerId]`）、`useAddMember`、`useUpdateMemberRole`、`useRemoveMember`。三個 mutation 成功後失效 `['members', ledgerId]`；移除自己時要一併失效 `['ledgers']`（帳本會從清單消失）。
   - 驗收：型別綠。
   - 本步刻意**不寫測試**：尚無呼叫者，測它們等於測 react-query。真正的驗證在 Step 6。
 
 ## Step 2：作用中帳本
 
-- [ ] **2.1 `ActiveLedgerProvider`**
+- [x] **2.1 `ActiveLedgerProvider`**
   - 內容：context 提供 `{ ledger, ledgerId, setLedgerId, ledgers, isLoading, error }`。id 存 `localStorage`（key 例如 `ledger-app.activeLedgerId`）。
   - **核心規則**：存的 id 一律要與 `/ledgers` 的結果對照。對不上（被刪、被移出成員、已封存）就退回**第一本未封存的帳本**，並把 `localStorage` 更新成新值。
   - 驗收：測試四種情形——存的 id 有效則採用；id 不存在則退回第一本；id 指向已封存帳本則退回第一本；`localStorage` 是空的則取第一本。
-- [ ] **2.2 掛進 Providers 並改寫 `HomePage`**
+- [x] **2.2 掛進 Providers 並改寫 `HomePage`**
   - 內容：`useCurrentLedger()` 的「固定取第一本」邏輯移除，改由 context 提供。`HomePage` 的 `LedgerView` 改用 context。
   - 驗收：既有的 HomePage / TransactionForm 測試全綠（行為不變，只換來源）。
+  - 實作註記（2026-08-23）：作用中帳本改成**當場算出來**，不存第二份 state。原案用
+    effect 把「退回第一本」的結果寫回 state，被 ESLint 的 `react-hooks/set-state-in-effect`
+    擋下（會多一輪渲染）。改法順帶讓登出與換人登入都不必特別處理——清單一變，答案就跟著變。
+    effect 只負責寫 `localStorage`。實際 key 是 `ledger.activeLedgerId`，比照 `ledger.accessToken`。
+    測試共 6 條（多了「清單為空不覆寫既有偏好」與「未登入不發請求」）。
+
+> ⚠️ **Step 3 與 Step 6 卡在後端小步 2d（帳本類型）**。建立表單要有私人 / 共享可選，
+> 成員管理要知道私人帳本不給加人。2d 完成前不要動這兩步。決議見下方「2026-08-23 需求變更」。
 
 ## Step 3：帳本列表與建立
 
