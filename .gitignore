@@ -153,3 +153,7 @@ vite.config.ts.timestamp-*
 # 3. codeql.yml 掃 javascript-typescript 且未限定 paths，展示用的 inline <script>
 #    會產生假的 XSS 告警，把 Security 分頁的真警訊淹掉。
 docs/artifacts/
+
+# Playwright（e2e 測試的產物：失敗時的截圖 / trace 與 HTML 報告）
+apps/web/test-results/
+apps/web/playwright-report/

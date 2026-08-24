@@ -95,13 +95,22 @@ Target a single package with `pnpm --filter <name> <script>` (e.g. `pnpm --filte
   pnpm --filter @ledger/api test
   ```
 
-- **e2e tests** (`apps/api/test/*.e2e-spec.ts`) run the real application against the `ledger_test` database. They require `apps/api/.env.test` (see setup) and apply migrations automatically before running:
+- **API e2e tests** (`apps/api/test/*.e2e-spec.ts`) run the real application against the `ledger_test` database. They require `apps/api/.env.test` (see setup) and apply migrations automatically before running:
 
   ```bash
   pnpm --filter @ledger/api test:e2e
   ```
 
-CI runs lint, type check, unit tests, build, and e2e (against a PostgreSQL service container) on every pull request.
+- **Web e2e tests** (`apps/web/e2e/*.spec.ts`) drive a real Chromium browser against a real API. Playwright starts both servers itself (API on port 3100, web on port 5273), so nothing needs to be running beforehand. They use the same `ledger_test` database and `apps/api/.env.test`:
+
+  ```bash
+  pnpm --filter @ledger/web exec playwright install chromium   # once, downloads the browser
+  pnpm --filter @ledger/web test:e2e
+  ```
+
+> ⚠️ **Do not run the two e2e suites at the same time locally.** They share the `ledger_test` database and each wipes it before every test, so running them concurrently makes both fail in confusing ways. CI runs them as sequential steps, so it is unaffected.
+
+CI runs formatting, lint, type check, unit tests, build, and both e2e suites (against a PostgreSQL service container) on every pull request. When the Playwright suite fails, its HTML report is uploaded as a build artifact.
 
 ## Documentation
 

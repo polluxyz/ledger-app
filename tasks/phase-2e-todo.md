@@ -155,3 +155,62 @@ Plan 把「兩個伺服器」整包放在 Step 2。實作時拆得更細：**Ste
 - [ ] **7.4 PR**
   - 內容：草擬 PR 標題與描述（Markdown 區塊，依 `.github/pull_request_template.md`）。標題 `test(web): add playwright end-to-end tests for the ledger flows`。
   - 驗收：CI 全綠後由開發者 squash merge。
+
+---
+
+## 實作紀錄（2026-08-24，Step 1～7 已完成，**待開發者驗收**）
+
+> 上面的核取方塊維持未勾選——依本檔開頭的用法，勾選代表「開發者已驗收」。
+
+### 已完成
+
+| Step | 任務                        | 狀態                                        |
+| ---- | --------------------------- | ------------------------------------------- |
+| 1    | 1.1～1.6                    | 全部完成，`test:e2e` 綠                     |
+| 2    | 2.1、2.2、2.3、2.5          | 完成                                        |
+| 2    | **2.4 改 api 的 `resetDb`** | 完成（Ask first 已同意）。api e2e 38 條全綠 |
+| 3    | 3.1～3.3                    | 完成                                        |
+| 4    | 4.0～4.6                    | 完成，六個情境全綠                          |
+| 5    | 5.1、5.2                    | 完成                                        |
+| 6    | 6.1～6.3（CI）              | 完成（Ask first 已同意）。YAML 已驗證可解析 |
+| 7    | 7.1、7.2                    | 完成                                        |
+| 7    | 7.3、7.4                    | 完成。SC-E9 待 PR 上 CI 才驗得到            |
+
+### 驗證結果
+
+- `pnpm --filter @ledger/web test:e2e`：8 條測試（2 條冒煙 + 6 個情境）全綠，約 15 秒。
+- **SC-E3**：連跑三次，每次都是 8 passed，中間不清資料庫。
+- **SC-E6**：拿掉 `apps/web/vite.config.ts` 的 `optimizeDeps.include` 之後，冒煙測試**變紅**。
+  實際訊息：`getByRole('heading', { name: '記帳系統', level: 1 })` → `element(s) not found`，
+  也就是整頁沒有渲染。驗完已把設定改回來。
+- **SC-E8**：`pnpm test` 只跑 Vitest 與 Jest（web 112、api 111），沒有跑到 Playwright。
+- **7.1**：`pnpm lint`、`typecheck`、`test`、`build`、`format:check` 全綠。
+- 兩個測試伺服器在測試結束後都關乾淨了，埠 3100 / 5273 沒有殘留（Windows 的行程樹問題**沒有**發生）。
+- 2.5 的反證：把 `API_BASE_URL` 指到錯的埠，冒煙測試會紅（`ECONNREFUSED`）。
+
+### 4.0 的確認結果（P5）
+
+前端**有**那段引導文字，在 `apps/web/src/pages/LedgerDetailPage.tsx:266`，條件是
+`errorCode === 'LEDGER_HAS_OTHERS_TRANSACTIONS'`（同檔 :84）。實際措辭：
+
+> 這本帳本有其他成員記的交易，不能刪除。請關掉這個視窗，改用「封存帳本」——帳本會轉為唯讀，交易也留得住。
+
+情境 6 就斷言這段文字，**沒有動到任何產品程式碼**。
+
+### 與 spec / plan 的偏離與補充
+
+| #   | 事項                                                                                                                            | 為什麼                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **多裝了 `@types/node`**（`apps/web` 的 devDependency）                                                                         | todo 1.1 的清單漏了它。`e2e/` 要用 `process.env`（1.4 的驗收條件），`@types/pg` 的型別也依賴它。types-only 套件，不進任何 bundle                                                                                                               |
+| 2   | **`tsconfig.e2e.json` 掛進 `tsconfig.json` 的 references**，`build` script 綁定成 `tsc -b tsconfig.app.json tsconfig.node.json` | 照 spec 不掛的話，沒有工具找得到這個 project：ESLint 報 `not found by the project service`，編輯器也在 `e2e/env.ts` 顯示假紅字（CLI 卻是綠的）。改掛 references 一次治好兩邊，`pnpm build` 的範圍靠綁定 script 維持不變。詳見 spec §11 第 2 條 |
+| 3   | **`vite.config.ts` 加了 `test.exclude`** 排除 `e2e/**`                                                                          | Vitest 預設會撿走所有 `*.spec.ts`，包含 Playwright 的。不排除的話 `pnpm test` 會爆掉，違反 SC-E8                                                                                                                                               |
+| 4   | **e2e 區塊另外關掉兩條 ESLint 規則**                                                                                            | `react-hooks/rules-of-hooks` 把 Playwright fixture 的 `use` 參數誤判成 React 的 `use()` hook；`no-empty-pattern` 擋掉 Playwright 慣用的 `async ({}, use)`                                                                                      |
+| 5   | 多一個檔案 `e2e/env.ts`                                                                                                         | 埠號與 `.env.test` 的載入同時被 `playwright.config.ts` 與測試使用。放設定檔裡的話，測試要反過來匯入設定檔                                                                                                                                      |
+| 6   | 讀 `.env.test` 用 Node 內建的 `process.loadEnvFile`                                                                             | 不必為 `apps/web` 多裝一個 dotenv。專案要求 Node 22，內建可用                                                                                                                                                                                  |
+| 7   | `e2e/db.ts` 多一道保險絲：資料庫名稱必須以 `_test` 結尾                                                                         | TRUNCATE 不可逆。萬一 `DATABASE_URL` 被指錯，要當場攔下（SC-E4）                                                                                                                                                                               |
+| 8   | 情境 5 多建一本帳本（「社團公款」）                                                                                             | 封存之後若只剩一本，`LedgerSwitcher` 會從下拉變成一段文字，斷言會變得繞。多一本才問得出「選項少了那一本」                                                                                                                                      |
+
+### 沒有用到 `data-testid`
+
+六個情境全部用 `getByRole` / `getByLabel` / `getByText` 就選得到（P2），
+**產品程式碼一行都沒改**。

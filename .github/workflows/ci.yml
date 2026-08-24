@@ -71,10 +71,43 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # e2e：對上面的 Postgres service 跑真實 API 流程。globalSetup 會先套用
-      # migration；DATABASE_URL / JWT_SECRET 由此步注入（本地則讀 .env.test）。
-      - name: E2E test
+      # e2e 有兩套，都對上面的 Postgres service 跑，而且共用同一個 ledger_test。
+      # 這裡是**序列**步驟，不會互相清資料；本機則不可同時跑（見 README）。
+      # 兩套的 globalSetup 都會先套用 migration；DATABASE_URL / JWT_SECRET 由各步
+      # 注入（本地則讀 .env.test）。
+
+      # 第一套：supertest 打 NestJS 應用程式，不開瀏覽器。
+      - name: API E2E (supertest)
         run: pnpm --filter @ledger/api test:e2e
         env:
           DATABASE_URL: postgresql://ledger:ledger@localhost:5432/ledger_test
           JWT_SECRET: ci-e2e-secret-not-used-in-production
+
+      # 瀏覽器約 150 MB，每次重下載會讓 CI 明顯變慢。key 掛 lockfile 的 hash：
+      # Playwright 版本記在 lockfile 裡，版本一變就自然換一個 key。
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # --with-deps 一併裝 Chromium 需要的系統套件（runner 預設沒有）。
+      - name: Install Chromium
+        run: pnpm --filter @ledger/web exec playwright install --with-deps chromium
+
+      # 第二套：真的開 Chromium 打真的 API。Playwright 自己起兩個伺服器
+      # （API 3100、web 5273），跑完自動關掉。
+      - name: Web E2E (Playwright)
+        run: pnpm --filter @ledger/web test:e2e
+        env:
+          DATABASE_URL: postgresql://ledger:ledger@localhost:5432/ledger_test
+          JWT_SECRET: ci-e2e-secret-not-used-in-production
+
+      # 只在失敗時上傳。成功時那份報告沒人會看，卻每次都佔額度。
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

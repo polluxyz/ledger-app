@@ -1,6 +1,6 @@
 # Spec：階段二 (2e) — Web 端對端測試（Playwright）
 
-> 狀態：**待審核**（2026-08-24）
+> 狀態：**已實作**（核可並完成於 2026-08-24）。與本文的差異記在 §11。
 > 依據：2b Slice 2 收尾時的定案，見 `docs/specs/phase-2-web-mvp.md` §9 技術債表。
 > 定位：**測試基礎建設**，不新增任何產品功能。自成一個 PR，不併入功能 slice。
 > 執行順序：2b Slice 2（已完成，PR #28）→ **本步** → 2b Slice 3。
@@ -123,9 +123,12 @@
 ```
 apps/web/
 ├── e2e/
+│   ├── env.ts               # 埠號、位址、載入 .env.test（設定檔與測試共用）
+│   ├── global-setup.ts      # 開跑前套用 migration
 │   ├── fixtures.ts          # Playwright fixture：清資料庫、建帳號、登入
 │   ├── db.ts                # 動態 TRUNCATE（D2）
 │   ├── api.ts               # 打真實 API 的輔助函式（註冊、建帳本、記交易）
+│   ├── smoke.spec.ts        # 首頁載得起來、帳號登得進去
 │   └── ledgers.spec.ts      # §7 的六個情境
 ├── playwright.config.ts
 └── tsconfig.e2e.json
@@ -185,19 +188,21 @@ fixture 提供「已登入的頁面」——透過 API 註冊並登入，把 tok
 
 ## 5. 對專案結構與工具鏈的影響
 
-| 項目           | 變更                                                                                                                                                        |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 新增相依       | `apps/web` devDependency：`@playwright/test`、`pg`、`@types/pg`（**屬 Ask first，核可後才裝**）                                                             |
-| `package.json` | `apps/web` 新增 `test:e2e`。`test` 維持 `vitest run` 不變（SC-E8）                                                                                          |
-| tsconfig       | 新增 `apps/web/tsconfig.e2e.json`，涵蓋 `e2e/` 與 `playwright.config.ts`。**不加進 `tsconfig.json` 的 references**——`pnpm build` 不該因為測試檔而變慢或失敗 |
-| typecheck      | `apps/web` 的 typecheck 改成同時檢查 app 與 e2e 兩個 project                                                                                                |
-| ESLint         | lint 的檔案範圍加上 `e2e/**/*.ts` 與 `playwright.config.ts`；新增一個設定區塊給這些檔案掛 `globals.node`（它們跑在 Node，不是瀏覽器）                       |
-| Prettier       | 不需改設定，`prettier --check .` 本來就涵蓋全部                                                                                                             |
-| `.gitignore`   | 加 `apps/web/test-results/`、`apps/web/playwright-report/`                                                                                                  |
+| 項目           | 變更                                                                                                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新增相依       | `apps/web` devDependency：`@playwright/test`、`pg`、`@types/pg`、`@types/node`（`@types/node` 是實作時才發現的必要項，見 §11）                                              |
+| `package.json` | `apps/web` 新增 `test:e2e`。`test` 維持 `vitest run` 不變（SC-E8）                                                                                                          |
+| tsconfig       | 新增 `apps/web/tsconfig.e2e.json`，涵蓋 `e2e/` 與 `playwright.config.ts`，並掛進 `tsconfig.json` 的 references（**2026-08-24 修正，原本寫「不加進」，理由見 §11 第 2 條**） |
+| build          | `build` script 改成 `tsc -b tsconfig.app.json tsconfig.node.json`，明確指定要建的 project。**`pnpm build` 因此仍然不碰 e2e**——測試檔壞掉不該讓產品建置失敗                  |
+| typecheck      | `apps/web` 的 typecheck 改成同時檢查 app 與 e2e 兩個 project                                                                                                                |
+| ESLint         | lint 的檔案範圍加上 `e2e/**/*.ts` 與 `playwright.config.ts`；新增一個設定區塊給這些檔案掛 `globals.node`（它們跑在 Node，不是瀏覽器）。該區塊另關掉兩條規則，見 §11         |
+| Vitest         | `vite.config.ts` 加 `test.exclude` 排除 `e2e/**`——否則 Vitest 會撿走 Playwright 的 `*.spec.ts`（SC-E8）                                                                     |
+| Prettier       | 不需改設定，`prettier --check .` 本來就涵蓋全部                                                                                                                             |
+| `.gitignore`   | 加 `apps/web/test-results/`、`apps/web/playwright-report/`                                                                                                                  |
 
 ---
 
-## 6. CI 變更（**屬 Ask first，實作前另行確認**）
+## 6. CI 變更（已核可並實作）
 
 在現有 `ci` job 的 `Build` 之後、`E2E test` 附近插入，並把既有步驟改名以區分兩種 e2e：
 
@@ -278,3 +283,45 @@ fixture 提供「已登入的頁面」——透過 API 註冊並登入，把 tok
 6. **CI**：§6 的步驟與快取。**動工前另行確認。** 驗收：SC-E9。
 
 > 每個 Step 仍遵守門控：開工前說明、等同意；完成後展示與驗收再進下一步。
+
+---
+
+## 11. 實作結果與與本文的偏離（2026-08-24）
+
+八條測試：兩條冒煙（`smoke.spec.ts`）＋ §7 的六個情境（`ledgers.spec.ts`）。本機一輪約 15 秒。
+
+### 成功條件的驗證結果
+
+| 條件  | 結果                                                                                         |
+| ----- | -------------------------------------------------------------------------------------------- |
+| SC-E1 | ✅ 不必先手動開任何伺服器                                                                    |
+| SC-E2 | ✅ 六個情境全綠                                                                              |
+| SC-E3 | ✅ 連跑三次結果一致                                                                          |
+| SC-E4 | ✅ 另加一道保險絲：資料庫名稱不以 `_test` 結尾就拒絕清空                                     |
+| SC-E5 | ✅ api e2e 38 條全綠                                                                         |
+| SC-E6 | ✅ 拿掉 `optimizeDeps.include` 後冒煙測試變紅：找不到 h1「記帳系統」，整頁沒渲染。驗完已改回 |
+| SC-E7 | ✅                                                                                           |
+| SC-E8 | ✅ `pnpm test` 只跑 Vitest 與 Jest                                                           |
+| SC-E9 | 待 PR 上 CI 後確認                                                                           |
+
+### 偏離與補充
+
+| #   | 事項                                                                                                                                     | 為什麼                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 多裝 `@types/node`（`apps/web` devDependency）                                                                                           | `e2e/` 要用 `process.env`，`@types/pg` 的型別也依賴它。types-only，不進任何 bundle                                                                                                                                                                                                                                                                                                                                    |
+| 2   | **`tsconfig.e2e.json` 改為掛進 `tsconfig.json` 的 references**，並把 `build` script 綁定成 `tsc -b tsconfig.app.json tsconfig.node.json` | 原本照 §5 不掛，代價是**沒有任何工具找得到這個 project**：ESLint 報 `not found by the project service`，編輯器則退回一組預設設定，`e2e/env.ts` 出現五、六條假紅字（找不到 `node:fs`、`import.meta` 不允許、`process` 未定義），而 CLI 全綠。一開始只用 ESLint 的 `project` 選項繞過，治了 lint 沒治編輯器。改掛 references 一次治好兩邊；`pnpm build` 的範圍靠綁定 script 維持不變，§5 那條規定的**用意**因此完全保留 |
+| 3   | e2e 區塊另關 `react-hooks/rules-of-hooks` 與 `no-empty-pattern`                                                                          | 前者把 Playwright fixture 的 `use` 參數誤判成 React 的 `use()` hook；後者擋掉 Playwright 慣用的 `async ({}, use)`。e2e 目錄裡沒有 React 程式碼                                                                                                                                                                                                                                                                        |
+| 4   | `vite.config.ts` 加 `test.exclude` 排除 `e2e/**`                                                                                         | Vitest 預設會撿走所有 `*.spec.ts`，撿到 Playwright 的就爆掉（SC-E8）                                                                                                                                                                                                                                                                                                                                                  |
+| 5   | 多一個 `e2e/env.ts`                                                                                                                      | 埠號與 `.env.test` 的載入同時被設定檔與測試使用。放設定檔裡的話，測試要反過來匯入設定檔                                                                                                                                                                                                                                                                                                                               |
+| 6   | 讀 `.env.test` 用 Node 內建的 `process.loadEnvFile`，不裝 dotenv                                                                         | 專案要求 Node 22，內建可用。少一個相依                                                                                                                                                                                                                                                                                                                                                                                |
+| 7   | `globalSetup` 的 migration 實際上在兩個伺服器啟動**之後**才跑（Playwright 的順序），不是 §4 寫的「之前」                                 | 不影響：Prisma 是查詢時才連線，而 migration 一定在第一條測試之前完成                                                                                                                                                                                                                                                                                                                                                  |
+| 8   | 情境 5 多建一本帳本（「社團公款」）                                                                                                      | 封存後若只剩一本，`LedgerSwitcher` 會從下拉變成一段文字。多一本才問得出「選項少了那一本」                                                                                                                                                                                                                                                                                                                             |
+
+### 沒有發生的風險
+
+- **Windows 殺不掉子行程**（Plan §6 的頭號風險）：沒有發生。測試結束後 3100 與 5273 都沒有殘留，不需要繞過 pnpm。
+- **需要 `data-testid`**（P2）：沒有發生。六個情境全部用 `getByRole` / `getByLabel` / `getByText` 選得到，**產品程式碼一行都沒改**。
+
+### 已知但不處理
+
+`apps/api` 跑 e2e 時會印 `pg` 的 `DeprecationWarning: Calling client.query() when the client is already executing a query`。這在改 `resetDb` **之前就存在**（已用 `git stash` 比對確認），與本步無關。屬 `@prisma/adapter-pg` 的行為，另案處理。
