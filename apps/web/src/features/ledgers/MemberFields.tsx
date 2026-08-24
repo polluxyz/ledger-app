@@ -6,8 +6,13 @@ import type { MemberDraft } from './participant-draft';
 interface MemberFieldsProps {
   value: MemberDraft;
   onChange: (next: MemberDraft) => void;
-  /** 這是第幾位參與者（從 1 起算），用於欄位標籤。 */
-  position: number;
+  /**
+   * 這是第幾位參與者（從 1 起算），用於欄位標籤。
+   *
+   * 只有一列時省略——「加入成員」彈窗裡寫「參與者 1 的 email」很怪，序號是為了在
+   * 多列並存時分得出來，只有一列就沒有那個問題。
+   */
+  position?: number;
   disabled?: boolean;
 }
 
@@ -25,10 +30,12 @@ interface MemberFieldsProps {
  * 現在在填哪一位——測試也靠它定位。
  */
 export function MemberFields({ value, onChange, position, disabled }: MemberFieldsProps) {
+  // 只有一列時省略序號。注意中文與英文的間距不同：「參與者 1 的 email」要有空格，
+  // 「參與者 1 的角色」不要——所以兩個標籤各自組，不共用一個 prefix。
   return (
     <>
       <TextField
-        label={`參與者 ${position} 的 email`}
+        label={position === undefined ? 'email' : `參與者 ${position} 的 email`}
         type="email"
         value={value.email}
         disabled={disabled}
@@ -36,7 +43,7 @@ export function MemberFields({ value, onChange, position, disabled }: MemberFiel
         onChange={(event) => onChange({ ...value, email: event.target.value })}
       />
       <Select
-        label={`參與者 ${position} 的角色`}
+        label={position === undefined ? '角色' : `參與者 ${position} 的角色`}
         value={value.role}
         disabled={disabled}
         onChange={(event) => onChange({ ...value, role: event.target.value as LedgerRole })}

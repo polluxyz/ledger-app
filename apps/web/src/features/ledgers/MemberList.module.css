@@ -1,0 +1,113 @@
+/* 形狀沿用 Step 5 明細頁原本的成員清單，換位置不換外觀。 */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  overflow: hidden;
+}
+
+.item + .item {
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.me {
+  margin-left: var(--space-xs);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.email {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.role {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* 不能改角色時（自己、非 owner、已封存）顯示成標籤，不是停用的下拉——
+   停用的控制項讀起來像「應該可以改，只是現在不行」。 */
+.roleTag {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.action {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background-color: var(--color-bg);
+}
+
+.action:disabled,
+.role:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.danger {
+  color: var(--color-danger);
+  border-color: #f3c6c6;
+}
+
+/* 貼在造成錯誤的那一列底下。整頁共用一個錯誤框的話，看的人不知道是哪一列。 */
+.error {
+  margin: 0;
+  padding: 0 var(--space-md) var(--space-md);
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+}

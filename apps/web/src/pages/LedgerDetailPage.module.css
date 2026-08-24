@@ -61,52 +61,25 @@
   font-weight: 400;
 }
 
-.members {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
-  overflow: hidden;
-}
-
-.member {
+.membersHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md);
+  flex-wrap: wrap;
 }
 
-.member + .member {
-  border-top: 1px solid var(--color-border);
+.membersHead .subtitle {
+  margin-bottom: var(--space-md);
 }
 
-.who {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-}
-
-.name {
-  font-weight: 500;
-}
-
-.email {
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  text-overflow: ellipsis;
-}
-
-.role {
-  padding: 0 var(--space-xs);
-  border: 1px solid var(--color-border);
+/* 封存帳本的成員區塊整個唯讀。說明為什麼沒有任何按鈕，不要讓人以為壞了。 */
+.readonly {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius);
+  background-color: var(--color-surface);
   color: var(--color-text-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  white-space: nowrap;
+  font-size: 0.875rem;
 }
