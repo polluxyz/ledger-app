@@ -83,3 +83,28 @@
   color: var(--color-text-muted);
   font-size: 0.875rem;
 }
+
+/* 危險操作獨立成一區，用紅框與上面的內容明顯分開，避免順手點到。 */
+.danger {
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+}
+
+/* 區塊本身已有上緣間距，標題不必再撐開一次。 */
+.danger .subtitle {
+  margin-top: 0;
+}
+
+.dangerNote {
+  margin: 0 0 var(--space-md);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dangerActions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
