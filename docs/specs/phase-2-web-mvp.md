@@ -160,6 +160,28 @@ apps/
 
 ---
 
+### `@ledger/shared` 在瀏覽器裡怎麼載入（2026-08-24 定案）
+
+`@ledger/shared` 編譯成 **CommonJS**（`main: dist/index.js`，內容是 `require` 與 `exports`）。
+它是 workspace 連結的套件，而 **Vite 預設不預先打包連結的套件**——會把原始檔案直接丟給
+瀏覽器。瀏覽器把 CommonJS 當 ES module 載入就會失敗，整個 app 掛不起來，畫面全白。
+
+在 Slice 2 Step 6 之前，web 對 shared 的每一處匯入都是 `import type`，編譯時就被抹掉，
+所以從來沒踩到。第一個**值**匯入（`LEDGER_ROLES`）當場讓首頁變白。
+
+**做法**：`apps/web/vite.config.ts` 加上 `optimizeDeps.include: ['@ledger/shared']`，
+讓 Vite 預先打包並做 CommonJS 互通。web 因此可以照常匯入 shared 的常數。
+
+**為什麼不讓 shared 改出 ESM**：它是 `private` 套件，三個消費者（NestJS、Vite、
+未來的 Metro）都吃得下 CommonJS。雙進入點換來的是雙份產物、`exports` 對應表，
+以及 dual-package hazard（同一個模組被載入兩次，常數變成兩個不同的物件）。
+成本比解決的問題大。**重評的觸發條件**：shared 要發佈到 npm，或出現吃不了 CJS 的消費者。
+
+⚠️ 附帶成本：改了 `packages/shared` 並重新 build 之後，**開發伺服器要重開**才會拿到新的
+預先打包結果。
+
+---
+
 ## 8. 擴充點（未來如何接上，現在不實作）
 
 - **Google OAuth 登入**：已確定要做，排在 Slice 0 完成後的獨立小步。前端只是登入頁多一顆按鈕；後端需 `googleId` 欄位與 `/auth/google` 流程（`passwordHash` 屆時改選填）。本階段先不預留任何程式碼。詳見《專案決策脈絡》對應章節。
@@ -197,13 +219,13 @@ apps/
 
 ### 尚未歸位的技術債（必須排進某一步）
 
-| 項目                      | 說明                                                                                                                    | 建議時機                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `ProtectedRoute` 重新啟用 | Slice 0 為了首頁預覽模式暫時移除；**`state.from` 必須限制為站內相對路徑**，否則是開放轉址漏洞                           | Slice 2（開始有多個受保護頁面時） |
-| Playwright 冒煙測試       | 目前所有 web 測試都 mock `fetch`，抓不到 CORS、建置設定這類問題（已被 CORS 與 shared 未重建各咬過一次）                 | 收尾                              |
-| CI 的 web job             | 根目錄指令已涵蓋 web，但 CI 尚未跑                                                                                      | 收尾                              |
-| CSP（內容安全政策）       | token 存 `localStorage`（假設 6）的補償措施——CSP 擋住 XSS 的執行面，token 才不容易被偷。見 `security-baseline.md` SEC-4 | 收尾（上線前必達）                |
-| token 撤銷                | 目前登出只是前端刪掉 token，舊 token 仍有效 7 天。屬後端變更，需另立 Step。見 `security-baseline.md` SEC-2              | 上線前必達（本階段外）            |
+| 項目                      | 說明                                                                                                                                                                                                 | 建議時機                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `ProtectedRoute` 重新啟用 | Slice 0 為了首頁預覽模式暫時移除；**`state.from` 必須限制為站內相對路徑**，否則是開放轉址漏洞                                                                                                        | Slice 2（開始有多個受保護頁面時） |
+| Playwright 冒煙測試       | 目前所有 web 測試都 mock `fetch`，抓不到 CORS、建置設定這類問題（已被 CORS、shared 未重建、**shared 的 CJS 在瀏覽器載入失敗**各咬過一次——第三次是整頁全白，而 lint / typecheck / test / build 全綠） | **收尾，優先度最高**              |
+| CI 的 web job             | 根目錄指令已涵蓋 web，但 CI 尚未跑                                                                                                                                                                   | 收尾                              |
+| CSP（內容安全政策）       | token 存 `localStorage`（假設 6）的補償措施——CSP 擋住 XSS 的執行面，token 才不容易被偷。見 `security-baseline.md` SEC-4                                                                              | 收尾（上線前必達）                |
+| token 撤銷                | 目前登出只是前端刪掉 token，舊 token 仍有效 7 天。屬後端變更，需另立 Step。見 `security-baseline.md` SEC-2                                                                                           | 上線前必達（本階段外）            |
 
 > 每個 Step 仍遵守門控：開工前說明、等同意；完成後展示與驗收再進下一步。
 > 資安相關的跨階段條件見 `docs/specs/security-baseline.md`。

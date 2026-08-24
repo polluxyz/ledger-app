@@ -1,5 +1,5 @@
-import { LEDGER_ROLES, type LedgerMemberInfo, type LedgerRole } from '@ledger/shared';
-import { ROLE_LABEL } from './role-labels';
+import type { LedgerMemberInfo, LedgerRole } from '@ledger/shared';
+import { ROLE_LABEL, ROLE_OPTIONS } from './role-labels';
 import styles from './MemberList.module.css';
 
 interface MemberListProps {
@@ -76,7 +76,7 @@ export function MemberList({
                     disabled={isPending}
                     onChange={(event) => onChangeRole(member, event.target.value as LedgerRole)}
                   >
-                    {LEDGER_ROLES.map((role) => (
+                    {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>
                         {ROLE_LABEL[role]}
                       </option>
