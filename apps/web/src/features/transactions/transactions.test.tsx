@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
@@ -53,7 +53,14 @@ describe('Transactions on the home page', () => {
   }
 
   /** 依請求路徑回應，讓測試不必在意 react-query 的呼叫順序。 */
-  function routeFetch(overrides: { transactions?: unknown; createResponse?: () => Response } = {}) {
+  function routeFetch(
+    overrides: {
+      transactions?: unknown;
+      createResponse?: () => Response;
+      /** 換一本帳本（例如 tracksBalance 為 false 的）。 */
+      ledger?: Record<string, unknown>;
+    } = {},
+  ) {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/transactions') && init?.method === 'POST') {
         return Promise.resolve(
@@ -73,7 +80,7 @@ describe('Transactions on the home page', () => {
         return Promise.resolve(jsonResponse(200, [account]));
       }
       if (url.includes('/ledgers')) {
-        return Promise.resolve(jsonResponse(200, [ledger]));
+        return Promise.resolve(jsonResponse(200, [overrides.ledger ?? ledger]));
       }
       return Promise.resolve(jsonResponse(404, { message: 'not mocked' }));
     });
@@ -204,5 +211,78 @@ describe('Transactions on the home page', () => {
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('amount must be a positive number');
+  });
+
+  // ── 非連動帳本（SC-16） ───────────────────────────────────────────────────
+
+  it('drops the account field entirely in a ledger that does not track balances', async () => {
+    const user = userEvent.setup();
+    let posted: Record<string, unknown> = {};
+    routeFetch({
+      ledger: { ...ledger, id: 'ledger-trip', name: '出遊分帳', tracksBalance: false },
+      createResponse: () => jsonResponse(201, { ...lunch, id: 'txn-new', account: null }),
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
+    // 欄位必須整個不存在，不能只是停用：後端連帶著空值都會回 400
+    // ACCOUNT_NOT_ALLOWED，而停用的欄位會讓人以為「應該要能選，只是現在不行」。
+    expect(screen.queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(screen.getByText(/這本帳本不影響你的帳戶餘額/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('金額'), '123');
+    await user.selectOptions(screen.getByLabelText('分類'), 'cat-1');
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    await waitFor(() => {
+      const created = fetchMock.mock.calls.find(
+        (call) =>
+          String(call[0]).includes('/transactions') &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(created).toBeDefined();
+      const body = (created?.[1] as RequestInit | undefined)?.body;
+      posted = JSON.parse(typeof body === 'string' ? body : '{}') as Record<string, unknown>;
+    });
+    // 帶著 accountId（哪怕是空字串）都會被後端擋成 400 ACCOUNT_NOT_ALLOWED。
+    expect(posted).not.toHaveProperty('accountId');
+  });
+
+  it('keeps the account field in a ledger that does track balances', async () => {
+    routeFetch();
+
+    render(<App />);
+
+    expect(await screen.findByLabelText('帳戶')).toBeInTheDocument();
+    expect(screen.queryByText(/這本帳本不影響你的帳戶餘額/)).not.toBeInTheDocument();
+  });
+
+  it('still lets you record with no accounts when the ledger does not track balances', async () => {
+    // 連動帳本沒有帳戶時會換成「先去建帳戶」的引導；非連動帳本根本不需要帳戶，
+    // 那個引導會把人送去做一件無關的事。
+    routeFetch({
+      ledger: { ...ledger, id: 'ledger-trip', tracksBalance: false },
+    });
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (String(url).includes('/accounts')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (String(url).includes('/ledgers') && !String(url).includes('/transactions')) {
+        return Promise.resolve(
+          jsonResponse(200, [{ ...ledger, id: 'ledger-trip', tracksBalance: false }]),
+        );
+      }
+      if (String(url).includes('/categories')) {
+        return Promise.resolve(jsonResponse(200, [expenseCategory]));
+      }
+      void init;
+      return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByLabelText('金額')).toBeInTheDocument();
+    expect(screen.queryByText(/記帳前要先有一個帳戶/)).not.toBeInTheDocument();
   });
 });

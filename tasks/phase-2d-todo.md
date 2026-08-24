@@ -44,7 +44,7 @@
 - [x] **2.4 更新 Prisma Client**
   - 內容：`prisma generate`。不需要套用 migration 就能更新型別。
   - 驗收：`apps/api` typecheck 認得 `LedgerKind`。
-- [ ] **2.5 👤 套用 migration 並手動驗證回填**
+- [x] **2.5 👤 套用 migration 並手動驗證回填**
   - 內容：開發者親手執行 `prisma migrate deploy`（或 `migrate dev`）。**套用前先造一本兩人帳本**，套用後確認它是 `SHARED`、單人帳本是 `PERSONAL`。
   - 驗收：SC-D7。這一條沒有自動測試，migration 不進 Jest。
 

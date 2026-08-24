@@ -34,3 +34,15 @@
   color: var(--color-text-muted);
   text-align: center;
 }
+
+/* 非連動帳本佔住帳戶欄位的位置，說明為什麼記完帳餘額不會變。
+   用中性色而非警示色——這是這種帳本的正常行為，不是錯誤。 */
+.notice {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}

@@ -85,7 +85,7 @@ function LedgerView() {
 
   return (
     <>
-      <TransactionForm ledgerId={ledger.id} />
+      <TransactionForm ledger={ledger} />
       <TransactionList
         transactions={transactions.data?.items ?? []}
         isLoading={transactions.isLoading}

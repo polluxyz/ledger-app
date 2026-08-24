@@ -1,0 +1,58 @@
+.group {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.legend {
+  padding: 0 var(--space-xs);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0 0 var(--space-md);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.row + .row {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px dashed var(--color-border);
+}
+
+.remove,
+.add {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.remove {
+  color: var(--color-danger);
+  border-color: #f3c6c6;
+}
+
+.add {
+  margin-top: var(--space-md);
+}
+
+.remove:disabled,
+.add:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* 每列各自的失敗原因。整份表單共用一個錯誤框的話，看的人不知道是哪一位失敗。 */
+.error {
+  margin: var(--space-xs) 0 0;
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+}
