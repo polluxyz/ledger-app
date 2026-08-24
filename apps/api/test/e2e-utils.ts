@@ -53,13 +53,28 @@ export async function createE2EApp(): Promise<E2EContext> {
 /**
  * 清空每張資料表，讓每個測試都從乾淨狀態開始（CASCADE 一併清掉關聯資料）。
  *
- * **新增資料表時務必補進這份清單**——漏掉的症狀很難認：單獨跑會過，整套跑才爛，
- * 因為前一個測試留下的資料汙染了後面的。
+ * 資料表清單是**查出來的**，不是寫死的。這裡原本維護一份手寫清單，症狀很難認：
+ * 新增資料表後忘了補，單獨跑會過、整套跑才爛，因為前一個測試留下的資料汙染了
+ * 後面的。查 `pg_tables` 就不會有漏掉這回事。
+ *
+ * `_prisma_migrations` 要留著——那是 migration 的紀錄，清掉的話下次
+ * `migrate deploy` 會以為所有 migration 都沒跑過。
+ *
+ * ⚠️ web 的 e2e 有一份等價實作（`apps/web/e2e/db.ts`），刻意各留一份：兩者連
+ * 同一個 `ledger_test`，但抽成共用套件的成本此刻不划算，而「查出所有資料表再
+ * 清空」這段邏輯不會隨 schema 漂移。
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE "Transaction", "Category", "Account", "LedgerMember", "Ledger", "User" RESTART IDENTITY CASCADE',
-  );
+  const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+  `;
+  if (tables.length === 0) {
+    return;
+  }
+  // 一次清完：資料表之間有外鍵，分開清會被關聯擋住。CASCADE 連帶處理。
+  const tableList = tables.map((table) => `"${table.tablename}"`).join(', ');
+  await prisma.$executeRawUnsafe(`TRUNCATE ${tableList} RESTART IDENTITY CASCADE`);
 }
 
 /** 註冊後隨即登入一位使用者，回傳其 token 與 id。 */
