@@ -7,6 +7,8 @@ interface TransactionListProps {
   transactions: Transaction[];
   isLoading: boolean;
   error: unknown;
+  onEdit: (transaction: Transaction) => void;
+  onRemove: (transaction: Transaction) => void;
 }
 
 /**
@@ -21,10 +23,26 @@ const AMOUNT_SIGN: Record<Transaction['type'], string> = {
 };
 
 /**
+ * 一列的口語描述，給編輯／刪除鈕當無障礙名稱用。
+ *
+ * 列表上每一列的按鈕文字都是「編輯」「刪除」，光靠文字分不出是哪一筆——
+ * 螢幕閱讀器的使用者會聽到一串一模一樣的按鈕。加上日期與分類才指得明確。
+ */
+function describe(transaction: Transaction): string {
+  return `${formatDate(transaction.date)} 的${transaction.category?.name ?? '轉帳'}`;
+}
+
+/**
  * 交易列表。順序完全依後端給的（日期新→舊），前端不重新排序也不加總——
  * 那些都是後端的職責。
  */
-export function TransactionList({ transactions, isLoading, error }: TransactionListProps) {
+export function TransactionList({
+  transactions,
+  isLoading,
+  error,
+  onEdit,
+  onRemove,
+}: TransactionListProps) {
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -52,13 +70,35 @@ export function TransactionList({ transactions, isLoading, error }: TransactionL
               <span className={`${styles.meta} ${styles.note}`}>{transaction.note}</span>
             )}
           </div>
-          <span
-            className={`${styles.amount} ${
-              transaction.type === 'EXPENSE' ? styles.expense : styles.income
-            }`}
-          >
-            {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
-          </span>
+          <div className={styles.right}>
+            <span
+              className={`${styles.amount} ${
+                transaction.type === 'EXPENSE' ? styles.expense : styles.income
+              }`}
+            >
+              {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
+            </span>
+            {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列
+                都有入口。真正的權限在後端把關，這裡不做任何判斷。 */}
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.action}
+                onClick={() => onEdit(transaction)}
+                aria-label={`編輯${describe(transaction)}`}
+              >
+                編輯
+              </button>
+              <button
+                type="button"
+                className={`${styles.action} ${styles.remove}`}
+                onClick={() => onRemove(transaction)}
+                aria-label={`刪除${describe(transaction)}`}
+              >
+                刪除
+              </button>
+            </div>
+          </div>
         </li>
       ))}
     </ul>

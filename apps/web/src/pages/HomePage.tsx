@@ -1,13 +1,16 @@
 import { useState } from 'react';
+import type { Transaction } from '@ledger/shared';
 import { Button } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
 import { AccountBalances } from '../features/accounts/AccountBalances';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { TransactionDialog } from '../features/transactions/TransactionDialog';
 import { TransactionForm } from '../features/transactions/TransactionForm';
 import { TransactionList } from '../features/transactions/TransactionList';
-import { useTransactions } from '../features/transactions/use-transactions';
+import { useDeleteTransaction, useTransactions } from '../features/transactions/use-transactions';
 import styles from './HomePage.module.css';
 
 /**
@@ -64,10 +67,32 @@ export default function HomePage() {
  * 已登入者的記帳畫面：新增表單 + 交易列表。
  *
  * 記進哪一本帳本由 ActiveLedgerProvider 決定（Slice 2 Step 2）；這裡只負責呈現。
+ *
+ * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
+ * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
  */
 function LedgerView() {
   const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
   const transactions = useTransactions(ledger?.id ?? null);
+  const deleteTransaction = useDeleteTransaction(ledger?.id ?? null);
+
+  // null = 彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [removing, setRemoving] = useState<Transaction | null>(null);
+
+  function closeRemove() {
+    setRemoving(null);
+    // 清掉上一次的失敗，下次開啟才不會殘留紅字。
+    deleteTransaction.reset();
+  }
+
+  function confirmRemove() {
+    if (removing) {
+      // 失敗時**不關彈窗**，錯誤由 ConfirmDialog 就地顯示——關掉的話使用者只會
+      // 看到「什麼都沒發生」。
+      deleteTransaction.mutate(removing.id, { onSuccess: closeRemove });
+    }
+  }
 
   if (ledgerLoading) {
     return <p className={styles.panelText}>載入中…</p>;
@@ -90,6 +115,23 @@ function LedgerView() {
         transactions={transactions.data?.items ?? []}
         isLoading={transactions.isLoading}
         error={transactions.error}
+        onEdit={setEditing}
+        onRemove={setRemoving}
+      />
+
+      <TransactionDialog ledger={ledger} transaction={editing} onClose={() => setEditing(null)} />
+
+      <ConfirmDialog
+        open={removing !== null}
+        title="刪除交易"
+        // 後端是軟刪除（資料列保留供稽核），但畫面上沒有還原的路，對使用者而言
+        // 就是回不去。文案要照實說。
+        message="確定要刪除這筆交易嗎？刪除後無法復原。"
+        confirmLabel="刪除"
+        error={deleteTransaction.error}
+        isPending={deleteTransaction.isPending}
+        onConfirm={confirmRemove}
+        onCancel={closeRemove}
       />
     </>
   );
