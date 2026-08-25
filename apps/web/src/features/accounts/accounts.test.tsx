@@ -21,13 +21,6 @@ describe('Accounts page', () => {
     window.history.pushState({}, '', '/accounts');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
-    // jsdom 尚未實作 showModal / close，補上最小的替身。
-    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
-      this.open = true;
-    });
-    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-      this.open = false;
-    });
   });
 
   afterEach(() => {

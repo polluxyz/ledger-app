@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
 
 /**
@@ -12,16 +12,6 @@ import { ConfirmDialog } from './ConfirmDialog';
  * 兩個呼叫點（刪帳戶、移除成員）都不希望多出一個輸入框。
  */
 describe('ConfirmDialog', () => {
-  beforeEach(() => {
-    // jsdom 尚未實作 showModal / close，補上最小的替身。
-    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
-      this.open = true;
-    });
-    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-      this.open = false;
-    });
-  });
-
   it('asks for no typing when confirmText is omitted', async () => {
     const onConfirm = vi.fn();
     const user = userEvent.setup();

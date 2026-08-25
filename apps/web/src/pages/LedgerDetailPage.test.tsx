@@ -34,12 +34,6 @@ describe('Ledger detail page', () => {
     window.history.pushState({}, '', '/ledgers/led-2');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
-    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
-      this.open = true;
-    });
-    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-      this.open = false;
-    });
   });
 
   afterEach(() => {

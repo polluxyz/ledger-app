@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Dialog } from './Dialog';
 
 /**
@@ -9,31 +9,7 @@ import { Dialog } from './Dialog';
  * 掛載後真的呼叫 showModal()（否則沒有焦點鎖定與遮罩，只是一塊浮在頁面上的方框）、
  * Esc 與關閉鈕都會通知父層、以及**關閉時整個卸載**而不只是隱藏。
  */
-/**
- * jsdom 尚未實作 showModal / close，補上最小的替身。
- *
- * AuthDialog.test.tsx 也有同一段。刻意暫時重複——把它收攏到 test/setup.ts 比較
- * 乾淨，但那必須動到那個檔案，而本次重構的驗收條件正是「該檔一字未改仍全綠」。
- * 等這次重構被證明沒問題後，再用獨立的 commit 收攏。
- */
-function stubShowModal() {
-  return vi.fn(function (this: HTMLDialogElement) {
-    this.open = true;
-  });
-}
-
 describe('Dialog', () => {
-  // 留住替身本身，斷言時才不必去讀 prototype 上的方法（那是未綁定的參考）。
-  let showModal: ReturnType<typeof stubShowModal>;
-
-  beforeEach(() => {
-    showModal = stubShowModal();
-    HTMLDialogElement.prototype.showModal = showModal;
-    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-      this.open = false;
-    });
-  });
-
   it('renders the title and children once open', () => {
     render(
       <Dialog open title="新增帳戶" onClose={vi.fn()}>
@@ -47,6 +23,10 @@ describe('Dialog', () => {
   });
 
   it('calls showModal so the browser provides focus trapping and the backdrop', () => {
+    // jsdom 的 showModal / close 替身由 `src/test/setup.ts` 統一安裝；這裡再包一層
+    // spy 只為了數呼叫次數，不改變行為。
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+
     render(
       <Dialog open title="新增帳戶" onClose={vi.fn()}>
         <p>表單內容</p>
