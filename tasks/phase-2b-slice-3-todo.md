@@ -46,9 +46,6 @@
 - [ ] **1.2 `useUpdateTransaction` / `useDeleteTransaction`**
   - 內容：`PATCH /ledgers/:id/transactions/:txId`、`DELETE`（回 204，`apiRequest` 已處理）。成功後同時失效 `transactionsKey(ledgerId)` 與 `ACCOUNTS_KEY`。
   - 驗收：型別綠。
-- [ ] **1.3 兩條快取失效測試**
-  - 內容：比照 `use-transactions.test.tsx` 既有的新增案例，為編輯與刪除各補一條：操作後 `/accounts` 必須被重新請求，且新數字出現在畫面上。
-  - 驗收：測試綠；把 `ACCOUNTS_KEY` 那行拿掉會變紅（自行驗一次再改回來）。
 
 ## Step 2：轉帳（新增模式）
 
@@ -86,6 +83,9 @@
 - [ ] **4.2 刪除確認與送出**
   - 內容：`ConfirmDialog`，文案寫明無法復原（D10）。失敗不關彈窗（比照 `AccountsPage`）。
   - 驗收：元件測試：確認後該筆從列表消失。
+- [ ] **4.3 兩條快取失效測試**（原 Step 1.3，因為要走真實畫面操作才移到這裡）
+  - 內容：比照 `use-transactions.test.tsx` 既有的新增案例，為編輯與刪除各補一條：操作後 `/accounts` 必須被重新請求，且新數字出現在畫面上。
+  - 驗收：測試綠；把 `ACCOUNTS_KEY` 那行拿掉會變紅（自行驗一次再改回來）。
 
 ## Step 5：篩選
 
