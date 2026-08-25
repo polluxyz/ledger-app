@@ -5,6 +5,19 @@
 > 用法：依序執行；每個任務有驗收條件。勾選＝「開發者已驗收」。
 > 通用驗收（每任務皆適用，不再重複）：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全綠。
 > 分支：`feature/transaction-lifecycle`（自 `main` 開）。**本切片不改後端。**
+>
+> **實作進度（2026-08-25）**：Step 0～8 的程式與測試都完成了，尚未經開發者驗收，
+> 所以下面的核取方塊全部留空。Step 8.2（瀏覽器手動實測）**尚未執行**——那要人真的操作一遍。
+
+| commit                                                 | 對應                           |
+| ------------------------------------------------------ | ------------------------------ |
+| `docs: plan slice 3…`                                  | Step 0.1、0.2                  |
+| `test(web): move the jsdom dialog stubs…`              | Step 0.3                       |
+| `feat(web): add paging, filtering, update and delete…` | Step 1                         |
+| `feat(web): record transfers…`                         | Step 2（含 Step 3 的表單改動） |
+| `feat(web): edit and delete a transaction…`            | Step 3、4                      |
+| `feat(web): filter and page through…`                  | Step 5、6                      |
+| `test(web): cover editing, deleting and transfers…`    | Step 7                         |
 
 ### 設計決策（已於 Plan §4 核可，實作時一律照此）
 
