@@ -121,10 +121,10 @@
 
 ## Step 7：e2e 與文件回寫
 
-- [ ] **7.1 三條 e2e 情境（D11）**
-  - 內容：新增 `e2e/transactions.spec.ts`，情境 7（編輯改金額 → 餘額變）、8（刪除 → 消失）、9（轉帳 → 兩邊餘額都動）。前置資料用 `e2e/api.ts` 建立。
+- [ ] **7.1 六條 e2e 情境（D11，2026-08-25 修訂）**
+  - 內容：新增 `e2e/transactions.spec.ts`，情境 7（編輯改金額 → 餘額變）、8（刪除 → 消失）、9（轉帳 → 兩邊餘額都動）、10（篩選型別）、11（21 筆翻頁 → 改篩選回第 1 頁）、12（編輯別人的交易，帳戶鎖住）。前置資料用 `e2e/api.ts` 建立。
   - 注意：元素一律用 `getByRole` / `getByLabel` / `getByText`；不用 CSS class；不用 `waitForTimeout`。整頁搜尋文字容易撞到下拉選項，用 `getByRole('listitem').filter({ hasText })` 縮小範圍。
-  - 驗收：`pnpm --filter @ledger/web test:e2e` 共 11 條全綠。
+  - 驗收：`pnpm --filter @ledger/web test:e2e` 共 14 條全綠。
 - [ ] **7.2 文件回寫**
   - 內容：2e spec §7 補三條情境、§8 補「篩選與分頁不進 e2e」、§11 補實作紀錄；`docs/specs/phase-2-web-mvp.md` §9 的 Step 6 打勾。
   - 驗收：文件與實作一致。
