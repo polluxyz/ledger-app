@@ -1,0 +1,40 @@
+/*
+ * 篩選列。欄位橫向排開，窄畫面時自動換行——每個欄位都保有可讀的最小寬度。
+ *
+ * 下方不留 padding：TextField / Select 自己帶了 1rem 的下邊距，由它們充當
+ * 這一列的底部留白。這樣就不必跨檔案去蓋掉那個邊距（兩邊的選擇器權重相同，
+ * 誰贏取決於載入順序，那種樣式很難維護）。
+ */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 var(--space-md);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md) var(--space-md) 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+}
+
+.bar > * {
+  flex: 1 1 8rem;
+}
+
+/* 「清除篩選」不是表單欄位，用文字鈕的樣子，也不跟著欄位一起長寬。 */
+.clear {
+  flex: 0 0 auto;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.clear:hover {
+  background-color: var(--color-bg);
+}

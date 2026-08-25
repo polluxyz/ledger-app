@@ -43,15 +43,6 @@ describe('Ledgers page', () => {
     window.history.pushState({}, '', '/ledgers');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
-    // jsdom 尚未實作 showModal / close，補上最小的替身。
-    // 這段與 accounts.test.tsx、AuthDialog.test.tsx、Dialog.test.tsx 重複（第 4 份了）。
-    // Slice 1 的 S1-D5 決定先各自帶著，等重構被證明安全再收攏到 test/setup.ts。
-    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
-      this.open = true;
-    });
-    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-      this.open = false;
-    });
   });
 
   afterEach(() => {

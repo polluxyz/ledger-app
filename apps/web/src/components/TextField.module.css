@@ -1,8 +1,16 @@
+/*
+ * `min-width: 0` 是必要的，不是保險。
+ *
+ * 這個容器常常是 grid 或 flex 的子項（表單的兩欄列、篩選列），而那種子項的
+ * 預設最小寬度是「內容的最小寬度」。`<input type="date">` 與 `<select>` 的預設
+ * 尺寸都很寬，於是欄位撐著容器不肯縮，整張表單超出彈窗，使用者得左右捲。
+ */
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   margin-bottom: var(--space-md);
+  min-width: 0;
 }
 
 .label {
@@ -11,6 +19,9 @@
 }
 
 .input {
+  /* 跟著容器縮放，而不是撐著自己的預設尺寸（見上方 .field 的說明）。 */
+  width: 100%;
+  min-width: 0;
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);

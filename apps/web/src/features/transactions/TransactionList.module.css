@@ -64,3 +64,35 @@
   color: var(--color-text-muted);
   text-align: center;
 }
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* 編輯 / 刪除的入口。樣式與帳戶列表一致，兩個清單才看起來屬於同一個 app。 */
+.actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.action {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.action:hover {
+  background-color: var(--color-bg);
+}
+
+.remove {
+  color: var(--color-danger);
+  border-color: #f3c6c6;
+}
