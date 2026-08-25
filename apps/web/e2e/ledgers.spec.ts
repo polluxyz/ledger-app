@@ -1,6 +1,6 @@
-import type { Page } from '@playwright/test';
 import { addMember, createLedger, createTransaction, listAccounts, listCategories } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
+import { newTransactionForm, parseAmount, switchLedger } from './ui';
 
 /**
  * Slice 2 的六個情境（spec §7）。
@@ -18,16 +18,6 @@ import { expect, test, USER_B_EMAIL } from './fixtures';
 /** 註冊時自動建立的個人帳本叫「{名字} 的帳本」（見 `auth.service.ts`）。 */
 const PERSONAL_LEDGER_NAME = '甲 的帳本';
 const TRIP_LEDGER_NAME = '出遊分帳';
-
-/** 把畫面上的「$1,234」變回數字，好做加減比較。 */
-function parseAmount(text: string | null): number {
-  return Number((text ?? '').replace(/[$,\s]/g, ''));
-}
-
-/** 切換頁首的作用中帳本。只有一本帳本時切換器是一段文字，不是下拉。 */
-async function switchLedger(page: Page, name: string): Promise<void> {
-  await page.getByLabel('作用中帳本').selectOption({ label: name });
-}
 
 test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ signedInPage: page }) => {
   await page.getByRole('link', { name: '帳本' }).click();
@@ -49,7 +39,7 @@ test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ sig
   await expect(page.getByText('這本帳本不影響你的帳戶餘額')).toBeVisible();
 
   await page.getByLabel('金額').fill('1200');
-  await page.getByLabel('分類').selectOption({ label: '餐飲' });
+  await newTransactionForm(page).getByLabel('分類').selectOption({ label: '餐飲' });
   await page.getByRole('button', { name: '新增', exact: true }).click();
 
   // 限定在交易列表的那一列裡找。整頁搜尋「餐飲」會同時對到分類下拉的選項。
@@ -82,7 +72,7 @@ test('情境 2：切回個人帳本後帳戶欄位回來，餘額跟著變動', 
   const before = parseAmount(await balance.textContent());
 
   await page.getByLabel('金額').fill('1200');
-  await page.getByLabel('分類').selectOption({ label: '餐飲' });
+  await newTransactionForm(page).getByLabel('分類').selectOption({ label: '餐飲' });
   await page.getByRole('button', { name: '新增', exact: true }).click();
 
   // SC-18：支出讓餘額減少相同的金額。用差額而非絕對值，才不會被預設值綁死。

@@ -5,6 +5,7 @@ import type {
   AuthTokenResponse,
   AuthUser,
   Category,
+  CreateAccountRequest,
   CreateLedgerRequest,
   CreateTransactionRequest,
   LedgerMemberInfo,
@@ -185,4 +186,17 @@ export async function createTransaction(
     data: body,
   });
   return readJson<Transaction>(response, '記一筆交易');
+}
+
+/** 新增一個帳戶。`initialBalance` 省略時是 0，可為負數（信用卡既有欠款）。 */
+export async function createAccount(
+  request: APIRequestContext,
+  token: string,
+  body: CreateAccountRequest,
+): Promise<Account> {
+  const response = await request.post(`${API_BASE_URL}/accounts`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<Account>(response, `建立帳戶「${body.name}」`);
 }
