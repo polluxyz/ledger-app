@@ -19,9 +19,13 @@
   margin-bottom: var(--space-md);
 }
 
+/*
+ * 金額與日期並排。窄到放不下兩欄時（彈窗裡就是），自動改成上下兩列——
+ * 硬塞兩欄會把日期輸入框壓到看不清楚。
+ */
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: var(--space-md);
 }
 

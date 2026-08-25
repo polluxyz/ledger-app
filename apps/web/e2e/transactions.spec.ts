@@ -242,3 +242,28 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   expect(bCashAfter!.balance).toBe(-200);
   await expect(page.getByLabel('現金餘額')).toHaveText('$0');
 });
+
+test('編輯彈窗不會被欄位撐到橫向捲動', async ({ signedInPage: page, userA, request }) => {
+  // 彈窗的寬度是固定的（22rem），裡面的欄位必須跟著縮。`<input type="date">` 與
+  // `<select>` 都有很寬的預設尺寸，一旦它們不肯縮，整張表單就會超出彈窗，
+  // 使用者得左右捲才看得到欄位的右半邊。
+  const { ledger, cash, expense } = await personalSetup(request, userA.token);
+
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 120,
+    date: TODAY,
+    categoryId: expense.id,
+    accountId: cash.id,
+  });
+
+  await page.reload();
+  await transactionRow(page, '-$120').getByRole('button', { name: /^編輯/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: '編輯交易' });
+  await expect(dialog.getByLabel('金額')).toBeVisible();
+
+  // 捲動寬度大於可視寬度＝內容溢出。留 1px 給次像素誤差。
+  const overflow = await dialog.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
