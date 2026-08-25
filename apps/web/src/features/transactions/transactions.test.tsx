@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
+ * 首頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
+ * ——fieldset 的 <legend> 就是它的無障礙名稱。
+ */
+const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
+
+/**
  * Slice 0 的核心流程測試（SC-3、SC-4）：已登入者看到帳本交易，新增一筆後
  * 不必重整就出現在列表。以真實的 App 出發，只把 fetch 換成 mock。
  */
@@ -170,7 +176,7 @@ describe('Transactions on the home page', () => {
     // 等分類載入完成，下拉才有選項。
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('金額'), '120');
-    await user.selectOptions(screen.getByLabelText('分類'), 'cat-1');
+    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     // 列表自動重取，新的一筆出現。
@@ -207,7 +213,7 @@ describe('Transactions on the home page', () => {
 
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('金額'), '0');
-    await user.selectOptions(screen.getByLabelText('分類'), 'cat-1');
+    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('amount must be a positive number');
@@ -232,7 +238,7 @@ describe('Transactions on the home page', () => {
     expect(screen.getByText(/這本帳本不影響你的帳戶餘額/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('金額'), '123');
-    await user.selectOptions(screen.getByLabelText('分類'), 'cat-1');
+    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await waitFor(() => {

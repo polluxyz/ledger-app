@@ -7,6 +7,8 @@ interface TransactionListProps {
   transactions: Transaction[];
   isLoading: boolean;
   error: unknown;
+  /** 目前有沒有套用篩選條件——決定空清單要說哪一句話。 */
+  isFiltered?: boolean;
   onEdit: (transaction: Transaction) => void;
   onRemove: (transaction: Transaction) => void;
 }
@@ -40,6 +42,7 @@ export function TransactionList({
   transactions,
   isLoading,
   error,
+  isFiltered = false,
   onEdit,
   onRemove,
 }: TransactionListProps) {
@@ -50,7 +53,12 @@ export function TransactionList({
     return <FormError error={error} />;
   }
   if (transactions.length === 0) {
-    return <p className={styles.empty}>還沒有任何交易，從上方新增第一筆吧。</p>;
+    // 篩選中的空清單不是「還沒開始記帳」。叫人「新增第一筆」會讓他以為資料不見了。
+    return (
+      <p className={styles.empty}>
+        {isFiltered ? '沒有符合條件的交易。' : '還沒有任何交易，從上方新增第一筆吧。'}
+      </p>
+    );
   }
 
   return (

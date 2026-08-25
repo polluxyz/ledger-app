@@ -1,15 +1,23 @@
 import { useState } from 'react';
-import type { Transaction } from '@ledger/shared';
+import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
+import { Pagination } from '../components/Pagination';
 import { AccountBalances } from '../features/accounts/AccountBalances';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionDialog } from '../features/transactions/TransactionDialog';
+import { TransactionFilterBar } from '../features/transactions/TransactionFilters';
 import { TransactionForm } from '../features/transactions/TransactionForm';
 import { TransactionList } from '../features/transactions/TransactionList';
+import {
+  EMPTY_FILTERS,
+  hasAnyFilter,
+  toListQuery,
+  type TransactionFilters,
+} from '../features/transactions/transaction-query';
 import { useDeleteTransaction, useTransactions } from '../features/transactions/use-transactions';
 import styles from './HomePage.module.css';
 
@@ -64,35 +72,15 @@ export default function HomePage() {
 }
 
 /**
- * 已登入者的記帳畫面：新增表單 + 交易列表。
+ * 已登入者的記帳畫面。這一層只負責找出「記進哪一本帳本」
+ * （由 ActiveLedgerProvider 決定，Slice 2 Step 2），其餘交給 `LedgerTransactions`。
  *
- * 記進哪一本帳本由 ActiveLedgerProvider 決定（Slice 2 Step 2）；這裡只負責呈現。
- *
- * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
- * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
+ * `key={ledger.id}` 是刻意的：換一本帳本就換一組篩選條件與頁碼。用 key 讓 React
+ * 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠——漏掉一個的症狀是
+ * 「切到只有 3 筆的帳本卻停在第 5 頁」，畫面一片空白而看不出原因。
  */
 function LedgerView() {
   const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
-  const transactions = useTransactions(ledger?.id ?? null);
-  const deleteTransaction = useDeleteTransaction(ledger?.id ?? null);
-
-  // null = 彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
-  const [editing, setEditing] = useState<Transaction | null>(null);
-  const [removing, setRemoving] = useState<Transaction | null>(null);
-
-  function closeRemove() {
-    setRemoving(null);
-    // 清掉上一次的失敗，下次開啟才不會殘留紅字。
-    deleteTransaction.reset();
-  }
-
-  function confirmRemove() {
-    if (removing) {
-      // 失敗時**不關彈窗**，錯誤由 ConfirmDialog 就地顯示——關掉的話使用者只會
-      // 看到「什麼都沒發生」。
-      deleteTransaction.mutate(removing.id, { onSuccess: closeRemove });
-    }
-  }
 
   if (ledgerLoading) {
     return <p className={styles.panelText}>載入中…</p>;
@@ -108,15 +96,69 @@ function LedgerView() {
     );
   }
 
+  return <LedgerTransactions key={ledger.id} ledger={ledger} />;
+}
+
+/**
+ * 一本帳本的記帳畫面：新增表單、篩選、列表、分頁，以及編輯與刪除的彈窗。
+ *
+ * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
+ * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
+ */
+function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
+  const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
+  const [page, setPage] = useState(1);
+
+  const transactions = useTransactions(ledger.id, toListQuery(filters, page));
+  const deleteTransaction = useDeleteTransaction(ledger.id);
+
+  // null = 彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [removing, setRemoving] = useState<Transaction | null>(null);
+
+  /**
+   * 換了篩選條件就回到第 1 頁。少了這件事，使用者會在「第 5 頁」看到空白，
+   * 而畫面上沒有任何線索說明原因。
+   */
+  function handleFiltersChange(next: TransactionFilters) {
+    setFilters(next);
+    setPage(1);
+  }
+
+  function closeRemove() {
+    setRemoving(null);
+    // 清掉上一次的失敗，下次開啟才不會殘留紅字。
+    deleteTransaction.reset();
+  }
+
+  function confirmRemove() {
+    if (removing) {
+      // 失敗時**不關彈窗**，錯誤由 ConfirmDialog 就地顯示——關掉的話使用者只會
+      // 看到「什麼都沒發生」。
+      deleteTransaction.mutate(removing.id, { onSuccess: closeRemove });
+    }
+  }
+
   return (
     <>
       <TransactionForm ledger={ledger} />
+
+      <TransactionFilterBar ledgerId={ledger.id} filters={filters} onChange={handleFiltersChange} />
+
       <TransactionList
         transactions={transactions.data?.items ?? []}
         isLoading={transactions.isLoading}
         error={transactions.error}
+        isFiltered={hasAnyFilter(filters)}
         onEdit={setEditing}
         onRemove={setRemoving}
+      />
+
+      <Pagination
+        page={transactions.data?.page ?? page}
+        limit={transactions.data?.limit ?? 20}
+        total={transactions.data?.total ?? 0}
+        onChange={setPage}
       />
 
       <TransactionDialog ledger={ledger} transaction={editing} onClose={() => setEditing(null)} />

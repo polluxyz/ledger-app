@@ -1,7 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
+
+/**
+ * 首頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
+ * ——fieldset 的 <legend> 就是它的無障礙名稱。
+ */
+const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
 
 /**
  * 轉帳（SC-15）。轉帳的欄位規則與支出／收入不同，因此獨立成一檔：
@@ -82,7 +88,7 @@ describe('Recording a transfer', () => {
     await user.click(await screen.findByRole('button', { name: '轉帳' }));
 
     // 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別）。
-    expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
+    expect(within(newTransactionForm()).queryByLabelText('分類')).not.toBeInTheDocument();
     expect(screen.getByLabelText('轉出帳戶')).toBeInTheDocument();
     expect(screen.getByLabelText('轉入帳戶')).toBeInTheDocument();
   });

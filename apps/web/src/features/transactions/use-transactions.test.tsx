@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
+ * 首頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
+ * ——fieldset 的 <legend> 就是它的無障礙名稱。
+ */
+const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
+
+/**
  * 快取一致性：**任何**會改變交易的操作之後，帳戶餘額都必須跟著重取。
  *
  * 這三條測試刻意獨立成一檔。餘額是後端依交易算出來的，少了 `invalidateQueries`
@@ -123,7 +129,7 @@ describe('Writing a transaction refreshes account balances', () => {
     const before = await waitForInitialBalance();
 
     await user.type(screen.getByLabelText('金額'), '120');
-    await user.selectOptions(screen.getByLabelText('分類'), 'cat-1');
+    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await expectRefetched(before, '$4,880');
