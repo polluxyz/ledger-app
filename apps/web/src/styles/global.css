@@ -11,17 +11,65 @@
   --color-primary: #2563eb;
   --color-danger: #dc2626;
 
+  /* 狀態色（2f 新增）。原本 hover / focus 都靠瀏覽器預設，
+     按鈕壓下去沒有回饋，鍵盤使用者也看不出焦點在哪。 */
+  --color-primary-hover: #1d4ed8;
+  --color-surface-hover: #f0f1f3;
+  --color-focus-ring: #93c5fd;
+
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;
   --space-lg: 1.5rem;
+  /* 2f 新增。寬版面下 lg（1.5rem）當區塊間距太擠，撐不出層次。 */
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* 字級階層（2f 新增）。這些值不是憑空訂的，是把散落在各 *.module.css 裡
+     已經在用的尺寸收攏起來——例如 0.8125rem 出現在六個檔案的 meta 文字，
+     1.5rem 是每一頁的標題。先命名，之後才有辦法整批調整。 */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* 陰影（2f 新增）。sm 給卡片，md 給浮在內容之上的浮動選單——
+     後者必須明顯比卡片重，否則看不出「它蓋在上面」。 */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 14%);
+
+  /* 版面尺寸（2f 新增）。 */
+  --sidebar-width: 14rem;
+  --topbar-height: 3.5rem;
+  --content-max: 70rem;
+  /*
+   * ⚠️ 斷點只能寫在這裡當**文件**，媒體查詢讀不到 CSS 變數——
+   * `@media (max-width: var(--breakpoint-md))` 是無效的，瀏覽器會整條忽略，
+   * 不會報錯，症狀是「響應式完全沒作用」。所以各 *.module.css 的
+   * `@media` 一律硬寫 900px，改的時候要連同這一行一起改。
+   */
+  --breakpoint-md: 900px;
 
   --radius: 0.375rem;
 
   font-family: system-ui, 'Segoe UI', 'Noto Sans TC', sans-serif;
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   color: var(--color-text);
   background-color: var(--color-bg);
+}
+
+/*
+ * 全站統一的鍵盤焦點樣式。瀏覽器預設的 outline 在深色文字上很難看見，
+ * 而焦點看不見等於鍵盤使用者不知道自己按 Enter 會觸發什麼。
+ * 用 `:focus-visible` 而不是 `:focus`：滑鼠點擊不該畫出焦點框。
+ */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 *,

@@ -1,4 +1,42 @@
-/* 標題與登出移到共用的 AppHeader；這裡只剩頁面內容的樣式。 */
+/* 標題與登出移到共用的外殼（AppTopBar / AppSidebar）；這裡只剩頁面內容的樣式。 */
+
+/*
+ * 已登入時的兩欄版面（2f · D2）：左邊是交易列表，右邊是記帳表單與餘額。
+ *
+ * `minmax(0, ...)` 兩欄都要寫。grid 欄的預設最小寬度是內容寬度，少了它，
+ * 一筆很長的備註就會把整欄撐開、擠掉另一欄，並讓整頁出現橫向捲動。
+ *
+ * 只設 column-gap，row-gap 留 0——各區塊（表單、篩選、餘額）本身已經帶著
+ * `margin-bottom`，再加 row-gap 會變成雙倍間距。
+ */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 0 var(--space-lg);
+  align-items: start;
+}
+
+.primary,
+.rail {
+  min-width: 0;
+}
+
+/*
+ * 1100px 以下退回單欄。**斷點比側邊欄的 900px 早**：側邊欄佔掉 14rem 之後，
+ * 視窗 1100px 時右欄只剩不到 300px，表單欄位會擠成兩行。
+ *
+ * 退回單欄時把右側欄排到前面——記帳表單要在列表上方，與 2f 之前的順序一致。
+ */
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    order: -1;
+  }
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

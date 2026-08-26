@@ -1,0 +1,88 @@
+/*
+ * 頂列橫跨整個視窗寬度，並且 sticky 在最上面——側邊欄與內容都會捲動，
+ * 站名與 ☰ 不該跟著捲走。
+ */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: var(--topbar-height);
+  padding: 0 var(--space-md);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
+.brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+/*
+ * ☰ 只在窄螢幕出現。寬螢幕的側邊欄一直攤在那裡，沒有東西需要展開。
+ * 用 display:none 而不是 visibility——它不該佔位置，也不該被 Tab 走到。
+ */
+.menuButton {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* 三條槓：中間那條是元素本身，上下兩條用 before / after 畫。 */
+.menuIcon,
+.menuIcon::before,
+.menuIcon::after {
+  display: block;
+  width: 1rem;
+  height: 2px;
+  background-color: var(--color-text);
+}
+
+.menuIcon {
+  position: relative;
+}
+
+.menuIcon::before,
+.menuIcon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+
+.menuIcon::before {
+  top: -5px;
+}
+
+.menuIcon::after {
+  top: 5px;
+}
+
+/*
+ * 斷點硬寫 900px。媒體查詢讀不到 CSS 變數，
+ * `@media (max-width: var(--breakpoint-md))` 會被整條忽略且不報錯。
+ * 改這個數字時，`global.css` 的 --breakpoint-md 要一起改。
+ */
+@media (max-width: 900px) {
+  .menuButton {
+    display: inline-flex;
+  }
+}

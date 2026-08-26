@@ -17,9 +17,9 @@ export default function LedgersPage() {
   const ledgers = useLedgers(includeArchived);
 
   return (
-    <section>
+    <section className={styles.page}>
       <header className={styles.header}>
-        {/* 站名是 AppHeader 的 h1，頁面標題往下一級。 */}
+        {/* 站名是 AppTopBar 的 h1，頁面標題往下一級。 */}
         <h2 className={styles.title}>帳本</h2>
         <Button onClick={() => setCreating(true)}>建立帳本</Button>
       </header>
