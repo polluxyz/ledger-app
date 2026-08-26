@@ -1,3 +1,11 @@
+/*
+ * 單欄的管理頁不吃滿 70rem。一列只有「名稱 …… 餘額 編輯 刪除」，
+ * 拉到 1120px 寬會讓名稱與金額遠到得轉頭看，反而更難讀（2f）。
+ */
+.page {
+  max-width: 52rem;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -10,5 +18,5 @@
 /* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
 .title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--text-xl);
 }

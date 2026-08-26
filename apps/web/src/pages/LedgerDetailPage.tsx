@@ -33,7 +33,7 @@ export default function LedgerDetailPage() {
   if (ledger.error || !ledger.data) {
     const notFound = ledger.error instanceof ApiError && ledger.error.statusCode === 404;
     return (
-      <section>
+      <section className={styles.page}>
         <h2 className={styles.title}>帳本</h2>
         <p className={styles.status}>
           {notFound ? '找不到這本帳本。' : '無法載入這本帳本，請稍後再試。'}
@@ -157,7 +157,7 @@ function LedgerDetailView({
   }
 
   return (
-    <section>
+    <section className={styles.page}>
       <header className={styles.header}>
         <h2 className={styles.title}>{ledger.name}</h2>
         {isOwner && ledger.archivedAt === null && (
