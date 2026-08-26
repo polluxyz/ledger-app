@@ -29,7 +29,7 @@ test('未登入的首頁載得起來，而且沒有未攔截的例外', async ({
 
   await page.goto('/');
 
-  // 站名是全站唯一的 h1（見 app/AppHeader.tsx）。
+  // 站名是全站唯一的 h1（見 app/AppTopBar.tsx）。
   await expect(page.getByRole('heading', { level: 1, name: '記帳系統' })).toBeVisible();
 
   // 未登入時首頁顯示訪客面板，裡面是登入 / 註冊兩個入口。
