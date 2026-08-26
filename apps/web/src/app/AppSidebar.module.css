@@ -1,0 +1,81 @@
+/*
+ * 寬螢幕：固定寬度的一欄，sticky 在頂列底下。
+ * 內容區會很長（交易列表可以到 20 筆），導覽跟著捲走的話換頁就得先捲回頂端。
+ */
+.sidebar {
+  position: sticky;
+  top: var(--topbar-height);
+  flex: none;
+  width: var(--sidebar-width);
+  height: calc(100vh - var(--topbar-height));
+  padding: var(--space-lg) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+}
+
+.switcher {
+  min-width: 0;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.link {
+  padding: var(--space-sm);
+  border-radius: var(--radius);
+  color: var(--color-primary);
+  font-size: var(--text-base);
+  text-decoration: none;
+}
+
+.link:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* 所在頁面：改用一般文字色並加粗，看得出「你在這裡」。 */
+.active {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.footer {
+  /* 推到底部。登出是低頻且不希望誤觸的操作，離導覽越遠越好。 */
+  margin-top: auto;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+/*
+ * 窄螢幕：脫離文件流，變成由 ☰ 展開的浮動面板。
+ * 斷點硬寫 900px——媒體查詢讀不到 CSS 變數（見 global.css 的說明）。
+ */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    z-index: 20;
+    /* 收起時完全不佔位置，也不會被 Tab 走到。 */
+    display: none;
+    width: min(18rem, 85vw);
+    height: auto;
+    max-height: calc(100vh - var(--topbar-height));
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    border-bottom-right-radius: var(--radius);
+    /* 比卡片重得多的陰影，才看得出它蓋在內容上面。 */
+    box-shadow: var(--shadow-md);
+  }
+
+  .open {
+    display: flex;
+  }
+}
