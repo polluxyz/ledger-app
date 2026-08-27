@@ -306,6 +306,7 @@ Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──�
 - PR 由 Claude Code 用 `gh pr create` 直接開（見下方「Git 自動化」），描述依 `.github/pull_request_template.md` 的四節填好。若因故要改由開發者手動貼上，**標題與描述都要給，且整份輸出成一個可直接複製的 Markdown 區塊**，不要把內容拆散在對話的說明文字裡。內容若含程式碼圍欄，外層改用四個反引號。
 - **PR 標題**用 Conventional Commits 格式（`<type>: <簡述>`），與 commit 同慣例用英文；squash merge 後它就是 `main` 上的 commit 標題，必須能獨立看懂。標題與描述**分開列出**（GitHub 是兩個輸入框），別把標題埋在內文裡。
 - PR 必須通過 CI 才能合併。
+- 合併用 squash merge，保持 `main` 歷史乾淨。
 - 單人開發時亦進行**自我 code review**，把 PR 當成留給未來與審查者看的決策紀錄。
 
 ### Git 自動化（2026-08-27 起）
@@ -331,7 +332,6 @@ Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──�
 - 關閉或重開別人的 PR、合併不是自己開的 PR。
 
 **PR 之間互不混用**：同時有多個議題時開多個分支與多個 PR，不把無關變更塞進同一個。
-- 合併建議用 squash merge，保持 `main` 歷史乾淨。
 
 ### 分支保護（main）
 
