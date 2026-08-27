@@ -1,6 +1,34 @@
-/* 頁首與頁面共用同一個外框，兩者的左右邊界才會對齊。 */
+/*
+ * 外殼：頂列橫跨全寬，其下才是「側邊欄 + 內容」。
+ *
+ * 這裡原本是 `max-width: 40rem`，把全站鎖在一根 640px 的窄欄裡置中——
+ * 那是手機 App 的形狀。改成 dashboard 版面的理由見
+ * `docs/specs/phase-2f-web-layout.md`。
+ */
 .shell {
-  max-width: 40rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+}
+
+/*
+ * 內容區。`min-width: 0` 不能省——flex 子元素的預設最小寬度是內容寬度，
+ * 少了它，寬表格或長備註會把整個版面撐出橫向捲動，而側邊欄跟著被擠掉。
+ *
+ * `max-width` 讓文字不會在超寬螢幕上拉成一長條；`margin: 0 auto` 讓它在
+ * 側邊欄右側的剩餘空間裡置中。
+ */
+.main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: var(--space-lg);
 }

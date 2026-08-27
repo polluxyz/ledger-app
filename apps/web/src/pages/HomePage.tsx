@@ -45,12 +45,6 @@ export default function HomePage() {
         <Stat label="結餘" authenticated={isAuthenticated} />
       </div>
 
-      {/*
-        餘額列只在已登入時渲染。這不只是版面問題：hook 不能有條件呼叫，元件一旦
-        掛上去就會打 `/accounts`，訪客沒有 token，那會是一個註定 401 的請求。
-      */}
-      {isAuthenticated && <AccountBalances />}
-
       {isAuthenticated ? (
         <LedgerView />
       ) : (
@@ -82,25 +76,43 @@ export default function HomePage() {
 function LedgerView() {
   const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
 
-  if (ledgerLoading) {
-    return <p className={styles.panelText}>載入中…</p>;
-  }
-  if (ledgerError) {
-    return <FormError error={ledgerError} />;
-  }
-  if (!ledger) {
-    return (
-      <section className={styles.panel}>
-        <p className={styles.panelText}>找不到任何帳本。</p>
-      </section>
-    );
-  }
+  return (
+    <div className={styles.layout}>
+      {/* 左主欄：篩選、列表、分頁。帳本還沒好的三種狀態也都落在這裡。 */}
+      <div className={styles.primary}>
+        {ledgerLoading && <p className={styles.panelText}>載入中…</p>}
+        {ledgerError && <FormError error={ledgerError} />}
+        {!ledgerLoading && !ledgerError && !ledger && (
+          <section className={styles.panel}>
+            <p className={styles.panelText}>找不到任何帳本。</p>
+          </section>
+        )}
+        {ledger && <LedgerTransactions key={ledger.id} ledger={ledger} />}
+      </div>
 
-  return <LedgerTransactions key={ledger.id} ledger={ledger} />;
+      {/*
+        右側欄：記帳表單與餘額。表單常駐而不是藏進彈窗——記帳是高頻動作，
+        少一次點擊有感（2f · D2）。
+
+        餘額列**不受帳本狀態影響**：帳戶屬於使用者、跨帳本共用，就算一本帳本都
+        沒有，「我現在有多少錢」仍然該看得到。它只需要已登入，而這裡就在
+        `isAuthenticated` 之下——hook 不能有條件呼叫，訪客渲染它就是一個註定
+        401 的 `/accounts` 請求。
+      */}
+      <aside className={styles.rail}>
+        {ledger && <TransactionForm key={ledger.id} ledger={ledger} />}
+        <AccountBalances />
+      </aside>
+    </div>
+  );
 }
 
 /**
- * 一本帳本的記帳畫面：新增表單、篩選、列表、分頁，以及編輯與刪除的彈窗。
+ * 一本帳本的交易區：篩選、列表、分頁，以及編輯與刪除的彈窗。
+ *
+ * **新增表單不在這裡**——它被移到右側欄（2f · D2）。之所以搬得動，是因為
+ * `TransactionForm` 只吃一個 `ledger` prop，與篩選、頁碼沒有任何共用狀態。
+ * 它在那邊有自己的 `key={ledger.id}`，換帳本一樣會整個重建。
  *
  * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
  * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
@@ -141,8 +153,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      <TransactionForm ledger={ledger} />
-
       <TransactionFilterBar ledgerId={ledger.id} filters={filters} onChange={handleFiltersChange} />
 
       <TransactionList

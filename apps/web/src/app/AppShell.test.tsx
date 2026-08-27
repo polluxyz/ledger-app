@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
 /**
- * 共用頁首的導覽（S5-A）。
+ * 外殼的導覽（2f 之前叫 `AppHeader`，拆成 `AppTopBar` + `AppSidebar` 後改名）。
  *
  * 重點是「未登入不該看到受保護頁面的入口」——那個連結按下去只會被導回登入頁，
  * 等於把人推進死路。
+ *
+ * 這三條與版面無關，所以 2f 只改了檔名與註解，斷言一條都沒動。
  */
-describe('AppHeader', () => {
+describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear();
     window.history.pushState({}, '', '/');
@@ -53,5 +55,19 @@ describe('AppHeader', () => {
 
     expect(await screen.findByRole('heading', { name: '帳戶' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '首頁' })).toBeInTheDocument();
+  });
+
+  /**
+   * D5 的回歸測試。頂列若也顯示頁面標題，這一條會抓到兩個 heading 而失敗——
+   * 那正是 `e2e/ledgers.spec.ts` 會踩到的地雷，只是在這裡先擋下來。
+   */
+  it('shows exactly one heading for the page title', async () => {
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    window.history.pushState({}, '', '/accounts');
+
+    render(<App />);
+
+    expect(await screen.findAllByRole('heading', { name: '帳戶' })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 });

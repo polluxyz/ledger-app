@@ -1,3 +1,8 @@
+/* 與帳戶頁、帳本列表同寬（2f）。 */
+.page {
+  max-width: 52rem;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -10,7 +15,7 @@
 /* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
 .title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--text-xl);
 }
 
 .subtitle {
