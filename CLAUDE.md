@@ -324,6 +324,18 @@ Specify（規格）──→ Plan（計畫）──→ Tasks（任務）──�
 第 6 步之所以可以自動，是因為開發者原本的判準就是「CI 全綠就合併」——
 那個判斷已經編碼在 CI 裡，人再按一次沒有增加資訊。
 
+**同時有多個 PR 開著時，第 6 步會被擋下。** 先合併的那個會讓 `main` 前進，
+後面的 PR 就落後於 base，而分支保護要求分支必須跟上才能合併，訊息是
+`the head branch is not up to date with the base branch`。
+
+處理方式：`gh pr update-branch <n>` 把 `main` 併進該分支，**等 CI 重跑完再合併**。
+它做的是 merge 不是 rebase，不需要 force push，所以不觸及下方的界線。
+**不要用 `--admin` 繞過**——那等於跳過分支保護，而分支保護正是「main 永遠可部署」
+的執行機制。
+
+> 開發者若把 repo 的 `allow_auto_merge` 打開，就可以改用 `gh pr merge --auto`，
+> 由 GitHub 自己處理這個排隊。**那是 repo 設定，一律由開發者自己改**（見下方界線）。
+
 **自動化不包含以下，這些一律先問**：
 
 - 直接 push `main`（永遠禁止，沒有例外）。
