@@ -6,9 +6,21 @@
 
 ## 1. 角色分工
 
-- **預設 agent 是 Claude Code**，它是 coordinator（協調者），負責拆工、派工、驗收、開 PR。
-- **worker 優先用 Pi**（跑 GLM 模型）。GLM 額度用盡時改用 Claude Code 當 worker。
+- **預設 agent 是 Claude Code**，它是 coordinator（協調者）。**它的主要工作是規劃與驗收，不是實作。**
+- **實作預設派給 worker**，優先用 Pi（跑 GLM 模型）。GLM 額度用盡時改用 Claude Code 當 worker。
 - **不要用 Claude Code 內建的 Agent tool 派工。** 它只開得了 Claude subagent，指定不了 Pi，也指定不了 GLM。要平行工作就走 `orca orchestration`。
+
+協調者該做與不該做：
+
+| 協調者自己做                                   | 派給 worker                                        |
+| ---------------------------------------------- | -------------------------------------------------- |
+| 寫 spec 與 plan、拆任務、做決策                | 依 spec 實作功能                                   |
+| 驗收 worker 的產出、開 PR、盯 CI               | 寫該功能的單元測試（用 `zai/glm-5.3`，不用 flash） |
+| 授權與資料隔離相關的程式碼                     | 前端頁面與元件                                     |
+| Prisma schema、API 介面                        | 重構、補文件、修 lint                              |
+| 派工成本高於自己做的瑣碎改動（改一個字串之類） | —                                                  |
+
+「派工成本高於自己做」是唯一的模糊地帶。判準：如果寫 Task spec 的時間比自己改還久，就自己改。
 
 什麼時候才需要協調者：使用者明確要求監督、追蹤完成、協調有相依的任務時。單純「把這件事交給另一個 agent，不監督」是交接，用 `orca-cli`，**不要建 Run**。
 
