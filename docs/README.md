@@ -9,7 +9,7 @@
 | `docs/reports/`   | 一次性的技術報告                   | 寫完不動               |
 | `docs/artifacts/` | HTML 產出（規劃圖、提案頁）        | **不進版控**，隨時可刪 |
 
-規範文件另外放：根目錄的 `CLAUDE.md`（怎麼做）、`專案決策脈絡.md`（當初為何這樣決定）、`README.md`（怎麼跑起來）。分層規範在 `apps/api/CLAUDE.md` 與 `apps/web/CLAUDE.md`。
+規範文件另外放：根目錄的 `CLAUDE.md`（怎麼做）、[`orca-multi-agent.md`](orca-multi-agent.md)（多代理派工與交接）、`專案決策脈絡.md`（當初為何這樣決定）、`README.md`（怎麼跑起來）。分層規範在 `apps/api/CLAUDE.md` 與 `apps/web/CLAUDE.md`。
 
 ---
 
