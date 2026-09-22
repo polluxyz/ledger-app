@@ -6,7 +6,7 @@
 
 ## 1. 角色分工
 
-- **預設 agent 是 Claude Code**，它是 coordinator（協調者）。**它的主要工作是規劃與驗收，不是實作。**
+- **預設 agent 是 Claude Code**，它是 coordinator（協調者），負責拆工、派工、驗收、開 PR。**它的主要工作是規劃與驗收，不是實作。**
 - **實作預設派給 worker**，優先用 Pi（跑 GLM 模型）。GLM 額度用盡時改用 Claude Code 當 worker。
 - **不要用 Claude Code 內建的 Agent tool 派工。** 它只開得了 Claude subagent，指定不了 Pi，也指定不了 GLM。要平行工作就走 `orca orchestration`。
 
