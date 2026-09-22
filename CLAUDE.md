@@ -241,7 +241,11 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 ### 多代理
 
-預設 agent 是 Claude Code，它是協調者。**能平行的工作就派出去，不要自己一件一件做。**
+預設 agent 是 Claude Code，它是協調者。**它的主要工作是規劃與驗收，不是實作。**
+
+- 規劃、拆解、決策、驗收、開 PR 由 Claude Code 自己做。
+- **實作預設派給 worker**，能平行的一次全部派出去，不要自己一件一件做。
+- 自己動手實作的例外只有三種：涉及授權與資料隔離、要動 Prisma schema 或 API 介面、派工成本明顯高於自己做的瑣碎改動。
 
 - **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Pi 或 GLM。
 - worker 優先用 **Pi + `zai/glm-5.3`**；單一檔案、不需判斷、驗收條件機器可驗的任務才用 `zai/glm-5.3-flash`。GLM 額度用盡改用 Claude Code 當 worker。
