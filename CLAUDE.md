@@ -239,6 +239,17 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 可用的 skill：`orca-cli`（worktree、終端機、內建瀏覽器）、`orchestration`（多 agent 協調）、`orca-per-workspace-env`（容器 / VM 環境配方，目前用不到）。使用前先執行 `orca skills get <名稱>` 取得版本相符的說明。
 
+### 多代理
+
+預設 agent 是 Claude Code，它是協調者。**能平行的工作就派出去，不要自己一件一件做。**
+
+- **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Pi 或 GLM。
+- worker 優先用 **Pi + `zai/glm-5.3`**；單一檔案、不需判斷、驗收條件機器可驗的任務才用 `zai/glm-5.3-flash`。GLM 額度用盡改用 Claude Code 當 worker。
+- **worker 不一定讀得到本檔**，規則要寫進 Task spec。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
+- worker 的產出一律由協調者驗收後才進 PR。
+
+派工指令、模型分流準則、額度切換、Task spec 格式、**context 快滿時的 session 交接程序**，全部見 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
+
 ---
 
 ## 12. 程式碼檢索（codebase-memory-mcp）
