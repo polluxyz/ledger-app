@@ -67,9 +67,19 @@ worker 回報 provider 額度或速率限制時：
 1. **不要靜默重試**，也不要換個講法再問一次。
 2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model <Opus 4.8 的 model id>`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
 
-Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定。`claude --model` 接受別名（`opus`、`sonnet`、`fable`）或完整名稱（如 `claude-fable-5`）。
+Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定。
 
-⚠️ **Opus 4.8 的完整 id 尚未確認**，填之前先在互動式 Claude session 用 `/model` 看實際清單，不要憑記憶寫。
+| 要什麼              | 填什麼                                            |
+| ------------------- | ------------------------------------------------- |
+| 最新的 Opus（建議） | `opus`                                            |
+| 釘住 Opus 4.8       | `claude-opus-4-8`                                 |
+| 搭配 1M context     | 後綴 `[1m]`，如 `opus[1m]`、`claude-opus-4-8[1m]` |
+
+**建議用 `opus` 別名，不要釘版本。** 別名解析為帳號上最新的 Opus；這台機器的 `/model` 選擇器顯示的是 Opus 5，比 4.8 新。釘死版本只在「新版行為有問題、要退回去」時才需要。
+
+完整 id 一定要寫對：Claude Code 在 Anthropic API 上會驗證模型名稱，不認得的字串會被拒絕並顯示 `Model "<name>" is not a recognized model id.`。它接受別名、選擇器裡的項目，以及任何 `claude-` 開頭的名稱。
+
+`--effort` 要搭配 `--model` 一起給，兩者都不能與 `--terminal` 並用。
 
 這是暫時安排。之後有其他模型可用時回來改這一節。
 
@@ -134,5 +144,4 @@ orca orchestration worker-list --run <run_id> --json
 
 - **`orca` 不一定在 PATH 上。** 由 Orca 終端機啟動的 session 才有；從外面開的 session 要用 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe`。
 - **Pi 沒有內建的 subagent 與 todo 工具。** 多代理協調靠 Orca 提供，不是 Pi 自己有。
-- **`worker-start --terminal <handle>` 尚未實跑**（見 §3）。
-- **Opus 4.8 的完整 model id 尚未確認**（見 §4）。
+- **`worker-start --terminal <handle>` 尚未實跑**（見 §3）。這是目前唯一沒驗證的環節。
