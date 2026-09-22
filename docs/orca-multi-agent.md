@@ -37,11 +37,7 @@ Pi 的模型有兩條路：
 2. 自己開終端機再接上（`--model` 與 `--terminal` 不能並用）：
 
    ```bash
-   pi --model zai/glm-5.3          # 預設
-   pi --model zai/glm-5.3-flash    # 簡單任務
-   ```
-
-   ```bash
+   # 模型寫在 pi 自己的旗標上：zai/glm-5.3 或 zai/glm-5.3-flash
    orca terminal create --worktree <selector> --command "pi --model zai/glm-5.3-flash" --json
    orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
    ```
@@ -65,7 +61,7 @@ Pi 的模型有兩條路：
 worker 回報 provider 額度或速率限制時：
 
 1. **不要靜默重試**，也不要換個講法再問一次。
-2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model <Opus 4.8 的 model id>`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
+2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model opus`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
 
 Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定。
 
