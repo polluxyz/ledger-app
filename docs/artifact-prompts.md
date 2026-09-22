@@ -19,7 +19,7 @@
 ```
 用 plan-map 幫我把 Slice 1 的規劃結構攤開來看。
 
-來源是 tasks/phase-2b-slice-1-plan.md 與 docs/specs/phase-2-web-mvp.md。
+來源是 tasks/archive/phase-2b-slice-1-plan.md 與 docs/specs/phase-2-web-mvp.md。
 我要理解的是「這個切片是怎麼設計的」，不是進度——不用標任何完成狀態，也不用讀 git。
 
 重點放在四件事：
@@ -41,7 +41,7 @@
 ```
 用 step-proposal 幫 Slice 1 Step 4 出一份提案：/accounts 帳戶管理頁。
 
-依據 tasks/phase-2b-slice-1-plan.md §3 的元件規劃（AccountList.tsx、AccountDialog.tsx、
+依據 tasks/archive/phase-2b-slice-1-plan.md §3 的元件規劃（AccountList.tsx、AccountDialog.tsx、
 AccountBalances.tsx）與 §4 的 D3、D4、D6。對應 SC-14。
 
 版面給我並排 2～3 個方案，我還沒有定見，要比較過才知道。三個地方特別想看：
@@ -88,7 +88,7 @@ Step 2 — ProtectedRoute 與 location.state.from 的站內路徑限制（D1）�
 ```
 做一頁 HTML 解釋 TanStack Query 在這個專案裡的快取失效鏈，放 docs/artifacts/。
 
-起點是 tasks/phase-2b-slice-1-plan.md 的 D5：新增交易會改變帳戶餘額，但
+起點是 tasks/archive/phase-2b-slice-1-plan.md 的 D5：新增交易會改變帳戶餘額，但
 useCreateTransaction 目前只失效 ['transactions', ledgerId]，沒有失效 ['accounts']，
 所以畫面上餘額會停在舊數字直到重整。
 
@@ -128,7 +128,7 @@ rgb(0 0 0 / 0.4)），以及字級是不是還沒 token 化。
 ## 其他值得試的（尚未寫成完整範本）
 
 - **API 破壞性變更影響報告**——階段三的好友 / 借還帳會動到核心資料模型，衝擊面比 2c 的
-  `PaymentMethod → Account` 更大。`tasks/phase-2c-todo.md` 的「對外提醒」那一節就是這種報告的
+  `PaymentMethod → Account` 更大。`tasks/archive/phase-2c-todo.md` 的「對外提醒」那一節就是這種報告的
   雛形，用 HTML 做成「一邊是 API 變更、一邊是受影響的前端檔案」的對照會清楚得多。
 - **Prisma `onDelete` 行為對照表**——`schema.prisma` 現在有 `Cascade` 與 `Restrict` 混用，
   而且註解特別警告過「選填關聯的預設是 `SetNull`」這個陷阱。做成一張刪除連鎖反應圖會很有用。

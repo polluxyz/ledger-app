@@ -4,7 +4,7 @@ Personal & family expense tracking system with AI-powered entry (NestJS + React 
 
 Supports two modes on one ledger model: **personal** (one member) and **family** (multiple members sharing a ledger, with role-based permissions). AI-assisted entry is planned for a later phase.
 
-> **Status:** Phase 1 (backend core) — authentication, ledgers, members, categories, and transactions. Web and mobile apps come in later phases.
+> **Status:** The backend core and the web app are both in place — authentication, ledgers and members, accounts with live balances, categories, and transactions. The mobile app and AI-assisted entry come in later phases.
 
 ## Tech stack
 
@@ -16,19 +16,22 @@ Supports two modes on one ledger model: **personal** (one member) and **family**
 | Database   | PostgreSQL 18                         |
 | Validation | class-validator (DTOs) · Zod (env)    |
 | API docs   | OpenAPI / Swagger (`@nestjs/swagger`) |
+| Web        | React 19 + Vite + CSS Modules         |
+| Web tests  | Vitest · Playwright (end-to-end)      |
 | Monorepo   | pnpm workspaces                       |
 
 ## Repository layout
 
 ```
 apps/
-  api/         NestJS backend (this phase)
-  web/         React + Vite frontend (later phase)
+  api/         NestJS backend
+  web/         React + Vite frontend
   mobile/      React Native + Expo app (later phase)
 packages/
   shared/      Shared TypeScript types, constants (API contract)
+docs/README.md Documentation index
 docs/specs/    Feature specifications
-tasks/         Implementation plan & task list
+tasks/         Plans & task lists for work in progress
 ```
 
 ## Prerequisites
@@ -72,6 +75,21 @@ tasks/         Implementation plan & task list
    - API base path: `http://localhost:3000/api`
    - **Swagger UI / interactive docs:** `http://localhost:3000/docs`
 
+## Working in a git worktree
+
+Each task runs in its own [git worktree](https://git-scm.com/docs/git-worktree), so several
+branches can be checked out at the same time in separate directories. A worktree only contains
+files that are under version control, which means two things:
+
+1. **Run `pnpm install` first.** `node_modules` does not carry over. The install also runs
+   `prisma generate` through `postinstall`. Do not share `node_modules` between worktrees —
+   branches can differ in their lockfile and Prisma schema.
+2. **Environment files are copied by `.worktreeinclude`** (`apps/api/.env`, `apps/api/.env.test`).
+   Add any new untracked-but-required file to that list.
+
+⚠️ **Run the e2e suites in one worktree at a time.** They share the `ledger_test` database and
+fixed ports, so parallel runs wipe each other's data.
+
 ## Common commands
 
 Run from the repo root (recurse across packages):
@@ -114,6 +132,8 @@ CI runs formatting, lint, type check, unit tests, build, and both e2e suites (ag
 
 ## Documentation
 
-- Phase 1 specification: [`docs/specs/phase-1-core-ledger.md`](docs/specs/phase-1-core-ledger.md)
-- Implementation plan & tasks: [`tasks/plan.md`](tasks/plan.md), [`tasks/todo.md`](tasks/todo.md)
-- Working conventions for contributors and AI assistance: [`CLAUDE.md`](CLAUDE.md)
+- **Start here:** [`docs/README.md`](docs/README.md) — index of every spec, plan and report.
+- Working conventions for contributors and AI assistance: [`CLAUDE.md`](CLAUDE.md), plus
+  [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) and [`apps/web/CLAUDE.md`](apps/web/CLAUDE.md) for the
+  backend and frontend layers.
+- Why each technology was chosen: [`專案決策脈絡.md`](專案決策脈絡.md) (Traditional Chinese).

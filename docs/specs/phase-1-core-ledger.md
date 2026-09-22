@@ -337,7 +337,7 @@ packages/shared/src/
 
 ## 10. Step 拆分概觀
 
-> 細節（順序、相依、驗收指令）待 spec 核可後寫入 `tasks/plan.md` 與 `tasks/todo.md`。每個 Step 依門控規則：先說明 → 同意 → 實作 → 驗收 → commit。
+> 細節（順序、相依、驗收指令）待 spec 核可後寫入 `tasks/archive/phase-1-plan.md` 與 `tasks/archive/phase-1-todo.md`。每個 Step 依門控規則：先說明 → 同意 → 實作 → 驗收 → commit。
 
 1. 開發環境：本地 PostgreSQL 安裝（開發者親手）＋ Prisma 初始化、schema、首次 migration。
 2. API 基礎設施：ConfigModule、PrismaModule、全域 ValidationPipe、統一錯誤 filter、Swagger、移除 Hello World。
