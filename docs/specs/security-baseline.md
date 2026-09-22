@@ -124,7 +124,7 @@
 
 ### 階段二剩餘切片（進行中）
 
-- 開放轉址：登入後的轉址目標 `state.from` **必須限制為站內相對路徑**。已在 `tasks/phase-2b-slice-1-plan.md:64` 處理，`ProtectedRoute` 重新啟用時要再驗一次。
+- 開放轉址：登入後的轉址目標 `state.from` **必須限制為站內相對路徑**。已在 `tasks/archive/phase-2b-slice-1-plan.md:64` 處理，`ProtectedRoute` 重新啟用時要再驗一次。
 - 前端零業務邏輯：授權判斷只影響「畫面顯示與否」，**不得取代後端檢查**。畫面藏起來的按鈕，對應的 API 仍必須自己擋。
 - 錯誤訊息只顯示後端統一格式的 `message`，不把原始回應內容印到畫面或 console。
 

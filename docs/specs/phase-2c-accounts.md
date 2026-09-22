@@ -230,7 +230,7 @@ model Transaction {
 
 ### 重新判斷：帳戶型別與分組——**維持不做**（2026-08-22，Slice 1 收尾）
 
-畫面做出來、瀏覽器實測走過之後回頭看這題（`tasks/phase-2b-slice-1-todo.md` 7.3）。
+畫面做出來、瀏覽器實測走過之後回頭看這題（`tasks/archive/phase-2b-slice-1-todo.md` 7.3）。
 
 **結論：不做。** 三個理由：
 

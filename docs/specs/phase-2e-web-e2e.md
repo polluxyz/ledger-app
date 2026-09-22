@@ -27,7 +27,7 @@
 - 自動啟動 API 與 web 兩個伺服器，測試結束自動關掉。
 - 測試資料策略：每個測試前清空測試資料庫，資料一律打真實 API 建立。
 - 把 `apps/api/test/e2e-utils.ts` 的 `resetDb` 從「固定資料表清單」改成動態查詢（D2）。
-- 自動化 `tasks/phase-2b-slice-2-plan.md` §7 的六個情境。
+- 自動化 `tasks/archive/phase-2b-slice-2-plan.md` §7 的六個情境。
 - CI 新增 Playwright 步驟與瀏覽器快取。
 - 工具鏈涵蓋新目錄：tsconfig、ESLint、Prettier。
 
