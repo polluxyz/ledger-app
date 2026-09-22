@@ -21,6 +21,16 @@ orca orchestration worker-start --spec "<task spec>" --worktree current --agent 
 orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
+⚠️ **協調者必須是綁定該 Run 的終端機。** 從 Orca 終端機以外呼叫 `worker-start` 會被拒絕：`worker-start requires the coordinator terminal currently bound to the Task Run`。解法是先拿 handle 再用 `--from`：
+
+```bash
+orca orchestration run-current --json        # 取 coordinator_handle
+orca orchestration worker-start --from <coordinator_handle> ... --json
+orca orchestration check       --terminal <coordinator_handle> --wait ... --json
+```
+
+旗標名稱三個指令各不相同：`worker-start` 用 `--from`，`check` 用 `--terminal`，`worker-release` **兩個都不吃**（傳了會回 `Unknown flag`）。在 Orca 自己的終端機裡全部可以省略。
+
 - **整個 run 用同一個執行檔。** 用哪個執行檔跑 `skills get`，就用哪個跑後續指令；它失敗就回報那個錯誤，不要換別的。
 - 平行的工作**一次全部啟動再等**，不要開一個等一個。
 - 收到 `worker_done` 後：先驗收，回覆 `reply`，再 `check --ack <delivery_id>`，最後 `worker-release`。驗收沒過不要 ack。
@@ -42,7 +52,7 @@ Pi 的模型有兩條路：
    orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
    ```
 
-   **前半段已實測**（2026-09-22）：`terminal create` 回傳 `term_<uuid>` handle，Pi 正常啟動，模型 pattern 無效時它會啟動失敗。**後半段 `worker-start --terminal` 尚未實跑。**
+   **已端對端實測**（2026-09-22，見 §8）。用 `--terminal` 時終端機是自己開的，Orca 不擁有它，所以 `worker-list --terminal-state reclaimable` 會是空的；`worker-release` 仍然要呼叫，它會回 ok。
 
 分流準則：
 
@@ -140,4 +150,17 @@ orca orchestration worker-list --run <run_id> --json
 
 - **`orca` 不一定在 PATH 上。** 由 Orca 終端機啟動的 session 才有；從外面開的 session 要用 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe`。
 - **Pi 沒有內建的 subagent 與 todo 工具。** 多代理協調靠 Orca 提供，不是 Pi 自己有。
-- **`worker-start --terminal <handle>` 尚未實跑**（見 §3）。這是目前唯一沒驗證的環節。
+
+## 8. 實測紀錄（2026-09-22）
+
+開一個拋棄式 worktree，派一個唯讀任務給 Pi，全程走完再刪掉。結果：
+
+| 驗證項目                           | 結果                                                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `.worktreeinclude`                 | **有效**。`apps/api/.env`、`.env.test`、`.claude/settings.local.json` 都被複製過去                         |
+| 新 worktree 的 `node_modules`      | 不存在，符合預期。要自己跑 `pnpm install`                                                                  |
+| 兩段式指定模型                     | **有效**。worker 自己回報「running on model id `glm-5.3-flash`（provider `zai`，讀 `PI_MODEL` 環境變數）」 |
+| `worker-start --terminal <handle>` | **有效**，但要加 `--from <coordinator_handle>`（見 §2）                                                    |
+| 完整生命週期                       | `run-create` → `worker-start` → `check --wait` → `worker-release` → `check --ack` 全部成功                 |
+
+順帶記下 Orca 的命名慣例：worktree 建在 `C:/Users/<使用者>/orca/workspaces/<repo>/<name>`，分支名是 `<github 帳號>/<name>`。
