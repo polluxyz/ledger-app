@@ -245,7 +245,8 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 - **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Pi 或 GLM。
 - worker 優先用 **Pi + `zai/glm-5.3`**；單一檔案、不需判斷、驗收條件機器可驗的任務才用 `zai/glm-5.3-flash`。GLM 額度用盡改用 Claude Code 當 worker。
-- **worker 不一定讀得到本檔**，規則要寫進 Task spec。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
+- **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
+- ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
 
 派工指令、模型分流準則、額度切換、Task spec 格式、**context 快滿時的 session 交接程序**，全部見 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
