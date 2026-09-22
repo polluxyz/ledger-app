@@ -41,8 +41,12 @@ Pi 的模型有兩條路：
    pi --model zai/glm-5.3-flash    # 簡單任務
    ```
 
-   然後 `worker-start --spec "..." --terminal <handle>`。
-   **這條兩段式路徑尚未實測**，第一次用要確認 `terminal create` 回傳的 handle 吃得動。
+   ```bash
+   orca terminal create --worktree <selector> --command "pi --model zai/glm-5.3-flash" --json
+   orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
+   ```
+
+   **前半段已實測**（2026-09-22）：`terminal create` 回傳 `term_<uuid>` handle，Pi 正常啟動，模型 pattern 無效時它會啟動失敗。**後半段 `worker-start --terminal` 尚未實跑。**
 
 分流準則：
 
@@ -61,14 +65,21 @@ Pi 的模型有兩條路：
 worker 回報 provider 額度或速率限制時：
 
 1. **不要靜默重試**，也不要換個講法再問一次。
-2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model <Opus 4.8 的 provider model id>`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
-3. **模型 id 先確認再填**，不要憑記憶寫。
+2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model <Opus 4.8 的 model id>`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
+
+Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定。`claude --model` 接受別名（`opus`、`sonnet`、`fable`）或完整名稱（如 `claude-fable-5`）。
+
+⚠️ **Opus 4.8 的完整 id 尚未確認**，填之前先在互動式 Claude session 用 `/model` 看實際清單，不要憑記憶寫。
 
 這是暫時安排。之後有其他模型可用時回來改這一節。
 
 ## 5. Task spec 必須自足
 
-**worker 不一定讀得到這個 repo 的 `CLAUDE.md`。** Pi 讀哪個指引檔尚未確認，所以任何 worker 需要遵守的規則，都要寫進 Task spec 本身。
+**Pi worker 會讀 `CLAUDE.md`。** 2026-09-22 實測：在這個 repo 啟動 Pi，畫面的 `[Context]` 區塊就列出 `CLAUDE.md`，skills 也一併載入。
+
+⚠️ **不要在 repo 裡新增 `AGENTS.md`。** Pi 每個目錄只取第一個命中的指引檔，順序是 `AGENTS.override.md` → `AGENTS.md` → `AGENTS.MD` → `CLAUDE.md` → `CLAUDE.MD`。建了 `AGENTS.md` 會**蓋掉同目錄的 `CLAUDE.md`**，而不是補充它。
+
+即使如此，**Task spec 仍然必須自足**——這是 Orca 的硬性要求，而且 worker 只會拿到你寫的那段文字當工作內容。分界是：通用規則靠 `CLAUDE.md`，這個任務特有的邊界寫進 spec。
 
 官方要求的五欄：
 
@@ -78,15 +89,13 @@ worker 回報 provider 額度或速率限制時：
 - **Ownership**：這個 worker 可以改什麼、與其他 worker 的界線。
 - **Observable acceptance**：證明完成的測試、輸出或證據。
 
-`Constraints` 至少要抄進去的專案規則：
+`Constraints` 每次都要寫的三條（`CLAUDE.md` 沒有，或 worker 容易誤判）：
 
-- 金額不可用浮點數。
-- 授權 deny by default，查詢先以帳本權限過濾。
-- 不在前端實作業務邏輯。
 - **不准動 Prisma schema 與 API 介面**；需要動就回報，不要自己改。
-- 註解用繁體中文。
-- 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
 - **不要跑 e2e**，除非 spec 指定由你跑。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
+- 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
+
+其餘規則（金額不用浮點數、授權 deny by default、不在前端寫業務邏輯、註解用繁體中文）`CLAUDE.md` 已經有，不必重抄。
 
 涉及授權、資料隔離、Prisma schema、API 介面的工作**不派給 worker**，coordinator 自己做。
 
@@ -125,5 +134,5 @@ orca orchestration worker-list --run <run_id> --json
 
 - **`orca` 不一定在 PATH 上。** 由 Orca 終端機啟動的 session 才有；從外面開的 session 要用 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe`。
 - **Pi 沒有內建的 subagent 與 todo 工具。** 多代理協調靠 Orca 提供，不是 Pi 自己有。
-- **Pi 讀哪個指引檔未確認。** 在確認之前，一律假設 worker 沒讀過 `CLAUDE.md`（見 §5）。
-- **兩段式指定模型未實測**（見 §3）。
+- **`worker-start --terminal <handle>` 尚未實跑**（見 §3）。
+- **Opus 4.8 的完整 model id 尚未確認**（見 §4）。
