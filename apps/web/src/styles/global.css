@@ -126,6 +126,9 @@
   --breakpoint-md: 900px;
   --breakpoint-lg: 1200px;
 
+  /* 原生 radio、checkbox 的勾選色跟著主題（預設是瀏覽器的藍色，與黑金不搭）。 */
+  accent-color: var(--color-accent);
+
   font-family: system-ui, 'Segoe UI', 'Noto Sans TC', sans-serif;
   line-height: var(--leading-normal);
   color: var(--color-text);
