@@ -4,7 +4,7 @@ import { expect, test } from './fixtures';
 import { transactionFilters } from './ui';
 
 /**
- * 2h 視覺改版的版面量測（spec `docs/specs/phase-2h-web-visual.md` SC-24、SC-28、SC-29）。
+ * 2h 視覺改版的版面量測（spec `docs/specs/phase-2h-web-visual.md` SC-24、SC-26.7、SC-28、SC-29）。
  *
  * 其他 e2e 驗「功能做不做得到」，這一份驗「版面有沒有退化」：這些數字是改版的
  * 驗收條件，而 CSS 小改一行就可能讓它們默默變差，單元測試（jsdom 不排版）看不到。
@@ -68,6 +68,21 @@ test('SC-28.1：篩選列的四個欄位一樣高', async ({ signedInPage: page 
   );
 
   expect(new Set(heights).size).toBe(1);
+});
+
+/**
+ * 鍵盤走到日期欄位要看得到焦點框。Chromium 的日期欄位只符合 `:focus-within`，
+ * 全域的 `:focus-visible` 對它無效——這個洞 jsdom 看不到，只能在真瀏覽器裡驗。
+ */
+test('SC-26.7：用 Tab 走到篩選的日期欄位，看得到焦點框', async ({ signedInPage: page }) => {
+  const filters = transactionFilters(page);
+  await filters.getByLabel('分類').focus();
+  await page.keyboard.press('Tab');
+
+  const startDate = filters.getByLabel('起日');
+  await expect(startDate).toBeFocused();
+  const outline = await startDate.evaluate((element) => getComputedStyle(element).outlineStyle);
+  expect(outline).not.toBe('none');
 });
 
 test('SC-24.5：每一頁的標題都從同一條左緣開始', async ({ signedInPage: page }) => {

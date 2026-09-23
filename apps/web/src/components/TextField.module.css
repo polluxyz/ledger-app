@@ -45,6 +45,18 @@
   border-color: var(--color-accent);
 }
 
+/*
+ * 例外：Chromium 的日期欄位，焦點其實落在裡面的年 / 月 / 日小格，欄位本身
+ * 連 :focus 都不符合，只符合 :focus-within——用 Tab 走到這裡時全域焦點框與
+ * 上面的換框色都不會出現（2h 用 e2e 以外的鍵盤巡檢發現）。
+ * 所以日期欄位用 :focus-within 畫框。文字欄位本來就是點一下也會畫框，行為一致。
+ */
+.input[type='date']:focus-within {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .hint {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
