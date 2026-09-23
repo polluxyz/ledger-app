@@ -41,6 +41,7 @@
 | [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)         | 收尾：CSP、錯誤訊息在地化、分類排序    | 已完成   |
 | [`phase-2h-web-visual.md`](specs/phase-2h-web-visual.md)   | 視覺改版：黑金主題、三欄工作台、深淺色 | 實作中   |
 | [`phase-3a-friends.md`](specs/phase-3a-friends.md)         | 階段三：好友邀請、邀請連結、好友清單   | 已完成   |
+| [`phase-3b-debts.md`](specs/phase-3b-debts.md)             | 階段三：借還帳（單邊借還、連動）       | 草案     |
 | [`security-baseline.md`](specs/security-baseline.md)       | 跨階段的安全基準                       | 長期有效 |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
