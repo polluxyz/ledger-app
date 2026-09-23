@@ -184,6 +184,12 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
   - 內容：刪掉 `--color-surface-hover`（Step 1 留給尚未改完的模組用）。
   - 驗收：`grep -rn "color-surface-hover" apps/web/src` 沒有結果；畫面不變。
 
+- [ ] **3.6 修掉 `transaction-edit` 的不穩定測試**
+  - 檔案：`features/transactions/transaction-edit.test.tsx`（:96 的 `openEditor()`）。
+  - 原因（W3 與協調者各自確認）：`findByRole` 用預設 1 秒逾時，整套測試平行跑、CPU 忙時來不及；還原到 base 也會失敗，單獨跑 5/5 綠。與 2h 的改動無關。
+  - 內容：只改等待方式（例如加 `{ timeout: 5000 }`），不動斷言。
+  - 驗收：整套 `pnpm test` 連跑 3 次都綠。
+
 ---
 
 ## Step 4：文件與 PR-B（協調者）
