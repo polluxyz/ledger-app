@@ -55,6 +55,19 @@ export const ErrorCode = {
   LEDGER_KIND_IMMUTABLE: 'LEDGER_KIND_IMMUTABLE',
   /** 私人帳本不得加入成員。想共享請另建一本共享帳本。 */
   PERSONAL_LEDGER_CANNOT_SHARE: 'PERSONAL_LEDGER_CANNOT_SHARE',
+  /** 邀請自己，或接受自己產生的邀請連結。 */
+  CANNOT_FRIEND_SELF: 'CANNOT_FRIEND_SELF',
+  /** 對方已經是好友。 */
+  ALREADY_FRIENDS: 'ALREADY_FRIENDS',
+  /** 已經有一筆送給同一個人、尚未回應的邀請。 */
+  FRIEND_REQUEST_PENDING: 'FRIEND_REQUEST_PENDING',
+  /** 邀請已被接受、拒絕或取消，不能再改變狀態。 */
+  FRIEND_REQUEST_NOT_PENDING: 'FRIEND_REQUEST_NOT_PENDING',
+  /**
+   * 邀請連結無效：不存在、已使用、已過期，或已被同一人產生的新連結取代。
+   * 四種情況刻意不區分——補救方法都一樣（請對方重新產生）。
+   */
+  INVITE_LINK_INVALID: 'INVITE_LINK_INVALID',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
