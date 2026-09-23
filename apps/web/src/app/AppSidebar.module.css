@@ -185,14 +185,27 @@
   text-decoration: none;
 }
 
+/*
+ * 滑過：淡一階的半透明底色。刻意和「目前頁面」的底色不同——同色的話，滑過的
+ * 那一項看起來也像被選中。
+ */
 .link:hover {
-  background-color: var(--color-chrome-active-bg);
+  background-color: color-mix(in srgb, var(--color-chrome-active-bg) 55%, transparent);
 }
 
-/* 所在頁面。底色與金線改由 `.navMarker` 畫（SC-43.1），這裡只留文字的變化。 */
+/*
+ * 所在頁面。底色與金線改由 `.navMarker` 畫（SC-43.1），這裡只留文字的變化。
+ *
+ * 滑過所在頁面時**不畫**滑過的底色：連結疊在 `.navMarker` 上面，畫了就會蓋住
+ * 那塊會滑動的底色與左緣金線（2026-09-24 開發者回報「懸停效果會蓋住浮框」）。
+ */
 .active {
   color: var(--color-chrome-active-text);
   font-weight: 600;
+}
+
+.active:hover {
+  background-color: transparent;
 }
 
 /* ---- 底部：收合鈕與使用者選單 ---- */

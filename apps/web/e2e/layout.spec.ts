@@ -387,6 +387,32 @@ test('SC-44：離開再回來，右側欄是關的', async ({ signedInPage: page
 });
 
 /**
+ * SC-44：分類頁交替按「新增支出分類／新增收入分類」再換頁，右側欄也要收起。
+ * 2026-09-24 開發者回報：照這個順序操作後換頁，右側欄停在打開、內容卻是空的黑塊。
+ * 原因是「換頁時在 render 期間把 open 設回 false」會被之後的 render 蓋回去；
+ * 改成用 `location.key` 判斷之後，這條釘住它不再發生。
+ */
+test('SC-44：分類頁交替開兩張表單後換頁，右側欄收起', async ({ signedInPage: page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const nav = page.getByRole('navigation', { name: '主要導覽' });
+  await nav.getByRole('link', { name: '分類' }).click();
+
+  const expense = page.getByRole('button', { name: '新增支出分類' });
+  const income = page.getByRole('button', { name: '新增收入分類' });
+  await expense.click();
+  await income.click();
+  await expense.click();
+  await expect(page.getByRole('dialog', { name: '新增支出分類' })).toBeVisible();
+
+  await nav.getByRole('link', { name: '帳戶' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: '帳戶' })).toBeVisible();
+
+  // 右側欄關著時，中間欄一路延伸到視窗右緣。
+  const main = await mainBox(page);
+  expect(Math.abs(main.x + main.width - 1440)).toBeLessThanOrEqual(1);
+});
+
+/**
  * SC-42（第三輪）：「建立帳本」與新增交易一樣從右側欄滑出，推開中間內容而不是
  * 擋住清單；按鈕的 `aria-expanded` 跟著變，Esc 收起。
  */
