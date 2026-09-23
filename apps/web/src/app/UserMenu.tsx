@@ -156,9 +156,15 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
       return;
     }
     // 預設在第一層右邊；右邊放不下就疊在第一層上方（spec §4.4）。
+    // 用 `bottom` 對齊第一層的底邊而不是用 `top` 對齊「設定」：選單在畫面最下方，
+    // 從「設定」往下長會超出視窗，最後一個選項被切掉。
     const rightEdge = button.right + MENU_GAP;
     const fitsOnTheRight = rightEdge + SETTINGS_MENU_WIDTH <= window.innerWidth;
-    setSettingsStyle({ left: fitsOnTheRight ? rightEdge : menu.left, top: button.top });
+    setSettingsStyle(
+      fitsOnTheRight
+        ? { left: rightEdge, bottom: window.innerHeight - menu.bottom }
+        : { left: menu.left, bottom: window.innerHeight - menu.top + MENU_GAP },
+    );
   }, [isSettingsOpen]);
 
   function handleTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
