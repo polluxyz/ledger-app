@@ -3,12 +3,15 @@ import { useActiveLedger } from './use-active-ledger';
 import styles from './LedgerSwitcher.module.css';
 
 /**
- * 頁首的作用中帳本切換器——決定記帳會寫進哪一本（spec 2i SC-33、§4.6、plan D26）。
+ * 上方橫條的作用中帳本切換器——決定記帳會寫進哪一本（spec 2i SC-33、SC-38.2、plan D26）。
  *
- * 2h 時它住在側欄的帳本卡裡；2i 把它搬到總覽與交易頁的標題上方，並換成**膠囊
- * 外觀**：帳本 icon、粗體帳本名、「私人／共享」小標籤、向下箭頭。滑過時邊框與
- * 文字轉成強調色——外觀本身就要說出「這個可以點」。側欄收合狀態的樣式一併移除，
- * 這個元件不再出現在側欄裡。
+ * 2h 時它住在側欄的帳本卡裡；2i 把它搬到總覽與交易頁**中間區最上方的橫條左邊**
+ * （第二輪修訂 3），並換成**膠囊外觀**：帳本 icon、粗體帳本名、「私人／共享」小標籤、
+ * 向下箭頭。滑過時邊框與文字轉成強調色——外觀本身就要說出「這個可以點」。側欄收合
+ * 狀態的樣式一併移除，這個元件不再出現在側欄裡。
+ *
+ * 放進橫條的是頁面（`HomePage`、`TransactionsPage` 用 `PageToolbarStart`），不是這裡；
+ * 管理頁不放，所以管理頁沒有切換器（SC-33.4）。
  *
  * 只列**未封存**的帳本（2h · D8）。封存帳本切過去之後，記帳表單的每一次送出都會是
  * 409；與其做一個註定失敗的表單，不如讓它只在 `/ledgers` 與明細頁看得到。清單來自
@@ -26,7 +29,7 @@ import styles from './LedgerSwitcher.module.css';
 export function LedgerSwitcher() {
   const { ledger, ledgers, setActiveLedgerId } = useActiveLedger();
 
-  // 還沒載入完或一本都沒有時什麼都不顯示。頁首不是講這件事的地方，
+  // 還沒載入完或一本都沒有時什麼都不顯示。橫條不是講這件事的地方，
   // 「找不到任何帳本」由總覽、交易頁與 `/ledgers` 各自處理。
   if (!ledger) {
     return null;

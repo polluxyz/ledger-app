@@ -251,6 +251,33 @@ describe('Home dashboard', () => {
     expect(rows[3]).toHaveTextContent('別人記的');
   });
 
+  it('puts the ledger switcher and the add button in the page toolbar', async () => {
+    // SC-38.2、SC-38.3：切換器在橫條左邊、「＋ 新增交易」在橫條右邊。
+    // 判準刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，所以它裡面的
+    // 東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
+    signIn();
+
+    render(<App />);
+
+    const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const heading = screen.getByRole('heading', { name: '總覽' });
+
+    expect(addButton.closest('header')).toBeNull();
+    expect(addButton.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+
+    // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
+    const switcher = screen.getByText('我的帳本');
+    expect(switcher.closest('header')).toBeNull();
+    expect(switcher.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+
+    // SC-38.5：標題上方不再有任何一行字。
+    expect(heading.closest('header')?.firstElementChild).toBe(heading);
+  });
+
   it('leaves the filters and the pager on the transactions page', async () => {
     signIn();
 

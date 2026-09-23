@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
+import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -128,17 +129,19 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
+      {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
+      <PageToolbarStart>
+        <LedgerSwitcher />
+      </PageToolbarStart>
+      <PageToolbarActions>
+        <Button onClick={startAdding}>
+          <Icon name="plus" />
+          新增交易
+        </Button>
+      </PageToolbarActions>
+
       <PageContent>
-        <PageHeader
-          title="總覽"
-          context={<LedgerSwitcher />}
-          actions={
-            <Button onClick={startAdding}>
-              <Icon name="plus" />
-              新增交易
-            </Button>
-          }
-        />
+        <PageHeader title="總覽" />
 
         <StatsRow authenticated />
 

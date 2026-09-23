@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
+import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -118,17 +119,19 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
+      {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
+      <PageToolbarStart>
+        <LedgerSwitcher />
+      </PageToolbarStart>
+      <PageToolbarActions>
+        <Button onClick={startAdding}>
+          <Icon name="plus" />
+          新增交易
+        </Button>
+      </PageToolbarActions>
+
       <PageContent>
-        <PageHeader
-          title="交易"
-          context={<LedgerSwitcher />}
-          actions={
-            <Button onClick={startAdding}>
-              <Icon name="plus" />
-              新增交易
-            </Button>
-          }
-        />
+        <PageHeader title="交易" />
 
         {/* 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。 */}
         <section className={styles.listCard}>
