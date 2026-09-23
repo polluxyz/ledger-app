@@ -15,3 +15,4 @@ export * from './types/category';
 export * from './types/account';
 export * from './types/pagination';
 export * from './types/friend';
+export * from './types/debt';

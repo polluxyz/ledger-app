@@ -160,6 +160,22 @@ describe('LedgersService (members)', () => {
 
       expect(prisma.ledger.delete).toHaveBeenCalledWith({ where: { id: ledgerId } });
     });
+
+    // SC-D9（3b 決策 21）：即使全是自己記的，只要有借還交易就不能真刪——cascade 會刪掉
+    // 債務引用的交易。第一次計數（別人的交易）回 0，第二次（借還交易）回 1。
+    it('409s when the ledger holds debt transactions, even the caller’s own', async () => {
+      prisma.transaction.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+      await expect(service.remove(ledgerId, 'user-1', ledgerRow.name)).rejects.toMatchObject({
+        status: 409,
+        errorCode: 'LEDGER_HAS_DEBT_TRANSACTIONS',
+      });
+      expect(prisma.ledger.delete).not.toHaveBeenCalled();
+      // 同樣不過濾 deletedAt：軟刪除的借還交易仍被債務紀錄引用。
+      expect(prisma.transaction.count).toHaveBeenLastCalledWith({
+        where: { ledgerId, type: { in: ['LEND', 'BORROW', 'COLLECT', 'REPAY'] } },
+      });
+    });
   });
 
   describe('kind', () => {

@@ -9,8 +9,8 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { TRANSACTION_TYPES } from '@ledger/shared';
-import type { CreateTransactionRequest, TransactionType } from '@ledger/shared';
+import { MANUAL_TRANSACTION_TYPES } from '@ledger/shared';
+import type { CreateTransactionRequest, ManualTransactionType } from '@ledger/shared';
 
 /**
  * 建立交易時 POST body 的驗證形狀。
@@ -25,9 +25,9 @@ import type { CreateTransactionRequest, TransactionType } from '@ledger/shared';
  * Swagger／OpenAPI 文件使用。
  */
 export class CreateTransactionDto implements CreateTransactionRequest {
-  @ApiProperty({ enum: TRANSACTION_TYPES, example: 'EXPENSE' })
-  @IsIn(TRANSACTION_TYPES)
-  type!: TransactionType;
+  @ApiProperty({ enum: MANUAL_TRANSACTION_TYPES, example: 'EXPENSE' })
+  @IsIn(MANUAL_TRANSACTION_TYPES)
+  type!: ManualTransactionType;
 
   // 金額以帳本幣別的「最小單位」表示的正整數；TWD 的最小單位即為「元」，
   // 故 120 就是 120 元。絕不用浮點數——整數可避免金額運算的精度誤差。

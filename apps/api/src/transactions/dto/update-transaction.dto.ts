@@ -9,8 +9,8 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { TRANSACTION_TYPES } from '@ledger/shared';
-import type { TransactionType, UpdateTransactionRequest } from '@ledger/shared';
+import { MANUAL_TRANSACTION_TYPES } from '@ledger/shared';
+import type { ManualTransactionType, UpdateTransactionRequest } from '@ledger/shared';
 
 /**
  * PATCH body 的驗證形狀：每個欄位都可選，呼叫端只需送要變更的欄位。有出現的
@@ -21,10 +21,10 @@ import type { TransactionType, UpdateTransactionRequest } from '@ledger/shared';
  * 毋須理解 `undefined` 與 `null` 的差別，也做不出「轉帳卻帶分類」的非法狀態。
  */
 export class UpdateTransactionDto implements UpdateTransactionRequest {
-  @ApiPropertyOptional({ enum: TRANSACTION_TYPES })
+  @ApiPropertyOptional({ enum: MANUAL_TRANSACTION_TYPES })
   @IsOptional()
-  @IsIn(TRANSACTION_TYPES)
-  type?: TransactionType;
+  @IsIn(MANUAL_TRANSACTION_TYPES)
+  type?: ManualTransactionType;
 
   @ApiPropertyOptional({ description: 'Positive integer, minor unit.' })
   @IsOptional()

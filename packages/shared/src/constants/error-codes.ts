@@ -68,6 +68,16 @@ export const ErrorCode = {
    * 四種情況刻意不區分——補救方法都一樣（請對方重新產生）。
    */
   INVITE_LINK_INVALID: 'INVITE_LINK_INVALID',
+  /** 還款超過未清餘額，或把本金改得比已還總額還小。 */
+  DEBT_OVERPAYMENT: 'DEBT_OVERPAYMENT',
+  /** 債務已結清或已免除，不能再記還款或免除。 */
+  DEBT_NOT_OPEN: 'DEBT_NOT_OPEN',
+  /** 只有「我借出」的債務能免除——免除是債權人放棄收回。 */
+  DEBT_NOT_FORGIVABLE: 'DEBT_NOT_FORGIVABLE',
+  /** 借還交易只能從債務端點修改或刪除。 */
+  DEBT_TRANSACTION_READ_ONLY: 'DEBT_TRANSACTION_READ_ONLY',
+  /** 帳本內有借還交易，不能真刪（請改用封存）。 */
+  LEDGER_HAS_DEBT_TRANSACTIONS: 'LEDGER_HAS_DEBT_TRANSACTIONS',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
