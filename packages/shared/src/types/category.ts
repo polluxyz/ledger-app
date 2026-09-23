@@ -6,6 +6,13 @@ export interface Category {
   name: string;
   /** 只會是 `EXPENSE` 或 `INCOME`——轉帳不使用分類。 */
   type: CategoryType;
+  /**
+   * 顯示順序。**前端不需要拿它來排序**——列表端點已經照它排好，照回傳順序渲染即可。
+   *
+   * 它出現在這裡只是讓契約誠實：後端回應裡有這個欄位，型別就該寫出來。
+   * 前端自己再排一次等於把排序規則複製到第二個地方，兩邊遲早分岔。
+   */
+  sortOrder: number;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }

@@ -97,10 +97,17 @@ model LedgerMember {
 }
 
 model Category {
-  id        String          @id @default(uuid())
-  ledgerId  String
-  name      String
-  type      TransactionType
+  id       String          @id @default(uuid())
+  ledgerId String
+  name     String
+  type     TransactionType
+  /// 顯示順序。預設分類依 `DEFAULT_CATEGORIES` 的定義順序填 0..n，讓「餐飲」
+  /// 這類常用分類排在前面。
+  ///
+  /// 為什麼不能靠 `createdAt`：預設分類是 `createMany` 一次寫入的，12 筆的時間戳
+  /// 完全相同，排序因此沒有確定結果——同一組分類在不同帳本會排成不同順序。
+  /// 既有資料拿到預設值 0，它們之間改由次要排序鍵 `name` 決定。
+  sortOrder Int             @default(0)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 

@@ -13,8 +13,26 @@ const envSchema = z.object({
    * 允許跨來源存取本 API 的前端網址（CORS）。Web 前端與 API 跑在不同的 port／
    * 網域，屬不同來源，瀏覽器預設會擋下請求，必須由後端明示放行。
    * 預設值為 Vite 開發伺服器；正式部署時改成實際的前端網域。
+   *
+   * **多個來源用逗號分隔**（例如 `https://app.example.com,https://staging.example.com`）。
+   * 一個來源時照舊寫一個字串即可。解析成陣列的動作在下面的 `transform` 做，
+   * 讓 `main.ts` 拿到的一律是字串陣列——放行清單的形狀只有一種，不必在兩個
+   * 地方各判斷一次。
+   *
+   * 每個來源仍然是**完全比對**，逗號只是把清單寫在一個環境變數裡，
+   * 不會放寬任何一筆的比對規則。
    */
-  CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+  CORS_ORIGIN: z
+    .string()
+    .min(1)
+    .default('http://localhost:5173')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0),
+    )
+    .refine((origins) => origins.length > 0, 'CORS_ORIGIN must list at least one origin'),
 });
 
 export type Env = z.infer<typeof envSchema>;

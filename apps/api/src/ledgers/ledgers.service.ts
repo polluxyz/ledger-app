@@ -74,11 +74,15 @@ export class LedgersService {
       data: { ledgerId: ledger.id, userId, role: 'OWNER' },
     });
 
+    // `sortOrder` 取自陣列索引，讓畫面上的順序等於 `DEFAULT_CATEGORIES` 的定義順序
+    // （「餐飲」排第一）。不能靠 `createdAt`——這裡是一次寫入，12 筆的時間戳相同，
+    // 排序會變成沒有確定結果。
     await tx.category.createMany({
-      data: DEFAULT_CATEGORIES.map((category) => ({
+      data: DEFAULT_CATEGORIES.map((category, index) => ({
         ledgerId: ledger.id,
         name: category.name,
         type: category.type,
+        sortOrder: index,
       })),
     });
 

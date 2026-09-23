@@ -16,6 +16,7 @@ interface CategoryRow {
   ledgerId: string;
   name: string;
   type: TransactionType;
+  sortOrder: number;
   createdAt: Date;
 }
 
@@ -27,16 +28,23 @@ export class CategoriesService {
   async list(ledgerId: string, type?: CategoryType): Promise<Category[]> {
     const categories = await this.prisma.category.findMany({
       where: { ledgerId, ...(type ? { type } : {}) },
-      orderBy: { createdAt: 'asc' },
+      // 次要鍵 `name` 不是裝飾：`sortOrder` 加上去之前就存在的分類全是預設值 0，
+      // 少了它，那些分類之間又回到沒有確定順序的狀態。
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     return categories.map((category) => this.toCategory(category));
   }
 
   /** 新增分類。名稱在（帳本, 型別）範圍內必須唯一（靠 DB 唯一索引擋重複）。 */
   async create(ledgerId: string, name: string, type: CategoryType): Promise<Category> {
+    // 排到同型別的最後。少了這一步，新分類會拿到 `sortOrder` 的預設值 0，
+    // 於是和「餐飲」並列第一，靠名稱插進預設分類中間——使用者剛加的東西
+    // 出現在清單中央，看起來像亂跳。
+    const sortOrder = await this.nextSortOrder(ledgerId, type);
+
     try {
       const category = await this.prisma.category.create({
-        data: { ledgerId, name, type },
+        data: { ledgerId, name, type, sortOrder },
       });
       return this.toCategory(category);
     } catch (error) {
@@ -97,6 +105,22 @@ export class CategoriesService {
     return category;
   }
 
+  /**
+   * 同一帳本、同一型別底下目前最大的 `sortOrder` + 1；一筆都沒有時回 0。
+   *
+   * 兩個人同時新增會拿到同一個值，這裡不加鎖——撞到的結果只是兩筆並列，
+   * 次要排序鍵 `name` 會決定先後，順序仍然是確定的。為了一個純顯示用的欄位
+   * 上交易鎖，代價不成比例。
+   */
+  private async nextSortOrder(ledgerId: string, type: CategoryType): Promise<number> {
+    const last = await this.prisma.category.findFirst({
+      where: { ledgerId, type },
+      orderBy: { sortOrder: 'desc' },
+      select: { sortOrder: true },
+    });
+    return last === null ? 0 : last.sortOrder + 1;
+  }
+
   private nameTaken(): AppException {
     return new AppException(
       HttpStatus.CONFLICT,
@@ -112,6 +136,7 @@ export class CategoriesService {
       // DB 的欄位與交易共用同一個 enum（含 TRANSFER），但分類永遠不會是轉帳：
       // 唯二的寫入路徑——DTO 與預設種子——都只接受 EXPENSE / INCOME。
       type: category.type as CategoryType,
+      sortOrder: category.sortOrder,
       createdAt: category.createdAt.toISOString(),
     };
   }
