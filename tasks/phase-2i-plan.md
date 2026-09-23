@@ -187,3 +187,26 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 - 收起時裡層設 `inert`（React 19 支援布林值），寬度 0 的表單不會被 Tab 走到。
 - 分類頁從 64rem 改成 52rem（spec 假設 10）；≥ 1200px 支出與收入兩張卡仍然並排，各約 400px。
 - web 單元測試 46 檔 294 條 → 48 檔 304 條。
+
+### Step 2（派工，2026-09-23）
+
+- Run `run_da5c75cf9919`，兩個 worker 都是 Claude Code `claude-opus-5`，各自在 `worker-start --worktree new-child` 建的子 worktree（從 `feature/web-layout-v2` 的 `94dd1fe` 分出）：
+
+| Worker    | 分支                     | Task                | Dispatch           |
+| --------- | ------------------------ | ------------------- | ------------------ |
+| W1 側欄   | `polluxyz/2i-w1-sidebar` | `task_06c7056213a6` | `ctx_36d78c37c6ba` |
+| W2 記帳頁 | `polluxyz/2i-w2-pages`   | `task_8ed206fc79e8` | `ctx_fc736f6cfc51` |
+
+- **派工後的更正（協調者發現）**：
+  1. 使用者選單改成**揭露式**而不是 ARIA `menu`。既有 e2e（`csp.spec.ts`、`smoke.spec.ts`）與 7 個單元測試用 `getByRole('button', { name: '登出' })`；`role="menuitem"` 會讓它不再是 button，等於改斷言。已通知 W1，spec §4.4 與 plan D24 已更新。
+  2. dashboard 的最近交易每一筆是 `<li>`，文字與交易表格的列相同（分類、帳戶、金額格式、備註）。原因：`transactions.spec.ts` 的情境 7、9、12 要在同一頁看到「改了 → 餘額跟著變」，而帳戶餘額只在 dashboard。已通知 W2。
+- W2 問：頁首加上切換器後，`AppSidebar.test.tsx:155、159`（W1 的檔案）會看到兩個「作用中帳本」而紅。回覆：不碰它，由 W1 移除側欄切換器時一起修；協調者先 merge W1 再 merge W2。
+
+### Step 3.1（e2e 的導航修改，與 Step 2 同時進行）
+
+- `ui.ts` 新增 `openTransactions`、`openDashboard`、`openUserMenu`（點連結而不是 `goto`，保留 React Query 快取，才驗得到改動後畫面有沒有更新）。
+- `transactions.spec.ts`：情境 7、12 在首頁點最近交易那一列進入編輯（首頁沒有鉛筆鈕）；情境 8 到交易頁刪除、再點「首頁」回去看餘額；情境 10、11 與最後一條先 `openTransactions`。
+- `ledgers.spec.ts:159`：檢查「作用中帳本」之前先 `openDashboard`。
+- **計畫外**：`csp.spec.ts:78`、`smoke.spec.ts:67` 用「登出按鈕看得到」確認登入成功；登出收進使用者選單後，斷言前先 `openUserMenu`。斷言不變。
+- `layout.spec.ts`：SC-24.3、SC-28.1、SC-26.7 先 `openTransactions`；SC-24.5 改成 SC-36.4（置中軸，假設 14）；新增 SC-31.1、31.2、31.6、32.3、35.1、35.2、36.1 與「使用者選單收著登出與個人資料」。
+- `git diff` 驗證：除了 SC-24.5 → SC-36.4 以外，沒有任何 `expect` 行被改。
