@@ -85,7 +85,9 @@ describe('ProtectedRoute', () => {
     await user.type(screen.getByLabelText('密碼'), 'sup3rsecret');
     await user.click(screen.getByRole('button', { name: '登入' }));
 
-    expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    await user.click(await screen.findByRole('button', { name: '帳號選單' }));
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/');
   });
 });

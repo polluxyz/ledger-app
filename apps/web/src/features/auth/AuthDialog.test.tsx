@@ -107,7 +107,9 @@ describe('AuthDialog on the home page', () => {
     await user.type(dialog().getByLabelText('密碼'), 'sup3rsecret');
     await user.click(dialog().getByRole('button', { name: '登入' }));
 
-    expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    await user.click(await screen.findByRole('button', { name: '帳號選單' }));
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     // 彈窗已關閉，且網址從頭到尾沒變。
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(window.location.pathname).toBe('/');

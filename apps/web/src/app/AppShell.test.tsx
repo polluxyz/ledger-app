@@ -42,6 +42,8 @@ describe('AppShell', () => {
     render(<App />);
 
     expect(screen.queryByRole('link', { name: '帳戶' })).not.toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以連那顆選單按鈕都不該出現。
+    expect(screen.queryByRole('button', { name: '帳號選單' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '登出' })).not.toBeInTheDocument();
     // 站名仍在，未登入者也看得到自己在哪個站。
     expect(screen.getByRole('heading', { name: '記帳系統' })).toBeInTheDocument();

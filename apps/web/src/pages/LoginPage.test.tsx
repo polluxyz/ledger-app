@@ -39,7 +39,9 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: '登入' }));
 
     // 登入成功 → 導向首頁（首頁的登出按鈕出現）。
-    expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    await user.click(await screen.findByRole('button', { name: '帳號選單' }));
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     expect(localStorage.getItem('ledger.accessToken')).toBe('jwt-abc');
   });
 
