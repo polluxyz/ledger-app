@@ -1,0 +1,35 @@
+/*
+ * 右側欄裡的新增表單（spec 2i §4.5）。外框由右側欄本身提供，這裡只安置收起鈕。
+ */
+.add {
+  position: relative;
+}
+
+/*
+ * 收起鈕與表單的「新增一筆交易」同一列。用絕對定位而不是把兩者包成 flex：
+ * 標題是 `<legend>`，必須留在 `<fieldset>` 的第一個位置，不能被別的元素包起來。
+ */
+.collapse {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fade) var(--motion-ease),
+    color var(--motion-fade) var(--motion-ease);
+}
+
+.collapse:hover {
+  background-color: var(--color-fill);
+  color: var(--color-text);
+}

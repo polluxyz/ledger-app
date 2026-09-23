@@ -100,7 +100,20 @@
   --sidebar-collapsed-width: 4.5rem;
   --panel-width: 22.5rem;
   --topbar-height: 3.5rem;
-  --content-max: 70rem;
+
+  /* ---- 內容寬度（2i）----
+     內容在「側欄之間」置中，所有頁面同一個最大寬度（spec 2i §4.8、第二輪修訂 2）：
+     每一頁的標題因此落在同一條線上。上方橫條的內容也用這個寬度。
+     用法見 `components/PageContent`。 */
+  --content-max: 72rem;
+
+  /* ---- 動畫（2i）----
+     側欄與右側欄的開合（抽屜）、選單的淡入。減少動態效果時下面整組歸零。
+     開合用 320ms 加「前後都慢」的緩動（修訂 6）：220ms 的先快後慢在 100ms 內就
+     收掉大半，實際看起來像瞬間切換。 */
+  --motion-panel: 320ms;
+  --motion-fade: 160ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
   /*
    * ⚠️ 斷點只能寫在這裡當**文件**，媒體查詢讀不到 CSS 變數——
    * `@media (max-width: var(--breakpoint-md))` 是無效的，瀏覽器會整條忽略，
@@ -117,6 +130,17 @@
   line-height: var(--leading-normal);
   color: var(--color-text);
   background-color: var(--color-bg);
+}
+
+/*
+ * 使用者要求減少動態效果：所有開合直接切換。只改時間，不改 `transition` 本身——
+ * 各元件照常寫 `transition: … var(--motion-panel)`，不必各自再判斷一次。
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-panel: 0ms;
+    --motion-fade: 0ms;
+  }
 }
 
 /* 淺色「象牙金」：使用者選了淺色。⚠️ 內容必須與下一塊逐字相同。 */

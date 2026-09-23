@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
- * 首頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
- * ——fieldset 的 <legend> 就是它的無障礙名稱。
+ * 記帳頁上可能有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增
+ * 表單之內——fieldset 的 <legend> 就是它的無障礙名稱。
  */
 const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
 
@@ -15,6 +15,9 @@ const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆
  * 這三條測試刻意獨立成一檔。餘額是後端依交易算出來的，少了 `invalidateQueries`
  * 不會拋錯、不會讓其他測試變紅，只會讓首頁的數字停在舊值——沒有專屬案例釘住的話，
  * 這種問題會一路活到使用者面前。新增、編輯、刪除各有一條。
+ *
+ * 2i 起餘額在首頁 dashboard、垃圾桶在 `/transactions`（spec 2i SC-34），所以刪除
+ * 那一條先在交易頁刪、再走回首頁看數字。驗的東西一條都沒少。
  */
 describe('Writing a transaction refreshes account balances', () => {
   const fetchMock = vi.fn();
@@ -143,8 +146,9 @@ describe('Writing a transaction refreshes account balances', () => {
     render(<App />);
     const before = await waitForInitialBalance();
 
-    await user.click(await screen.findByRole('button', { name: /^編輯/ }));
-    const dialog = screen.getByRole('dialog');
+    // dashboard 的最近交易沒有鉛筆，整列本身就是「編輯這一筆」的按鈕（假設 8）。
+    await user.click(await screen.findByRole('button', { name: /午餐/ }));
+    const dialog = await screen.findByRole('dialog');
     await user.clear(within(dialog).getByLabelText('金額'));
     await user.type(within(dialog).getByLabelText('金額'), '200');
     await user.click(within(dialog).getByRole('button', { name: '儲存' }));
@@ -155,13 +159,24 @@ describe('Writing a transaction refreshes account balances', () => {
   it('asks for the balances again after a transaction is deleted', async () => {
     const user = userEvent.setup();
     routeFetch({ items: [lunch] });
+    // 垃圾桶只在交易頁（SC-34.2）。刪完再走回首頁確認數字真的變了。
+    window.history.pushState({}, '', '/transactions');
 
     render(<App />);
-    const before = await waitForInitialBalance();
+    // 交易頁沒有餘額卡，改等新增表單把 `/accounts` 取回來，才知道「之後那次請求」
+    // 確實是刪除造成的。
+    await screen.findByLabelText('帳戶');
+    const before = accountRequests();
 
     await user.click(await screen.findByRole('button', { name: /^刪除2026/ }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '刪除' }));
 
-    await expectRefetched(before, '$5,120');
+    await waitFor(() => {
+      expect(accountRequests()).toBeGreaterThan(before);
+    });
+
+    // 側欄的站名是回首頁的連結，而導覽列這一步還沒有「交易」那一項。
+    await user.click(screen.getByRole('link', { name: '記帳系統' }));
+    expect(await screen.findByText('$5,120')).toBeInTheDocument();
   });
 });

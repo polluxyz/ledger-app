@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 
@@ -21,11 +22,14 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '註冊' })).toBeInTheDocument();
   });
 
-  it('shows the signed-in home page when a token is stored', () => {
+  it('shows the signed-in home page when a token is stored', async () => {
     localStorage.setItem('ledger.accessToken', 'fake.jwt.token');
 
     render(<App />);
 
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '帳號選單' }));
     expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     // 已登入時統計改為待補（正確數字需後端彙總端點）。
     expect(screen.queryByText('$0')).not.toBeInTheDocument();

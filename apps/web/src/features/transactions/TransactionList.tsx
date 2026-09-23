@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react';
 import type { Transaction } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
-import { formatAmount, formatDate, formatGroupDate } from '../../lib/format';
+import { formatDate, formatGroupDate, formatTransactionAmount } from '../../lib/format';
 import styles from './TransactionList.module.css';
 
 interface TransactionListProps {
@@ -18,18 +18,7 @@ interface TransactionListProps {
 }
 
 /**
- * 金額前綴。轉帳刻意**不用正負號**：錢只是換了帳戶，既不是支出也不是收入，
- * 用「−」會讓人以為花掉了。三種型別各自給值，而不是「非支出即收入」的二分法
- * ——後者在 TRANSFER 出現後就是錯的。
- */
-const AMOUNT_SIGN: Record<Transaction['type'], string> = {
-  EXPENSE: '-',
-  INCOME: '+',
-  TRANSFER: '',
-};
-
-/**
- * 金額的語意色，同樣三種型別各自對一個 class（理由見 AMOUNT_SIGN）。
+ * 金額的語意色，三種型別各自對一個 class（理由見 `lib/format.ts` 的 `formatTransactionAmount`）。
  *
  * CSS Modules 的型別是索引簽章，取出來是 `string | undefined`；`?? ''` 只是
  * 補上那個型別上的洞，class 真的少掉也不過是沒上色。
@@ -160,7 +149,7 @@ export function TransactionList({
                   {transaction.toAccount && ` → ${transaction.toAccount.name}`}
                 </span>
                 <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
-                  {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
+                  {formatTransactionAmount(transaction.type, transaction.amount)}
                 </span>
                 {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列
                     都有入口。真正的權限在後端把關，這裡不做任何判斷。 */}

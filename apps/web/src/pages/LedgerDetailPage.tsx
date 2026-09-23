@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { LedgerDetail, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
+import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -29,7 +30,12 @@ export default function LedgerDetailPage() {
   const [renaming, setRenaming] = useState<LedgerDetail | null>(null);
 
   if (ledger.isLoading) {
-    return <p className={styles.status}>載入中…</p>;
+    return (
+      <>
+        <BackToLedgers />
+        <p className={styles.status}>載入中…</p>
+      </>
+    );
   }
 
   // 404 與其他錯誤都收斂成同一句話。分開講就等於把「這本帳本存在」透露出去。
@@ -37,11 +43,13 @@ export default function LedgerDetailPage() {
     const notFound = ledger.error instanceof ApiError && ledger.error.statusCode === 404;
     return (
       <section className={styles.page}>
+        {/* 回列表的路只留橫條那一條（SC-38.2）。內容裡再放一次，同一個無障礙名稱
+            就會在頁面上出現兩遍，螢幕閱讀器與 e2e 都分不出該用哪一個。 */}
+        <BackToLedgers />
         <PageHeader title="帳本" />
         <p className={styles.status}>
           {notFound ? '找不到這本帳本。' : '無法載入這本帳本，請稍後再試。'}
         </p>
-        <Link to="/ledgers">回到帳本列表</Link>
       </section>
     );
   }
@@ -163,16 +171,18 @@ function LedgerDetailView({
 
   return (
     <section className={styles.page}>
-      <PageHeader
-        title={ledger.name}
-        actions={
-          isOwner && !isArchived ? (
-            <Button variant="secondary" onClick={() => onRename(ledger)}>
-              改名
-            </Button>
-          ) : undefined
-        }
-      />
+      {/* 橫條左邊是返回連結、右邊是頁面層級的按鈕（SC-38.2、SC-38.3）。
+          「改名」的出現條件照舊：owner 而且未封存。 */}
+      <BackToLedgers />
+      {isOwner && !isArchived && (
+        <PageToolbarActions>
+          <Button variant="secondary" onClick={() => onRename(ledger)}>
+            改名
+          </Button>
+        </PageToolbarActions>
+      )}
+
+      <PageHeader title={ledger.name} />
 
       <dl className={styles.facts}>
         <Fact
@@ -320,6 +330,24 @@ function LedgerDetailView({
 
       <LedgerRenameDialog ledger={renaming} onClose={() => onRename(null)} />
     </section>
+  );
+}
+
+/**
+ * 橫條左邊的返回連結（SC-38.2）。
+ *
+ * 看得到的是「← 帳本」，但無障礙名稱是「回到帳本列表」——一個箭頭加兩個字，
+ * 螢幕閱讀器讀出來不知道會去哪裡。這一頁的三種狀態（載入中、載不出來、正常）
+ * 都放同一份，使用者不會因為帳本讀不到就卡在這裡。
+ */
+function BackToLedgers() {
+  return (
+    <PageToolbarStart>
+      <Link className={styles.back} to="/ledgers" aria-label="回到帳本列表">
+        <Icon name="chevronLeft" size={16} />
+        帳本
+      </Link>
+    </PageToolbarStart>
   );
 }
 

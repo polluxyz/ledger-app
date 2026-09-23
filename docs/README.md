@@ -24,25 +24,26 @@
 | 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 未開始 |
 | 五   | 語音（STT）+ 本地模型 provider           | 未開始 |
 
-階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）；3a 後端合併後，階段三其餘工作暫停等 2h 完成。
+階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）與 **2i 版面第二輪**；3a 後端合併後，階段三其餘工作暫停，等 2h、2i 完成。
 
 不要提前實作後續階段的功能，也不要預先建立未來階段才需要的檔案。
 
 ## 規格（`docs/specs/`）
 
-| 文件                                                       | 內容                                   | 狀態     |
-| ---------------------------------------------------------- | -------------------------------------- | -------- |
-| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)   | 階段一：認證、帳本、成員、分類、交易   | 已完成   |
-| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)           | 階段二：Web 前端，含 Slice 0–4 的拆分  | 已完成   |
-| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)       | 帳戶與即時餘額、轉帳型別、帳本連動設定 | 已完成   |
-| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md) | 帳本類型（`PERSONAL` / `SHARED`）      | 已完成   |
-| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)         | Playwright 端對端測試                  | 已完成   |
-| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)   | 版面重整為 dashboard shell             | 已完成   |
-| [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)         | 收尾：CSP、錯誤訊息在地化、分類排序    | 已完成   |
-| [`phase-2h-web-visual.md`](specs/phase-2h-web-visual.md)   | 視覺改版：黑金主題、三欄工作台、深淺色 | 實作中   |
-| [`phase-3a-friends.md`](specs/phase-3a-friends.md)         | 階段三：好友邀請、邀請連結、好友清單   | 已完成   |
-| [`phase-3b-debts.md`](specs/phase-3b-debts.md)             | 階段三：借還帳（單邊借還、連動）       | 草案     |
-| [`security-baseline.md`](specs/security-baseline.md)       | 跨階段的安全基準                       | 長期有效 |
+| 文件                                                           | 內容                                      | 狀態     |
+| -------------------------------------------------------------- | ----------------------------------------- | -------- |
+| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)       | 階段一：認證、帳本、成員、分類、交易      | 已完成   |
+| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)               | 階段二：Web 前端，含 Slice 0–4 的拆分     | 已完成   |
+| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)           | 帳戶與即時餘額、轉帳型別、帳本連動設定    | 已完成   |
+| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md)     | 帳本類型（`PERSONAL` / `SHARED`）         | 已完成   |
+| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)             | Playwright 端對端測試                     | 已完成   |
+| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)       | 版面重整為 dashboard shell                | 已完成   |
+| [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)             | 收尾：CSP、錯誤訊息在地化、分類排序       | 已完成   |
+| [`phase-2h-web-visual.md`](specs/phase-2h-web-visual.md)       | 視覺改版：黑金主題、三欄工作台、深淺色    | 已完成   |
+| [`phase-2i-web-layout-v2.md`](specs/phase-2i-web-layout-v2.md) | 版面第二輪：側欄動畫、dashboard、交易分頁 | 實作中   |
+| [`phase-3a-friends.md`](specs/phase-3a-friends.md)             | 階段三：好友邀請、邀請連結、好友清單      | 已完成   |
+| [`phase-3b-debts.md`](specs/phase-3b-debts.md)                 | 階段三：借還帳（單邊借還、連動）          | 已核可   |
+| [`security-baseline.md`](specs/security-baseline.md)           | 跨階段的安全基準                          | 長期有效 |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
 

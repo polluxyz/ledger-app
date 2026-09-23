@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * 側欄收合偏好（phase-2h D11、SC-24.2）。
@@ -8,8 +8,9 @@ import { useCallback, useState } from 'react';
  * 隱私模式或被套件封鎖時 localStorage 會直接拋錯，收合狀態不值得為此打斷任何人，
  * 失敗一律當成「未收合」。
  *
- * 與斷點的關係：這個 hook 只記「使用者想不想收合」，只在 ≥ 1200px 生效；
- * 900–1199px 一律收合、< 900px 一律展開，那兩條由 CSS 決定（D10：斷點只存在 CSS）。
+ * 與斷點的關係：這個 hook 只記「使用者想不想收合」，**只在 ≥ 1200px 生效**；
+ * 901–1199px 的展開是暫時的、不記憶（2i D27，見本檔的 `useSidebarFloatingRange`），
+ * ≤ 900px 是 ☰ 浮動選單，收合沒有意義。
  */
 const SIDEBAR_COLLAPSED_KEY = 'ledger.sidebarCollapsed';
 
@@ -44,4 +45,48 @@ export function useSidebarCollapsed() {
   }, [collapsed, setCollapsedAndPersist]);
 
   return { collapsed, toggle };
+}
+
+/**
+ * 「現在是不是 901–1199px」（2i D27、SC-31.6）。
+ *
+ * 斷點原則上只寫在 CSS（2h D10），這裡是**唯一的例外**：那個區間的展開是
+ * 「浮在內容上、不推擠中間區、不寫進 localStorage」，行為與 ≥ 1200px 不同，
+ * 元件得知道自己在哪一段才知道按鈕該做哪件事。CSS 判斷不了「該存不該存」。
+ *
+ * jsdom 沒有 `matchMedia`，一律回 false（＝當成 ≥ 1200px），所以單元測試
+ * 拿到的是「推擠 ＋ 記憶」那一套；要測浮動展開就自己 stub 一個 `matchMedia`。
+ */
+const FLOATING_RANGE_QUERY = '(min-width: 901px) and (max-width: 1199px)';
+
+function matchFloatingRange(): boolean {
+  try {
+    return (
+      typeof window.matchMedia === 'function' && window.matchMedia(FLOATING_RANGE_QUERY).matches
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function useSidebarFloatingRange(): boolean {
+  const [inRange, setInRange] = useState(matchFloatingRange);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const query = window.matchMedia(FLOATING_RANGE_QUERY);
+    const sync = () => setInRange(query.matches);
+    // 掛上監聽之前先同步一次：第一次 render 到 effect 之間視窗可能已經被拉過。
+    sync();
+    // 舊版 Safari 只有 addListener；沒有任何一種就只當成單次量測。
+    if (typeof query.addEventListener !== 'function') {
+      return;
+    }
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return inRange;
 }

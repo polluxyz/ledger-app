@@ -1,9 +1,9 @@
 /*
- * 帳本明細頁：52rem、靠左（SC-24.5）。內容由上到下是頁首、基本資訊卡、
+ * 帳本明細頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。內容由上到下是頁首、基本資訊卡、
  * 成員區塊、危險操作區——三張卡片用同一套寫法，看起來屬於同一個 app。
  */
 .page {
-  max-width: 52rem;
+  composes: content from '../components/PageContent.module.css';
 }
 
 /* 唯讀狀態（載入中）的提示。 */
@@ -148,4 +148,27 @@ button.deleteButton {
 
 button.deleteButton:hover:not(:disabled) {
   background-color: var(--color-danger-soft);
+}
+
+/*
+ * 橫條左邊的「← 帳本」返回連結（SC-38.2）。
+ *
+ * 高度與帳本切換器的膠囊一致（2.125rem ≒ 34px），兩者在橫條上換頁時不會上下跳。
+ * 平常是次要文字色，滑過才轉成強調色——它是導覽，不該跟頁面標題搶視線。
+ */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 2.125rem;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: color var(--motion-fade) var(--motion-ease);
+}
+
+.back:hover {
+  color: var(--color-accent);
 }

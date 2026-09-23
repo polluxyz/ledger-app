@@ -4,16 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
- * 首頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
+ * 交易頁上有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增表單之內
  * ——fieldset 的 <legend> 就是它的無障礙名稱。
  */
 const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
 
 /**
- * Slice 0 的核心流程測試（SC-3、SC-4）：已登入者看到帳本交易，新增一筆後
+ * Slice 0 的核心流程測試（SC-3、SC-4）：已登入者在交易頁看到帳本交易，新增一筆後
  * 不必重整就出現在列表。以真實的 App 出發，只把 fetch 換成 mock。
  */
-describe('Transactions on the home page', () => {
+describe('Transactions on the transactions page', () => {
   const fetchMock = vi.fn();
 
   const ledger = {
@@ -42,7 +42,7 @@ describe('Transactions on the home page', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/transactions');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
   });

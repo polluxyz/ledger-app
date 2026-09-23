@@ -1,34 +1,100 @@
 /*
  * 側欄（黑金 chrome）。三種形態，差別只在 CSS——元件本身只輸出一份 DOM。
  *
- * 這裡是預設形態：≥ 1200px 且使用者沒收合時的全高側欄。
- * 檔案後半依序是「收合」與「≤ 900px 浮動選單」兩組覆寫。
+ * ## icon 為什麼收合前後不動（2i · SC-31.1、D23）
  *
- * 高度是整個 100vh、`top: 0`：登入後 ≥ 901px 沒有頂列，側欄自己就是畫面的左緣。
- * sticky 而不是 fixed——內容區很長時導覽要跟著留在原地，但它仍佔一欄的寬度。
+ * 三個條件同時成立就做得到，缺一不可：
+ *
+ * 1. **每一列固定 `height`**（品牌 48px、其餘 40px），沒有任何一列靠 padding 撐高。
+ * 2. **左內距不隨收合改變**：`.panel` 的 8px 加上每一列自己的 8px，圖示永遠從
+ *    左邊 16px 開始。2h 的收合規則會把水平 padding 從 16px 改成 8px，icon 就位移了。
+ * 3. **收合只改側欄寬度**。文字往左滑出並淡出（`transform` ＋ `opacity`），
+ *    仍然佔著原來的格子，只是被 `.panel` 的 `overflow-x: hidden` 裁掉。
+ *    `transform` 不影響版面，所以它動起來也不會推到 icon。
+ *
+ * ## 抽屜感從哪裡來（2i · SC-31.2、第二輪修訂 6）
+ *
+ * 寬度、文字位移、箭頭旋轉三者用**同一組**時間與緩動（`--motion-panel` 320ms
+ * ＋ `--motion-ease`）。文字若只是淡掉，看起來像「字消失了」；一起往左滑才像
+ * 「整個抽屜收進去」。減少動態效果時 `--motion-panel` 是 0ms，這裡不必再判斷。
+ *
+ * 所有圖示都包在 24px 見方的 `.rowIcon` 裡（品牌的 `.logo` 同寬），所以整排
+ * 圖示的中心也在同一條垂直線上。
+ *
+ * ## 為什麼多一層 `.panel`
+ *
+ * 901–1199px 浮動展開時，外層 `<aside>` 必須維持 72px——外殼 grid 的第一欄是
+ * `auto`，它一變寬中間內容就會被推走，而那個區間要求中間不動（D27）。
+ * 真正變寬、浮起來、帶陰影的是內層 `.panel`。
  */
+
 .sidebar {
   position: sticky;
   top: 0;
   flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
   width: var(--sidebar-width);
   height: 100vh;
-  padding: var(--space-lg) var(--space-md);
+  /* 外殼第一欄是 `auto`：這裡的寬度逐格變化，中間內容就逐格跟著移動（SC-31.2）。 */
+  transition: width var(--motion-panel) var(--motion-ease);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-sm);
   background-color: var(--color-chrome);
   border-right: 1px solid var(--color-chrome-border);
   color: var(--color-chrome-text);
+  /* 橫向一定要藏：收合後文字還在原位，沒有它會冒出橫向捲軸。 */
+  overflow-x: hidden;
   overflow-y: auto;
+  /* 901–1199px 浮動展開時，這一層才是真正變寬並浮起來的那個（見下方）。
+     陰影跟著寬度一起淡入，抽屜才像是「滑出來蓋在內容上」而不是憑空出現。 */
+  transition:
+    width var(--motion-panel) var(--motion-ease),
+    box-shadow var(--motion-panel) var(--motion-ease);
 }
 
-/* ---- 站名列 ---- */
+/* ---- 共用：列與圖示槽 ---- */
+
+/* 24px 見方的圖示槽。所有列共用，圖示因此對齊同一條垂直線。 */
+.rowIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+
+/*
+ * 收合時往左滑出並淡出的文字。**不能用 `display: none`**——名稱一消失，
+ * 螢幕閱讀器與 e2e 的選取器就一起找不到元素了。
+ *
+ * 時間與側欄寬度同一組，兩者才會一起動；用 `--motion-fade`（160ms）的話
+ * 字會在側欄收到一半時就不見了。
+ */
+.collapsibleLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity var(--motion-panel) var(--motion-ease),
+    transform var(--motion-panel) var(--motion-ease);
+}
+
+/* ---- 站名列（48px）---- */
 
 .brandRow {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  height: 48px;
+  padding: 0 var(--space-sm);
 }
 
 .title {
@@ -40,16 +106,16 @@
 }
 
 .brandMark {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
   color: var(--color-chrome-active-text);
   font-weight: 600;
   text-decoration: none;
-  white-space: nowrap;
 }
 
-/* 「帳」字標誌方塊。頂列有同一套規格的一份（各自的 module 各寫一份）。 */
+/* 「帳」字標誌方塊。與 `.rowIcon` 同寬，才與下面整排導覽圖示對齊。 */
 .logo {
   flex: none;
   display: grid;
@@ -63,71 +129,24 @@
   font-weight: 700;
 }
 
-.collapseButton {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  color: var(--color-chrome-muted);
-  cursor: pointer;
-}
-
-.collapseButton:hover {
-  background-color: var(--color-chrome-active-bg);
-  color: var(--color-chrome-active-text);
-}
-
-/*
- * 收合鈕只在 ≥ 1200px 有意義：901–1199px 一律收合、≤ 900px 是浮動選單，
- * 兩種情況按了都不會有反應，不如不顯示。
- */
-@media (max-width: 1199px) {
-  .collapseButton {
-    display: none;
-  }
-}
-
-/* ---- 帳本卡 ---- */
-
-.ledgerCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  background-color: var(--color-chrome-active-bg);
-  border: 1px solid var(--color-chrome-border);
-  border-radius: var(--radius-lg);
-}
-
-.ledgerCardLabel {
-  margin: 0;
-  color: var(--color-chrome-muted);
-  font-size: var(--text-xs);
-  line-height: var(--leading-tight);
-}
-
-/* ---- 導覽 ---- */
+/* ---- 導覽（每列 40px）---- */
 
 .nav {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  margin-top: var(--space-md);
 }
 
 .link {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm);
+  height: 40px;
+  padding: 0 var(--space-sm);
   border-radius: var(--radius);
   color: var(--color-chrome-text);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   text-decoration: none;
 }
 
@@ -144,10 +163,10 @@
   box-shadow: inset 2px 0 0 var(--color-chrome-accent);
 }
 
-/* ---- 底部：深淺切換、使用者、登出 ---- */
+/* ---- 底部：收合鈕與使用者選單 ---- */
 
 .footer {
-  /* 推到底部。登出是低頻且不希望誤觸的操作，離導覽越遠越好。 */
+  /* 推到底部。 */
   margin-top: auto;
   display: flex;
   flex-direction: column;
@@ -155,170 +174,79 @@
   padding-top: var(--space-md);
 }
 
-.themeRow {
-  display: flex;
-}
-
-.userRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
-  border-top: 1px solid var(--color-chrome-border);
-  padding-top: var(--space-md);
-}
-
-.avatar {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  background-color: var(--color-chrome-active-bg);
-  color: var(--color-chrome-active-text);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.userName {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-chrome-active-text);
-  font-size: var(--text-sm);
-  line-height: var(--leading-tight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.logout {
+.collapseRow {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
-  padding: var(--space-sm);
+  height: 40px;
+  padding: 0 var(--space-sm);
   border: none;
   border-radius: var(--radius);
   background: none;
-  color: var(--color-chrome-text);
+  color: var(--color-chrome-muted);
   font: inherit;
   font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
 }
 
-.logout:hover {
+.collapseRow:hover {
   background-color: var(--color-chrome-active-bg);
+  color: var(--color-chrome-active-text);
 }
 
-/* 展開時不做任何事；收合時才被下面兩組規則變成「視覺隱藏」。 */
-.collapsibleLabel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 箭頭平常指向左（＝按了會收起來）；收合後轉 180° 指向右。 */
+.collapseIcon {
+  transition: transform var(--motion-panel) var(--motion-ease);
 }
 
 /*
  * ================= 收合 =================
  *
- * 兩個觸發條件，樣式必須寫兩份（D10、D13）：
- *
- * 1. 使用者按了收合鈕 → 根元素多一個 `.collapsed`，只在 ≥ 901px 生效
- *    （≤ 900px 是浮動選單，收合沒有意義，也不該讓桌機的選擇跟過去）。
- * 2. 901–1199px → 一律收合。
- *
- * 媒體查詢讀不到 class，class 也管不到視窗寬度，CSS 沒有辦法把兩者合成一條。
- * ⚠️ 改其中一塊時，另一塊要一起改。
+ * ≥ 901px 才生效：≤ 900px 是浮動選單，收合沒有意義，也不該讓桌機的選擇跟過去。
+ * 只改兩件事——側欄寬度，以及文字的透明度與位移。列高、內距、圖示位置一律不動。
  */
 @media (min-width: 901px) {
   .sidebar.collapsed {
     width: var(--sidebar-collapsed-width);
-    padding-left: var(--space-sm);
-    padding-right: var(--space-sm);
-    align-items: center;
   }
 
-  .sidebar.collapsed .title {
-    flex: none;
+  /* 往左退 12px 再淡出：距離夠短，不會在展開時看起來像「字從外面飛進來」。 */
+  .sidebar.collapsed .collapsibleLabel {
+    opacity: 0;
+    transform: translateX(-12px);
   }
 
-  .sidebar.collapsed .brandRow,
-  .sidebar.collapsed .themeRow,
-  .sidebar.collapsed .userRow {
-    justify-content: center;
-  }
-
-  .sidebar.collapsed .link,
-  .sidebar.collapsed .logout {
-    justify-content: center;
-  }
-
-  .sidebar.collapsed .ledgerCard {
-    width: 44px;
-    height: 44px;
-    padding: 0;
-  }
-
-  /* 照抄 global.css 的 `.visually-hidden`：名稱還在，眼睛看不到。
-     用 `display: none` 的話無障礙名稱會一起消失，e2e 與螢幕閱讀器都找不到。 */
-  .sidebar.collapsed .collapsibleLabel,
-  .sidebar.collapsed .ledgerCardLabel,
-  .sidebar.collapsed .userName {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
+  .sidebar.collapsed .collapseIcon {
+    transform: rotate(180deg);
   }
 }
 
-/* 901–1199px：三欄放不下展開的側欄，一律收合。內容與上面那塊相同。 */
+/*
+ * ================= 901–1199px：浮動展開 =================
+ *
+ * 外殼第一欄固定 72px（`.sidebar` 的寬度在這個區間不隨 `.collapsed` 變動），
+ * 展開的是內層 `.panel`：它脫離文件流浮到中間區上方，所以中間內容不位移（D27）。
+ */
 @media (min-width: 901px) and (max-width: 1199px) {
-  .sidebar {
+  .sidebar,
+  .sidebar.collapsed {
     width: var(--sidebar-collapsed-width);
-    padding-left: var(--space-sm);
-    padding-right: var(--space-sm);
-    align-items: center;
   }
 
-  .title {
-    flex: none;
-  }
-
-  .brandRow,
-  .themeRow,
-  .userRow {
-    justify-content: center;
-  }
-
-  .link,
-  .logout {
-    justify-content: center;
-  }
-
-  .ledgerCard {
-    width: 44px;
-    height: 44px;
-    padding: 0;
-  }
-
-  .collapsibleLabel,
-  .ledgerCardLabel,
-  .userName {
+  /*
+   * 寬度與陰影都會過渡（`transition` 寫在 `.panel` 上），所以看得到抽屜滑出來
+   * 的過程。`position` 本身不能過渡，會在按下去的瞬間切換——那不影響觀感，
+   * 因為 72px 的位置在切換前後相同。
+   */
+  .sidebar.floating .panel {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    width: var(--sidebar-width);
+    box-shadow: var(--shadow-md);
   }
 }
 
@@ -339,13 +267,21 @@
     width: min(18rem, 85vw);
     height: auto;
     max-height: calc(100vh - var(--topbar-height));
+  }
+
+  .sidebar.open {
+    display: block;
+  }
+
+  .panel {
     border-bottom: 1px solid var(--color-chrome-border);
     border-bottom-right-radius: var(--radius);
     /* 比卡片重得多的陰影，才看得出它蓋在內容上面。 */
     box-shadow: var(--shadow-md);
   }
 
-  .open {
-    display: flex;
+  /* ☰ 已經負責開合，再放一顆收合鈕只會讓人按了沒反應。 */
+  .collapseRow {
+    display: none;
   }
 }

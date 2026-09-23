@@ -1,9 +1,9 @@
 /*
- * 個人資料頁：52rem、靠左（SC-24.5），與其他登入後頁面的左緣對齊。
+ * 個人資料頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。
  * 內容只有一張窄卡片——這一頁只能改一個欄位，卡片再寬也只是拉長視線。
  */
 .page {
-  max-width: 52rem;
+  composes: content from '../components/PageContent.module.css';
 }
 
 /* 唯讀資訊（載入中、載入失敗）的共用樣式。 */

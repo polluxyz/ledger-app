@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSidebarCollapsed } from './use-sidebar-collapsed';
+import { useSidebarCollapsed, useSidebarFloatingRange } from './use-sidebar-collapsed';
 
 /**
  * 側欄收合的記憶（phase-2h D11、SC-24.2）。
@@ -67,5 +67,56 @@ describe('useSidebarCollapsed', () => {
     // 讀寫都失敗，畫面還是要能收合（只是這次瀏覽記不住）。
     act(() => result.current.toggle());
     expect(result.current.collapsed).toBe(true);
+  });
+});
+
+/**
+ * 901–1199px 的偵測（2i · D27）。
+ *
+ * 這是「斷點只存在 CSS」的唯一例外：那個區間的展開不寫 localStorage，
+ * 該不該寫只有 JS 判斷得了。驗兩件事——查得到時照媒體查詢的結果回答，
+ * jsdom 沒有 `matchMedia` 時回 false（＝當成 ≥ 1200px，走推擠 ＋ 記憶那套）。
+ */
+describe('useSidebarFloatingRange', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubMatchMedia(matches: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  it('reports false when matchMedia is unavailable', () => {
+    const { result } = renderHook(() => useSidebarFloatingRange());
+
+    expect(result.current).toBe(false);
+  });
+
+  it('follows the media query when the browser provides one', () => {
+    stubMatchMedia(true);
+
+    const { result } = renderHook(() => useSidebarFloatingRange());
+
+    expect(result.current).toBe(true);
+  });
+
+  it('reports false outside the range', () => {
+    stubMatchMedia(false);
+
+    const { result } = renderHook(() => useSidebarFloatingRange());
+
+    expect(result.current).toBe(false);
   });
 });

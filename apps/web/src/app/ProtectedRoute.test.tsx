@@ -30,6 +30,15 @@ describe('ProtectedRoute', () => {
     });
   }
 
+  it('protects the transactions page too (spec 2i SC-34.3)', () => {
+    window.history.pushState({}, '', '/transactions');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: '登入' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login');
+  });
+
   it('sends a signed-out visitor to the login page', () => {
     window.history.pushState({}, '', '/accounts');
 
@@ -76,7 +85,9 @@ describe('ProtectedRoute', () => {
     await user.type(screen.getByLabelText('密碼'), 'sup3rsecret');
     await user.click(screen.getByRole('button', { name: '登入' }));
 
-    expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    await user.click(await screen.findByRole('button', { name: '帳號選單' }));
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/');
   });
 });

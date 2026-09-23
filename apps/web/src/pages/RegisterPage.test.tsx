@@ -44,7 +44,9 @@ describe('RegisterPage', () => {
     await fillForm(user);
     await user.click(screen.getByRole('button', { name: '註冊' }));
 
-    expect(await screen.findByRole('button', { name: '登出' })).toBeInTheDocument();
+    // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
+    await user.click(await screen.findByRole('button', { name: '帳號選單' }));
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
     expect(localStorage.getItem('ledger.accessToken')).toBe('jwt-new');
     // 先打註冊，再以同一組帳密打登入（登入後首頁還會去抓帳本，故不斷言總次數）。
     const calledPaths = fetchMock.mock.calls.map((call) => String(call[0]));

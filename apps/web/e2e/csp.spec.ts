@@ -8,7 +8,7 @@ import {
   TEST_PASSWORD,
 } from './api';
 import { PREVIEW_ORIGIN } from './env';
-import { transactionRow } from './ui';
+import { openUserMenu, transactionRow } from './ui';
 
 /**
  * CSP（Content Security Policy）的 e2e：政策由 `vite.config.ts` 的插件注入
@@ -75,6 +75,8 @@ test('在 CSP 之下登入並讀得到資料，過程沒有任何 CSP 違規', a
   // 登入打 /auth/login，成功後畫面接著拉帳本、帳戶、分類、交易——任何一個被
   // connect-src 擋掉，這兩行就等不到。這條是 connect-src 的照妖鏡：漏了 API
   // origin，當場紅。
+  // 「登出」收在使用者選單裡（spec 2i SC-32）。
+  await openUserMenu(page);
   await expect(page.getByRole('button', { name: '登出' })).toBeVisible();
   await expect(transactionRow(page, '-$120')).toContainText('CSP 探針');
 
