@@ -18,8 +18,15 @@ import { fileURLToPath } from 'node:url';
 export const API_PORT = 3100;
 export const WEB_PORT = 5273;
 
+/**
+ * `vite preview`（建置產物的靜態伺服器）的埠。CSP 由建置時的插件注入，
+ * 只存在於產物裡，所以 CSP 的 e2e 打這個埠，不打 dev 的 5273。
+ */
+export const PREVIEW_PORT = 5274;
+
 export const API_ORIGIN = `http://localhost:${API_PORT}`;
 export const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
+export const PREVIEW_ORIGIN = `http://localhost:${PREVIEW_PORT}`;
 
 /** 後端所有路由都掛在 `/api` 之下（見 `apps/api/src/main.ts` 的 setGlobalPrefix）。 */
 export const API_BASE_URL = `${API_ORIGIN}/api`;

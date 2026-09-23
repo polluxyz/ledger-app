@@ -223,7 +223,8 @@ describe('Ledger members', () => {
     await user.click(screen.getByRole('button', { name: '加入' }));
 
     // 訊息不可只寫「找不到」，而且彈窗要留著讓人改 email。
-    expect(await screen.findByRole('alert')).toHaveTextContent('查無此使用者');
+    // USER_NOT_FOUND 有對照到中文，顯示的是對照表裡的句子。
+    expect(await screen.findByRole('alert')).toHaveTextContent('找不到使用這個 email 的帳號');
     expect(screen.getByLabelText('email')).toHaveValue('ghost@example.com');
   });
 
@@ -345,7 +346,7 @@ describe('Ledger members', () => {
     await user.click(screen.getByRole('button', { name: '退出' }));
 
     // 409 是按下確認之後才發生的。彈窗關掉的話，使用者只會看到「什麼都沒發生」。
-    expect(await screen.findByRole('alert')).toHaveTextContent('至少要有一位擁有者');
+    expect(await screen.findByRole('alert')).toHaveTextContent('唯一的擁有者');
     expect(window.location.pathname).toBe('/ledgers/led-2');
   });
 });

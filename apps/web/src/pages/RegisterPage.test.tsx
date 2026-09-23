@@ -66,7 +66,7 @@ describe('RegisterPage', () => {
     await fillForm(user);
     await user.click(screen.getByRole('button', { name: '註冊' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Email is already registered.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('已經註冊過了');
     expect(localStorage.getItem('ledger.accessToken')).toBeNull();
   });
 

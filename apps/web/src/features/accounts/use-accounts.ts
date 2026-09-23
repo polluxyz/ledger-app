@@ -25,8 +25,9 @@ export function useAccounts() {
 
 /**
  * 以下三個 mutation 都不攔截錯誤——`apiRequest` 已把後端的統一錯誤格式轉成
- * `ApiError`，呼叫端交給 `FormError` 呈現即可。前端不自行改寫錯誤訊息：
- * 那是後端的職責，重寫只會讓兩邊講法不一致。
+ * `ApiError`，呼叫端交給 `FormError` 呈現。訊息內容仍由後端定義；前端只負責把
+ * `errorCode` 對應到在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣
+ * 顯示後端訊息。
  */
 
 /** 新增帳戶。名稱重複時後端回 409 `ACCOUNT_NAME_TAKEN`。 */

@@ -117,10 +117,8 @@ describe('ProfilePage', () => {
     await user.type(nameField, '愛麗絲');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
-    // 後端的訊息由 FormError 原樣呈現，前端不改寫。
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'name must be longer than or equal to 1 characters',
-    );
+    // VALIDATION_FAILED 有對照到中文，FormError 顯示對照表的句子。
+    expect(await screen.findByRole('alert')).toHaveTextContent('有欄位不符合要求');
     // 使用者剛打的字不能消失。
     expect(screen.getByLabelText('顯示名稱')).toHaveValue('愛麗絲');
   });
