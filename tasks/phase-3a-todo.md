@@ -8,13 +8,13 @@
 | T1  | shared 契約            | 協調者 | —      |
 | T2  | schema + migration     | 協調者 | T1     |
 | T3  | 授權測試先行           | 協調者 | T2     |
-| T4  | 好友邀請               | 待定   | T3     |
-| T5  | 邀請連結               | 待定   | T3     |
-| T6  | 好友清單與解除好友     | 待定   | T3     |
+| T4  | 好友邀請               | worker | T3     |
+| T5  | 邀請連結               | worker | T3     |
+| T6  | 好友清單與解除好友     | worker | T3     |
 | T7  | 流量限制測試與 OpenAPI | worker | T4～T6 |
 | T8  | 最終驗收               | 協調者 | T7     |
 
-T4～T6 彼此獨立，可以平行。「待定」取決於開發者對分工的決定。
+T4～T6 彼此獨立，平行派出。依 plan §5，worker 不准修改 T3 的授權測試、Prisma schema 與 shared 契約。
 
 ---
 
@@ -35,17 +35,17 @@ T4～T6 彼此獨立，可以平行。「待定」取決於開發者對分工的
 
 ## T3｜授權測試先行（SEC-10）
 
-- `friends.service.spec.ts`：SC-F6 的授權矩陣，用 `it.each` 列出「動作 × 角色 → 預期結果」。
+- `friend-requests.service.spec.ts`：SC-F6 的授權矩陣，用 `it.each` 列出「動作 × 角色 → 預期結果」。
 - `test/friends-isolation.e2e-spec.ts`：SC-F10 的 5 條隔離檢查。
 
 **驗收**：測試存在，而且在 T4～T6 完成前是紅燈。
 
 ## T4｜好友邀請
 
-- `friends.service.ts` 的送出、列出、接受、拒絕、取消；決策 8（反向邀請直接成立）。
+- `friend-requests.service.ts` 的送出、列出、接受、拒絕、取消；決策 8（反向邀請直接成立）。
 - `friend-requests.controller.ts` 與 DTO；`POST /friend-requests` 加 `@Throttle`（每分鐘 10 次）。
 
-**驗收**：T3 的授權矩陣全綠；SC-F1～F5 的 e2e 通過。
+**驗收**：T3 的授權矩陣全綠（worker 驗）；SC-F1～F5 的 e2e 通過（協調者合併後驗）。
 
 ## T5｜邀請連結
 
@@ -56,7 +56,7 @@ T4～T6 彼此獨立，可以平行。「待定」取決於開發者對分工的
 
 ## T6｜好友清單與解除好友
 
-- `GET /friends`（分頁，新到舊）、`DELETE /friends/{userId}`。
+- `friends.service.ts` 與 `friends.controller.ts`：`GET /friends`（分頁，新到舊）、`DELETE /friends/{userId}`。
 
 **驗收**：SC-F9、SC-F11 通過；T3 的隔離測試全綠。
 

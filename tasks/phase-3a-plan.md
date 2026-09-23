@@ -1,6 +1,6 @@
 # 實作計畫：階段三 (3a) — 好友系統
 
-> 狀態：**待開發者核可**（2026-09-23）
+> 狀態：**已核可**（2026-09-23）
 > 依據：`docs/specs/phase-3a-friends.md`（2026-09-23 核可）。
 > 對應成功條件：SC-F1～SC-F13。
 > 分支：`feature/friends`（自 `main` 開）。**本步不動前端。**
@@ -27,9 +27,10 @@ apps/api/src/friends/
 ├── friend-requests.controller.ts    POST/GET /friend-requests、accept/decline/cancel
 ├── friend-invite-links.controller.ts POST /friend-invite-links、preview、accept
 ├── friends.controller.ts            GET /friends、DELETE /friends/{userId}
-├── friends.service.ts               好友關係與邀請的狀態轉換
-├── friend-invite-links.service.ts   token 產生、雜湊、條件式消耗
-├── friendship-key.ts                把一對 userId 排成 (low, high)
+├── friend-requests.service.ts       T4：邀請的狀態轉換
+├── friends.service.ts               T6：好友清單與解除好友
+├── friend-invite-links.service.ts   T5：token 產生、雜湊、條件式消耗
+├── friendship.ts                    協調者：排序 (low, high)、建立與查詢好友關係的共用函式
 ├── dto/*.dto.ts
 └── *.spec.ts                        單元測試，與被測檔同目錄
 
@@ -55,11 +56,11 @@ apps/api/src/app.module.ts       修改：匯入 FriendsModule
 
 ### 2.2 好友關係的排序
 
-`friendship-key.ts` 的一個純函式把兩個 userId 排成 `{ userLowId, userHighId }`。所有讀寫 `Friendship` 的地方都經過它。
+`friendship.ts` 的一個純函式把兩個 userId 排成 `{ userLowId, userHighId }`。所有讀寫 `Friendship` 的地方都經過它。
 資料庫的 CHECK 約束（`userLowId < userHighId`）確保漏經過時直接報錯，不會默默存成反向的第二筆。
 
 注意：JavaScript 的字串比較與 PostgreSQL 的 `<` 在不同 collation 下結果可能不同。UUID 只含 `0-9a-f-`，兩邊都依 ASCII 比較，結果一致。
-這一點寫進 `friendship-key.ts` 的註解，並用一組固定 UUID 的單元測試鎖住。
+這一點寫進 `friendship.ts` 的註解，並用一組固定 UUID 的單元測試鎖住。
 
 ### 2.3 決策 8（對方已邀請我）
 
@@ -108,8 +109,18 @@ apps/api/src/app.module.ts       修改：匯入 FriendsModule
 
 ## 5. 分工
 
-見 `phase-3a-todo.md` 各任務的「負責」欄。依 `CLAUDE.md` §11，授權、資料隔離、Prisma schema、API 介面由協調者自己做。
+見 `phase-3a-todo.md` 各任務的「負責」欄。
+
+**本輪豁免 `CLAUDE.md` §11 的一條規則**（開發者 2026-09-23 決定）：T4～T6 雖然涉及授權，仍派給 worker。
+補償措施：協調者在 T3 先寫好授權矩陣與隔離測試，當作 worker 的驗收門檻；worker 不准修改這些測試，需要改就回報。
+Prisma schema 與 shared 契約（T1、T2）仍由協調者自己做，worker 不准動。
 worker 一律用 Claude Code，模型釘 `claude-opus-5`（開發者 2026-09-23 指定）。
+
+平行派工的做法：
+
+- 協調者在 T1～T3 先建好 `friends.module.ts` 骨架、三個 service 與 controller 的空殼、`friendship.ts` 共用函式，commit 到 `feature/friends`。
+- 每個 worker 一個 worktree、一個分支，從該 commit 分出。三人各自只改自己的 service、controller、DTO 與單元測試，檔案不重疊。
+- **worker 不跑 e2e**（共用 `ledger_test`）。e2e 由協調者在合併三個分支後統一跑。
 
 ---
 

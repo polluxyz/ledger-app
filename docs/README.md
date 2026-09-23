@@ -39,7 +39,7 @@
 | [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)         | Playwright 端對端測試                  | 已完成   |
 | [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)   | 版面重整為 dashboard shell             | 已完成   |
 | [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)         | 收尾：CSP、錯誤訊息在地化、分類排序    | 已完成   |
-| [`phase-3a-friends.md`](specs/phase-3a-friends.md)         | 階段三：好友邀請、邀請連結、好友清單   | 草案     |
+| [`phase-3a-friends.md`](specs/phase-3a-friends.md)         | 階段三：好友邀請、邀請連結、好友清單   | 實作中   |
 | [`security-baseline.md`](specs/security-baseline.md)       | 跨階段的安全基準                       | 長期有效 |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
