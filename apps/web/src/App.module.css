@@ -32,18 +32,21 @@
  * 內容區。`min-width: 0` 不能省——grid 子元素的預設最小寬度是內容寬度，
  * 少了它，寬表格或長備註會把整個版面撐出橫向捲動，而側欄跟著被擠掉。
  *
- * 最大寬度與置中由各頁的 `PageContent` 決定（寬／窄兩種，spec 2i §4.8），
- * 這裡只負責留白。`grid-column: 2` 要寫明：訪客沒有側欄時，自動排版會把 main
- * 放進第一欄。
+ * 最上方是橫條（`PageToolbar`，貼齊上緣所以不吃留白），下面的 `.content`
+ * 才有留白。最大寬度與置中由各頁的 `PageContent` 決定（spec 2i §4.8）。
+ * `grid-column: 2` 要寫明：訪客沒有側欄時，自動排版會把 main 放進第一欄。
  */
 .main {
   grid-column: 2;
   min-width: 0;
+}
+
+.content {
   padding: var(--space-xl);
 }
 
 @media (max-width: 900px) {
-  .main {
+  .content {
     padding: var(--space-md);
   }
 }

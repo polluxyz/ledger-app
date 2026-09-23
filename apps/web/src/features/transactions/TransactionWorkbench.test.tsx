@@ -167,6 +167,8 @@ describe('Transaction workbench in the right panel', () => {
     render(<App />);
 
     const addForm = await findAddForm();
+    // 右側欄預設關閉（spec 2i 第二輪修訂 5），先打開。
+    await user.click(screen.getByRole('button', { name: '新增交易' }));
     // 收起前，面板的內容對鍵盤是開放的。
     expect(addForm.closest('[inert]')).toBeNull();
 

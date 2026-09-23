@@ -45,7 +45,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <PageContent width="wide">
+    <PageContent>
       <PageHeader title="交易" />
       {ledgerLoading && <p className={styles.note}>載入中…</p>}
       {ledgerError && <FormError error={ledgerError} />}
@@ -118,7 +118,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      <PageContent width="wide">
+      <PageContent>
         <PageHeader
           title="交易"
           context={<LedgerSwitcher />}

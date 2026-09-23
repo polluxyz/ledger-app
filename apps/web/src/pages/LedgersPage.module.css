@@ -1,6 +1,6 @@
-/* 帳本頁：管理頁，窄的內容寬度、置中（spec 2i §4.8）。 */
+/* 帳本頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。 */
 .page {
-  composes: narrow from '../components/PageContent.module.css';
+  composes: content from '../components/PageContent.module.css';
 }
 
 /*

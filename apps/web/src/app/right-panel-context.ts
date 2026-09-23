@@ -16,7 +16,7 @@ import { createContext, useContext } from 'react';
 export interface RightPanelState {
   /** 目前的頁面有沒有右側欄（至少一個 `RightPanelContent` 掛著）。 */
   isRegistered: boolean;
-  /** 有登記、而且是打開的。≥ 901px 記在 localStorage；≤ 900px 是抽屜，不記。 */
+  /** 有登記、而且是打開的。預設關閉、不記憶，換頁就關（spec 2i 第二輪修訂 5）。 */
   isOpen: boolean;
   open: () => void;
   close: () => void;
@@ -33,9 +33,6 @@ export interface RightPanelState {
   /** 登記，回傳取消登記的函式（直接當 effect 的 cleanup 用）。 */
   register: () => () => void;
 }
-
-/** localStorage 的鍵名。值只有 `'true'`（收起）或不存在（預設打開）。 */
-export const RIGHT_PANEL_COLLAPSED_KEY = 'ledger.rightPanelCollapsed';
 
 export const RightPanelContext = createContext<RightPanelState | null>(null);
 

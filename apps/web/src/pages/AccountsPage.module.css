@@ -1,9 +1,9 @@
 /*
- * 帳戶頁：管理頁，用窄的內容寬度並在側欄右邊的空間置中（spec 2i §4.8）。
- * 一列只有「名稱 …… 餘額 ✎ 🗑」，拉太寬會讓名稱與金額遠到得轉頭看。
+ * 帳戶頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。
+ * 所有頁面同寬，每一頁的標題才會落在同一條線上（第二輪修訂 1、2）。
  */
 .page {
-  composes: narrow from '../components/PageContent.module.css';
+  composes: content from '../components/PageContent.module.css';
 }
 
 /*

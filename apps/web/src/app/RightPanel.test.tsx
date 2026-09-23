@@ -1,20 +1,19 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RightPanel, RightPanelContent } from './RightPanel';
 import { RightPanelProvider } from './RightPanelProvider';
 import { useRightPanel } from './right-panel-context';
 
 /**
- * 右側欄的地基（spec 2i §4.2、SC-35、plan D21）。
+ * 右側欄的地基（spec 2i §4.2、SC-35、plan D21；第二輪修訂 5：預設關閉、不記憶）。
  *
  * 用一個迷你外殼：`RightPanel`（欄位）＋ 可以切換「這一頁有沒有右側欄」的頁面
- * ＋ 一組操作鈕。驗登記、預設打開、收起的記憶、取消登記、焦點請求，以及收起時
+ * ＋ 一組操作鈕。驗登記、預設關閉、打開與收起、換頁就關、焦點請求，以及收起時
  * 內容不能被 Tab 走到（`inert`）。
  *
- * jsdom 沒有 `matchMedia`，Provider 會當成寬螢幕——抽屜（≤ 900px）的行為在
- * e2e 驗。寬度動畫也一樣只能在瀏覽器裡看，這裡驗的是狀態與屬性。
+ * 寬度與滑動的動畫只能在瀏覽器裡看（e2e），這裡驗的是狀態與屬性。
  */
 function Controls() {
   const panel = useRightPanel();
@@ -53,10 +52,6 @@ function column(): HTMLElement {
 }
 
 describe('RightPanel', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   it('stays zero-width when no page registers content', () => {
     render(<Shell initiallyWithPanel={false} />);
 
@@ -64,68 +59,62 @@ describe('RightPanel', () => {
     expect(column()).not.toHaveAttribute('data-open');
   });
 
-  it('shows the registered content and is open by default', async () => {
+  it('holds the registered content but starts closed', async () => {
     render(<Shell />);
 
-    expect(await screen.findByLabelText('金額')).toBeInTheDocument();
+    const amount = await screen.findByLabelText('金額');
     expect(column()).toHaveAttribute('data-registered');
-    expect(column()).toHaveAttribute('data-open');
-  });
-
-  it('remembers that the user closed it, across a remount', async () => {
-    const user = userEvent.setup();
-    const first = render(<Shell />);
-    await screen.findByLabelText('金額');
-
-    await user.click(screen.getByRole('button', { name: '收起' }));
-
     expect(column()).not.toHaveAttribute('data-open');
-    expect(localStorage.getItem('ledger.rightPanelCollapsed')).toBe('true');
-
-    first.unmount();
-    render(<Shell />);
-    await screen.findByLabelText('金額');
-    expect(column()).not.toHaveAttribute('data-open');
+    // 關著的時候鍵盤走不進去。
+    expect(amount.closest('[inert]')).not.toBeNull();
   });
 
-  it('forgets the stored value when opened again', async () => {
-    localStorage.setItem('ledger.rightPanelCollapsed', 'true');
-    const user = userEvent.setup();
-    render(<Shell />);
-    await screen.findByLabelText('金額');
-
-    await user.click(screen.getByRole('button', { name: '打開' }));
-
-    expect(column()).toHaveAttribute('data-open');
-    expect(localStorage.getItem('ledger.rightPanelCollapsed')).toBeNull();
-  });
-
-  it('makes the content unreachable by keyboard while closed', async () => {
+  it('opens and closes on request', async () => {
     const user = userEvent.setup();
     render(<Shell />);
     const amount = await screen.findByLabelText('金額');
 
-    await user.click(screen.getByRole('button', { name: '收起' }));
+    await user.click(screen.getByRole('button', { name: '打開' }));
+    expect(column()).toHaveAttribute('data-open');
+    expect(amount.closest('[inert]')).toBeNull();
 
-    expect(amount.closest('[inert]')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '收起' }));
+    expect(column()).not.toHaveAttribute('data-open');
   });
 
-  it('unregisters when the page leaves', async () => {
+  it('does not remember the open state across a remount', async () => {
     const user = userEvent.setup();
+    const first = render(<Shell />);
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+
+    first.unmount();
     render(<Shell />);
     await screen.findByLabelText('金額');
 
-    await user.click(screen.getByRole('button', { name: '換頁' }));
+    expect(column()).not.toHaveAttribute('data-open');
+  });
 
+  it('closes and unregisters when the page leaves', async () => {
+    const user = userEvent.setup();
+    render(<Shell />);
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+
+    await user.click(screen.getByRole('button', { name: '換頁' }));
     expect(screen.queryByLabelText('金額')).not.toBeInTheDocument();
     expect(column()).not.toHaveAttribute('data-registered');
+
+    // 回到有右側欄的頁面：又是關著的。
+    await user.click(screen.getByRole('button', { name: '換頁' }));
+    await screen.findByLabelText('金額');
+    expect(column()).not.toHaveAttribute('data-open');
   });
 
   it('opens and counts up on every focus request', async () => {
     const user = userEvent.setup();
     render(<Shell />);
     await screen.findByLabelText('金額');
-    await user.click(screen.getByRole('button', { name: '收起' }));
 
     await user.click(screen.getByRole('button', { name: '要求焦點' }));
     await user.click(screen.getByRole('button', { name: '要求焦點' }));

@@ -1,9 +1,9 @@
 /*
- * 帳本明細頁：管理頁，窄的內容寬度、置中（spec 2i §4.8）。內容由上到下是頁首、基本資訊卡、
+ * 帳本明細頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。內容由上到下是頁首、基本資訊卡、
  * 成員區塊、危險操作區——三張卡片用同一套寫法，看起來屬於同一個 app。
  */
 .page {
-  composes: narrow from '../components/PageContent.module.css';
+  composes: content from '../components/PageContent.module.css';
 }
 
 /* 唯讀狀態（載入中）的提示。 */

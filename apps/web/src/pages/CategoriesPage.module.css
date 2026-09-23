@@ -1,9 +1,9 @@
 /*
- * 分類頁：管理頁，窄的內容寬度、置中（spec 2i §4.8）。2h 是 64rem 讓支出與收入
- * 並排；52rem 時兩張卡片各約 400px，仍然放得下（≥ 1200px 才並排，見下方）。
+ * 分類頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。
+ * ≥ 1200px 時支出與收入兩張卡片並排（見下方）。
  */
 .page {
-  composes: narrow from '../components/PageContent.module.css';
+  composes: content from '../components/PageContent.module.css';
 }
 
 /* 網址上的 ledgerId 對不上清單時的一行說明（D11）。不是錯誤，用 muted 而非紅色。 */

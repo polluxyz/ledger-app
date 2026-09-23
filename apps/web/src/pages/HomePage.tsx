@@ -81,7 +81,7 @@ function LedgerView() {
   }
 
   return (
-    <PageContent width="wide">
+    <PageContent>
       <PageHeader title="總覽" />
       <StatsRow authenticated />
       {ledgerLoading && <p className={styles.note}>載入中…</p>}
@@ -128,7 +128,7 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      <PageContent width="wide">
+      <PageContent>
         <PageHeader
           title="總覽"
           context={<LedgerSwitcher />}
