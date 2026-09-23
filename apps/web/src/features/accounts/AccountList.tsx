@@ -1,6 +1,6 @@
 import type { Account } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
-import { formatAmount } from '../../lib/format';
+import { formatMoney } from '../../lib/format';
 import styles from './AccountList.module.css';
 
 interface AccountListProps {
@@ -50,7 +50,7 @@ export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: Ac
               // 讓螢幕閱讀器知道這個數字是什麼，不必依賴視覺上的位置。
               aria-label={`${account.name}餘額`}
             >
-              ${formatAmount(account.balance)}
+              {formatMoney(account.balance)}
             </span>
             <div className={styles.actions}>
               <button

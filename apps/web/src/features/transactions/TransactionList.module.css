@@ -56,6 +56,11 @@
   color: #15803d;
 }
 
+/* 轉帳既不是花錢也不是賺錢，用中性色，不能沿用收入的綠。 */
+.transfer {
+  color: var(--color-text-muted);
+}
+
 .empty,
 .status {
   padding: var(--space-lg);
@@ -65,8 +70,14 @@
   text-align: center;
 }
 
+/*
+ * 金額與按鈕不讓出寬度。少了 flex-shrink: 0，窄螢幕上它們會被擠到一個字寬，
+ * 「編輯」「刪除」變成一字一行的直排——390px 時 20 列裡有 10 列是這樣。
+ * 要讓位的是左邊的分類與備註，它們本來就會換行或截斷。
+ */
 .right {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-md);
 }
@@ -85,6 +96,7 @@
   color: var(--color-text);
   font: inherit;
   font-size: 0.8125rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 
