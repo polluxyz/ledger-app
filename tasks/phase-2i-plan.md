@@ -3,7 +3,7 @@
 > 對應 spec：[`docs/specs/phase-2i-web-layout-v2.md`](../docs/specs/phase-2i-web-layout-v2.md)（SC-31～SC-37）。
 > 任務清單：[`phase-2i-todo.md`](phase-2i-todo.md)。
 > 分支：`feature/web-layout-v2`（worktree `web-redesign`，從 `main` 分出）。
-> 狀態：**待核可**（與 spec、todo 一起送審）。
+> 狀態：**已核可**（2026-09-23），實作中。
 
 ---
 
@@ -35,7 +35,6 @@ RightPanelProvider（登記、開關、記憶、focus 請求）
        └─ TransactionWorkbench（新增 ⇄ 編輯；從 2h HomePage 抽出）
 PageHeader（既有 actions 插槽放「＋ 新增交易」；context 插槽放 LedgerSwitcher）
 AppSidebar ─ UserMenu ─ 設定選單 ─ ThemeToggle（三選一）
-AppTopBar（≤ 900px 顯示頁面名稱，名稱表放 routes.tsx）
 ```
 
 ---
@@ -93,21 +92,21 @@ spec §4.4。兩層都是同一個 `Menu` 內部元件的實例；外層只管�
 
 spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換外觀層。單一帳本時不渲染 `<select>`（2h 已經如此），只渲染外觀，沒有箭頭。
 
-### D27 — 頁面名稱表
+### D27 — 901–1199px 的浮動展開
 
-`routes.tsx` 匯出 `PAGE_TITLES: Record<string, string>`（`/` → 總覽、`/transactions` → 交易…），`AppTopBar` 用 `useLocation` 查表，查不到（例如 `/ledgers/:id`）就顯示上一層的名稱（帳本）。**只放在 ≤ 900px 的頂列**，不是 `h1`。
+外殼第一欄在這個區間固定 72px（CSS）。側欄元件多一個「暫時展開」的 state（不寫 localStorage）：展開時加一個 class，讓 `<aside>` 改成浮在中間區上方、寬 240px。收回的時機：`NavLink` 的 `onClick`、Esc、`pointerdown` 在側欄外。≥ 1200px 仍然是「推擠 ＋ 記憶」（`use-sidebar-collapsed`）。判斷區間用 `matchMedia("(min-width: 901px) and (max-width: 1199px)")`；jsdom 沒有 `matchMedia` 時當成 ≥ 1200px。
 
 ---
 
 ## 5. 實作順序
 
-| 步驟 | 內容                                                                                                                                                                | 誰     | 相依 |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
-| 0    | 基準線：五個指令、測試數                                                                                                                                            | 協調者 | 無   |
-| 1    | 共用介面：token、`PageContent`（並套到五個管理頁）、`RightPanelProvider`／`RightPanel`／`RightPanelContent`、外殼三欄 grid 與過渡、`/transactions` 路由與頁面名稱表 | 協調者 | 0    |
-| 2    | 兩個 worker 平行（§8）                                                                                                                                              | worker | 1    |
-| 3    | 整合：e2e 導航修改、新 e2e、截圖、鍵盤                                                                                                                              | 協調者 | 2    |
-| 4    | 文件與 PR                                                                                                                                                           | 協調者 | 3    |
+| 步驟 | 內容                                                                                                                                                    | 誰     | 相依 |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| 0    | 基準線：五個指令、測試數                                                                                                                                | 協調者 | 無   |
+| 1    | 共用介面：token、`PageContent`（並套到五個管理頁）、`RightPanelProvider`／`RightPanel`／`RightPanelContent`、外殼三欄 grid 與過渡、`/transactions` 路由 | 協調者 | 0    |
+| 2    | 兩個 worker 平行（§8）                                                                                                                                  | worker | 1    |
+| 3    | 整合：e2e 導航修改、新 e2e、截圖、鍵盤                                                                                                                  | 協調者 | 2    |
+| 4    | 文件與 PR                                                                                                                                               | 協調者 | 3    |
 
 ---
 
@@ -133,7 +132,7 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 | ------------- | -------------------------------------------------------------------------------- |
 | SC-31.1       | `layout.spec.ts` 量收合前後的 icon 中心座標                                      |
 | SC-31.2、35.2 | `layout.spec.ts` 讀 computed `transition-duration`；另開 `reducedMotion` 驗 0    |
-| SC-31.6       | 單元測試（`AppTopBar` 頁面名稱）＋ 390px 截圖                                    |
+| SC-31.6       | 單元測試（901–1199px 浮動展開）＋ 1024、390px 截圖                               |
 | SC-32         | 單元測試（`UserMenu`）＋ `layout.spec.ts` 鍵盤開關                               |
 | SC-33         | 單元測試（`LedgerSwitcher`）＋ 截圖                                              |
 | SC-34         | 單元測試（`HomePage`、`TransactionsPage`、路由保護）＋ 既有交易 e2e              |
@@ -153,7 +152,7 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 
 | Worker    | 負責的檔案（只能改這些）                                                                                                                                                                                                                                                                                    |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W1 側欄   | `app/AppSidebar.*`、`app/AppTopBar.*`、`app/UserMenu.*`（新）、`components/ThemeToggle.*`、`app/use-sidebar-collapsed.*`、`app/AppShell.test.tsx`                                                                                                                                                           |
+| W1 側欄   | `app/AppSidebar.*`、`app/UserMenu.*`（新）、`components/ThemeToggle.*`、`app/use-sidebar-collapsed.*`、`app/AppShell.test.tsx`                                                                                                                                                                              |
 | W2 記帳頁 | `pages/HomePage.*`、`pages/TransactionsPage.*`（新）、`features/transactions/TransactionWorkbench.*`（新）、`features/transactions/TransactionDialog.tsx`、`features/transactions/TransactionForm.*`、`features/ledgers/LedgerSwitcher.*`、`features/accounts/AccountBalances.*`、`components/PageHeader.*` |
 
 - 每個 worker 在自己的子 worktree 做（2h 的做法：從本分支分出，做完由協調者 merge 回來），避免兩個 worker 同時跑測試時看到彼此改到一半的檔案。

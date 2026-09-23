@@ -30,9 +30,9 @@
   - 內容：plan D21 的 API；外殼三欄 grid 與 `grid-template-columns` 過渡；≤ 900px 抽屜；`RightPanelContent` 的登記與 portal。
   - 驗收：單元測試——沒有登記時第三欄寬度 0；登記後預設打開；收起後重新 mount 仍收起；unmount 取消登記；`requestFocus` 遞增。
 
-- [ ] **1.4 `/transactions` 路由與頁面名稱表**
+- [ ] **1.4 `/transactions` 路由**
   - 檔案：`app/routes.tsx`、`pages/TransactionsPage.tsx`（先放最小骨架，W2 填內容）。
-  - 內容：掛在 `ProtectedRoute` 下；匯出 `PAGE_TITLES`。
+  - 內容：掛在 `ProtectedRoute` 下；導覽的「交易」連結由 W1 加。
   - 驗收：路由測試——未登入進 `/transactions` 被導走。
 
 ---
@@ -40,7 +40,7 @@
 ## Step 2：兩個 worker 平行（Claude Code Opus 5）
 
 - [ ] **2.1 W1 側欄**
-  - 內容：固定列高與收合動畫（D23）、收合鈕移到底部、拿掉帳本卡與深淺色列、導覽加「交易」拿掉「個人資料」、`UserMenu` 兩層（D24）、`ThemeToggle` 三選一、≤ 900px 頂列頁面名稱（D27）。
+  - 內容：固定列高與收合動畫（D23）、收合鈕移到底部、拿掉帳本卡與深淺色列、導覽加「交易」拿掉「個人資料」、`UserMenu` 兩層（D24）、`ThemeToggle` 三選一、901–1199px 的浮動展開（D27）。
   - 驗收：SC-31、SC-32 的單元測試；lint／typecheck／test／format:check 綠；1440 截圖收合前後 icon 不動。
 
 - [ ] **2.2 W2 記帳頁**
