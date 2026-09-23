@@ -300,3 +300,8 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 | W3 表格        | `ctx_79b8ed5196a9` | `lib/format.ts`（改）                                        |
 | W4a 帳戶／分類 | `ctx_e1e7e6e3c24b` | 5 個基礎元件的 CSS／測試、`AccountDialog.tsx`                |
 | W4b 帳本／個人 | `ctx_3030a4343ec5` | 帳本與帳本明細 12 個檔案                                     |
+
+**Step 2 期間的設計調整**
+
+- **側欄的使用者區塊只顯示名字，email 改放 `title` 提示**（原 W1 規格是名字＋email）。W1 回報：側欄印出 email 後，`members.test.tsx:102` 用 `getByText(email)` 找成員列會對到兩個；e2e 的 `ledgers.spec.ts:103、128` 也用 `getByText(email)`，目前剛好是不同人的 email 才沒撞。改成只顯示名字，兩邊都不用動。
+- W3、W4b 已驗收並 merge（`aee6cff`、`9c1b2f6`）。兩者都回報 `transaction-edit` 的 prefills 逾時，已列入 todo 3.6。
