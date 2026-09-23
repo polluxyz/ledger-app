@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type {
-  CategoryType,
-  LedgerSummary,
-  Transaction,
-  TransactionType,
-  UpdateTransactionRequest,
+import {
+  isDebtTransactionType,
+  type CategoryType,
+  type LedgerSummary,
+  type ManualTransactionType,
+  type Transaction,
+  type UpdateTransactionRequest,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
@@ -72,7 +73,17 @@ export function TransactionForm({
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined;
 
-  const [type, setType] = useState<TransactionType>(transaction?.type ?? 'EXPENSE');
+  /**
+   * 這張表單只處理使用者自己記得出來的 3 種型別（`ManualTransactionType`）。
+   *
+   * 借還的 4 種由債務端點產生，一般交易端點連改都不讓改（409
+   * `DEBT_TRANSACTION_READ_ONLY`），所以列表也不會替借還交易打開這張表單。
+   * 這裡仍然問一次而不是直接斷言型別：斷言只是把編譯器噤聲，真有借還交易被送
+   * 進來時會一路送出一個後端必拒的 body；退回「支出」至少是個講得通的狀態。
+   */
+  const [type, setType] = useState<ManualTransactionType>(
+    transaction && !isDebtTransactionType(transaction.type) ? transaction.type : 'EXPENSE',
+  );
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '');
   const [date, setDate] = useState(() =>
     toDateInputValue(transaction ? new Date(transaction.date) : undefined),
@@ -159,7 +170,7 @@ export function TransactionForm({
    * 刻意在事件處理裡一次改完，而非用 useEffect 事後補救：後者會多觸發一輪
    * 渲染（cascading render），React 也不建議這樣用。
    */
-  function handleTypeChange(nextType: TransactionType) {
+  function handleTypeChange(nextType: ManualTransactionType) {
     setType(nextType);
     setCategoryId('');
   }

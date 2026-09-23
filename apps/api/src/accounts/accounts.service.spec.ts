@@ -191,6 +191,17 @@ describe('AccountsService', () => {
     await expect(balanceOf(1000, [], [250])).resolves.toBe(1250);
   });
 
+  // 借還帳（3b，spec §4.1）：資金方向只看型別。原本的寫法是「INCOME 加、其他一律減」，
+  // 借入與收回會被默默算成減少——這一組測試就是為了抓那個錯。
+  it.each([
+    ['LEND', 1000 - 400], // 借出：錢出去
+    ['BORROW', 1000 + 400], // 借入：錢進來
+    ['COLLECT', 1000 + 400], // 收回：錢進來
+    ['REPAY', 1000 - 400], // 償還：錢出去
+  ])('balance moves the right way for a %s transaction', async (type, expected) => {
+    await expect(balanceOf(1000, [{ type, amount: 400 }])).resolves.toBe(expected);
+  });
+
   it('balance combines every term at once', async () => {
     const balance = await balanceOf(
       1000,

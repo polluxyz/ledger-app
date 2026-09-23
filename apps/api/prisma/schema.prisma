@@ -24,6 +24,11 @@ enum TransactionType {
   EXPENSE
   INCOME
   TRANSFER // 帳戶之間的資金移動：不計入收入也不計入支出
+  // 借還帳（3b）：資金方向固定，不計入收入也不計入支出。只能從債務端點產生。
+  LEND // 借出：錢從帳戶出去
+  BORROW // 借入：錢進到帳戶
+  COLLECT // 收回：債權人收到還款，錢進到帳戶
+  REPAY // 償還：債務人還錢，錢從帳戶出去
 }
 
 model User {
@@ -47,6 +52,9 @@ model User {
   friendRequestsReceived FriendRequest[]    @relation("FriendRequestReceived")
   friendInviteLinks      FriendInviteLink[] @relation("FriendInviteLinkCreated")
   friendInviteLinksUsed  FriendInviteLink[] @relation("FriendInviteLinkUsed")
+
+  // 借還帳（3b）。債務屬於使用者，不屬於帳本（spec 決策 17）。
+  debts Debt[]
 }
 
 enum FriendRequestStatus {
@@ -222,8 +230,69 @@ model Transaction {
   toAccount Account?  @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
   creator   User      @relation("TransactionCreator", fields: [creatorId], references: [id])
 
+  // 借還帳（3b）：這筆交易若是某筆債務的本金或還款，由債務那一側持有外鍵（spec §4.4）。
+  debtPrincipal Debt?        @relation("DebtPrincipal")
+  debtPayment   DebtPayment? @relation("DebtPaymentTransaction")
+
   @@index([ledgerId, date])
   @@index([ledgerId, categoryId])
   @@index([accountId])
   @@index([toAccountId])
+}
+
+/// 從擁有者的角度看，這筆債務的方向。
+enum DebtDirection {
+  LENT // 我借出：我是債權人
+  BORROWED // 我借入：我是債務人
+}
+
+/// 一個人記下的一筆債務（「我借出了／我借入了」）。永遠只屬於一位擁有者（spec 決策 15）。
+///
+/// 未清餘額與狀態**不存欄位**：未清餘額 = 本金 − Σ 未刪除的還款，狀態再由它與 forgivenAt
+/// 推得（spec §3.2）。存下來的數字只要有一條路徑忘了更新，就會永遠錯下去。
+///
+/// 資料庫另有 CHECK 約束 `Debt_principal_positive`（principal > 0），只存在於 migration。
+model Debt {
+  id               String        @id @default(uuid())
+  ownerId          String
+  direction        DebtDirection
+  /// 對方的名字。3b-1 一律是擁有者輸入的。
+  counterpartyName String
+  /// 最小貨幣單位，> 0。
+  principal        Int
+  date             DateTime
+  note             String?
+  /// 本金那筆 LEND / BORROW 交易。舊債可以沒有交易（spec 決策 7）。
+  transactionId    String?       @unique
+  forgivenAt       DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Restrict：仍被債務引用的交易不可被真刪。帳本真刪會 cascade 刪交易，所以帳本那一側
+  // 另外先擋（LEDGER_HAS_DEBT_TRANSACTIONS，spec 決策 21），這裡是最後防線。
+  transaction Transaction?  @relation("DebtPrincipal", fields: [transactionId], references: [id], onDelete: Restrict)
+  payments    DebtPayment[]
+
+  @@index([ownerId, deletedAt])
+}
+
+/// 一筆還款。資料庫另有 CHECK 約束 `DebtPayment_amount_positive`（amount > 0）。
+model DebtPayment {
+  id            String    @id @default(uuid())
+  debtId        String
+  /// 最小貨幣單位，> 0。
+  amount        Int
+  date          DateTime
+  note          String?
+  /// 對應的 COLLECT / REPAY 交易。可以沒有（本金沒有交易時，還款預設也不產生）。
+  transactionId String?   @unique
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  debt        Debt         @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation("DebtPaymentTransaction", fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@index([debtId])
 }
