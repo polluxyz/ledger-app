@@ -201,7 +201,6 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
               <Icon name="gear" />
             </span>
             <span className={styles.itemLabel}>設定</span>
-            <Icon name="chevronRight" />
           </button>
 
           <Link to="/profile" className={styles.item} data-menu-item="" onClick={handleNavigate}>
