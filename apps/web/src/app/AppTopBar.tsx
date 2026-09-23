@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { Icon } from '../components/Icon';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { useAuth } from '../features/auth/use-auth';
 import type { Disclosure } from './use-disclosure';
 import styles from './AppTopBar.module.css';
@@ -9,34 +11,57 @@ interface AppTopBarProps {
 }
 
 /**
- * 全站頂列。它只做兩件事：顯示站名，以及在窄螢幕顯示開關選單的 ☰。
+ * 頂列，兩種形態（D12）：
  *
- * **刻意不顯示頁面標題。** 每一頁都已經有自己的 `h2`（例如 `AccountsPage` 的
- * 「帳戶」），頂列再放一次同樣的字，`getByRole('heading', { name })` 就會同時
- * 對到兩個而拋錯——`e2e/ledgers.spec.ts` 正好有這種斷言。理由完整寫在
- * `tasks/phase-2f-plan.md` D5。
+ * - **訪客**：站名（全站唯一的 `h1`）＋ 深淺切換鈕。訪客沒有側欄，站名只能住在這裡。
+ * - **登入後**：☰ ＋ 站名，只在 ≤ 900px 出現（≥ 901px 側欄攤開，整條 CSS 隱藏）。
+ *   這裡的站名是**普通文字、不是 heading**——登入後唯一的 `h1` 在側欄裡，
+ *   這裡再多一個的話，jsdom 測試與 e2e 都會數到兩個。
  *
- * 站名是**全站唯一的 `h1`**，而且在未登入時也要在（訪客也該知道自己在哪個站）。
- * 因此它放在這裡，不放側邊欄——側邊欄只在登入後才渲染。
+ * **刻意不顯示頁面標題**：每頁已有自己的 `h2`，頂列再放一次會讓
+ * `getByRole('heading', { name })` 對到兩個（見 `tasks/phase-2f-plan.md` D5）。
  */
 export function AppTopBar({ menuTrigger }: AppTopBarProps) {
   const { isAuthenticated } = useAuth();
 
-  return (
-    <header className={styles.topbar}>
-      {/* 未登入沒有導覽可以展開，☰ 就不該出現。 */}
-      {isAuthenticated && (
+  if (isAuthenticated) {
+    return (
+      <header data-chrome="" className={`${styles.topbar} ${styles.signedIn}`}>
+        {/* aria-label 與 useDisclosure 的接法都不變（e2e 靠「主選單」定位）。 */}
         <button type="button" className={styles.menuButton} aria-label="主選單" {...menuTrigger}>
-          {/* 三條槓用 CSS 畫，不用字元——不同系統的 ☰ 字形寬度差很多。 */}
-          <span className={styles.menuIcon} aria-hidden="true" />
+          <Icon name="menu" size={20} />
         </button>
-      )}
 
+        <span className={styles.brandMark}>
+          <BrandLogo />
+          <span>記帳系統</span>
+        </span>
+      </header>
+    );
+  }
+
+  return (
+    <header data-chrome="" className={`${styles.topbar} ${styles.guest}`}>
       <h1 className={styles.title}>
-        <Link className={styles.brand} to="/">
-          記帳系統
+        <Link className={styles.brandMark} to="/">
+          <BrandLogo />
+          <span>記帳系統</span>
         </Link>
       </h1>
+
+      <ThemeToggle />
     </header>
+  );
+}
+
+/**
+ * 「帳」字標誌方塊。裝飾——站名的無障礙名稱是「記帳系統」，多讀一個「帳」
+ * 只會干擾，所以掛 `aria-hidden`（樣式與側欄的標誌同一套規格）。
+ */
+function BrandLogo() {
+  return (
+    <span className={styles.logo} aria-hidden="true">
+      帳
+    </span>
   );
 }

@@ -1,21 +1,134 @@
-.select {
-  max-width: 12rem;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
+/*
+ * 帳本卡裡的一行。展開時是「粗體帳本名 ＋ 箭頭」，側欄收合時縮成 44px 的方塊，
+ * 方塊裡只剩帳本名的第一個字。
+ *
+ * 收合的判斷不在這個元件裡：側欄的根元素帶著 `data-sidebar-collapsed`
+ * （使用者按了收合鈕），901–1199px 則一律收合。屬性選取器不會被 CSS Modules
+ * 改寫，所以跨 module 只能用它當鉤子。⚠️ 兩塊規則要一起改。
+ */
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+  color: var(--color-chrome-active-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/*
+ * `<select>` 是透明的，焦點框畫在它身上會跟著看不見（opacity 連 outline 一起吃掉）。
+ * 所以焦點框畫在這一行上。
+ */
+.field:focus-within {
+  outline: 2px solid var(--color-chrome-focus-ring);
+  outline-offset: 2px;
   border-radius: var(--radius);
-  background-color: var(--color-surface);
-  color: var(--color-text);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  color: var(--color-chrome-muted);
+}
+
+/* 首字方塊只在收合時出現。 */
+.initial {
+  display: none;
+}
+
+/*
+ * 原生下拉鋪滿整行且完全透明：使用者看到的是上面那兩個 span，點到的是這個元素。
+ * `opacity: 0` 而不是 `visibility: hidden`——後者連點擊都收不到。
+ */
+.select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
   font: inherit;
-  font-size: 0.875rem;
+  opacity: 0;
   cursor: pointer;
 }
 
-/* 只有一本帳本時沒有東西可切換，顯示名稱即可。刻意不長得像可點的控制項。 */
-.single {
-  max-width: 12rem;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 使用者按了收合鈕（只在 ≥ 901px 生效，≤ 900px 是浮動選單）。 */
+@media (min-width: 901px) {
+  [data-sidebar-collapsed] .field {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+
+  /* 照抄 global.css 的 `.visually-hidden`。只有一本帳本時這個 span 就是名稱的
+     唯一來源，用 `display: none` 會讓它消失，所以一律用視覺隱藏。 */
+  [data-sidebar-collapsed] .name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  [data-sidebar-collapsed] .chevron {
+    display: none;
+  }
+
+  [data-sidebar-collapsed] .initial {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: var(--text-base);
+  }
+}
+
+/* 901–1199px：側欄一律收合。內容與上面那塊相同。 */
+@media (min-width: 901px) and (max-width: 1199px) {
+  .field {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+
+  .name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .chevron {
+    display: none;
+  }
+
+  .initial {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: var(--text-base);
+  }
 }
