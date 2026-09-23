@@ -126,7 +126,7 @@ describe('AppSidebar 的收合', () => {
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     window.history.pushState({}, '', '/');
     fetchMock.mockReset();
-    // 兩本帳本，切換器才會畫成 `<select>`（只有一本時是純文字，驗不到重複）。
+    // 兩本帳本，切換器才會畫成可切換的那一版（只有一本時是純文字，驗不到重複）。
     fetchMock.mockImplementation((url: string) => {
       const body = String(url).endsWith('/ledgers') ? [personal, family] : [];
       return Promise.resolve(
@@ -186,6 +186,69 @@ describe('AppSidebar 的收合', () => {
     render(<App />);
 
     expect(screen.getByRole('link', { name: '交易' })).toHaveAttribute('href', '/transactions');
+  });
+});
+
+/**
+ * 會滑動的選中底色（2i · SC-43.1，第三輪）。
+ *
+ * jsdom 不排版，量不到它滑到哪裡——那要在 e2e 量。這裡釘住的是**前提**：
+ * 整個導覽只有一塊底色（不是每個連結各一塊，那樣滑不起來），而且它跟著
+ * `aria-current="page"` 走：不在導覽裡的頁面（個人資料）就藏起來。
+ */
+describe('AppSidebar 的選中底色', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    window.history.pushState({}, '', '/');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function marker(): HTMLElement {
+    const nav = screen.getByRole('navigation', { name: '主要導覽' });
+    const found = nav.querySelectorAll('[data-nav-marker]');
+    expect(found).toHaveLength(1);
+    return found[0] as HTMLElement;
+  }
+
+  it('keeps one highlight for the whole nav and follows the current link', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    // 起點是首頁：首頁那一項選中，底色顯示。
+    expect(screen.getByRole('link', { name: '首頁' })).toHaveAttribute('aria-current', 'page');
+    expect(marker()).not.toHaveAttribute('hidden');
+
+    await user.click(screen.getByRole('link', { name: '帳戶' }));
+
+    expect(screen.getByRole('link', { name: '帳戶' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: '首頁' })).not.toHaveAttribute('aria-current');
+    expect(marker()).not.toHaveAttribute('hidden');
+  });
+
+  it('hides the highlight on pages that are not in the nav', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    // 個人資料在使用者選單裡，不是導覽的一項（SC-31.4）。
+    await user.click(screen.getByRole('button', { name: '帳號選單' }));
+    await user.click(screen.getByRole('link', { name: '個人資料' }));
+
+    expect(marker()).toHaveAttribute('hidden');
   });
 });
 

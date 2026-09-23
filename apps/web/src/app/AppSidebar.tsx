@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../features/auth/use-auth';
 import type { Disclosure } from './use-disclosure';
@@ -41,6 +41,46 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
   const inFloatingRange = useSidebarFloatingRange();
   const [floatingRequested, setFloatingRequested] = useState(false);
   const panelId = panel.id;
+  const { pathname } = useLocation();
+  const navRef = useRef<HTMLElement | null>(null);
+  const [marker, setMarker] = useState<{ top: number; height: number } | null>(null);
+  const [markerReady, setMarkerReady] = useState(false);
+
+  /*
+   * 選中底色的位置（SC-43.1）。
+   *
+   * 導覽裡只有**一塊**底色，它靠 `transform: translateY()` 從舊的一項滑到新的一項。
+   * 每個連結各自畫一塊的話，換頁時是「一塊消失、另一塊出現」，滑不起來。
+   *
+   * 量的是目前 `aria-current="page"` 那個連結——`NavLink` 已經把「哪一項算選中」
+   * 算好了（`/ledgers/:id` 仍然選中「帳本」），這裡不必再判斷一次路徑。
+   * 沒有任何一項選中時（例如 `/profile`）`marker` 是 null，底色就藏起來。
+   *
+   * 用 `useLayoutEffect` 而不是 `useEffect`：要在瀏覽器畫出這一幀之前就定位，
+   * 否則換頁的第一幀底色還停在舊位置，會閃一下。
+   */
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) {
+      return;
+    }
+    const current = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    setMarker(current ? { top: current.offsetTop, height: current.offsetHeight } : null);
+  }, [pathname, isAuthenticated]);
+
+  /*
+   * 第一次定位不播動畫（否則一進站底色會從最上面滑下來）。
+   *
+   * 做法是「先畫出來，下一幀才給 transition」：`requestAnimationFrame` 的 callback
+   * 在這一幀畫完之後才跑，那時底色已經在定位上，之後的移動才是真正的換頁。
+   */
+  useEffect(() => {
+    if (!marker || markerReady) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => setMarkerReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, [marker, markerReady]);
 
   /*
    * 暫時展開只在 901–1199px 算數，所以用**推導**而不是另外存一份狀態：
@@ -127,7 +167,26 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
           </h1>
         </div>
 
-        <nav className={styles.nav} aria-label="主要導覽">
+        <nav ref={navRef} className={styles.nav} aria-label="主要導覽">
+          {/*
+            會滑動的那一塊選中底色（SC-43.1）。它是裝飾，名稱仍然來自連結本身；
+            `aria-current="page"` 與加粗都還在連結上，螢幕閱讀器讀到的東西不變。
+            `data-ready` 決定要不要過渡，見上面 `markerReady` 的說明。
+          */}
+          <span
+            className={styles.navMarker}
+            // 測試用的穩定抓取點：它沒有文字也沒有 role，class 名又是 CSS Modules
+            // 編譯出來的，不給一個名字就只能用 class 前綴去猜。
+            data-nav-marker=""
+            data-ready={markerReady ? '' : undefined}
+            hidden={!marker}
+            aria-hidden="true"
+            style={
+              marker
+                ? { height: `${marker.height}px`, transform: `translateY(${marker.top}px)` }
+                : undefined
+            }
+          />
           {/*
             連結文字一個字都不能改——`e2e/ledgers.spec.ts` 有多處靠
             `getByRole('link', { name })` 定位它們。圖示是裝飾（aria-hidden），
@@ -202,8 +261,8 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
 }
 
 /**
- * 目前所在的頁面：底色 ＋ 加粗 ＋ 左緣一條金線（CSS 的 inset box-shadow）。
- * 不再改成別的文字顏色——黑底上換色不如換底色明顯。
+ * 目前所在的頁面：文字加亮 ＋ 加粗。底色與左緣那條金線不在這裡了——第三輪改成
+ * 導覽裡共用的一塊 `.navMarker`，換頁時它會滑過去（SC-43.1）。
  */
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return isActive ? `${styles.link} ${styles.active}` : styles.link;
