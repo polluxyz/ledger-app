@@ -12,9 +12,16 @@ export function parseAmount(text: string | null): number {
   return Number((text ?? '').replace(/[$,\s]/g, ''));
 }
 
-/** 切換頁首的作用中帳本。只有一本帳本時切換器是一段文字，不是下拉。 */
+/**
+ * 切換上方橫條的作用中帳本。只有一本帳本時切換器是一段文字，不是下拉。
+ *
+ * 2i 第三輪（SC-40）：切換器是自己做的清單，不是原生 `<select>`，所以改成
+ * 「點開按鈕 → 點選項」。選項名稱後面還帶著「私人／共享」小標籤，用包含比對。
+ */
 export async function switchLedger(page: Page, name: string): Promise<void> {
-  await page.getByLabel('作用中帳本').selectOption({ label: name });
+  const switcher = page.getByRole('group', { name: '作用中帳本' });
+  await switcher.getByRole('button').click();
+  await switcher.getByRole('option', { name }).click();
 }
 
 /**

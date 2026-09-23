@@ -292,7 +292,11 @@ test('SC-32.3：使用者選單與設定彈窗可以完全用鍵盤操作', asyn
   await expect(trigger).toBeFocused();
 });
 
-test('SC-35.1：管理頁沒有右側欄，也沒有「新增交易」', async ({ signedInPage: page }) => {
+/**
+ * SC-35.1（第三輪 SC-42.5 改寫）：管理頁沒有「新增交易」；管理頁的右側欄只有在
+ * 按了新增類按鈕時才出現，所以剛進來時中間欄一路延伸到視窗右緣。
+ */
+test('SC-35.1：管理頁沒有「新增交易」，右側欄預設關閉', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNewTransaction(page);
   await expect(newTransactionForm(page)).toBeVisible();
@@ -358,6 +362,52 @@ test('SC-36.1：側欄開合前後，內容都在中間欄置中', async ({ sign
   await page.getByRole('button', { name: '新增交易' }).click();
   const panelOpen = await expectCentered();
   expect(panelOpen.width).toBeLessThan(leftCollapsed.width);
+});
+
+/**
+ * SC-44（第三輪）：在總覽打開右側欄、換到別頁、再回到總覽，右側欄是關的。
+ * 第二輪只記「在哪個路徑打開的」，回到同一個路徑時右側欄會自己再打開。
+ */
+test('SC-44：離開再回來，右側欄是關的', async ({ signedInPage: page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const inert = () =>
+    newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null);
+
+  await openNewTransaction(page);
+  expect(await inert()).toBe(false);
+
+  const nav = page.getByRole('navigation', { name: '主要導覽' });
+  await nav.getByRole('link', { name: '帳戶' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: '帳戶' })).toBeVisible();
+  await nav.getByRole('link', { name: '首頁' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: '總覽' })).toBeVisible();
+
+  await expect(newTransactionForm(page)).toHaveCount(1);
+  expect(await inert()).toBe(true);
+});
+
+/**
+ * SC-42（第三輪）：「建立帳本」與新增交易一樣從右側欄滑出，推開中間內容而不是
+ * 擋住清單；按鈕的 `aria-expanded` 跟著變，Esc 收起。
+ */
+test('SC-42：建立帳本的表單從右側欄滑出', async ({ signedInPage: page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page
+    .getByRole('navigation', { name: '主要導覽' })
+    .getByRole('link', { name: '帳本' })
+    .click();
+  const button = page.getByRole('button', { name: '建立帳本' });
+  const closed = await mainBox(page);
+
+  await button.click();
+  const dialog = page.getByRole('dialog', { name: '建立帳本' });
+  await expect(dialog).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+  const open = await mainBox(page);
+  expect(open.width).toBeLessThan(closed.width);
+
+  await page.keyboard.press('Escape');
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('使用者選單收著「登出」與「個人資料」', async ({ signedInPage: page }) => {
