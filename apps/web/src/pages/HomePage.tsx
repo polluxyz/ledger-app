@@ -14,7 +14,7 @@ import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
 import { useTransactions } from '../features/transactions/use-transactions';
-import { formatAmount, formatDate } from '../lib/format';
+import { formatDate, formatTransactionAmount } from '../lib/format';
 import styles from './HomePage.module.css';
 
 /** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
@@ -214,16 +214,6 @@ function RecentTransactions({
   );
 }
 
-/**
- * 金額前綴。轉帳刻意**不用正負號**：錢只是換了帳戶，既不是支出也不是收入。
- * 與 `TransactionList` 同一套規則。
- */
-const AMOUNT_SIGN: Record<Transaction['type'], string> = {
-  EXPENSE: '-',
-  INCOME: '+',
-  TRANSFER: '',
-};
-
 /** 金額的語意色，同樣三種型別各自對一個 class。 */
 const AMOUNT_COLOR: Record<Transaction['type'], string> = {
   EXPENSE: styles.expense ?? '',
@@ -286,7 +276,7 @@ function RecentBody({
               {transaction.toAccount && ` → ${transaction.toAccount.name}`}
             </span>
             <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
-              {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
+              {formatTransactionAmount(transaction.type, transaction.amount)}
             </span>
           </button>
         </li>

@@ -1,3 +1,5 @@
+import type { TransactionType } from '@ledger/shared';
+
 /**
  * 顯示用的格式化工具。純粹是呈現層——不做任何金額運算（加總、換算一律屬
  * 後端職責）。
@@ -24,6 +26,27 @@ export function formatAmount(amount: number): string {
 export function formatMoney(amount: number): string {
   const sign = amount < 0 ? '-' : '';
   return `${sign}$${formatAmount(Math.abs(amount))}`;
+}
+
+/**
+ * 交易金額的前綴。轉帳刻意**不用正負號**：錢只是換了帳戶，既不是支出也不是
+ * 收入，用「−」會讓人以為花掉了。三種型別各自給值，而不是「非支出即收入」的
+ * 二分法——後者在 TRANSFER 出現後就是錯的。
+ */
+const TRANSACTION_SIGN: Record<TransactionType, string> = {
+  EXPENSE: '-',
+  INCOME: '+',
+  TRANSFER: '',
+};
+
+/**
+ * 交易列上的金額：`-$120`、`+$5,000`、`$500`（轉帳）。
+ *
+ * 交易頁的表格與首頁的「最近交易」共用這一個函式（2i）。兩處各寫一份的話，
+ * 改了其中一邊，同一筆交易在兩頁就會長得不一樣——e2e 也是靠這個字串找列的。
+ */
+export function formatTransactionAmount(type: TransactionType, amount: number): string {
+  return `${TRANSACTION_SIGN[type]}$${formatAmount(amount)}`;
 }
 
 /** ISO 8601 時間字串轉成 `2026/08/12` 這種好讀的日期。 */
