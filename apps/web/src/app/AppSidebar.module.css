@@ -132,13 +132,48 @@
 /* ---- 導覽（每列 40px）---- */
 
 .nav {
+  /* 會滑動的那塊底色靠它定位。 */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   margin-top: var(--space-md);
 }
 
+/*
+ * 「目前頁面」的底色（2i · SC-43.1，第三輪）。
+ *
+ * 整個導覽只有這一塊，換頁時用 `transform` 滑到新的一項——每個連結各畫一塊的話
+ * 只會是「一塊消失、另一塊出現」，滑不起來。位置與高度由 `AppSidebar.tsx` 量出來
+ * 寫成 inline style（`offsetTop` / `offsetHeight`），這裡只負責長相與過渡。
+ *
+ * 左右各 0：連結本身就是滿寬的，所以底色跟著側欄寬度變，收合時自然一起縮。
+ * 底色與連結都是定位元素，誰蓋住誰只由 DOM 順序決定；`pointer-events: none`
+ * 讓「點得到連結」這件事不必依賴那個順序。
+ *
+ * `data-ready` 是「第一次不要動」的開關：初次定位時還沒有 transition，下一幀才加。
+ */
+.navMarker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-radius: var(--radius);
+  background-color: var(--color-chrome-active-bg);
+  /* 左緣那條 2px 金線。跟著底色一起滑，不再由每個連結自己畫。 */
+  box-shadow: inset 2px 0 0 var(--color-chrome-accent);
+  pointer-events: none;
+}
+
+.navMarker[data-ready] {
+  transition:
+    transform var(--motion-panel) var(--motion-ease),
+    height var(--motion-panel) var(--motion-ease);
+}
+
 .link {
+  /* 疊在底色上面：底色是絕對定位的，不提高連結的層級就會蓋住文字。 */
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -154,13 +189,10 @@
   background-color: var(--color-chrome-active-bg);
 }
 
-/* 所在頁面。左緣那條 2px 金線用 inset box-shadow 畫，不佔版面寬度——
-   用 border-left 的話所有連結都得預留 2px，否則選中時文字會跳一下。 */
+/* 所在頁面。底色與金線改由 `.navMarker` 畫（SC-43.1），這裡只留文字的變化。 */
 .active {
-  background-color: var(--color-chrome-active-bg);
   color: var(--color-chrome-active-text);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--color-chrome-accent);
 }
 
 /* ---- 底部：收合鈕與使用者選單 ---- */

@@ -117,3 +117,75 @@
   font-size: var(--text-xs);
   line-height: var(--leading-tight);
 }
+
+/*
+ * ================= 動畫開關（2i · SC-39，第三輪）=================
+ *
+ * 一列：左邊名稱、右邊滑軌。整列都是那顆 `role="switch"` 的按鈕，點哪裡都會切換
+ * ——只讓那條 36px 的滑軌可點，在觸控上太難按中。
+ *
+ * 滑軌與滑塊的動畫走 `--motion-fade`。關掉動畫的那一次它會是 0ms（`global.css`
+ * 在 `[data-motion='off']` 下把 token 歸零），滑塊直接就位，這是刻意的。
+ */
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.switchRow:hover {
+  border-color: var(--color-accent);
+}
+
+.switchLabel {
+  line-height: var(--leading-tight);
+}
+
+/* 滑軌：關閉時是中性的填色，打開時轉成強調色。 */
+.switchTrack {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 2.25rem;
+  height: 1.25rem;
+  padding: 2px;
+  border-radius: 999px;
+  background-color: var(--color-fill);
+  transition: background-color var(--motion-fade) var(--motion-ease);
+}
+
+.switchRow[aria-checked='true'] .switchTrack {
+  background-color: var(--color-accent);
+}
+
+/*
+ * 滑塊靠 `transform` 移動，不改 margin——`transform` 不牽動版面，動起來也不會
+ * 讓旁邊的文字跟著抖。
+ *
+ * 兩種狀態各自挑對比夠的顏色：關閉時滑軌是 `--color-fill`，滑塊用次要文字色才
+ * 看得出來；打開時滑軌是金色，滑塊改用「金底上的字色」，深淺兩色都成立。
+ */
+.switchThumb {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  background-color: var(--color-text-muted);
+  transform: translateX(0);
+  transition:
+    background-color var(--motion-fade) var(--motion-ease),
+    transform var(--motion-fade) var(--motion-ease);
+}
+
+.switchRow[aria-checked='true'] .switchThumb {
+  background-color: var(--color-on-primary);
+  transform: translateX(1rem);
+}
