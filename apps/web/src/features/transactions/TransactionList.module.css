@@ -141,8 +141,13 @@
   cursor: pointer;
 }
 
+/*
+ * 滑過按鈕時浮起來一點（surface 底＋細框）。不能用 fill 當底色——整列滑過時本身就是
+ * fill，按鈕會融進列裡，看不出游標停在哪一顆上。
+ */
 .action:hover {
-  background-color: var(--color-fill);
+  background-color: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
   color: var(--color-text);
 }
 

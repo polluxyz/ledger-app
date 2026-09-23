@@ -59,6 +59,10 @@
  * 窄一點就上下排，硬擠成兩欄會讓分類名稱一直被截斷。
  * `minmax(0, 1fr)` 而不是 `1fr`：格子的預設最小寬度是內容寬度，長名稱會把欄位撐爆。
  */
+.ledgerPicker {
+  max-width: 20rem;
+}
+
 .groups {
   display: grid;
   gap: var(--space-xl);

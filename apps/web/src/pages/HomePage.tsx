@@ -183,6 +183,8 @@ function LedgerWorkbench({ ledger }: { ledger: LedgerSummary }) {
               isFiltered={hasAnyFilter(filters)}
               onEdit={setEditing}
               onRemove={setRemoving}
+              // 右側面板正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
+              selectedId={editing?.id ?? null}
             />
 
             <Pagination

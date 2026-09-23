@@ -102,17 +102,20 @@ export default function CategoriesPage() {
 
       {/* 帳本選擇器。清單在快取裡，不另外發請求；選擇寫進網址（D7、D9）。 */}
       {ledgers.length > 1 && (
-        <Select
-          label="管理哪一本帳本的分類"
-          value={ledger.id}
-          onChange={(event) => setSearchParams({ ledgerId: event.target.value })}
-        >
-          {ledgers.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </Select>
+        // 只有幾個選項的下拉不需要拉滿整頁寬（提案 v2 診斷：原本拉滿 832px）。
+        <div className={styles.ledgerPicker}>
+          <Select
+            label="管理哪一本帳本的分類"
+            value={ledger.id}
+            onChange={(event) => setSearchParams({ ledgerId: event.target.value })}
+          >
+            {ledgers.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </Select>
+        </div>
       )}
 
       {!canEdit && <p className={styles.readonly}>你在這本帳本是檢視者，無法變更分類。</p>}
