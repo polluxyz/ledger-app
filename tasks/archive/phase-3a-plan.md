@@ -1,6 +1,6 @@
 # 實作計畫：階段三 (3a) — 好友系統
 
-> 狀態：**已核可**（2026-09-23）
+> 狀態：**已實作**（2026-09-23）
 > 依據：`docs/specs/phase-3a-friends.md`（2026-09-23 核可）。
 > 對應成功條件：SC-F1～SC-F13。
 > 分支：`feature/friends`（自 `main` 開）。**本步不動前端。**
@@ -126,4 +126,30 @@ worker 一律用 Claude Code，模型釘 `claude-opus-5`（開發者 2026-09-23 
 
 ## 6. 實作紀錄
 
-（實作中遇到的計畫外問題與處置記在這裡。）
+- **CHECK 約束改用 `COLLATE "C"`**（T2）。§2.2 原本假設 UUID 在任何 collation 下都依 ASCII 排序，但某些 collation 會在第一輪比較時忽略 `-`。直接指定 `"C"`（位元組順序）比論證它不會出事可靠，也與 JavaScript 的字串比較一致。
+- **API 層由協調者寫**（T1～T3）。controller、DTO、service 方法簽章都是 API 介面，依 `CLAUDE.md` §11 不派給 worker；worker 只實作 service 內部與單元測試。
+- **token 格式不符回 400**。`FriendInviteTokenDto` 要求 43 個 base64url 字元，格式不符在 DTO 驗證就回 `400 VALIDATION_FAILED`，不查資料庫。格式正確但查無此連結仍是 `404 INVITE_LINK_INVALID`。spec §5 的錯誤表沒列 400，這是所有端點共通的驗證行為。
+- **worker 的 worktree 沒有從 `feature/friends` 分出**。`--worktree new-child` 建出的分支落後，三個 worker 都依 Task spec 的第 1 步自己 `git merge --ff-only feature/friends`。三人也都發現 `pnpm install` 回報 up to date、沒有重新產生 Prisma Client，手動跑了 `prisma generate` 與 `@ledger/shared` 的 build。下次派工把這兩步直接寫進 Task spec。
+- **T7 由協調者做**。流量限制測試只有一個檔案，寫 Task spec 比自己寫還久。OpenAPI 標註已在 T1～T3 寫 controller 時一併完成。
+- **修正 T5 的一行註解**：`preview` 的註解說「不需要登入身分」，實際上端點需要登入，只是不看呼叫者是誰。
+- 單元測試：API 15 個 suite、212 個測試全綠（新增 93 個）。
+
+### 最終驗收（T8，2026-09-23）
+
+| 條件   | 驗證方式                                                                          | 結果 |
+| ------ | --------------------------------------------------------------------------------- | ---- |
+| SC-F1  | `friends.e2e-spec.ts`：邀請 → 收件清單 → 接受 → 雙方清單                          | 通過 |
+| SC-F2  | 同上：未註冊 email 回 404 且不留資料；大小寫不同仍找得到                          | 通過 |
+| SC-F3  | 同上：邀請自己 400、重複待確認 409、已是好友 409                                  | 通過 |
+| SC-F4  | 同上：反向邀請直接成為好友，資料庫只有一筆邀請                                    | 通過 |
+| SC-F5  | 同上：拒絕後看到 `DECLINED`，可立刻重送                                           | 通過 |
+| SC-F6  | `friend-requests.service.spec.ts` 授權矩陣 34 條（worker 未修改）＋ e2e 403 / 404 | 通過 |
+| SC-F7  | `friends.e2e-spec.ts`：預覽、接受、重用、過期、被新連結取代、接受自己的連結       | 通過 |
+| SC-F8  | 同上：資料庫只存 token 的 SHA-256                                                 | 通過 |
+| SC-F9  | 同上：單方解除、雙方消失、可重新邀請、解除非好友 404                              | 通過 |
+| SC-F10 | `friends-isolation.e2e-spec.ts`：帳本、交易、成員、分類、帳戶、好友的好友         | 通過 |
+| SC-F11 | `friends.e2e-spec.ts`：好友清單只有三個欄位；待確認的送出邀請只帶 email           | 通過 |
+| SC-F12 | `friends-throttle.e2e-spec.ts`：第 11 次回 429                                    | 通過 |
+| SC-F13 | lint / typecheck / test / build / format:check；API e2e 65、Web e2e 20            | 通過 |
+
+資料庫約束另以 `psql` 直接對 `ledger_test` 驗證：反向排序的 `Friendship` 被 CHECK 擋下、同一對第二筆 `PENDING` 被部分唯一索引擋下、`DECLINED` 之後可以再建一筆 `PENDING`。
