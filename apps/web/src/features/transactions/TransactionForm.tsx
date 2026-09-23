@@ -28,6 +28,12 @@ interface TransactionFormProps {
    * 可言（phase-2h · D9）。
    */
   onCancel?: () => void;
+  /**
+   * 金額欄位的 `id`。右側欄要在「＋ 新增交易」被按下時把焦點送到金額欄
+   * （spec 2i SC-35.3），但 `TextField` 不轉送 ref，所以改用呼叫端指定的 id
+   * 去 `document.getElementById` 找它。不傳就沿用 `useId` 產生的值。
+   */
+  amountFieldId?: string;
 }
 
 /**
@@ -56,7 +62,13 @@ interface TransactionFormProps {
  *
  * 所以欄位不能只是「停用」，必須整個不存在，送出的 body 也不能帶 `accountId`。
  */
-export function TransactionForm({ ledger, transaction, onSaved, onCancel }: TransactionFormProps) {
+export function TransactionForm({
+  ledger,
+  transaction,
+  onSaved,
+  onCancel,
+  amountFieldId,
+}: TransactionFormProps) {
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined;
 
@@ -241,6 +253,7 @@ export function TransactionForm({ ledger, transaction, onSaved, onCancel }: Tran
         <div className={styles.amount}>
           <TextField
             label="金額"
+            id={amountFieldId}
             type="number"
             min={1}
             step={1}

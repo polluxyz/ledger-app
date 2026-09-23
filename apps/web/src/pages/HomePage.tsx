@@ -1,27 +1,24 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
+import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
-import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
 import { Icon } from '../components/Icon';
+import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
-import { Pagination } from '../components/Pagination';
 import { AccountBalances } from '../features/accounts/AccountBalances';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
+import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
-import { TransactionDialog } from '../features/transactions/TransactionDialog';
-import { TransactionFilterBar } from '../features/transactions/TransactionFilters';
-import { TransactionForm } from '../features/transactions/TransactionForm';
-import { TransactionList } from '../features/transactions/TransactionList';
-import {
-  EMPTY_FILTERS,
-  hasAnyFilter,
-  toListQuery,
-  type TransactionFilters,
-} from '../features/transactions/transaction-query';
-import { useDeleteTransaction, useTransactions } from '../features/transactions/use-transactions';
+import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
+import { useTransactions } from '../features/transactions/use-transactions';
+import { formatAmount, formatDate } from '../lib/format';
 import styles from './HomePage.module.css';
+
+/** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
+const RECENT_LIMIT = 5;
 
 /**
  * 首頁，有兩種狀態：
@@ -29,7 +26,8 @@ import styles from './HomePage.module.css';
  * - **未登入**：顯示介面預覽——統計卡片是純粹的空狀態（固定 0，不做任何計算），
  *   讓人先看懂這個 app 長什麼樣，再引導去登入 / 註冊。不保存任何訪客資料，
  *   因此前端毋須實作任何業務邏輯。
- * - **已登入**：左邊是交易列表、右邊是常駐的工作面板（phase-2h · D8/D9）。
+ * - **已登入**：dashboard（spec 2i SC-34.1）——統計卡、最近 5 筆交易、帳戶餘額。
+ *   完整的交易表格（篩選、分頁、刪除）搬到 `/transactions`。
  *
  * 統計卡片在登入後標示為「即將推出」：正確的數字必須由後端彙總端點提供，
  * 拿前端當頁的交易自行加總會是錯的（只算得到那一頁），也違反單一後端原則。
@@ -64,170 +62,236 @@ export default function HomePage() {
 }
 
 /**
- * 已登入者的記帳畫面。這一層只負責找出「記進哪一本帳本」
- * （由 ActiveLedgerProvider 決定，Slice 2 Step 2），其餘交給 `LedgerWorkbench`。
+ * 已登入者的 dashboard。這一層只負責找出「記進哪一本帳本」
+ * （由 `ActiveLedgerProvider` 決定），其餘交給 `Dashboard`。
  *
- * `key={ledger.id}` 是刻意的：換一本帳本就換一組篩選條件、頁碼與編輯中的那一筆。
- * 用 key 讓 React 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠——
- * 漏掉一個的症狀是「切到只有 3 筆的帳本卻停在第 5 頁」，畫面一片空白而看不出原因。
+ * `key={ledger.id}` 是刻意的：換一本帳本就換一組「編輯中的那一筆」。用 key 讓
+ * React 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠。
  *
- * 帳本還沒好的三種狀態（載入中 / 失敗 / 一本都沒有）走下面那條路。它們仍然用
- * 同一個兩欄版面，因為**餘額不受帳本狀態影響**：帳戶屬於使用者、跨帳本共用，
- * 就算一本帳本都沒有，「我現在有多少錢」仍然該看得到。
+ * 帳本還沒好的三種狀態（載入中 / 失敗 / 一本都沒有）走下面那條路。它們仍然看得到
+ * **帳戶餘額**，因為餘額不受帳本狀態影響：帳戶屬於使用者、跨帳本共用，就算一本
+ * 帳本都沒有，「我現在有多少錢」仍然該看得到。那時不渲染 `TransactionWorkbench`，
+ * 右側欄沒有頁面登記，寬度自然是 0——沒有帳本就沒有地方可以記帳。
  */
 function LedgerView() {
   const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
 
   if (ledger) {
-    return <LedgerWorkbench key={ledger.id} ledger={ledger} />;
+    return <Dashboard key={ledger.id} ledger={ledger} />;
   }
 
   return (
-    <div className={styles.layout}>
-      <div className={styles.primary}>
-        <StatsRow authenticated />
-        {ledgerLoading && <p className={styles.note}>載入中…</p>}
-        {ledgerError && <FormError error={ledgerError} />}
-        {!ledgerLoading && !ledgerError && (
-          <section className={styles.card}>
-            <p className={styles.note}>找不到任何帳本。</p>
-          </section>
-        )}
-      </div>
-      <aside className={styles.panel}>
+    <PageContent width="wide">
+      <PageHeader title="總覽" />
+      <StatsRow authenticated />
+      {ledgerLoading && <p className={styles.note}>載入中…</p>}
+      {ledgerError && <FormError error={ledgerError} />}
+      {!ledgerLoading && !ledgerError && (
+        <section className={styles.card}>
+          <p className={styles.note}>找不到任何帳本。</p>
+        </section>
+      )}
+      <div className={styles.cards}>
         <AccountBalances />
-      </aside>
-    </div>
+      </div>
+    </PageContent>
   );
 }
 
 /**
- * 一本帳本的工作台：左欄是頁首、統計卡與交易列表，右欄是常駐面板。
+ * dashboard 本體（spec 2i §4.7）：頁首、三張統計卡、兩張並排的卡片。
  *
- * ## 為什麼編輯狀態放在這一層（D9）
+ * 版面用 grid 排成一列一列，2j 要加圖表時只是多一列卡片，不必動既有的區塊
+ * （假設 9：這一輪不放圖表佔位）。
  *
- * 面板要顯示「新增」還是「編輯」，取決於列表上點了哪一筆。列表在左欄、面板在
- * 右欄，兩者只有這個共同的父層，`editing` 只能放這裡。
- *
- * **新增表單與編輯面板互斥**（D9 的警告）：兩張表單的欄位標籤一模一樣，同時
- * 存在的話 `getByLabelText('金額')` 會對到兩個，測試與螢幕閱讀器都分不出來。
- *
- * `key={editing.id}` 讓編輯中直接點另一列時表單整個重建——少了它，React 會沿用
- * 同一個元件實例，欄位仍留著上一筆的值。
- *
- * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
- * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
+ * `editing` 放在這一層的理由與交易頁相同（D25）：最近交易在頁面裡、編輯面板在
+ * 右側欄（portal 過去），兩者只有這個共同的父層。
  */
-function LedgerWorkbench({ ledger }: { ledger: LedgerSummary }) {
-  const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
-  const [page, setPage] = useState(1);
-
-  const transactions = useTransactions(ledger.id, toListQuery(filters, page));
-  const deleteTransaction = useDeleteTransaction(ledger.id);
-
-  // null = 面板顯示新增表單 / 確認彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
+function Dashboard({ ledger }: { ledger: LedgerSummary }) {
+  const { open, requestFocus } = useRightPanel();
   const [editing, setEditing] = useState<Transaction | null>(null);
-  const [removing, setRemoving] = useState<Transaction | null>(null);
 
-  /**
-   * 換了篩選條件就回到第 1 頁。少了這件事，使用者會在「第 5 頁」看到空白，
-   * 而畫面上沒有任何線索說明原因。
-   */
-  function handleFiltersChange(next: TransactionFilters) {
-    setFilters(next);
-    setPage(1);
+  // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
+  const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
+
+  function startEditing(transaction: Transaction) {
+    setEditing(transaction);
+    // 使用者收起過右側欄時，點了一筆卻沒反應是最糟的情況。
+    open();
   }
 
-  function closeRemove() {
-    setRemoving(null);
-    // 清掉上一次的失敗，下次開啟才不會殘留紅字。
-    deleteTransaction.reset();
-  }
-
-  function confirmRemove() {
-    if (removing) {
-      // 失敗時**不關彈窗**，錯誤由 ConfirmDialog 就地顯示——關掉的話使用者只會
-      // 看到「什麼都沒發生」。
-      deleteTransaction.mutate(removing.id, { onSuccess: closeRemove });
-    }
+  /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
+  function startAdding() {
+    setEditing(null);
+    requestFocus();
   }
 
   return (
     <>
-      <div className={styles.layout}>
-        <div className={styles.primary}>
-          <PageHeader
-            title="總覽"
-            context={
-              <>
-                <Icon name="book" size={14} />
-                {ledger.name}・{ledger.kind === 'PERSONAL' ? '私人帳本' : '共享帳本'}
-              </>
-            }
+      <PageContent width="wide">
+        <PageHeader
+          title="總覽"
+          context={<LedgerSwitcher />}
+          actions={
+            <Button onClick={startAdding}>
+              <Icon name="plus" />
+              新增交易
+            </Button>
+          }
+        />
+
+        <StatsRow authenticated />
+
+        <div className={styles.cards}>
+          <RecentTransactions
+            transactions={recent.data?.items ?? []}
+            isLoading={recent.isLoading}
+            error={recent.error}
+            selectedId={editing?.id ?? null}
+            onSelect={startEditing}
           />
-
-          <StatsRow authenticated />
-
-          {/* 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。 */}
-          <section className={styles.listCard}>
-            <TransactionFilterBar
-              ledgerId={ledger.id}
-              filters={filters}
-              onChange={handleFiltersChange}
-            />
-
-            <TransactionList
-              transactions={transactions.data?.items ?? []}
-              isLoading={transactions.isLoading}
-              error={transactions.error}
-              isFiltered={hasAnyFilter(filters)}
-              onEdit={setEditing}
-              onRemove={setRemoving}
-              // 右側面板正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
-              selectedId={editing?.id ?? null}
-            />
-
-            <Pagination
-              page={transactions.data?.page ?? page}
-              limit={transactions.data?.limit ?? 20}
-              total={transactions.data?.total ?? 0}
-              onChange={setPage}
-            />
-          </section>
-        </div>
-
-        <aside className={styles.panel}>
-          {editing === null ? (
-            <TransactionForm ledger={ledger} />
-          ) : (
-            <TransactionDialog
-              key={editing.id}
-              ledger={ledger}
-              transaction={editing}
-              onClose={() => setEditing(null)}
-            />
-          )}
           <AccountBalances />
-        </aside>
+        </div>
+      </PageContent>
+
+      <TransactionWorkbench ledger={ledger} editing={editing} onEditDone={() => setEditing(null)} />
+    </>
+  );
+}
+
+interface RecentTransactionsProps {
+  transactions: Transaction[];
+  isLoading: boolean;
+  error: unknown;
+  /** 右側欄正在編輯的那一筆，該列標成選取中。 */
+  selectedId: string | null;
+  onSelect: (transaction: Transaction) => void;
+}
+
+/**
+ * 「最近交易」卡（SC-34.1、假設 8）。
+ *
+ * 與交易頁的 `TransactionList` 刻意不共用元件：這裡是一張**摘要**卡——不分組、
+ * 不分頁、沒有鉛筆與垃圾桶（刪除要到交易頁），每一列本身就是「編輯這一筆」。
+ * 把兩種需求塞進同一個元件，只會得到一串互相牴觸的開關。
+ *
+ * 每一筆用一個 `<li>` 包一顆 `<button>`：滑鼠與鍵盤都能操作，而且不必自己補
+ * `tabIndex` 與 Enter／Space 的處理。`<li>` 的數量因此剛好等於交易筆數。
+ *
+ * **一列的文字與交易頁的列相同**：分類（轉帳顯示「轉帳」）、備註、帳戶
+ * （轉帳是「現金 → 國泰世華」）、金額。e2e 有好幾個情境是拿「-$120 那一列」
+ * 去找交易再讀它的備註，兩頁的列讀起來不一樣的話，同一段選取器只有一頁對得到。
+ * 正負號與顏色的規則也照抄 `TransactionList`（那兩張對照表是它的模組私有變數，
+ * 拿不到，只能各留一份——改動時兩邊要一起改）。
+ */
+function RecentTransactions({
+  transactions,
+  isLoading,
+  error,
+  selectedId,
+  onSelect,
+}: RecentTransactionsProps) {
+  return (
+    <section className={styles.dataCard} aria-labelledby="recent-transactions">
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardHeading} id="recent-transactions">
+          最近交易
+        </h2>
+        {/* 四種狀態下都留著這個入口：交易載不出來時，使用者至少走得到交易頁。 */}
+        <Link className={styles.cardLink} to="/transactions">
+          查看全部
+        </Link>
       </div>
 
-      {/*
-        刪除確認刻意留在版面之外：它是 modal，不屬於任何一欄，而且窄螢幕編輯時
-        左欄會被 CSS 整個隱藏（D10），放在裡面會跟著消失。
-      */}
-      <ConfirmDialog
-        open={removing !== null}
-        title="刪除交易"
-        // 後端是軟刪除（資料列保留供稽核），但畫面上沒有還原的路，對使用者而言
-        // 就是回不去。文案要照實說。
-        message="確定要刪除這筆交易嗎？刪除後無法復原。"
-        confirmLabel="刪除"
-        error={deleteTransaction.error}
-        isPending={deleteTransaction.isPending}
-        onConfirm={confirmRemove}
-        onCancel={closeRemove}
+      <RecentBody
+        transactions={transactions}
+        isLoading={isLoading}
+        error={error}
+        selectedId={selectedId}
+        onSelect={onSelect}
       />
-    </>
+    </section>
+  );
+}
+
+/**
+ * 金額前綴。轉帳刻意**不用正負號**：錢只是換了帳戶，既不是支出也不是收入。
+ * 與 `TransactionList` 同一套規則。
+ */
+const AMOUNT_SIGN: Record<Transaction['type'], string> = {
+  EXPENSE: '-',
+  INCOME: '+',
+  TRANSFER: '',
+};
+
+/** 金額的語意色，同樣三種型別各自對一個 class。 */
+const AMOUNT_COLOR: Record<Transaction['type'], string> = {
+  EXPENSE: styles.expense ?? '',
+  INCOME: styles.income ?? '',
+  TRANSFER: styles.transfer ?? '',
+};
+
+/** 載入中 / 失敗 / 沒有交易 / 有資料，四種呈現。 */
+function RecentBody({
+  transactions,
+  isLoading,
+  error,
+  selectedId,
+  onSelect,
+}: RecentTransactionsProps) {
+  if (isLoading) {
+    return <p className={styles.status}>載入中…</p>;
+  }
+  // 失敗時不用紅框：這是 dashboard 的一張卡，記帳表單並沒有壞掉，
+  // 一塊紅框會讓人以為整頁掛了。
+  if (error) {
+    return <p className={styles.status}>交易暫時無法載入</p>;
+  }
+  if (transactions.length === 0) {
+    return <p className={styles.status}>還沒有任何交易，從右邊記下第一筆吧。</p>;
+  }
+
+  return (
+    <ul className={styles.recent}>
+      {/*
+        排序與「最近」的定義都在後端（請求帶的是 `limit=5`）。這裡再截一次只是
+        守住標題的承諾：卡片寫著「最近交易」而後端多給了幾筆時，這張摘要卡不該
+        默默長高、把下面的內容推走。不做任何排序、篩選或加總。
+      */}
+      {transactions.slice(0, RECENT_LIMIT).map((transaction) => (
+        <li key={transaction.id}>
+          <button
+            type="button"
+            className={`${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`}
+            onClick={() => onSelect(transaction)}
+          >
+            <span className={styles.recentDate}>{formatDate(transaction.date)}</span>
+            <span className={styles.recentMain}>
+              {/* 分類為 null＝這是一筆轉帳（轉帳沒有分類）。 */}
+              <span className={styles.recentCategory}>
+                {transaction.category ? (
+                  transaction.category.name
+                ) : (
+                  <>
+                    <Icon name="transfer" />
+                    轉帳
+                  </>
+                )}
+              </span>
+              {transaction.note && <span className={styles.recentNote}>{transaction.note}</span>}
+            </span>
+            {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
+            <span className={styles.recentAccount}>
+              {transaction.account?.name}
+              {transaction.toAccount && ` → ${transaction.toAccount.name}`}
+            </span>
+            <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
+              {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -1,0 +1,31 @@
+/*
+ * 交易頁（spec 2i SC-34.2）。三欄版面由外殼負責，這裡只剩頁面內容的樣式——
+ * 2h 首頁那組「兩欄 grid ＋ 貼邊面板」的規則全部不需要了。
+ */
+
+/*
+ * 篩選列、列表、分頁包成一張卡片。`overflow: hidden` 讓裡面的表頭與分頁列
+ * 貼齊圓角，不會在四個角落露出方角。
+ */
+.listCard {
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* 說明用的單張卡片（找不到帳本）。 */
+.card {
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+}
