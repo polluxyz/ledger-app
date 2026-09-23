@@ -12,6 +12,7 @@ import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   newTransactionForm,
   openDashboard,
+  openNewTransaction,
   openTransactions,
   switchLedger,
   transactionFilters,
@@ -120,6 +121,8 @@ test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage
   await createAccount(request, userA.token, { name: '國泰世華', initialBalance: 5000 });
 
   await page.reload();
+  // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
+  await openNewTransaction(page);
 
   const form = newTransactionForm(page);
   await form.getByRole('button', { name: '轉帳' }).click();

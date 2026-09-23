@@ -1,6 +1,12 @@
 import { addMember, createLedger, createTransaction, listAccounts, listCategories } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
-import { newTransactionForm, openDashboard, parseAmount, switchLedger } from './ui';
+import {
+  newTransactionForm,
+  openDashboard,
+  openNewTransaction,
+  parseAmount,
+  switchLedger,
+} from './ui';
 
 /**
  * Slice 2 的六個情境（spec §7）。
@@ -33,6 +39,8 @@ test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ sig
 
   await page.getByRole('link', { name: '首頁' }).click();
   await switchLedger(page, TRIP_LEDGER_NAME);
+  // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
+  await openNewTransaction(page);
 
   // SC-16：欄位必須整個不存在，不是停用——後端連「帶著空值」都會擋下。
   await expect(page.getByLabel('帳戶', { exact: true })).toHaveCount(0);
@@ -60,6 +68,8 @@ test('情境 2：切回個人帳本後帳戶欄位回來，餘額跟著變動', 
     tracksBalance: false,
   });
   await page.reload();
+  // 右側欄預設關閉；打開之後在同一頁切換帳本不會關掉它。
+  await openNewTransaction(page);
 
   await switchLedger(page, TRIP_LEDGER_NAME);
   await expect(page.getByLabel('帳戶', { exact: true })).toHaveCount(0);

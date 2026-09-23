@@ -61,6 +61,15 @@ export async function openDashboard(page: Page): Promise<void> {
 }
 
 /**
+ * 打開右側欄的新增表單（spec 2i 第二輪修訂 5：右側欄預設關閉）。
+ * 「＋ 新增交易」在總覽與交易頁的上方橫條右邊。
+ */
+export async function openNewTransaction(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '新增交易' }).click();
+  await newTransactionForm(page).getByLabel('金額').waitFor();
+}
+
+/**
  * 打開側欄底部的使用者選單（spec 2i SC-32）。「登出」「個人資料」都收在裡面。
  * 取不到使用者名稱時按鈕叫「帳號選單」，所以兩種名稱都接受。
  */

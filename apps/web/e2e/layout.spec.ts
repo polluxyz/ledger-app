@@ -1,7 +1,13 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { createTransaction, listAccounts, listCategories, personalLedger } from './api';
 import { expect, test } from './fixtures';
-import { newTransactionForm, openTransactions, openUserMenu, transactionFilters } from './ui';
+import {
+  newTransactionForm,
+  openNewTransaction,
+  openTransactions,
+  openUserMenu,
+  transactionFilters,
+} from './ui';
 
 /**
  * 版面量測：2h 的 SC-24、SC-26.7、SC-28、SC-29，與 2i 的 SC-31～SC-36
@@ -127,36 +133,29 @@ test('SC-26.7：用 Tab 走到篩選的日期欄位，看得到焦點框', async
   expect(outline).not.toBe('none');
 });
 
-/**
- * SC-36.4（取代 2h 的 SC-24.5「五頁標題左緣相同」，spec 2i 假設 14）。
- *
- * 2i 起內容在中間欄置中，而且分寬窄兩種：同一類頁面的**置中軸**相同才是不跳動的
- * 定義。左緣相同在寬窄不同的頁面之間本來就不成立。
- */
-test('SC-36.4：同一類頁面的內容置中軸相同', async ({ signedInPage: page }) => {
+test('SC-24.5：每一頁的標題都從同一條左緣開始', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  const groups: [string, string][][] = [
-    [
-      ['/', '總覽'],
-      ['/transactions', '交易'],
-    ],
-    [
-      ['/accounts', '帳戶'],
-      ['/categories', '分類'],
-      ['/ledgers', '帳本'],
-      ['/profile', '個人資料'],
-    ],
+  // 2i 第二輪修訂：所有頁面同一個內容寬度（72rem），標題又回到同一條左緣。
+  // 只比 x 座標：高度本來就可以不同。
+  const pages: [string, string][] = [
+    ['/', '總覽'],
+    ['/transactions', '交易'],
+    ['/accounts', '帳戶'],
+    ['/categories', '分類'],
+    ['/ledgers', '帳本'],
+    ['/profile', '個人資料'],
   ];
-  for (const group of groups) {
-    const centers: number[] = [];
-    for (const [path, title] of group) {
-      await page.goto(path);
-      centers.push(await headerCenter(page, title));
-    }
-    for (const center of centers) {
-      expect(Math.abs(center - centers[0]!)).toBeLessThanOrEqual(1);
-    }
+  const lefts: number[] = [];
+  for (const [path, title] of pages) {
+    await page.goto(path);
+    const heading = page.getByRole('heading', { level: 2, name: title, exact: true });
+    await expect(heading).toBeVisible();
+    lefts.push((await heading.boundingBox())!.x);
+  }
+
+  for (const left of lefts) {
+    expect(Math.abs(left - lefts[0]!)).toBeLessThanOrEqual(1);
   }
 });
 
@@ -237,10 +236,11 @@ test('SC-31.2：側欄開合有動畫；減少動態效果時沒有', async ({ s
   const duration = () =>
     sidebar.evaluate((element) => getComputedStyle(element).transitionDuration);
 
-  expect(await duration()).toMatch(/0\.22s/);
+  // 第二輪修訂 6：抽屜式，320ms。
+  expect(await duration()).toMatch(/0\.32s/);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  expect(await duration()).not.toMatch(/0\.22s/);
+  expect(await duration()).not.toMatch(/0\.32s/);
 });
 
 /**
@@ -263,7 +263,7 @@ test('SC-31.6：1024px 的側欄可以展開，而且不推擠內容', async ({ 
   await expect(page.getByRole('button', { name: '展開側欄' })).toBeVisible();
 });
 
-test('SC-32.3：使用者選單可以完全用鍵盤操作', async ({ signedInPage: page }) => {
+test('SC-32.3：使用者選單與設定彈窗可以完全用鍵盤操作', async ({ signedInPage: page }) => {
   const trigger = page.getByRole('button', { name: /的選單$|^帳號選單$/ });
   await trigger.focus();
   await page.keyboard.press('Enter');
@@ -272,20 +272,20 @@ test('SC-32.3：使用者選單可以完全用鍵盤操作', async ({ signedInPa
   await expect(settings).toBeFocused();
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: '淺色' })).toBeVisible();
+  // 第二輪修訂 8：「設定」打開彈窗，外觀是三張預覽卡。
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: '設定' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: '淺色' })).toBeVisible();
 
   await page.keyboard.press('Escape');
-  await expect(settings).toBeFocused();
-  await expect(page.getByRole('radio', { name: '淺色' })).toBeHidden();
-
-  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('SC-35.1：管理頁沒有右側欄，也沒有「新增交易」', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await openNewTransaction(page);
   await expect(newTransactionForm(page)).toBeVisible();
 
   await page
@@ -302,30 +302,33 @@ test('SC-35.1：管理頁沒有右側欄，也沒有「新增交易」', async (
 });
 
 /**
- * SC-35.2／35.3：右側欄收起後重新整理仍是收起的；按「＋ 新增交易」會打開並把
- * 焦點送到金額欄。收起時表單設了 `inert`，鍵盤走不進去。
+ * SC-35.1–35.3（第二輪修訂 5）：右側欄預設關閉，按「＋ 新增交易」打開並把焦點送到
+ * 金額欄；收起後重新整理仍是關的（不記憶）。關著的時候表單設了 `inert`，鍵盤
+ * 走不進去；中間欄一路延伸到視窗右緣。
  */
-test('SC-35.2：右側欄收起的狀態會記住，「新增交易」會把它打開', async ({ signedInPage: page }) => {
+test('SC-35.2：右側欄預設關閉，「新增交易」會把它打開', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const inert = () =>
     newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null);
 
-  await page.getByRole('button', { name: '收起新增面板' }).click();
-  expect(await inert()).toBe(true);
-
-  await page.reload();
   await expect(newTransactionForm(page)).toHaveCount(1);
   expect(await inert()).toBe(true);
+  const closed = await mainBox(page);
+  expect(Math.abs(closed.x + closed.width - 1440)).toBeLessThanOrEqual(1);
 
   await page.getByRole('button', { name: '新增交易' }).click();
   expect(await inert()).toBe(false);
   await expect(newTransactionForm(page).getByLabel('金額')).toBeFocused();
+
+  await page.getByRole('button', { name: '收起新增面板' }).click();
+  expect(await inert()).toBe(true);
+
+  await page.getByRole('button', { name: '新增交易' }).click();
+  await page.reload();
+  await expect(newTransactionForm(page)).toHaveCount(1);
+  expect(await inert()).toBe(true);
 });
 
-/**
- * SC-36.1／36.2：內容在中間欄置中；左右側欄開合之後仍然置中，而且中間欄真的
- * 變寬了（證明內容跟著移動，而不是停在原地）。
- */
 test('SC-36.1：側欄開合前後，內容都在中間欄置中', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -342,9 +345,10 @@ test('SC-36.1：側欄開合前後，內容都在中間欄置中', async ({ sign
   const leftCollapsed = await expectCentered();
   expect(leftCollapsed.width).toBeGreaterThan(initial.width);
 
-  await page.getByRole('button', { name: '收起新增面板' }).click();
-  const bothCollapsed = await expectCentered();
-  expect(bothCollapsed.width).toBeGreaterThan(leftCollapsed.width);
+  // 打開右側欄：中間欄被推窄，內容仍然置中。
+  await page.getByRole('button', { name: '新增交易' }).click();
+  const panelOpen = await expectCentered();
+  expect(panelOpen.width).toBeLessThan(leftCollapsed.width);
 });
 
 test('使用者選單收著「登出」與「個人資料」', async ({ signedInPage: page }) => {
