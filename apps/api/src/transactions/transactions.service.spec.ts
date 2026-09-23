@@ -501,7 +501,6 @@ describe('TransactionsService', () => {
         type: 'LEND',
         amount: 500,
         date: new Date('2026-09-24T00:00:00.000Z'),
-        note: null,
         accountId,
       });
 
@@ -530,7 +529,6 @@ describe('TransactionsService', () => {
           type: 'BORROW',
           amount: 500,
           date: new Date(),
-          note: null,
         }),
       ).rejects.toMatchObject({ errorCode: 'ACCOUNT_REQUIRED' });
       expect(client.transaction.create).not.toHaveBeenCalled();
@@ -548,7 +546,6 @@ describe('TransactionsService', () => {
           type: 'LEND',
           amount: 500,
           date: new Date(),
-          note: null,
           accountId,
         }),
       ).rejects.toMatchObject({ errorCode: 'NOT_FOUND' });

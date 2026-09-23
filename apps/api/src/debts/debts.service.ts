@@ -65,7 +65,6 @@ export class DebtsService {
           type: principalTransactionType(input.direction),
           amount: input.principal,
           date: new Date(input.date),
-          note: input.note ?? null,
           accountId: input.record.accountId,
         });
       }

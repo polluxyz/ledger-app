@@ -140,7 +140,6 @@ describe('DebtPaymentsService', () => {
           type: 'COLLECT',
           amount: 2000,
           accountId: ACCOUNT_ID,
-          note: null,
         }),
       );
       expect(prisma.debtPayment.create).toHaveBeenCalledWith({
@@ -188,9 +187,14 @@ describe('DebtPaymentsService', () => {
         expect.objectContaining({
           ledgerId: 'ledger-2',
           accountId: 'account-2',
-          note: '第一期',
         }),
       );
+      // 還款的備註屬於債務，不帶進交易：共享帳本的其他成員看得到交易（spec §3.5）。
+      const [, recorded] = transactions.createDebtTransaction.mock.calls[0] as [
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(recorded).not.toHaveProperty('note');
     });
 
     it('reuses the principal transaction’s ledger and account when record is omitted', async () => {

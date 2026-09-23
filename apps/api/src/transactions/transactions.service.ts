@@ -275,7 +275,6 @@ export class TransactionsService {
       type: DebtTransactionType;
       amount: number;
       date: Date;
-      note: string | null;
       accountId?: string;
     },
   ): Promise<string> {
@@ -289,7 +288,9 @@ export class TransactionsService {
         type: input.type,
         amount: input.amount,
         date: input.date,
-        note: input.note,
+        // 借還交易一律不帶備註：共享帳本的其他成員看得到這筆交易（決策 13），但債務的備註屬於
+        // 債務擁有者的私人記錄（spec §3.5）。擁有者要看備註，從交易的 debtId 回到債務即可。
+        note: null,
         accountId: input.accountId ?? null,
         categoryId: null,
         toAccountId: null,

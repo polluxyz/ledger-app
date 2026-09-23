@@ -149,7 +149,6 @@ export class DebtPaymentsService {
       type: paymentTransactionType(row.direction),
       amount: input.amount,
       date: new Date(input.date),
-      note: input.note ?? null,
       accountId: target.accountId,
     });
   }
