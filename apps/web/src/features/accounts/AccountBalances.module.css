@@ -1,5 +1,11 @@
+/*
+ * 右側面板的下半（phase-2h）。上面是記帳表單，靠一條分隔線隔開——面板本身已經
+ * 是一個框，再給餘額區加一個框會變成框中框。
+ */
 .section {
-  margin-bottom: var(--space-lg);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
 }
 
 .head {
@@ -7,68 +13,64 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-md);
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-sm);
 }
 
 .heading {
   margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .manage {
-  font-size: 0.8125rem;
-  color: var(--color-primary);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
 }
 
-/*
- * auto-fit：帳戶少的時候把寬度攤開，多的時候自動換行。
- * 帳戶數量再成長時，改成橫向滑動翻頁只需要動這一段 CSS（見 plan 的 Step 5 決議）。
- */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
-  gap: var(--space-sm);
+/* 一行一個帳戶：左邊圖示與名稱，右邊金額。 */
+.list {
+  display: flex;
+  flex-direction: column;
 }
 
-.cell {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
   min-width: 0;
 }
 
 .name {
-  display: block;
-  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
   color: var(--color-text-muted);
-  /* 帳戶名可以很長，格子寬度是固定的——截斷比撐破版面好。 */
+  /* 帳戶名可以很長，金額的位置是固定的——截斷比擠掉金額好。 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .value {
-  display: block;
-  margin-top: var(--space-xs);
   font-weight: 600;
+  /* 等寬數字：金額靠右對齊成一直線，一眼比得出大小。 */
   font-variant-numeric: tabular-nums;
 }
 
-/* 與帳戶頁、交易列表用同一個紅：負餘額是正常狀態，只是要一眼看得出來。 */
+/* 負餘額是正常狀態，只是要一眼看得出來。與交易列表的支出用同一個紅。 */
 .negative {
-  color: var(--color-danger);
+  color: var(--color-expense);
 }
 
-/* 載入中 / 失敗 / 零帳戶共用。高度與一格資料相近，載完不會整頁跳動。 */
+/* 載入中 / 失敗 / 零帳戶共用。高度與一列資料相近，載完不會整頁跳動。 */
 .status {
   margin: 0;
   padding: var(--space-sm) var(--space-md);
-  border: 1px dashed var(--color-border);
   border-radius: var(--radius);
-  background-color: var(--color-surface);
-  font-size: 0.8125rem;
+  background-color: var(--color-fill);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
