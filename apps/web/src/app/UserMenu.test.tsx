@@ -6,12 +6,16 @@ import App from '../App';
 /**
  * 側欄底部的使用者選單（2i · SC-32、D24）。
  *
- * 驗的是**選單這個控制項**：兩層的開關與 `aria-expanded`、鍵盤能不能走完全程、
- * Esc 有沒有把焦點送回開啟它的項目、選了外觀會不會真的換主題。位置（fixed 的
+ * 驗的是**選單這個控制項**：開關與 `aria-expanded`、鍵盤能不能走完全程、
+ * Esc 有沒有把焦點送回觸發鈕、「設定」有沒有把選單換成設定彈窗。位置（fixed 的
  * 座標）是 CSS 與版面的事，jsdom 量不到，交給 e2e 的 SC-32.4。
  *
+ * 第二輪修訂把「外觀」從往右浮出的第二層改成彈窗，所以彈窗**裡面**的行為
+ * （三張預覽卡、方向鍵、Esc）搬到 `SettingsDialog.test.tsx`；這裡只留接線：
+ * 點下去選單關了、彈窗開了、關掉之後焦點回得來。
+ *
  * **這是揭露式面板，不是 ARIA menu**，所以每一項都用它原本的角色去找：
- * 「設定」是 button、「個人資料」是 link、「登出」是 button、外觀是三顆 radio。
+ * 「設定」是 button、「個人資料」是 link、「登出」是 button。
  * 「登出」維持 button 這件事本身就是契約——既有 e2e 與單元測試都這樣定位它。
  *
  * 一律透過 `<App />` 渲染：選單同時要 AuthProvider、react-query 與 Router，
@@ -44,7 +48,7 @@ describe('UserMenu', () => {
     return screen.getByRole('button', { name: '王小明的選單' });
   }
 
-  /** 浮出的第一層。關著的時候是 null——`aria-controls` 指的元素不存在。 */
+  /** 浮出的選單。關著的時候是 null——`aria-controls` 指的元素不存在。 */
   function menuPanel(): HTMLElement | null {
     const id = trigger().getAttribute('aria-controls');
     return id ? document.getElementById(id) : null;
@@ -84,40 +88,54 @@ describe('UserMenu', () => {
     expect(panel.getByRole('button', { name: '登出' })).toBeInTheDocument();
   });
 
-  it('opens the appearance group with three radio options', async () => {
+  /**
+   * 「設定」開的是彈窗不是第二層，所以標的是 `aria-haspopup="dialog"`，
+   * 而不是 2i 第一輪的 `aria-expanded`——兩者對螢幕閱讀器的意思不一樣。
+   */
+  it('announces the settings item as opening a dialog', async () => {
     const actor = userEvent.setup();
     render(<App />);
     await openMenu(actor);
 
     const settings = screen.getByRole('button', { name: '設定' });
-    await actor.click(settings);
-
-    expect(settings).toHaveAttribute('aria-expanded', 'true');
-    const group = screen.getByRole('radiogroup', { name: '外觀' });
-    expect(within(group).getAllByRole('radio')).toHaveLength(3);
-
-    // 預設是「跟隨系統」，其餘兩個沒被選。
-    expect(screen.getByRole('radio', { name: '跟隨系統' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: '淺色' })).not.toBeChecked();
-    expect(screen.getByRole('radio', { name: '深色' })).not.toBeChecked();
+    expect(settings).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(settings).not.toHaveAttribute('aria-expanded');
   });
 
-  it('applies and remembers the chosen appearance', async () => {
+  it('swaps the menu for the settings dialog (SC-32.2)', async () => {
+    const actor = userEvent.setup();
+    render(<App />);
+    await openMenu(actor);
+
+    await actor.click(screen.getByRole('button', { name: '設定' }));
+
+    // 彈窗開了，選單同時關了：使用者一次只看到一個浮動層。
+    expect(screen.getByRole('dialog', { name: '設定' })).toBeInTheDocument();
+    expect(menuPanel()).toBeNull();
+    expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(screen.getByRole('radiogroup', { name: '外觀' })).getAllByRole('radio'),
+    ).toHaveLength(3);
+  });
+
+  /**
+   * 關掉彈窗後焦點回到**觸發鈕**（SC-32.3）。不是回到「設定」：那顆按鈕在彈窗
+   * 打開的同時就隨選單一起消失了，原生 `<dialog>` 的焦點回歸救不了它。
+   */
+  it('returns the focus to the trigger after the dialog closes', async () => {
     const actor = userEvent.setup();
     render(<App />);
     await openMenu(actor);
     await actor.click(screen.getByRole('button', { name: '設定' }));
 
-    await actor.click(screen.getByRole('radio', { name: '淺色' }));
+    const dialog = within(screen.getByRole('dialog', { name: '設定' }));
+    await actor.click(dialog.getByRole('button', { name: '關閉' }));
 
-    // 畫面顏色的唯一來源是 `<html data-theme>`，不是 React state（2h D19）。
-    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
-    expect(localStorage.getItem('ledger.theme')).toBe('light');
-    expect(screen.getByRole('radio', { name: '淺色' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: '跟隨系統' })).not.toBeChecked();
+    expect(screen.queryByRole('dialog', { name: '設定' })).not.toBeInTheDocument();
+    expect(trigger()).toHaveFocus();
   });
 
-  it('moves focus with the arrow keys and opens the second layer with ArrowRight', async () => {
+  it('moves focus with the arrow keys', async () => {
     const actor = userEvent.setup();
     render(<App />);
     await openMenu(actor);
@@ -131,52 +149,34 @@ describe('UserMenu', () => {
     await actor.keyboard('{ArrowDown}');
     expect(screen.getByRole('button', { name: '登出' })).toHaveFocus();
 
-    await actor.keyboard('{ArrowUp}{ArrowUp}');
+    // 走到頭再按會回到另一端，不會卡住。
+    await actor.keyboard('{ArrowDown}');
     expect(screen.getByRole('button', { name: '設定' })).toHaveFocus();
 
-    // → 打開第二層，焦點落在**目前選中**的那顆 radio。
-    await actor.keyboard('{ArrowRight}');
-    expect(screen.getByRole('radio', { name: '跟隨系統' })).toHaveFocus();
+    await actor.keyboard('{ArrowUp}');
+    expect(screen.getByRole('button', { name: '登出' })).toHaveFocus();
   });
 
-  it('closes one layer at a time with Escape and returns the focus each time', async () => {
+  it('closes with Escape and returns the focus to the trigger', async () => {
     const actor = userEvent.setup();
     render(<App />);
     await openMenu(actor);
-    await actor.keyboard('{ArrowRight}');
 
-    // 第一次 Esc：只關第二層，焦點回到開啟它的「設定」。
     await actor.keyboard('{Escape}');
-    expect(screen.queryByRole('radiogroup', { name: '外觀' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '設定' })).toHaveFocus();
 
-    // 第二次 Esc：關掉整個選單，焦點回到觸發鈕，鍵盤使用者不會迷路。
-    await actor.keyboard('{Escape}');
+    // 焦點回到觸發鈕，鍵盤使用者不會迷路。
     expect(menuPanel()).toBeNull();
     expect(trigger()).toHaveFocus();
   });
 
-  it('closes the second layer with ArrowLeft', async () => {
+  it('closes when the user points outside', async () => {
     const actor = userEvent.setup();
     render(<App />);
     await openMenu(actor);
-    await actor.keyboard('{ArrowRight}');
-
-    await actor.keyboard('{ArrowLeft}');
-
-    expect(screen.queryByRole('radiogroup', { name: '外觀' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '設定' })).toHaveFocus();
-  });
-
-  it('closes every layer when the user points outside', async () => {
-    const actor = userEvent.setup();
-    render(<App />);
-    await openMenu(actor);
-    await actor.click(screen.getByRole('button', { name: '設定' }));
 
     await actor.click(document.body);
 
-    expect(screen.queryByRole('radiogroup', { name: '外觀' })).not.toBeInTheDocument();
+    expect(menuPanel()).toBeNull();
     expect(trigger()).toHaveAttribute('aria-expanded', 'false');
   });
 

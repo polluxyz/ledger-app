@@ -32,7 +32,8 @@ interface AppSidebarProps {
  *   中間區不動，點連結 / Esc / 點外面就收回，不記憶（D27）。
  * - ≤ 900px：收起來，由頂列的 ☰ 展開成浮在內容之上的面板。
  *
- * 收合時所有文字只是 `opacity: 0`，不是移除——螢幕閱讀器與 e2e 讀的就是那些文字。
+ * 收合時所有文字只是往左滑出並淡掉（`transform` ＋ `opacity`），不是移除——
+ * 螢幕閱讀器與 e2e 讀的就是那些文字。動畫的細節見 `AppSidebar.module.css` 檔頭。
  */
 export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
   const { isAuthenticated } = useAuth();

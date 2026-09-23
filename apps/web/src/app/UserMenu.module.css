@@ -1,7 +1,8 @@
 /*
- * 使用者選單（2i · SC-32）。兩層共用 `.menu` 與 `.item`，只有位置不同。
+ * 使用者選單（2i · SC-32）。一層：「設定 / 個人資料 / 登出」。
+ * 「設定」開的是彈窗，它的樣式在 `SettingsDialog.module.css`，不在這裡。
  *
- * 兩層都是 `position: fixed`：側欄有 `overflow-y: auto`，用 `absolute` 會被裁掉。
+ * 選單是 `position: fixed`：側欄有 `overflow-y: auto`，用 `absolute` 會被裁掉。
  * 座標由 `UserMenu.tsx` 依觸發鈕的實際位置算好後用 inline style 傳進來——
  * CSS 算不出「觸發鈕現在在哪」，那取決於側欄收合與否和視窗高度。
  *
@@ -84,11 +85,6 @@
   animation: menu-in var(--motion-fade) var(--motion-ease);
 }
 
-/* 第二層疊在第一層之上（放不下時會直接蓋住它）。 */
-.settingsMenu {
-  z-index: 61;
-}
-
 @keyframes menu-in {
   from {
     opacity: 0;
@@ -139,19 +135,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.groupLabel {
-  margin: 0;
-  padding: var(--space-xs) var(--space-sm);
-  color: var(--color-chrome-muted);
-  font-size: var(--text-xs);
-  line-height: var(--leading-tight);
-}
-
-/* 原生 radio。留著它本人（不是自己畫一顆）：方向鍵移動與螢幕閱讀器的報讀都靠它。 */
-.radio {
-  flex: none;
-  margin: 0;
-  accent-color: var(--color-chrome-accent);
 }
