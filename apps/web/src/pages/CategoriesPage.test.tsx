@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useSearchParams } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Category, CategoryType, LedgerSummary } from '@ledger/shared';
+import { RightPanel } from '../app/RightPanel';
+import { RightPanelProvider } from '../app/RightPanelProvider';
 import { AuthProvider } from '../features/auth/AuthProvider';
 import { ActiveLedgerProvider } from '../features/ledgers/ActiveLedgerProvider';
 import CategoriesPage from './CategoriesPage';
@@ -13,7 +15,9 @@ import CategoriesPage from './CategoriesPage';
  * 以及「管理中帳本 ≠ 作用中帳本」的提示條。
  *
  * 策略：不經過 App 的路由（這一頁還沒掛進去），自己組 Provider 鏈
- * （QueryClient → Auth → ActiveLedger → MemoryRouter）直接渲染頁面；fetch 照
+ * （QueryClient → Auth → ActiveLedger → MemoryRouter → RightPanel）直接渲染頁面；
+ * 新增分類的表單住在右側欄（spec 2i SC-42），所以這裡要連外殼的 `RightPanel`
+ * 一起掛上，portal 才有地方去。fetch 照
  * `LedgerDetailPage.test.tsx` 的做法整個換成 mock。mock 這邊維護一個「每本帳本
  * 的分類存放區」，寫入操作（POST／PATCH／DELETE）會真的改到它，快取失效重取之後
  * 畫面自然看得到變化——與其斷言 invalidation 被呼叫，不如斷言使用者看到的結果。
@@ -206,8 +210,11 @@ describe('Categories page', () => {
         <AuthProvider>
           <ActiveLedgerProvider>
             <MemoryRouter initialEntries={[initialUrl]}>
-              <SearchProbe />
-              <CategoriesPage />
+              <RightPanelProvider>
+                <SearchProbe />
+                <CategoriesPage />
+                <RightPanel />
+              </RightPanelProvider>
             </MemoryRouter>
           </ActiveLedgerProvider>
         </AuthProvider>
@@ -266,6 +273,23 @@ describe('Categories page', () => {
     ).toBeInTheDocument();
     // 關掉的話使用者剛打的字全沒了，多半也沒看到錯誤。
     expect(screen.getByRole('dialog', { name: '新增支出分類' })).toBeInTheDocument();
+  });
+
+  it('opens the create form in the right panel instead of inside the group', async () => {
+    routeFetch();
+    const user = userEvent.setup();
+    renderPage();
+
+    const expense = await screen.findByRole('button', { name: '新增支出分類' });
+    expect(expense).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(expense);
+
+    expect(expense).toHaveAttribute('aria-expanded', 'true');
+    const form = screen.getByRole('dialog', { name: '新增支出分類' });
+    // SC-42：表單 portal 進外殼的右側欄，所以它不在頁面的任何一個 <section> 裡
+    // （頁面本身與兩個分類區塊都是 section）。這個判準不依賴 CSS 類名。
+    expect(form.closest('section')).toBeNull();
   });
 
   it('keeps only one create form expanded at a time', async () => {

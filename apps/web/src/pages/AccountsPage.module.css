@@ -5,16 +5,3 @@
 .page {
   composes: content from '../components/PageContent.module.css';
 }
-
-/*
- * 往下展開的「新增帳戶」表單外框（§4.7）。用標準卡片寫法，讓它看起來是清單
- * 上方臨時多出來的一張卡；下邊距把它與清單隔開，收起後整塊卸載，不留空白。
- */
-.panel {
-  margin-bottom: var(--space-lg);
-  padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}

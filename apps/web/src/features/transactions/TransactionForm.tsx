@@ -139,6 +139,21 @@ export function TransactionForm({
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
 
   /**
+   * 三選一的選項清單。轉帳不一定畫得出來（見 `showTransferButton`），所以清單是
+   * 動態的——滑動方塊的寬度與位移都依這份清單算，少一格時位置才不會算歪。
+   */
+  const typeOptions: { value: TransactionType; label: string }[] = [
+    { value: 'EXPENSE', label: '支出' },
+    { value: 'INCOME', label: '收入' },
+    ...(showTransferButton ? [{ value: 'TRANSFER' as const, label: '轉帳' }] : []),
+  ];
+  // 找不到（理論上不會）就當第一格，方塊至少停在一個合理的位置。
+  const selectedTypeIndex = Math.max(
+    typeOptions.findIndex((option) => option.value === type),
+    0,
+  );
+
+  /**
    * 切換型別時一併清掉已選分類——換了型別就是換一組分類，先前選的多半已不在清單中。
    *
    * 刻意在事件處理裡一次改完，而非用 useEffect 事後補救：後者會多觸發一輪
@@ -221,32 +236,31 @@ export function TransactionForm({
         <FormError error={error} />
 
         <div className={styles.types}>
-          <Button
-            type="button"
-            variant={type === 'EXPENSE' ? 'primary' : 'secondary'}
-            aria-pressed={type === 'EXPENSE'}
-            onClick={() => handleTypeChange('EXPENSE')}
-          >
-            支出
-          </Button>
-          <Button
-            type="button"
-            variant={type === 'INCOME' ? 'primary' : 'secondary'}
-            aria-pressed={type === 'INCOME'}
-            onClick={() => handleTypeChange('INCOME')}
-          >
-            收入
-          </Button>
-          {showTransferButton && (
-            <Button
+          {/*
+            滑動的選中方塊（SC-43.2）。它疊在按鈕上方、不吃點擊，寬度是一格、
+            位移是「第幾格 × 100%」——按鈕本身不再各自畫底色，切換時方塊滑過去。
+            寬度與位移依**實際畫出來的按鈕數**算，所以沒有轉帳鈕時也對得準。
+          */}
+          <span className={styles.thumbTrack} aria-hidden="true">
+            <span
+              className={styles.thumb}
+              style={{
+                width: `${100 / typeOptions.length}%`,
+                transform: `translateX(${selectedTypeIndex * 100}%)`,
+              }}
+            />
+          </span>
+          {typeOptions.map((option) => (
+            <button
+              key={option.value}
               type="button"
-              variant={type === 'TRANSFER' ? 'primary' : 'secondary'}
-              aria-pressed={type === 'TRANSFER'}
-              onClick={() => handleTypeChange('TRANSFER')}
+              className={styles.type}
+              aria-pressed={type === option.value}
+              onClick={() => handleTypeChange(option.value)}
             >
-              轉帳
-            </Button>
-          )}
+              {option.label}
+            </button>
+          ))}
         </div>
 
         {/* 金額自成一列並放大：它是這張表單唯一非填不可的數字，要一眼看到。 */}
