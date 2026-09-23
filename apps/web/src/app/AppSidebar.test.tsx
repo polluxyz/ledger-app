@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
 /**
@@ -73,12 +73,18 @@ describe('AppSidebar 的浮動選單', () => {
   /**
    * Slice 4 新增了「分類」與「個人資料」兩個連結。釘住它們的存在與去向：
    * 導覽連結的文字同時是 e2e 的選取器，改字就是改契約。
+   *
+   * 2i 把「個人資料」從導覽移進使用者選單（SC-31.4、SC-32.1），所以這一條的
+   * **選取步驟**多了「先打開選單」，去向仍然是 `/profile`。
    */
-  it('links to the categories and profile pages', () => {
+  it('links to the categories and profile pages', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     // 分類連結刻意不帶 `?ledgerId=`——從導覽進去就是看作用中帳本那一本。
     expect(screen.getByRole('link', { name: '分類' })).toHaveAttribute('href', '/categories');
+
+    await user.click(screen.getByRole('button', { name: '帳號選單' }));
     expect(screen.getByRole('link', { name: '個人資料' })).toHaveAttribute('href', '/profile');
   });
 
@@ -92,12 +98,13 @@ describe('AppSidebar 的浮動選單', () => {
 });
 
 /**
- * 側欄的收合（2h · D11、D13、D18、SC-24.2）。
+ * 側欄的收合（2h · D11、SC-24.2；2i · SC-31.3、SC-31.4、SC-31.5）。
  *
- * 收合的「觸發條件」有兩個，其中一個是 901–1199px 的媒體查詢——jsdom 不套 CSS，
- * 那一條只能交給 e2e。這裡驗的是另一半：**按鈕記得住選擇**，以及**收合之後
- * 每一個無障礙名稱都還在**。後者才是真正的風險：用 `display: none` 藏文字的話
- * 畫面看起來對，但 e2e 的 74 個選取器會整批找不到元素。
+ * 這裡驗三件事：**按鈕記得住選擇**、**收合之後每一個無障礙名稱都還在**、
+ * 以及 2i 搬走的東西真的不在側欄裡了。第二件才是真正的風險：用 `display: none`
+ * 藏文字的話畫面看起來對，但 e2e 的選取器會整批找不到元素。
+ *
+ * 「收合後 icon 不位移」是 CSS 的事，jsdom 不套 CSS，交給 e2e 的 SC-31.1 量座標。
  */
 describe('AppSidebar 的收合', () => {
   const fetchMock = vi.fn();
@@ -152,17 +159,125 @@ describe('AppSidebar 的收合', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByLabelText('作用中帳本')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '收合側欄' }));
 
-    // 收合狀態不能另外渲染一份切換器（D18）。
-    expect(screen.getAllByLabelText('作用中帳本')).toHaveLength(1);
-
-    for (const name of ['首頁', '帳本', '帳戶', '分類', '個人資料']) {
+    for (const name of ['首頁', '交易', '帳本', '帳戶', '分類']) {
       expect(screen.getByRole('link', { name })).toBeInTheDocument();
     }
 
-    // 登出永遠看得見，不能收進選單（spec §4.2）。
+    // 登出在使用者選單裡（2i SC-32）；收合後那顆按鈕與選單內容都還讀得到。
+    await user.click(screen.getByRole('button', { name: '帳號選單' }));
     expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
   });
+
+  /**
+   * 2i 把帳本切換器搬到記帳頁的頁首、「個人資料」搬進使用者選單（SC-31.4）。
+   * 側欄裡不能再留一份——留著就是兩個同名控制項，`getByLabelText` 會對到兩個。
+   */
+  it('no longer carries the ledger card or the profile link', () => {
+    render(<App />);
+
+    expect(within(sidebar()).queryByLabelText('作用中帳本')).not.toBeInTheDocument();
+    expect(within(sidebar()).queryByText('目前帳本')).not.toBeInTheDocument();
+    expect(within(sidebar()).queryByRole('link', { name: '個人資料' })).not.toBeInTheDocument();
+  });
+
+  it('navigates to the new transactions page', () => {
+    render(<App />);
+
+    expect(screen.getByRole('link', { name: '交易' })).toHaveAttribute('href', '/transactions');
+  });
 });
+
+/**
+ * 901–1199px 的浮動展開（2i · SC-31.6、D27）。
+ *
+ * 那個區間側欄預設收合，但收合鈕**仍然顯示**（2h 在這裡把它藏起來）。按下去是
+ * 「暫時浮出來看一眼」：側欄浮在內容上、中間區不動、**不寫 localStorage**，
+ * 點連結就收回。斷點本身只存在 CSS，所以這裡 stub 一個 `matchMedia` 來模擬。
+ */
+describe('AppSidebar 在 901–1199px 的浮動展開', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    window.history.pushState({}, '', '/');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      ),
+    );
+    // 只讓「901–1199px」那一條成立，其他查詢（例如右側欄的 ≤ 900px）一律 false。
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('901px'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('starts collapsed but still offers the expand button', () => {
+    render(<App />);
+
+    // 2h 在這個區間把按鈕藏起來，使用者看不到其他頁面的名稱（假設 4）。
+    expect(screen.getByRole('button', { name: '展開側欄' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('floats open without remembering the choice, and retracts after a link', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '展開側欄' }));
+
+    const collapseButton = screen.getByRole('button', { name: '收合側欄' });
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    // 浮起來的是側欄自己，外殼第一欄不動——靠 `.floating` 那組 CSS 規則。
+    expect(sidebar().className).toContain('floating');
+    // 這個區間的展開是暫時的，不進 localStorage（D27）。
+    expect(localStorage.getItem('ledger.sidebarCollapsed')).toBeNull();
+
+    await user.click(screen.getByRole('link', { name: '帳戶' }));
+
+    expect(screen.getByRole('button', { name: '展開側欄' })).toBeInTheDocument();
+    expect(sidebar().className).not.toContain('floating');
+  });
+
+  it('retracts when the user presses Escape', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '展開側欄' }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByRole('button', { name: '展開側欄' })).toBeInTheDocument();
+  });
+});
+
+/** 側欄本體。用 ☰ 的 `aria-controls` 取，不必另外掛 test id。 */
+function sidebar(): HTMLElement {
+  const id = screen.getByRole('button', { name: '主選單' }).getAttribute('aria-controls');
+  const element = document.getElementById(id as string);
+  if (!element) {
+    throw new Error('找不到側欄。');
+  }
+  return element;
+}

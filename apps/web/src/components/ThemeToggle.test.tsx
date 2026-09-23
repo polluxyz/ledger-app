@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
@@ -42,13 +42,19 @@ describe('ThemeToggle', () => {
     expect(document.documentElement).not.toHaveAttribute('data-theme');
   });
 
-  it('keeps exactly one toggle on the page in any state', () => {
+  /**
+   * 「全站同一時間只有一組外觀控制項」——意圖不變，控制項的長相在 2i 變了：
+   * 登入後這顆循環鈕收進使用者選單，改成「設定 → 外觀」裡的三顆 radio（SC-32.2）。
+   * 訪客沒有側欄，頂列那顆循環鈕照舊。
+   */
+  it('keeps exactly one appearance control on the page in any state', async () => {
     // 訪客：切換鈕在頂列。
     const guest = render(<App />);
     expect(screen.getAllByRole('button', { name: /^外觀：/ })).toHaveLength(1);
     guest.unmount();
 
-    // 登入後：切換鈕在側欄，頂列那顆不該跟著渲染出來。
+    // 登入後：頂列那顆不該渲染，外觀改由使用者選單裡的 radio 群組控制。
+    const user = userEvent.setup();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     vi.stubGlobal(
       'fetch',
@@ -63,6 +69,14 @@ describe('ThemeToggle', () => {
     );
     render(<App />);
 
-    expect(screen.getAllByRole('button', { name: /^外觀：/ })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /^外觀：/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '帳號選單' }));
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    expect(within(screen.getByRole('radiogroup', { name: '外觀' })).getAllByRole('radio')).toEqual([
+      screen.getByRole('radio', { name: '跟隨系統' }),
+      screen.getByRole('radio', { name: '淺色' }),
+      screen.getByRole('radio', { name: '深色' }),
+    ]);
   });
 });
