@@ -210,3 +210,30 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 - **計畫外**：`csp.spec.ts:78`、`smoke.spec.ts:67` 用「登出按鈕看得到」確認登入成功；登出收進使用者選單後，斷言前先 `openUserMenu`。斷言不變。
 - `layout.spec.ts`：SC-24.3、SC-28.1、SC-26.7 先 `openTransactions`；SC-24.5 改成 SC-36.4（置中軸，假設 14）；新增 SC-31.1、31.2、31.6、32.3、35.1、35.2、36.1 與「使用者選單收著登出與個人資料」。
 - `git diff` 驗證：除了 SC-24.5 → SC-36.4 以外，沒有任何 `expect` 行被改。
+
+### Step 2 驗收與整合
+
+**W1（側欄）**：commit `792d619`，merge 為 `feature/web-layout-v2` 上的 merge commit。
+
+- 依更正改成揭露式使用者選單；外觀是 `role="radiogroup"` 裡三顆原生 radio，第二層的 ↑↓ 交給瀏覽器內建。
+- **偏離**：`<aside>` 裡多包一層 `.panel`。901–1199px 浮動展開時，外殼第一欄（`auto`）必須維持 72px；`<aside>` 固定 72px，真正變寬、浮起來的是內層。≥ 1200px 的寬度動畫仍在 `<aside>` 上。
+- **偏離**：W1 沒有開樣版網站（`CLAUDE.md` §13：不主動把 `docs/artifacts/` 當 context），一律照 spec 文字做。
+- 改過選取步驟的既有單元測試 9 處（`App.test.tsx`、`AppShell.test.tsx`、`ProtectedRoute.test.tsx`、`AuthDialog.test.tsx`、`LoginPage.test.tsx`、`RegisterPage.test.tsx`：先打開使用者選單再找「登出」；`AppSidebar.test.tsx` 兩處：個人資料改從選單找、收合後的名稱清單換成五項；`ThemeToggle.test.tsx`：協調者核可改寫，意圖「全站同時只有一組外觀控制項」不變）。
+- 協調者驗收時修正：側欄收合時，第二層設定選單用 `top` 對齊「設定」而超出視窗底部，「深色」被切掉。改成用 `bottom` 對齊第一層（`7a2cd3c`）。
+- 量測：1440 深淺兩色，收合前後 6 個 icon 位移 0px；1024 浮動展開時 `<main>` 的 x 維持 72。
+
+**W2（記帳頁）**：commit `9da9a61`。
+
+- 依追加需求，dashboard 最近交易每筆一個 `<li>`，文字含分類、備註、日期、帳戶與交易表格同格式的金額，整列是一顆按鈕。
+- 協調者驗收時修正：
+  1. W2 因為 `TransactionList` 的正負號對照表是模組私有，在 `HomePage` 複製了一份。收攏成 `lib/format.ts` 的 `formatTransactionAmount`，兩處共用並補單元測試（`993df9c`）。
+  2. dashboard 的卡片只有交易表格一半寬，一行擠日期、分類、備註、帳戶、金額，備註被截斷。改成兩行：上行「分類 備註」、下行「日期・帳戶」（`1b1905e`）。
+- merge 後沒有衝突；W1、W2 各自預期會紅的 `LedgerSwitcher.test.tsx`、`AppSidebar.test.tsx` 合起來全綠。
+
+### Step 3（整合驗證）
+
+- web e2e **35 條全過**（原 27 ＋ 新 8），第一次就綠；api e2e 65 條全過。
+- 反向驗證：在收合狀態的導覽加 6px 內距 → SC-31.1 紅（`Received: 6`），還原後綠。
+- 根目錄 `pnpm test`：api 212；web 51 檔 343 條（基準 46 檔 294）。**有一次** web 出現 1 條失敗，當時沒有抓到測試名稱；之後連續 5 次全綠。與 2h 記錄過的「api 與 web 同時跑時的負載逾時」同型，列為已知的偶發問題。
+- lint、typecheck、format:check、build 全綠。
+- 截圖（假 API）：375／390／1024／1440 × 深淺兩色 × 首頁／交易／帳戶，另有側欄收合、使用者選單兩層、1024 浮動展開。全部沒有橫向捲動、沒有 console 錯誤。
