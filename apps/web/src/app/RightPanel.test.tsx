@@ -24,7 +24,7 @@ function Controls() {
       <button onClick={panel.open}>打開</button>
       <button onClick={panel.close}>收起</button>
       <button onClick={panel.requestFocus}>要求焦點</button>
-      <button onClick={() => navigate('/elsewhere')}>換網址</button>
+      <button onClick={() => void navigate('/elsewhere')}>換網址</button>
       <output aria-label="焦點請求">{panel.focusRequest}</output>
     </>
   );
