@@ -305,3 +305,10 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 
 - **側欄的使用者區塊只顯示名字，email 改放 `title` 提示**（原 W1 規格是名字＋email）。W1 回報：側欄印出 email 後，`members.test.tsx:102` 用 `getByText(email)` 找成員列會對到兩個；e2e 的 `ledgers.spec.ts:103、128` 也用 `getByText(email)`，目前剛好是不同人的 email 才沒撞。改成只顯示名字，兩邊都不用動。
 - W3、W4b 已驗收並 merge（`aee6cff`、`9c1b2f6`）。兩者都回報 `transaction-edit` 的 prefills 逾時，已列入 todo 3.6。
+- W1、W2、W4a 已驗收並 merge。整合後根目錄 `pnpm test` 連跑 3 次全綠（api 119、web 45 檔 289 條）。W1 在 `src/test/setup.ts` 加了 `configure({ asyncUtilTimeout: 5000 })`（協調者核可），解決 todo 3.6；3.7 由協調者修。
+
+**2026-09-23 開發者的三個決定**
+
+1. SC-24.3 改以 1440×900 驗收（spec §4.8）。
+2. PR-A 可以合併。
+3. worker 用 Claude Code Opus 5 **只限這次**，`CLAUDE.md` §11 不改。

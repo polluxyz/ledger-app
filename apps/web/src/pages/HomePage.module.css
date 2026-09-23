@@ -74,15 +74,16 @@
 }
 
 /* 三張「即將推出」的統計卡（D5：原樣保留，只換樣式）。 */
+/* 統計卡刻意壓矮（spec §4.8）：它們目前只是佔位，不該吃掉首屏的交易筆數。 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-md);
 }
 
 .stat {
-  padding: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   border: var(--card-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
