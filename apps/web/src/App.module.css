@@ -1,14 +1,14 @@
 /*
- * 外殼：頂列橫跨全寬，其下才是「側邊欄 + 內容」。
+ * 外殼：頂列橫跨全寬，其下才是「側欄 + 內容」。
  *
- * 這裡原本是 `max-width: 40rem`，把全站鎖在一根 640px 的窄欄裡置中——
- * 那是手機 App 的形狀。改成 dashboard 版面的理由見
- * `docs/specs/phase-2f-web-layout.md`。
+ * 登入後 ≥ 901px 的頂列整條被 CSS 隱藏（見 `AppTopBar.module.css`），
+ * 那時畫面上就只有「全高側欄 + 內容」兩欄。訪客與 ≤ 900px 才會看到頂列。
  */
 .shell {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  background-color: var(--color-bg);
 }
 
 .body {
@@ -19,16 +19,21 @@
 
 /*
  * 內容區。`min-width: 0` 不能省——flex 子元素的預設最小寬度是內容寬度，
- * 少了它，寬表格或長備註會把整個版面撐出橫向捲動，而側邊欄跟著被擠掉。
+ * 少了它，寬表格或長備註會把整個版面撐出橫向捲動，而側欄跟著被擠掉。
  *
- * `max-width` 讓文字不會在超寬螢幕上拉成一長條；`margin: 0 auto` 讓它在
- * 側邊欄右側的剩餘空間裡置中。
+ * 2h 拿掉了 `max-width` 與置中（2f 的做法）：三欄版面要用滿整個寬度，
+ * 各頁自己決定內容的最大寬度。留白必須是 `--space-xl`——首頁的右側面板
+ * 用負 margin 貼齊 main 的邊緣，那個負值對應的就是這個數字。
  */
 .main {
   flex: 1;
   min-width: 0;
   width: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: var(--space-lg);
+  padding: var(--space-xl);
+}
+
+@media (max-width: 900px) {
+  .main {
+    padding: var(--space-md);
+  }
 }

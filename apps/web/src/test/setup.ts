@@ -3,7 +3,21 @@
  * DOM 專用的斷言，讓元件測試讀起來更貼近使用者觀點。
  */
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
 import { beforeEach, vi } from 'vitest';
+
+/**
+ * `findBy*` 這類非同步查詢的等待上限，從預設的 1000ms 放寬到 5000ms。
+ *
+ * 根目錄的 `pnpm test` 會讓 api 的 Jest 與 web 的 vitest **同時**跑。CPU 吃滿時，
+ * 元件從送出請求到把結果畫出來會多花幾百毫秒，1000ms 的餘裕太薄——
+ * `transaction-edit`、`transfer`、`ledgers` 都被觀察到在這種情況下逾時。
+ * 那些不是邏輯錯誤：同一個檔案單獨跑一律通過。
+ *
+ * 這裡只延長「最多等多久」，不改任何斷言。通過的測試不會因此變慢：查詢一找到
+ * 元素就回來，多出來的等待只發生在真的失敗的那一次。
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * jsdom 尚未實作 `<dialog>` 的 `showModal()`、`show()` 與 `close()`，補上最小的替身。
