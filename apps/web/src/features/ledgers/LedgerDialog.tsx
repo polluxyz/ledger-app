@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { LedgerKind } from '@ledger/shared';
 import { Button } from '../../components/Button';
-import { Dialog } from '../../components/Dialog';
+import { Dialog, type DialogVariant } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { TextField } from '../../components/TextField';
 import { ApiError } from '../../lib/api-client';
@@ -14,24 +14,26 @@ import styles from './LedgerDialog.module.css';
 interface LedgerDialogProps {
   open: boolean;
   onClose: () => void;
+  /** `modal`（預設）是彈窗；`panel` 是帳本頁往下展開的非 modal 面板（2h D20）。 */
+  variant?: DialogVariant;
 }
 
 /**
- * 建立帳本的表單彈窗。
+ * 建立帳本的表單。
  *
  * 由上到下：名稱 → 帳本類型 → （選共享才展開的）參與者 → 是否連動帳戶。
  * 一頁到底，不做兩步精靈——兩組選擇還撐不起一個「下一步」。
  *
  * `kind` 與 `tracksBalance` 都是**建立後不可變更**的，兩組下面各寫明這件事。
  */
-export function LedgerDialog({ open, onClose }: LedgerDialogProps) {
+export function LedgerDialog({ open, onClose, variant = 'modal' }: LedgerDialogProps) {
   if (!open) {
     return null;
   }
-  return <LedgerDialogForm onClose={onClose} />;
+  return <LedgerDialogForm onClose={onClose} variant={variant} />;
 }
 
-function LedgerDialogForm({ onClose }: { onClose: () => void }) {
+function LedgerDialogForm({ onClose, variant }: { onClose: () => void; variant: DialogVariant }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<LedgerKind>('PERSONAL');
   const [tracksBalance, setTracksBalance] = useState(true);
@@ -102,7 +104,7 @@ function LedgerDialogForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog open title="建立帳本" onClose={onClose}>
+    <Dialog open title="建立帳本" onClose={onClose} variant={variant}>
       <form onSubmit={(event) => void handleSubmit(event)} noValidate>
         <FormError error={createLedger.error} />
 

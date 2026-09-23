@@ -1,3 +1,7 @@
+/*
+ * 建立共享帳本時的參與者清單。落在表單裡，欄位間用虛線分開——
+ * 「一位參與者」是清單上的一列，不是表單裡的一個區塊。
+ */
 .group {
   margin: 0 0 var(--space-md);
   padding: var(--space-md);
@@ -7,14 +11,14 @@
 
 .legend {
   padding: 0 var(--space-xs);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
 .hint {
   margin: 0 0 var(--space-md);
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
 .row + .row {
@@ -23,25 +27,33 @@
   border-top: 1px dashed var(--color-border);
 }
 
+/* 小型文字按鈕：加一位／移除一位都是次要動作，不跟「建立」搶主要按鈕的位置。 */
 .remove,
 .add {
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background-color: var(--color-surface);
+  background-color: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
+.remove:hover:not(:disabled),
+.add:hover:not(:disabled) {
+  background-color: var(--color-fill);
+}
+
+/* 移除是危險方向：文字用 danger，框用半透明的 danger 軟化，不至於滿列紅。 */
 .remove {
   color: var(--color-danger);
-  border-color: #f3c6c6;
+  border-color: var(--color-danger-soft);
 }
 
 .add {
   margin-top: var(--space-md);
+  color: var(--color-accent);
 }
 
 .remove:disabled,
@@ -54,5 +66,5 @@
 .error {
   margin: var(--space-xs) 0 0;
   color: var(--color-danger);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }

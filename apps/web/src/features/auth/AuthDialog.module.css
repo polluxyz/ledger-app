@@ -1,19 +1,20 @@
-/**
+/*
  * 只剩「切換登入／註冊」那一行的樣式。彈窗外殼（.dialog / .header / .title /
  * .close）已搬到 components/Dialog.module.css 供所有彈窗共用。
  */
 .switch {
   margin: var(--space-md) 0 0;
-  font-size: 0.875rem;
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
   text-align: center;
 }
 
+/* 做成按鈕（切換不是換頁），但長得像連結——用強調色，與整頁版的「註冊」一致。 */
 .link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-primary);
+  color: var(--color-accent);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

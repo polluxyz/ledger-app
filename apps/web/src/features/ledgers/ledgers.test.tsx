@@ -268,4 +268,28 @@ describe('Ledgers page', () => {
     expect(created).toHaveLength(1);
     expect(addCalls).toBe(2);
   });
+
+  // ── 往下展開的建立表單（2h SC-30）─────────────────────────────────────────
+
+  it('toggles the create form open and shut from the same button', async () => {
+    routeFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+    await screen.findByRole('link', { name: '個人帳本' });
+
+    const trigger = screen.getByRole('button', { name: '建立帳本' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+
+    // 往下展開之後它仍然是 dialog、名稱不變——e2e 就是靠這個名稱找到表單的。
+    expect(screen.getByRole('dialog', { name: '建立帳本' })).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(trigger);
+
+    expect(screen.queryByRole('dialog', { name: '建立帳本' })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
 });

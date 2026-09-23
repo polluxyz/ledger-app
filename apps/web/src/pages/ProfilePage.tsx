@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { AuthUser } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
+import { PageHeader } from '../components/PageHeader';
 import { TextField } from '../components/TextField';
 import { useCurrentUser, useUpdateProfile } from '../features/auth/use-current-user';
 import styles from './ProfilePage.module.css';
@@ -20,14 +21,21 @@ import styles from './ProfilePage.module.css';
 export default function ProfilePage() {
   const user = useCurrentUser();
 
+  // 載入中與載入失敗也戴上頁首：標題一開始就落在該在的位置，
+  // 資料回來時只有卡片出現，標題不會晚一拍才跳出來。
   if (user.isLoading) {
-    return <p className={styles.status}>載入中…</p>;
+    return (
+      <section className={styles.page}>
+        <PageHeader title="個人資料" />
+        <p className={styles.status}>載入中…</p>
+      </section>
+    );
   }
 
   if (user.error || !user.data) {
     return (
       <section className={styles.page}>
-        <h2 className={styles.title}>個人資料</h2>
+        <PageHeader title="個人資料" />
         <p className={styles.status}>無法載入個人資料，請稍後再試。</p>
       </section>
     );
@@ -48,33 +56,35 @@ function ProfileForm({ user }: { user: AuthUser }) {
 
   return (
     <section className={styles.page}>
-      {/* 站名是 AppTopBar 的 h1，頁面標題往下一級。 */}
-      <h2 className={styles.title}>個人資料</h2>
+      <PageHeader title="個人資料" />
 
-      <div className={styles.email}>
-        <span className={styles.emailLabel}>Email</span>
-        <p className={styles.emailValue}>
-          {user.email}
-          <span className={styles.emailNote}>Email 不可變更</span>
-        </p>
+      {/* 一張卡片裝完這一頁：上半是看的（Email），分隔線以下是改的（顯示名稱）。 */}
+      <div className={styles.card}>
+        <div>
+          <span className={styles.emailLabel}>Email</span>
+          <p className={styles.emailValue}>
+            {user.email}
+            <span className={styles.emailNote}>Email 不可變更</span>
+          </p>
+        </div>
+
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          <FormError error={updateProfile.error} />
+
+          <TextField
+            label="顯示名稱"
+            value={name}
+            required
+            maxLength={100}
+            onChange={(event) => setName(event.target.value)}
+          />
+
+          {/* 失敗時什麼都不清、不重設——使用者剛打的字不能消失。 */}
+          <Button type="submit" disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? '儲存中…' : '儲存'}
+          </Button>
+        </form>
       </div>
-
-      <form onSubmit={handleSubmit} noValidate>
-        <FormError error={updateProfile.error} />
-
-        <TextField
-          label="顯示名稱"
-          value={name}
-          required
-          maxLength={100}
-          onChange={(event) => setName(event.target.value)}
-        />
-
-        {/* 失敗時什麼都不清、不重設——使用者剛打的字不能消失。 */}
-        <Button type="submit" disabled={updateProfile.isPending}>
-          {updateProfile.isPending ? '儲存中…' : '儲存'}
-        </Button>
-      </form>
     </section>
   );
 }
