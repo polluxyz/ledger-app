@@ -268,6 +268,26 @@ describe('Categories page', () => {
     expect(screen.getByRole('dialog', { name: '新增支出分類' })).toBeInTheDocument();
   });
 
+  it('keeps only one create form expanded at a time', async () => {
+    routeFetch();
+    const user = userEvent.setup();
+    renderPage();
+
+    const expense = await screen.findByRole('button', { name: '新增支出分類' });
+    const income = screen.getByRole('button', { name: '新增收入分類' });
+
+    await user.click(expense);
+    await user.click(income);
+
+    // SC-30.5：兩個型別各有一顆新增鈕，但頁面上只能有一張新增表單——
+    // 兩張同時展開的話，使用者打完字按「新增」根本分不清建到哪一組。
+    expect(screen.getByRole('dialog', { name: '新增收入分類' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '新增支出分類' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(expense).toHaveAttribute('aria-expanded', 'false');
+    expect(income).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('updates the list after a rename', async () => {
     routeFetch();
     const user = userEvent.setup();

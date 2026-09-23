@@ -1,30 +1,52 @@
+/*
+ * 全站按鈕的基底樣式（phase-2h SC-26）。
+ *
+ * 高度固定 2.25rem、垂直內距歸零：與 TextField／Select 同高，篩選列才能把
+ * 所有欄位切齊（SC-28）。顏色一律走 token——深色金底、淺色黑底金字，
+ * 這裡不該出現任何色碼。
+ */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
+  height: 2.25rem;
+  padding: 0 var(--space-md);
   border: 1px solid transparent;
   border-radius: var(--radius);
   font: inherit;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  /* 「新增支出分類」這類文字不該在窄容器裡被折成兩行。 */
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* 主要動作。字色用 on-primary token：深色是金底配暗字、淺色是黑底配金字，
+   寫死 #fff 在淺色模式的黑底金扣上是錯的。 */
 .primary {
   background-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
+.primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+/* 次要動作：與內容同底的「安靜」按鈕，靠框線標示界線、滑過浮出底色。 */
 .secondary {
   background-color: var(--color-surface);
   color: var(--color-text);
   border-color: var(--color-border);
+}
+
+.secondary:hover:not(:disabled) {
+  background-color: var(--color-fill);
 }
 
 .block {

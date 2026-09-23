@@ -4,7 +4,10 @@ import type { Category, CategoryType, LedgerSummary } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
+import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import { Select } from '../components/Select';
+import { SlideDown } from '../components/SlideDown';
 import { CategoryDialog } from '../features/categories/CategoryDialog';
 import { CategoryList } from '../features/categories/CategoryList';
 import { useCategories, useDeleteCategory } from '../features/categories/use-categories';
@@ -74,13 +77,9 @@ export default function CategoriesPage() {
 
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
-        {/* 站名是 AppTopBar 的 h1，頁面標題往下一級。 */}
-        <h2 className={styles.title}>分類</h2>
-        {/* 一行小字講清楚「現在管的是哪一本」。只有一本帳本時不畫下拉，
-            這行就是帳本名的顯示處（比照 LedgerSwitcher 的做法）。 */}
-        <p className={styles.subtitle}>目前管理「{ledger.name}」的分類</p>
-      </header>
+      {/* 說明文字講清楚「現在管的是哪一本」。只有一本帳本時不畫下拉，
+          這行就是帳本名的唯一顯示處（比照 LedgerSwitcher 的做法）。 */}
+      <PageHeader title="分類" description={`目前管理「${ledger.name}」的分類`} />
 
       {notFound && (
         <p className={styles.notice}>找不到指定的帳本，已改為顯示『{ledger.name}』的分類。</p>
@@ -129,17 +128,22 @@ export default function CategoriesPage() {
 }
 
 /**
- * 單一帳本的分類區：支出與收入兩個區塊，加上新增／改名／刪除的彈窗。
+ * 單一帳本的分類區：支出與收入兩個區塊，加上新增／改名／刪除的表單。
  * 與外層分開，是為了讓 `key={ledger.id}` 能連彈窗狀態一起重置（見上方說明）。
+ *
+ * **`editing` 只存一個目標**，所以「同一時間只展開一個新增表單」（SC-30.5）
+ * 是這個資料結構自然的結果，不必另外記一份開關。
  */
 function LedgerCategories({ ledger, canEdit }: { ledger: LedgerSummary; canEdit: boolean }) {
-  const expenses = useCategories(ledger.id, 'EXPENSE');
-  const incomes = useCategories(ledger.id, 'INCOME');
   const deleteCategory = useDeleteCategory(ledger.id);
 
   // null = 關閉；{ type } = 新增那個型別；分類物件 = 改名那一筆。
   const [editing, setEditing] = useState<Category | { type: CategoryType } | null>(null);
   const [removing, setRemoving] = useState<Category | null>(null);
+
+  // 新增（往下展開）與改名（小視窗）兩種目標拆開看，下面兩處各自只關心一種。
+  const creating = editing !== null && !('id' in editing) ? editing.type : null;
+  const renaming = editing !== null && 'id' in editing ? editing : null;
 
   function closeRemove() {
     setRemoving(null);
@@ -156,38 +160,26 @@ function LedgerCategories({ ledger, canEdit }: { ledger: LedgerSummary; canEdit:
   }
 
   return (
-    <div>
-      <section className={styles.group}>
-        <header className={styles.groupHeader}>
-          <h3 className={styles.groupTitle}>支出（{expenses.data?.length ?? 0}）</h3>
-          {canEdit && <Button onClick={() => setEditing({ type: 'EXPENSE' })}>新增支出分類</Button>}
-        </header>
-        <CategoryList
-          categories={expenses.data ?? []}
-          isLoading={expenses.isLoading}
-          error={expenses.error}
-          canEdit={canEdit}
-          onEdit={setEditing}
-          onRemove={setRemoving}
-        />
-      </section>
+    <>
+      <div className={styles.groups}>
+        {(['EXPENSE', 'INCOME'] as const).map((type) => (
+          <CategoryGroup
+            key={type}
+            ledgerId={ledger.id}
+            type={type}
+            canEdit={canEdit}
+            creating={creating === type}
+            // 按第二次收起。換成另一個型別時，上一個自然收起（同一份 state）。
+            onToggleCreate={() => setEditing(creating === type ? null : { type })}
+            onCloseCreate={() => setEditing(null)}
+            onEdit={setEditing}
+            onRemove={setRemoving}
+          />
+        ))}
+      </div>
 
-      <section className={styles.group}>
-        <header className={styles.groupHeader}>
-          <h3 className={styles.groupTitle}>收入（{incomes.data?.length ?? 0}）</h3>
-          {canEdit && <Button onClick={() => setEditing({ type: 'INCOME' })}>新增收入分類</Button>}
-        </header>
-        <CategoryList
-          categories={incomes.data ?? []}
-          isLoading={incomes.isLoading}
-          error={incomes.error}
-          canEdit={canEdit}
-          onEdit={setEditing}
-          onRemove={setRemoving}
-        />
-      </section>
-
-      <CategoryDialog ledgerId={ledger.id} target={editing} onClose={() => setEditing(null)} />
+      {/* 改名維持小視窗（§4.7）。新增那一份在各自區塊的 SlideDown 裡。 */}
+      <CategoryDialog ledgerId={ledger.id} target={renaming} onClose={() => setEditing(null)} />
 
       <ConfirmDialog
         open={removing !== null}
@@ -199,6 +191,77 @@ function LedgerCategories({ ledger, canEdit }: { ledger: LedgerSummary; canEdit:
         onConfirm={confirmRemove}
         onCancel={closeRemove}
       />
-    </div>
+    </>
+  );
+}
+
+interface CategoryGroupProps {
+  ledgerId: string;
+  type: CategoryType;
+  canEdit: boolean;
+  /** 這一組的新增表單是不是展開著。 */
+  creating: boolean;
+  onToggleCreate: () => void;
+  onCloseCreate: () => void;
+  onEdit: (category: Category) => void;
+  onRemove: (category: Category) => void;
+}
+
+/**
+ * 一個型別的區塊：標題列（計數與新增鈕）、往下展開的新增表單、清單。
+ *
+ * 支出與收入只差型別，所以做成一個元件渲染兩次——複製兩份的話，下次改標題列
+ * 就會有一邊忘記改。清單的請求放在這一層，計數才拿得到自己那一組的長度。
+ */
+function CategoryGroup({
+  ledgerId,
+  type,
+  canEdit,
+  creating,
+  onToggleCreate,
+  onCloseCreate,
+  onEdit,
+  onRemove,
+}: CategoryGroupProps) {
+  const categories = useCategories(ledgerId, type);
+  // 標題與按鈕的文字是 e2e 的選取器，一字都不能改。
+  const label = type === 'EXPENSE' ? '支出' : '收入';
+  const createLabel = type === 'EXPENSE' ? '新增支出分類' : '新增收入分類';
+
+  return (
+    <section className={styles.group}>
+      <header className={styles.groupHeader}>
+        <h3 className={styles.groupTitle}>
+          {label}（{categories.data?.length ?? 0}）
+        </h3>
+        {canEdit && (
+          <Button aria-expanded={creating} onClick={onToggleCreate}>
+            <Icon name="plus" />
+            {createLabel}
+          </Button>
+        )}
+      </header>
+
+      <SlideDown open={creating}>
+        {/* 面板本身沒有外框（Dialog 的 panel 變體刻意不畫），這張卡片就是它的外框。 */}
+        <div className={styles.panel}>
+          <CategoryDialog
+            ledgerId={ledgerId}
+            target={{ type }}
+            variant="panel"
+            onClose={onCloseCreate}
+          />
+        </div>
+      </SlideDown>
+
+      <CategoryList
+        categories={categories.data ?? []}
+        isLoading={categories.isLoading}
+        error={categories.error}
+        canEdit={canEdit}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
+    </section>
   );
 }
