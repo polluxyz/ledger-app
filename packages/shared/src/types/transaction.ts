@@ -1,5 +1,6 @@
 /**
- * 一筆交易是「支出」「收入」還是「轉帳」。與 Prisma 的 `TransactionType` enum 值
+ * 一筆交易的型別：支出、收入、轉帳，以及借還帳的 4 種（見 `DEBT_TRANSACTION_TYPES`）。
+ * 與 Prisma 的 `TransactionType` enum 值
  * 對應，放在這裡是為了讓前端也能共用，而不必 import 後端產生的程式碼。宣告成
  * const tuple，好讓這組值也能重用於執行期驗證。
  *
@@ -7,8 +8,42 @@
  * ——錢只是換了地方，總額沒變。做成獨立型別而非「兩筆連動交易」，是因為一筆就是
  * 一件事，不會產生孤兒或金額不一致，統計時也不必記得排除。
  */
-export const TRANSACTION_TYPES = ['EXPENSE', 'INCOME', 'TRANSFER'] as const;
+export const TRANSACTION_TYPES = [
+  'EXPENSE',
+  'INCOME',
+  'TRANSFER',
+  'LEND',
+  'BORROW',
+  'COLLECT',
+  'REPAY',
+] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+/**
+ * 使用者可以在 `/ledgers/{id}/transactions` 直接建立或改成的型別。
+ *
+ * 借還的 4 種型別刻意不在這裡：它們只能從債務端點產生（見 `DEBT_TRANSACTION_TYPES`），
+ * 否則交易金額會與債務的本金、還款對不起來。
+ */
+export const MANUAL_TRANSACTION_TYPES = ['EXPENSE', 'INCOME', 'TRANSFER'] as const;
+export type ManualTransactionType = (typeof MANUAL_TRANSACTION_TYPES)[number];
+
+/**
+ * 借還帳（階段三 3b）產生的交易型別。資金方向固定，**不算收入也不算支出**：
+ *
+ * - `LEND` 借出、`REPAY` 償還：錢從帳戶出去。
+ * - `BORROW` 借入、`COLLECT` 收回：錢進到帳戶。
+ *
+ * 使用者不會自己挑這 4 種：建立債務時說「我借出／我借入」，記還款時由系統依角色決定
+ * `COLLECT` 或 `REPAY`。這類交易在一般交易端點是唯讀的。
+ */
+export const DEBT_TRANSACTION_TYPES = ['LEND', 'BORROW', 'COLLECT', 'REPAY'] as const;
+export type DebtTransactionType = (typeof DEBT_TRANSACTION_TYPES)[number];
+
+/** 這筆交易是不是借還帳產生的（在一般交易端點唯讀）。 */
+export function isDebtTransactionType(type: TransactionType): type is DebtTransactionType {
+  return (DEBT_TRANSACTION_TYPES as readonly TransactionType[]).includes(type);
+}
 
 /**
  * 分類可以掛的型別。分類只服務於支出與收入——轉帳沒有分類（「從銀行領錢」不屬於
@@ -46,6 +81,11 @@ export interface Transaction {
   toAccount: TransactionRef | null;
   /** 由誰記下（僅供顯示／稽核；共享帳本下任何 editor 都可編輯任何一筆）。 */
   creator: TransactionRef;
+  /**
+   * 借還交易所屬的債務 id。**只有債務擁有者看得到**：共享帳本的其他成員看得到這筆
+   * 交易，但看不到背後的債務，對他們一律是 `null`。一般交易也是 `null`。
+   */
+  debtId: string | null;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }
@@ -67,7 +107,7 @@ export interface Transaction {
  * 「連動帳本」指 `tracksBalance: true` 的帳本（預設）。
  */
 export interface CreateTransactionRequest {
-  type: TransactionType;
+  type: ManualTransactionType;
   amount: number;
   date: string;
   /** 支出／收入必填；轉帳不可填。須屬於同一帳本、且型別一致。 */
@@ -84,7 +124,7 @@ export interface CreateTransactionRequest {
  * 所有欄位皆可選，只有送出的欄位會被更新；合併後仍須滿足上表的條件必填規則。
  */
 export interface UpdateTransactionRequest {
-  type?: TransactionType;
+  type?: ManualTransactionType;
   amount?: number;
   date?: string;
   categoryId?: string;

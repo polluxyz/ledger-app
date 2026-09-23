@@ -1,7 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  DebtTransactionType,
   ErrorCode,
+  isDebtTransactionType,
   ListTransactionsQuery,
+  ManualTransactionType,
   Paginated,
   Transaction,
   TransactionRef,
@@ -49,6 +52,9 @@ interface TransactionRow {
   account: AccountRef | null;
   toAccount: AccountRef | null;
   creator: { id: string; name: string };
+  // 借還帳（3b）：外鍵在債務那一側，所以從交易反查。只取判斷「檢視者是不是擁有者」所需的欄位。
+  debtPrincipal: { id: string; ownerId: string } | null;
+  debtPayment: { debt: { id: string; ownerId: string } } | null;
 }
 
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
@@ -58,10 +64,12 @@ const TRANSACTION_INCLUDE = {
   account: { select: { id: true, name: true, userId: true } },
   toAccount: { select: { id: true, name: true, userId: true } },
   creator: { select: { id: true, name: true } },
+  debtPrincipal: { select: { id: true, ownerId: true } },
+  debtPayment: { select: { debt: { select: { id: true, ownerId: true } } } },
 } as const;
 
 interface CreateTransactionInput {
-  type: TransactionType;
+  type: ManualTransactionType;
   amount: number;
   date: string;
   categoryId?: string;
@@ -71,7 +79,7 @@ interface CreateTransactionInput {
 }
 
 interface UpdateTransactionInput {
-  type?: TransactionType;
+  type?: ManualTransactionType;
   amount?: number;
   date?: string;
   categoryId?: string;
@@ -182,6 +190,7 @@ export class TransactionsService {
     input: UpdateTransactionInput,
   ): Promise<Transaction> {
     const existing = await this.findActive(ledgerId, transactionId);
+    this.assertNotDebtTransaction(existing.type);
 
     const finalType = input.type ?? existing.type;
     const becomesTransfer = finalType === 'TRANSFER';
@@ -224,10 +233,100 @@ export class TransactionsService {
 
   /** 軟刪除一筆交易（設 deletedAt）；資料列保留以利稽核。 */
   async remove(ledgerId: string, transactionId: string): Promise<void> {
-    await this.findActive(ledgerId, transactionId);
+    const existing = await this.findActive(ledgerId, transactionId);
+    this.assertNotDebtTransaction(existing.type);
     await this.prisma.transaction.update({
       where: { id: transactionId },
       data: { deletedAt: new Date() },
+    });
+  }
+
+  /**
+   * 借還交易在一般交易端點是唯讀的（spec 3b 決策 4）。改它的金額或刪掉它，債務的本金與
+   * 還款就會跟帳戶對不起來；要改請走債務端點，那裡會一起改債務與交易。
+   *
+   * 新增交易時擋不到這裡：create / update 的 DTO 只接受 `MANUAL_TRANSACTION_TYPES`，
+   * 借還型別在驗證那一層就回 400。這裡擋的是「對既有的借還交易動手」。
+   */
+  private assertNotDebtTransaction(type: TransactionType): void {
+    if (isDebtTransactionType(type)) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.DEBT_TRANSACTION_READ_ONLY,
+        'This transaction belongs to a debt; change it through the debt instead.',
+      );
+    }
+  }
+
+  // ── 借還帳（3b）專用。只給 DebtsModule 呼叫，沒有對應的 HTTP 端點。 ──────────
+
+  /**
+   * 在呼叫端的資料庫交易（`client`）裡寫一筆借還交易，回傳它的 id。
+   *
+   * **帳本權限不在這裡檢查**：呼叫端必須先用 `assertLedgerWritable` 確認呼叫者至少是
+   * EDITOR、帳本未封存。這裡只沿用一般交易的帳戶規則——連動帳本必填帳戶、非連動帳本
+   * 不可填、帳戶必須屬於本人（`assertAccountRules`）。借還交易沒有分類。
+   */
+  async createDebtTransaction(
+    client: Prisma.TransactionClient,
+    input: {
+      ledgerId: string;
+      creatorId: string;
+      type: DebtTransactionType;
+      amount: number;
+      date: Date;
+      accountId?: string;
+    },
+  ): Promise<string> {
+    const accounts = { accountId: input.accountId };
+    await this.assertAccountRules(input.ledgerId, input.creatorId, input.type, accounts, accounts);
+
+    const created = await client.transaction.create({
+      data: {
+        ledgerId: input.ledgerId,
+        creatorId: input.creatorId,
+        type: input.type,
+        amount: input.amount,
+        date: input.date,
+        // 借還交易一律不帶備註：共享帳本的其他成員看得到這筆交易（決策 13），但債務的備註屬於
+        // 債務擁有者的私人記錄（spec §3.5）。擁有者要看備註，從交易的 debtId 回到債務即可。
+        note: null,
+        accountId: input.accountId ?? null,
+        categoryId: null,
+        toAccountId: null,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
+  /** 債務的本金或日期改了，對應的交易一起改。只動金額與日期，帳本與帳戶不變。 */
+  async updateDebtTransaction(
+    client: Prisma.TransactionClient,
+    transactionId: string,
+    input: { amount?: number; date?: Date },
+  ): Promise<void> {
+    await client.transaction.update({
+      where: { id: transactionId },
+      data: {
+        ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.date !== undefined ? { date: input.date } : {}),
+      },
+    });
+  }
+
+  /** 刪除債務或還款時，對應的交易一起軟刪除。已刪除的不會被重設時間。 */
+  async softDeleteDebtTransactions(
+    client: Prisma.TransactionClient,
+    transactionIds: string[],
+    deletedAt: Date,
+  ): Promise<void> {
+    if (transactionIds.length === 0) {
+      return;
+    }
+    await client.transaction.updateMany({
+      where: { id: { in: transactionIds }, deletedAt: null },
+      data: { deletedAt },
     });
   }
 
@@ -421,8 +520,20 @@ export class TransactionsService {
       account: this.visibleAccount(row.account, viewerUserId),
       toAccount: this.visibleAccount(row.toAccount, viewerUserId),
       creator: { id: row.creator.id, name: row.creator.name },
+      debtId: this.visibleDebtId(row, viewerUserId),
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * 借還交易背後的債務 id，只給債務的擁有者看（spec 3b §3.5 最後一列）。
+   *
+   * 共享帳本的其他成員看得到這筆交易（決策 13），但債務是擁有者的個人記錄——連「它存在」
+   * 都不該透露，所以對他們一律是 `null`，與一般交易無從區分。
+   */
+  private visibleDebtId(row: TransactionRow, viewerUserId: string): string | null {
+    const debt = row.debtPrincipal ?? row.debtPayment?.debt ?? null;
+    return debt !== null && debt.ownerId === viewerUserId ? debt.id : null;
   }
 
   /**

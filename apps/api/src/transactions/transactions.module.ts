@@ -10,5 +10,7 @@ import { TransactionsService } from './transactions.service';
   imports: [LedgersModule],
   controllers: [TransactionsController],
   providers: [TransactionsService],
+  // 匯出給 DebtsModule：借還交易由債務端點產生，但寫入規則（帳戶規則、唯讀）只在這裡一份。
+  exports: [TransactionsService],
 })
 export class TransactionsModule {}

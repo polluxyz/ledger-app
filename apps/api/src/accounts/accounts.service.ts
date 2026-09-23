@@ -21,6 +21,31 @@ interface AccountRow {
   createdAt: Date;
 }
 
+/**
+ * 一筆交易對它的 `accountId` 是加（+1）還是減（−1）。轉帳的「轉入」另外算，不經過這裡。
+ *
+ * 刻意逐一列舉每個型別，而不是「INCOME 加、其他一律減」：後者在借還帳加入 `BORROW`、
+ * `COLLECT` 時會默默把錢進來算成錢出去。`default` 分支的 `never` 讓新增型別卻忘了處理時，
+ * typecheck 直接失敗（spec 3b §4.1、SC-D2）。
+ */
+function directionOf(type: Prisma.TransactionGroupByOutputType['type']): 1 | -1 {
+  switch (type) {
+    case 'INCOME':
+    case 'BORROW': // 借入：錢進到帳戶
+    case 'COLLECT': // 收回：錢進到帳戶
+      return 1;
+    case 'EXPENSE':
+    case 'TRANSFER': // 轉出
+    case 'LEND': // 借出：錢從帳戶出去
+    case 'REPAY': // 償還：錢從帳戶出去
+      return -1;
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled transaction type: ${String(unhandled)}`);
+    }
+  }
+}
+
 @Injectable()
 export class AccountsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -45,6 +70,8 @@ export class AccountsService {
    *      + Σ INCOME   (accountId   = A)
    *      − Σ EXPENSE  (accountId   = A)
    *      − Σ TRANSFER (accountId   = A)   // 轉出
+   *      + Σ BORROW、COLLECT (accountId = A)   // 借入、收回（3b）
+   *      − Σ LEND、REPAY     (accountId = A)   // 借出、償還（3b）
    *      + Σ TRANSFER (toAccountId = A)   // 轉入
    * ```
    *
@@ -69,7 +96,7 @@ export class AccountsService {
     };
 
     const [outgoing, incoming] = await Promise.all([
-      // 這個帳戶作為「交易的帳戶」時的三種加總：收入加、支出減、轉出減。
+      // 這個帳戶作為「交易的帳戶」時的加總，方向由 directionOf 依型別決定。
       this.prisma.transaction.groupBy({
         by: ['accountId', 'type'],
         where: { ...countedTransactions, accountId: { in: accountIds } },
@@ -88,7 +115,7 @@ export class AccountsService {
         continue; // where 已排除，這裡只是讓型別收斂
       }
       const sum = group._sum.amount ?? 0;
-      const delta = group.type === 'INCOME' ? sum : -sum; // EXPENSE 與 TRANSFER 都是減
+      const delta = directionOf(group.type) * sum;
       balances.set(group.accountId, (balances.get(group.accountId) ?? 0) + delta);
     }
 

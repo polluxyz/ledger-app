@@ -87,6 +87,7 @@ describe('TransactionsService', () => {
       account: { id: accountId, name: '現金' },
       toAccount: null,
       creator: { id: creatorId, name: 'Alice' },
+      debtId: null,
       createdAt: joined.createdAt.toISOString(),
     });
   });
@@ -425,5 +426,130 @@ describe('TransactionsService', () => {
         where: { id: 'txn-x', ledgerId, deletedAt: null },
       }),
     );
+  });
+
+  // ── 借還帳（3b） ──────────────────────────────────────────────────────────
+
+  // SC-D8：借還交易在一般交易端點唯讀。4 種型別 × 修改與刪除，一律 409 且不寫入。
+  describe('debt transactions are read-only here (SC-D8)', () => {
+    const debtTypes = ['LEND', 'BORROW', 'COLLECT', 'REPAY'] as const;
+
+    it.each(debtTypes)('refuses to update a %s transaction', async (type) => {
+      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId, type });
+
+      await expect(
+        service.update(ledgerId, 'txn-1', creatorId, { amount: 1 }),
+      ).rejects.toMatchObject({ errorCode: 'DEBT_TRANSACTION_READ_ONLY' });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it.each(debtTypes)('refuses to delete a %s transaction', async (type) => {
+      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId, type });
+
+      await expect(service.remove(ledgerId, 'txn-1')).rejects.toMatchObject({
+        errorCode: 'DEBT_TRANSACTION_READ_ONLY',
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // SC-D12 的單元層：debtId 只給債務擁有者；帳本其他成員看到的是 null。
+  describe('debtId visibility', () => {
+    const principalRow = {
+      ...joined,
+      type: 'LEND' as const,
+      category: null,
+      debtPrincipal: { id: 'debt-1', ownerId: creatorId },
+      debtPayment: null,
+    };
+    const paymentRow = {
+      ...joined,
+      type: 'COLLECT' as const,
+      category: null,
+      debtPrincipal: null,
+      debtPayment: { debt: { id: 'debt-1', ownerId: creatorId } },
+    };
+
+    it.each([
+      ['principal', principalRow],
+      ['payment', paymentRow],
+    ])('shows the debt id of a %s transaction to the debt owner', async (_label, row) => {
+      prisma.transaction.findFirst.mockResolvedValue(row);
+      const result = await service.getById(ledgerId, 'txn-1', creatorId);
+      expect(result.debtId).toBe('debt-1');
+    });
+
+    it.each([
+      ['principal', principalRow],
+      ['payment', paymentRow],
+    ])('hides the debt id of a %s transaction from other ledger members', async (_label, row) => {
+      prisma.transaction.findFirst.mockResolvedValue(row);
+      const result = await service.getById(ledgerId, 'txn-1', otherUserId);
+      expect(result.debtId).toBeNull();
+    });
+  });
+
+  describe('createDebtTransaction', () => {
+    it('writes a debt transaction with no category, using the account rules', async () => {
+      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+      prisma.account.findUnique.mockResolvedValue({ userId: creatorId });
+      const client = { transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-9' }) } };
+
+      const id = await service.createDebtTransaction(client as never, {
+        ledgerId,
+        creatorId,
+        type: 'LEND',
+        amount: 500,
+        date: new Date('2026-09-24T00:00:00.000Z'),
+        accountId,
+      });
+
+      expect(id).toBe('txn-9');
+      expect(client.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'LEND',
+            amount: 500,
+            accountId,
+            categoryId: null,
+            toAccountId: null,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('requires an account in a ledger that tracks balances', async () => {
+      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+      const client = { transaction: { create: jest.fn() } };
+
+      await expect(
+        service.createDebtTransaction(client as never, {
+          ledgerId,
+          creatorId,
+          type: 'BORROW',
+          amount: 500,
+          date: new Date(),
+        }),
+      ).rejects.toMatchObject({ errorCode: 'ACCOUNT_REQUIRED' });
+      expect(client.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it("refuses someone else's account with 404", async () => {
+      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+      prisma.account.findUnique.mockResolvedValue({ userId: otherUserId });
+      const client = { transaction: { create: jest.fn() } };
+
+      await expect(
+        service.createDebtTransaction(client as never, {
+          ledgerId,
+          creatorId,
+          type: 'LEND',
+          amount: 500,
+          date: new Date(),
+          accountId,
+        }),
+      ).rejects.toMatchObject({ errorCode: 'NOT_FOUND' });
+      expect(client.transaction.create).not.toHaveBeenCalled();
+    });
   });
 });

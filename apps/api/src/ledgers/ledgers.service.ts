@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  DEBT_TRANSACTION_TYPES,
   DEFAULT_CATEGORIES,
   ErrorCode,
   LedgerDetail,
@@ -218,6 +219,19 @@ export class LedgersService {
         HttpStatus.CONFLICT,
         ErrorCode.LEDGER_HAS_OTHERS_TRANSACTIONS,
         'This ledger holds transactions recorded by other members; archive it instead.',
+      );
+    }
+
+    // 借還帳（3b 決策 21）：真刪會 cascade 刪掉借還交易，債務的本金與還款就跟帳戶對不起來。
+    // 同樣不過濾 deletedAt——軟刪除的借還交易仍被債務的紀錄引用。
+    const debtTransactions = await this.prisma.transaction.count({
+      where: { ledgerId, type: { in: [...DEBT_TRANSACTION_TYPES] } },
+    });
+    if (debtTransactions > 0) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS,
+        'This ledger holds debt transactions; archive it instead.',
       );
     }
 
