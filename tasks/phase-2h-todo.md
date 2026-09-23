@@ -22,7 +22,7 @@
 | D7  | 三個顯示錯誤另開 PR-A                                     | spec §4.1 |
 | D8  | 編輯面板是 `Dialog` 的 `panel` 變體（`show()`，非 modal） | plan §4   |
 | D9  | 面板狀態沿用 `HomePage` 的 `editing`；新增與編輯表單互斥  | plan §4   |
-| D10 | 窄螢幕的狀態全用 CSS（`:has()`、強制展開），JS 不讀斷點   | plan §4   |
+| D10 | 窄螢幕的狀態全用 CSS（`:has()`），JS 不讀斷點             | plan §4   |
 | D11 | 收合記在 `localStorage['ledger.sidebarCollapsed']`        | plan §4   |
 | D12 | 登入後 `h1` 在側欄；窄螢幕頂列的站名不是 heading          | plan §4   |
 | D13 | 收合時的文字用 `.visually-hidden`，不用 `display: none`   | plan §4   |
