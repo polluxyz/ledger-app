@@ -9,14 +9,20 @@
  *
  * 在 index.html 裡**不能加 defer 或 async**——它必須在畫面出來之前同步跑完。
  *
- * ⚠️ localStorage 的 key 與 `src/app/use-theme.ts` 的 THEME_STORAGE_KEY 必須相同。
- * 這裡不能 import，所以 `src/app/theme-init.test.ts` 會拿兩邊比對。
+ * ⚠️ localStorage 的 key 與 `src/app/use-theme.ts` 的 THEME_STORAGE_KEY、
+ * `src/app/use-motion.ts` 的 MOTION_STORAGE_KEY 必須相同。這裡不能 import，
+ * 所以 `src/app/theme-init.test.ts` 會拿兩邊比對。
+ *
+ * 動畫開關（spec 2i SC-39）也在這裡套：關掉動畫的人，第一個畫面就不該有開合動畫。
  */
 (function () {
   try {
     var theme = window.localStorage.getItem('ledger.theme');
     if (theme === 'light' || theme === 'dark') {
       document.documentElement.setAttribute('data-theme', theme);
+    }
+    if (window.localStorage.getItem('ledger.motion') === 'off') {
+      document.documentElement.setAttribute('data-motion', 'off');
     }
   } catch (error) {
     // 讀不到（隱私模式、被瀏覽器封鎖）就什麼都不做，等於跟隨系統。

@@ -91,16 +91,6 @@
   font-weight: 600;
 }
 
-/* 往下展開的加入成員表單，外框由這張卡片提供（Dialog 的 panel 變體沒有外框）。 */
-.addMemberCard {
-  margin: var(--space-md) 0;
-  padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
 /* 封存帳本的成員區塊整個唯讀。說明為什麼沒有任何按鈕，不要讓人以為壞了。 */
 .readonly {
   margin: var(--space-md) 0;

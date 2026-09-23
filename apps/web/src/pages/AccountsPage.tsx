@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { Account } from '@ledger/shared';
 import { PageToolbarActions } from '../app/PageToolbar';
+import { RightPanelContent } from '../app/RightPanel';
+import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
-import { SlideDown } from '../components/SlideDown';
 import { AccountDialog } from '../features/accounts/AccountDialog';
 import { AccountList } from '../features/accounts/AccountList';
 import { useAccounts, useDeleteAccount } from '../features/accounts/use-accounts';
@@ -14,14 +15,11 @@ import styles from './AccountsPage.module.css';
 /**
  * 帳戶管理頁：列表（含即時餘額）、新增、改名、調整初始餘額、刪除。
  *
- * ## 新增往下展開、編輯維持小視窗（phase-2h §4.7）
+ * ## 新增從右側欄滑出、編輯維持小視窗（spec 2i SC-42）
  *
- * 新增是「在清單上多加一項」，所以表單展開在清單**上方**，建立完就看得到它出現
- * 在下面；編輯針對某一列，小視窗蓋上去比較直覺。兩者共用同一個 `AccountDialog`，
- * 只差 `variant`——表單內容不複製第二份，否則兩邊會慢慢長歪。
- *
- * 展開的那一份放在 `SlideDown` 裡，`open` 恆為 true：開關由 `SlideDown` 決定，
- * 它負責動畫與「收起後卸載」，`Dialog` 只管外殼與焦點。
+ * 新增是「在清單上多加一項」，所以表單滑出在右邊、不擋住清單，建立完直接看到它
+ * 出現在列表裡；編輯針對某一列，小視窗蓋上去比較直覺。兩者共用同一個
+ * `AccountDialog`，只差 `variant`——表單內容不複製第二份，否則兩邊會慢慢長歪。
  *
  * ## 兩個彈窗的資料流留在這一層
  *
@@ -31,12 +29,28 @@ import styles from './AccountsPage.module.css';
 export default function AccountsPage() {
   const accounts = useAccounts();
   const deleteAccount = useDeleteAccount();
+  const { isOpen, open, close } = useRightPanel();
 
   // null = 關閉；'new' = 新增；帳戶物件 = 編輯那一筆。
   const [editing, setEditing] = useState<Account | 'new' | null>(null);
   const [removing, setRemoving] = useState<Account | null>(null);
 
-  const isCreating = editing === 'new';
+  // 「右側欄正開著這張表單」才算展開：右側欄也可能被外殼關掉（例如換頁）。
+  const showCreate = editing === 'new' && isOpen;
+
+  function toggleCreate() {
+    if (showCreate) {
+      closeCreate();
+      return;
+    }
+    setEditing('new');
+    open();
+  }
+
+  function closeCreate() {
+    setEditing(null);
+    close();
+  }
 
   function closeRemove() {
     setRemoving(null);
@@ -55,24 +69,22 @@ export default function AccountsPage() {
   return (
     <section className={styles.page}>
       {/*
-        「新增帳戶」是頁面層級的主要按鈕，位置在橫條右邊（SC-38.3）。行為一個字都沒改：
-        按第二次收起，狀態仍然靠 aria-expanded 說出來，展開的表單還是出現在標題下方。
+        「新增帳戶」是頁面層級的主要按鈕，位置在橫條右邊（SC-38.3）。無障礙名稱
+        與 aria-expanded 一個字都沒改，只有表單改從右側欄滑出。
       */}
       <PageToolbarActions>
-        <Button aria-expanded={isCreating} onClick={() => setEditing(isCreating ? null : 'new')}>
+        <Button aria-expanded={showCreate} onClick={toggleCreate}>
           <Icon name="plus" />
           新增帳戶
         </Button>
       </PageToolbarActions>
 
-      <PageHeader title="帳戶" description="餘額由伺服器依交易即時計算" />
+      {/* 右側欄的內容一直掛著，裡面的表單才由 `showCreate` 決定畫不畫。 */}
+      <RightPanelContent>
+        {showCreate ? <AccountDialog target="new" variant="panel" onClose={closeCreate} /> : null}
+      </RightPanelContent>
 
-      <SlideDown open={isCreating}>
-        {/* 面板本身沒有外框（Dialog 的 panel 變體刻意不畫），這張卡片就是它的外框。 */}
-        <div className={styles.panel}>
-          <AccountDialog target="new" variant="panel" onClose={() => setEditing(null)} />
-        </div>
-      </SlideDown>
+      <PageHeader title="帳戶" description="餘額由伺服器依交易即時計算" />
 
       <AccountList
         accounts={accounts.data ?? []}
@@ -82,7 +94,7 @@ export default function AccountsPage() {
         onRemove={setRemoving}
       />
 
-      {/* 編輯用的小視窗。`editing` 是帳戶物件時才有目標，'new' 歸上面那份展開的面板。 */}
+      {/* 編輯用的小視窗。`editing` 是帳戶物件時才有目標，'new' 歸右側欄那一份。 */}
       <AccountDialog
         target={typeof editing === 'object' ? editing : null}
         onClose={() => setEditing(null)}

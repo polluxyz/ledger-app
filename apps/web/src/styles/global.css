@@ -126,6 +126,9 @@
   --breakpoint-md: 900px;
   --breakpoint-lg: 1200px;
 
+  /* 原生 radio、checkbox 的勾選色跟著主題（預設是瀏覽器的藍色，與黑金不搭）。 */
+  accent-color: var(--color-accent);
+
   font-family: system-ui, 'Segoe UI', 'Noto Sans TC', sans-serif;
   line-height: var(--leading-normal);
   color: var(--color-text);
@@ -133,14 +136,17 @@
 }
 
 /*
- * 使用者要求減少動態效果：所有開合直接切換。只改時間，不改 `transition` 本身——
- * 各元件照常寫 `transition: … var(--motion-panel)`，不必各自再判斷一次。
+ * 使用者在設定彈窗關掉動畫（spec 2i SC-39）：所有開合直接切換。只改時間，不改
+ * `transition` 本身——各元件照常寫 `transition: … var(--motion-panel)`，不必各自
+ * 再判斷一次。
+ *
+ * **不看作業系統的 `prefers-reduced-motion`**：開發者 2026-09-24 決定動畫由使用者
+ * 在網站裡自己開關（第三輪修訂）。屬性由 `public/theme-init.js` 與
+ * `app/use-motion.ts` 設定。
  */
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --motion-panel: 0ms;
-    --motion-fade: 0ms;
-  }
+:root[data-motion='off'] {
+  --motion-panel: 0ms;
+  --motion-fade: 0ms;
 }
 
 /* 淺色「象牙金」：使用者選了淺色。⚠️ 內容必須與下一塊逐字相同。 */

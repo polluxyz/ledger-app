@@ -12,13 +12,16 @@
 }
 
 /*
- * 支出 / 收入 / 轉帳做成一條分段控制（segmented control）：三顆鈕擠在同一個框裡
- * 等寬撐滿，看得出「只能選一個」。選中的那顆是金色，由 Button 的 primary 負責，
- * 這裡只管排版。
+ * 支出 / 收入 / 轉帳做成一條分段控制（segmented control）：每一顆等寬撐滿，
+ * 看得出「只能選一個」。
+ *
+ * 選中的金色方塊是一個獨立的元素（.thumb），不是按鈕自己的底色——這樣切換時
+ * 它才能用 transform 滑過去（SC-43.2）。按鈕只改文字顏色。
+ * 內距 3px 是方塊與外框之間的縫；.thumbTrack 用同樣的 inset 對齊它。
  */
 .types {
+  position: relative;
   display: flex;
-  gap: 2px;
   margin-bottom: var(--space-md);
   padding: 3px;
   border: 1px solid var(--color-border);
@@ -26,9 +29,57 @@
   background-color: var(--color-fill);
 }
 
-.types > button {
+/*
+ * 方塊的滑道：貼齊內距之內的整條區域。它疊在按鈕下面（z-index 靠 DOM 順序），
+ * 而且不吃點擊，否則按鈕會被它蓋住點不到。
+ */
+.thumbTrack {
+  position: absolute;
+  inset: 3px;
+  display: flex;
+  pointer-events: none;
+}
+
+/*
+ * 寬度與位移由 TransactionForm 用行內樣式給——格數會變（沒有轉帳鈕時只有兩格），
+ * CSS 這裡算不出來。動畫關掉時 --motion-panel 是 0ms，方塊直接跳到定位。
+ */
+.thumb {
+  height: 100%;
+  border-radius: calc(var(--radius) - 2px);
+  background-color: var(--color-primary);
+  transition: transform var(--motion-panel) var(--motion-ease);
+}
+
+/*
+ * 三顆鈕自己不畫底色，只改文字顏色。高度與 Button 一致（2.25rem），
+ * 換掉 Button 之後這一條分段控制的高度才不會變。
+ */
+.type {
+  position: relative;
   flex: 1;
   min-width: 0;
+  height: 2.25rem;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-fade) var(--motion-ease);
+}
+
+.type:hover {
+  color: var(--color-text);
+}
+
+/* 選中的那顆站在金色方塊上，字色要跟著換成 primary 的對比色。 */
+.type[aria-pressed='true'] {
+  color: var(--color-on-primary);
 }
 
 /* 金額是這張表單的主角，字級與字重都比其他欄位大一階。 */

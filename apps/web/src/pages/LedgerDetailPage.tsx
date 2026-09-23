@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { LedgerDetail, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
+import { RightPanelContent } from '../app/RightPanel';
+import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
-import { SlideDown } from '../components/SlideDown';
 import { useCurrentUser } from '../features/auth/use-current-user';
 import { LedgerRenameDialog } from '../features/ledgers/LedgerRenameDialog';
 import { MemberDialog } from '../features/ledgers/MemberDialog';
@@ -77,6 +78,9 @@ function LedgerDetailView({
   const canAddMembers = isOwner && ledger.kind === 'SHARED' && !isArchived;
 
   const [adding, setAdding] = useState(false);
+  const { isOpen, open, close } = useRightPanel();
+  // 「右側欄正開著這張表單」才算展開：右側欄也可能被外殼關掉（例如換頁）。
+  const showAdd = adding && isOpen;
   const [removing, setRemoving] = useState<LedgerMemberInfo | null>(null);
   // 封存與刪除同時間只會開一個彈窗，用一個欄位表示比兩個布林值更不容易出錯。
   const [danger, setDanger] = useState<'archive' | 'delete' | null>(null);
@@ -111,6 +115,20 @@ function LedgerDetailView({
     );
     // 失敗時下拉會退回原值：清單重新渲染時讀的是伺服器上的 member.role，
     // 而那一筆並沒有被改動。不必自己保存「原本選什麼」。
+  }
+
+  function toggleAdd() {
+    if (showAdd) {
+      closeAdd();
+      return;
+    }
+    setAdding(true);
+    open();
+  }
+
+  function closeAdd() {
+    setAdding(false);
+    close();
   }
 
   function closeRemove() {
@@ -219,32 +237,22 @@ function LedgerDetailView({
       <div className={styles.membersHead}>
         <h3 className={styles.subtitle}>成員（{ledger.members.length}）</h3>
         {canAddMembers && (
-          <Button
-            variant="secondary"
-            aria-expanded={adding}
-            onClick={() => setAdding((open) => !open)}
-          >
+          <Button variant="secondary" aria-expanded={showAdd} onClick={toggleAdd}>
             加入成員
           </Button>
         )}
       </div>
 
       {/*
-        「加入成員」與帳本頁的「建立帳本」同一套互動（2h §4.7）：往下展開、
-        開關交給 SlideDown、Dialog 恆為開啟。收起動畫播完才卸載，重開時欄位是空的。
+        「加入成員」與帳本頁的「建立帳本」同一套互動（spec 2i SC-42）：從右側欄
+        滑出，不往下擠開成員清單。`Dialog` 的 panel 變體收起時整個卸載，下次打開的
+        欄位因此是空的；它也負責把焦點送進第一個欄位、關閉時送回「加入成員」。
       */}
-      {canAddMembers && (
-        <SlideDown open={adding}>
-          <div className={styles.addMemberCard}>
-            <MemberDialog
-              open
-              ledgerId={ledger.id}
-              variant="panel"
-              onClose={() => setAdding(false)}
-            />
-          </div>
-        </SlideDown>
-      )}
+      <RightPanelContent>
+        {showAdd ? (
+          <MemberDialog open ledgerId={ledger.id} variant="panel" onClose={closeAdd} />
+        ) : null}
+      </RightPanelContent>
 
       {isArchived && (
         <p className={styles.readonly}>帳本已封存，僅可讀取。成員無法變更，目前也無法退出。</p>

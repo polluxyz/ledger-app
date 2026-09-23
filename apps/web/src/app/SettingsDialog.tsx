@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Dialog } from '../components/Dialog';
+import { useMotion } from './use-motion';
 import { useTheme, type ThemePreference } from './use-theme';
 import styles from './SettingsDialog.module.css';
 
@@ -11,7 +12,8 @@ import styles from './SettingsDialog.module.css';
  * 設定要跳出彈窗。所以這裡用 `components/Dialog` 的 modal 變體——焦點鎖定、
  * 背景遮罩、Esc 關閉都由原生 `<dialog>` 提供，不必自己實作也不必多一個相依。
  *
- * 目前只有「外觀」一組，但版面（群組標題 ＋ 底部說明）是為了之後還會加東西而留的。
+ * 第三輪加了第二組「動畫」（SC-39）。版面（群組標題 ＋ 底部說明）本來就是為了
+ * 「之後還會加東西」而留的，這次就照原樣多疊一組，不必改結構。
  *
  * 三件事值得先說明：
  *
@@ -49,6 +51,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
  */
 function SettingsBody({ onClose }: { onClose: () => void }) {
   const { preference, choose } = useTheme();
+  const { enabled: motionEnabled, setEnabled: setMotionEnabled } = useMotion();
   const groupRef = useRef<HTMLDivElement | null>(null);
 
   /** 選一張卡並把焦點留在它身上（roving tabindex 的另一半）。 */
@@ -147,6 +150,32 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
             );
           })}
         </div>
+      </section>
+
+      <section className={styles.group}>
+        <h3 className={styles.groupLabel}>動畫</h3>
+        {/*
+          `role="switch"` 的按鈕，名稱就是裡面那行「動畫」的文字（SC-39.1）。
+          用按鈕而不是原生 checkbox：外觀要與上面三張卡同一套 token，而 checkbox
+          的打勾框在各瀏覽器長得不一樣，藏掉再自己畫等於繞遠路做同一件事。
+
+          開關是**立刻生效**的——按下去的同時 `<html data-motion>` 就變了，所以
+          滑塊自己的動畫在關閉的那一次會跟著變成 0ms。那正是我們要的：關了動畫
+          之後，連這顆開關都不再動。
+        */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={motionEnabled}
+          className={styles.switchRow}
+          onClick={() => setMotionEnabled(!motionEnabled)}
+        >
+          <span className={styles.switchLabel}>動畫</span>
+          <span className={styles.switchTrack} aria-hidden="true">
+            <span className={styles.switchThumb} />
+          </span>
+        </button>
+        <p className={styles.hint}>關閉後，側欄與右側欄的開合會直接切換。</p>
       </section>
 
       <p className={styles.hint}>之後的設定也會放在這裡。</p>

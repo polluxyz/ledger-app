@@ -220,6 +220,26 @@ describe('Accounts page', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('closes the right panel and returns focus after a successful create', async () => {
+    const user = userEvent.setup();
+    routeFetch();
+
+    render(<App />);
+
+    // SC-42.4：建立成功要收起右側欄，並把焦點送回「新增帳戶」。焦點掉回
+    // document.body 的話，鍵盤使用者接不下去。
+    const toggle = await screen.findByRole('button', { name: '新增帳戶' });
+    await user.click(toggle);
+    await user.type(dialog().getByLabelText('名稱'), '國泰世華');
+    await user.click(dialog().getByRole('button', { name: '新增' }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '新增帳戶' })).not.toBeInTheDocument();
+    });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
+  });
+
   it('edits an existing account in a modal, not the panel', async () => {
     const user = userEvent.setup();
     routeFetch();

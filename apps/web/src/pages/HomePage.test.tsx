@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
@@ -82,9 +82,21 @@ describe('Home dashboard', () => {
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
   }
 
-  /** 最近交易卡自成一個 region，查詢限定在它裡面才不會抓到帳戶餘額那張卡。 */
-  const recentCard = async () =>
-    within(await screen.findByRole('region', { name: '最近交易' }, WAIT));
+  /**
+   * 最近交易卡自成一個 region，查詢限定在它裡面才不會抓到帳戶餘額那張卡。
+   *
+   * 卡片本身比交易資料先出現（先畫「載入中…」）。只等卡片的話，後面的同步查詢
+   * 可能撞上還在載入的那一瞬間——CPU 忙時大約六次錯一次（2i W6 找到的偶發失敗）。
+   * 所以一併等到「載入中…」消失才交出去。
+   */
+  const recentCard = async () => {
+    const region = await screen.findByRole('region', { name: '最近交易' }, WAIT);
+    await waitFor(
+      () => expect(within(region).queryByText('載入中…')).not.toBeInTheDocument(),
+      WAIT,
+    );
+    return within(region);
+  };
 
   // ── 訪客（假設 13：一個字都不變） ─────────────────────────────────────────
 

@@ -1,13 +1,24 @@
 /*
- * 上方橫條的帳本切換器：一顆帶邊框的膠囊（spec 2i SC-33、SC-38.2、plan D26）。
+ * 上方橫條的帳本切換器：一顆帶邊框的膠囊 ＋ 自己畫的下拉清單
+ * （spec 2i SC-33、SC-38.2、SC-40，第三輪）。
  *
- * 裡面依序是帳本 icon、粗體帳本名、「私人／共享」小標籤、向下箭頭。整顆膠囊
- * 就是那個透明 `<select>` 的可點範圍，所以 `position: relative` 不能省。
+ * 膠囊裡依序是帳本 icon、粗體帳本名、「私人／共享」小標籤、向下箭頭。
+ * 有兩本以上時它是一顆 `<button>`，清單浮在它下面；只有一本時是同一顆膠囊的
+ * 靜態版本（`.field` 少了 `data-switchable`，沒有箭頭、沒有滑過效果）。
  *
- * 2h 為側欄收合寫的 `[data-sidebar-collapsed]` 規則全部移除——切換器不再住在側欄。
+ * 2h 那個疊在膠囊上的透明 `<select>` 已經移除——第三輪改成自己畫的 listbox，
+ * 原因見 `LedgerSwitcher.tsx` 的檔頭。
  */
-.field {
+
+/* 清單的定位基準。`inline-flex` 讓它在橫條裡與旁邊的元素並排，不獨佔一列。 */
+.root {
   position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.field {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
@@ -20,6 +31,7 @@
   border-radius: 999px;
   background-color: var(--color-surface);
   color: var(--color-text);
+  font: inherit;
   font-size: var(--text-sm);
   transition:
     border-color var(--motion-fade) var(--motion-ease),
@@ -30,17 +42,14 @@
  * 滑過的變化只給「真的可以切換」的時候（只有一本帳本時沒有 `data-switchable`）。
  * 一顆會亮起來卻點不動的膠囊，比一顆安靜的膠囊更讓人困惑。
  */
-.field[data-switchable]:hover {
+.field[data-switchable]:hover,
+.field[aria-expanded='true'] {
   border-color: var(--color-accent);
   color: var(--color-accent);
   cursor: pointer;
 }
 
-/*
- * `<select>` 是透明的，焦點框畫在它身上會跟著看不見（opacity 連 outline 一起吃掉）。
- * 所以焦點框畫在膠囊上，用的是全站共用的焦點框顏色。
- */
-.field:focus-within {
+.field:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
@@ -69,27 +78,96 @@
   font-size: var(--text-xs);
 }
 
+/* 箭頭打開時轉 180°，與側欄收合鈕同一個慣例。 */
 .chevron {
   flex: none;
   color: var(--color-text-muted);
+  transition: transform var(--motion-fade) var(--motion-ease);
+}
+
+.field[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
 }
 
 /*
- * 原生下拉鋪滿整顆膠囊且完全透明：使用者看到的是上面那幾個元素，點到的是這個。
- * `opacity: 0` 而不是 `visibility: hidden`——後者連點擊都收不到。
+ * ================= 下拉清單（SC-40）=================
+ *
+ * 浮在膠囊下方。收起時用 `visibility: hidden` 而不是 `display: none` 或把節點拿掉：
+ *
+ * - 文字留在 DOM 裡，「切換器裡有沒有某一本帳本」不打開也查得到（`LedgerSwitcher.tsx`
+ *   的說明第 2 點）。
+ * - `visibility: hidden` 仍然把它排除在 Tab 順序與無障礙樹之外，不會有看不見卻
+ *   按得到的東西——`display: none` 也做得到，但那樣就不能有收起的動畫了。
+ *
+ * 淡入時順便往下掉 4px，看起來像從按鈕「長出來」，不是憑空出現。`visibility`
+ * 一起列進 `transition`，收起時它會在動畫走到一半才真的消失，淡出因此看得見。
  */
-.select {
+.list {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  top: calc(100% + var(--space-xs));
+  left: 0;
+  z-index: 40;
+  min-width: 100%;
+  max-width: min(20rem, 80vw);
   margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: none;
-  color: inherit;
-  font: inherit;
+  padding: var(--space-xs);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  list-style: none;
+  visibility: hidden;
   opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--motion-fade) var(--motion-ease),
+    transform var(--motion-fade) var(--motion-ease),
+    visibility var(--motion-fade) var(--motion-ease);
+}
+
+.list[data-open] {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/*
+ * 一列一本帳本。滑鼠滑過與鍵盤停留用**同一個**底色（`data-highlighted` 兩者都會有），
+ * 使用者才不必記兩套視覺語言。
+ */
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--motion-fade) var(--motion-ease);
+}
+
+.option[data-highlighted] {
+  background-color: var(--color-fill);
+}
+
+/* 勾選記號固定佔一格，沒被選中的那幾項名稱才不會往左跑。 */
+.check {
+  flex: none;
+  width: 1rem;
+  color: var(--color-accent);
+  text-align: center;
+}
+
+.optionName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 目前這一本加粗，與膠囊上的帳本名對得起來。 */
+.option[aria-selected='true'] .optionName {
+  font-weight: 700;
 }

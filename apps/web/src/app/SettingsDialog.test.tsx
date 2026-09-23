@@ -6,6 +6,9 @@ import { SettingsDialog } from './SettingsDialog';
 /**
  * 設定彈窗（2i · SC-32.2、SC-32.3，第二輪修訂）。
  *
+ * 第三輪多了「動畫」這一組（SC-39），驗法與外觀相同：按下去要真的改到
+ * `<html data-motion>` 與 localStorage。
+ *
  * 驗四件事：彈窗是名稱「設定」的 modal `dialog`、外觀是三張 `role="radio"` 的卡片
  * 且 `aria-checked` 跟著偏好走、選了之後**真的換主題**（`<html data-theme>` 與
  * localStorage 是唯一真相，不是 React state）、以及鍵盤與關閉的四條路徑。
@@ -21,6 +24,9 @@ describe('SettingsDialog', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
+    // 動畫開關與深淺色一樣，唯一真相是 `<html>` 上的屬性——一個測試關掉之後
+    // 不清掉，下一個測試就會從「已經關了」開始。
+    document.documentElement.removeAttribute('data-motion');
   });
 
   function appearanceGroup(): HTMLElement {
@@ -91,6 +97,36 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('radio', { name: '跟隨系統' })).toBeChecked();
     // 「跟隨系統」是把屬性**移除**，不是設成 system（2h D19）。
     expect(document.documentElement).not.toHaveAttribute('data-theme');
+  });
+
+  /**
+   * 動畫開關（SC-39）。預設開，而且旁邊那行說明要在——使用者得先知道關掉會怎樣，
+   * 才有辦法決定要不要關。
+   */
+  it('offers an animation switch that starts on', () => {
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    expect(screen.getByRole('switch', { name: '動畫' })).toBeChecked();
+    expect(screen.getByText('關閉後，側欄與右側欄的開合會直接切換。')).toBeInTheDocument();
+  });
+
+  it('turns animation off and back on, and remembers the choice', async () => {
+    const user = userEvent.setup();
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole('switch', { name: '動畫' }));
+
+    // 與深淺色同一個慣例：畫面的唯一來源是 `<html>` 的屬性，不是 React state。
+    expect(document.documentElement).toHaveAttribute('data-motion', 'off');
+    expect(localStorage.getItem('ledger.motion')).toBe('off');
+    expect(screen.getByRole('switch', { name: '動畫' })).not.toBeChecked();
+
+    await user.click(screen.getByRole('switch', { name: '動畫' }));
+
+    // 「開」是預設值，所以是把屬性與那一筆 localStorage 都**移除**，不是存 'on'。
+    expect(document.documentElement).not.toHaveAttribute('data-motion');
+    expect(localStorage.getItem('ledger.motion')).toBeNull();
+    expect(screen.getByRole('switch', { name: '動畫' })).toBeChecked();
   });
 
   it('closes on Escape', () => {

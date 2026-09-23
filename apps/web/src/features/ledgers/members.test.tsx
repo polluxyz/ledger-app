@@ -215,6 +215,21 @@ describe('Ledger members', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('opens the add-member form in the right panel', async () => {
+    routeFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+    await waitForMyRole();
+
+    await user.click(screen.getByRole('button', { name: '加入成員' }));
+
+    // SC-42：表單搬到右側欄，不再往下擠開成員清單。右側欄是 <main> 的兄弟，
+    // 所以「不在 main 裡」就是「在右側欄」，這個判準不依賴 CSS 類名。
+    const form = await screen.findByRole('dialog', { name: '加入成員' });
+    expect(form.closest('main')).toBeNull();
+  });
+
   it('adds a member and closes the dialog', async () => {
     routeFetch();
     const user = userEvent.setup();

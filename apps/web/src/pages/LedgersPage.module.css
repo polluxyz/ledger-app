@@ -3,19 +3,6 @@
   composes: content from '../components/PageContent.module.css';
 }
 
-/*
- * 往下展開的建立表單。標準卡片寫法；Dialog 的 panel 變體自帶標題列與關閉鈕，
- * 這裡只提供外框與內距，看起來與清單卡片是同一種東西。
- */
-.createCard {
-  margin-bottom: var(--space-lg);
-  padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
 /* 勾選框列。次要文字用 muted，游標用 pointer——整列文字都點得到。 */
 .toggle {
   display: flex;

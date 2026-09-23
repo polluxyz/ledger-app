@@ -249,3 +249,23 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 - **W4（橫條）**：`task_b8fb9c4e8c79`／`ctx_9404d570d93d`。帳本切換器與各頁的頁面層級按鈕（新增交易、新增帳戶、建立帳本、改名）搬進橫條；帳本明細的橫條左邊是「回到帳本列表」；`PageHeader` 拿掉 `context`／`actions` 插槽。
 - **e2e**：用到新增表單前先 `openNewTransaction`（`ledgers.spec`、`categories.spec`、`transactions.spec` 情境 9）。2h 的 SC-24.5「標題左緣相同」因為回到單一寬度而重新成立，**恢復原本的斷言**（多量交易頁），假設 14 的斷言修改不再需要。與 `main` 比對，e2e 沒有任何 `expect` 行被刪改。
 - **驗證**：web 單元測試 54 檔 363 條；web e2e 35 條全過（連跑兩次）；api e2e 65 條；lint、typecheck、format、build 全綠。動畫實測：右側欄打開 20 個中間影格、側欄收合 19 個。根目錄 `pnpm test` 又出現一次 web 1 條失敗，接著連續 4 次全綠，仍未抓到名稱。
+
+### 第三輪修訂（2026-09-24，PR #56 合併後，分支 `feature/web-layout-v3`）
+
+回饋原文與釐清問題的回答在 spec §4.12；成功條件 SC-39～SC-44。
+
+- **協調者（地基）**：
+  - 動畫開關：`app/use-motion.ts`（`localStorage['ledger.motion']`、`<html data-motion="off">`），`theme-init.js` 在第一次繪製前套用；`global.css` 拿掉 `prefers-reduced-motion`，改成 `:root[data-motion='off']`。`SlideDown` 也改看這個開關（後來被 W6 刪除）。
+  - SC-44：右側欄改成「路徑一變就清掉打開狀態」（render 期間依變化調整 state）。第二輪只記「在哪個路徑打開的」，離開再回到同一路徑時會自己再打開。
+  - e2e：`switchLedger` 改成點開清單再點選項；SC-31.2 改成「系統要求減少動畫仍有動畫，設定裡關掉才沒有」；新增 SC-44、SC-42 兩條。
+- **W5**（`task_5c2d30a1ac04`／`ctx_6ad2d3928505`）：設定彈窗的動畫開關（`role="switch"`）、導覽的滑動底色（單一元素 `transform` 移動、初次不播）、帳本切換器自己做的 listbox（`role="group"` 名稱「作用中帳本」、選項一直在 DOM）。既有測試兩處步驟調整（「私人」查詢限縮在觸發鈕內；鍵盤選取後重新查按鈕）。
+- **W6**（`task_b6a6ceae00f0`／`ctx_b58e954c25c6`）：建立帳本、新增帳戶、新增支出／收入分類、加入成員改用 `RightPanelContent`；「建立帳本」加「＋」；支出／收入／轉帳的滑動方塊；**刪除已無人使用的 `SlideDown`**（6 條測試隨元件刪除，新增 8 條）。
+- **W6 找到偶發失敗的原因**：`HomePage.test.tsx` 的 `recentCard()` 只等卡片出現，卡片先畫「載入中…」，後面的同步查詢偶爾撞上。協調者改成一併等「載入中…」消失；單檔連跑 6 次全綠，根目錄 `pnpm test` 全綠。這應該就是 2h 以來根目錄偶發失敗的來源之一。
+- **協調者驗收時加的**：`global.css` 設 `accent-color: var(--color-accent)`，原生 radio 與 checkbox（建立帳本的帳本類型、顯示已封存）不再是瀏覽器的藍色。
+- **驗證**：web 單元測試 55 檔 380 條；web e2e 37 條全過；api e2e 65 條；lint、typecheck、format、build 全綠。截圖：清單、建立帳本右側欄、設定彈窗與動畫開關、離開再回來右側欄是關的，無 console 錯誤。
+
+### 第三輪：開發者回報的兩個問題（2026-09-24）
+
+- **分類頁交替按「新增支出分類／新增收入分類」後換頁，右側欄停在打開、內容是空的黑塊**。用假 API 重現：只有「支出 → 收入 → 支出 → 換頁」這個順序會發生。加 log 追到：換頁時在 render 期間把 `open` 設回 false 之後，之後的 render 又變回 true，而且沒有經過任何 `open()` 呼叫——React Router 7 的導覽走 transition，render 期間的調整會被舊的更新蓋回去。改成完全不在換頁時改 state：只記「在哪一次瀏覽（`location.key`）打開的」，key 不同就算關。新增 e2e「分類頁交替開兩張表單後換頁」，反向驗證：舊寫法紅、新寫法綠。
+- **滑過目前頁面時，滑過的底色蓋住會滑動的底色與金線**。連結疊在 `.navMarker` 上面、滑過的底色又與它同色。改成：目前頁面滑過時不畫底色；其他項目滑過用淡一階的半透明底色，與選中的底色分得出來。
+- **流程上的失誤**：修正後我先 commit、push，才看 e2e 的結果，當時有 3 條紅（其中一條是「登入 401 帳密錯誤」）。事後查不到別的 e2e 程序，接著連跑兩次都是 38 條全過，判斷是測試資料庫在跑到一半時被清掉（`ledger_test` 由兩套 e2e 共用，可能是另一個 session 跑了 api e2e）。之後一律先看完結果再 commit。
