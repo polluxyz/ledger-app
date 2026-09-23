@@ -1,33 +1,47 @@
+/*
+ * 翻頁列。放在首頁交易卡片的最底部，所以只有一條上邊框，沒有自己的外框。
+ * 靠右對齊——列表的視線是由上往下掃，翻頁鈕擺在右下角最順手。
+ */
 .bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-top: 1px solid var(--color-border);
 }
 
+.status {
+  /* 頁碼變動時寬度不跟著抖，等寬數字是必要的。 */
+  margin-right: var(--space-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 圖示只是輔助，文字「上一頁」「下一頁」一定看得見——只有箭頭的按鈕，
+ * 螢幕閱讀器與 e2e 都找不到它。
+ */
 .button {
-  padding: var(--space-sm) var(--space-md);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background-color: var(--color-surface);
+  background-color: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
 .button:hover:not(:disabled) {
-  background-color: var(--color-bg);
+  background-color: var(--color-fill);
 }
 
 .button:disabled {
   color: var(--color-text-muted);
   cursor: default;
-}
-
-.status {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
 }
