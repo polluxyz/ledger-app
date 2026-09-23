@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsIn } from 'class-validator';
 import { LEDGER_ROLES } from '@ledger/shared';
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import type { AddMemberRequest, LedgerRole } from '@ledger/shared';
 
 /**
@@ -9,6 +10,7 @@ import type { AddMemberRequest, LedgerRole } from '@ledger/shared';
  */
 export class AddMemberDto implements AddMemberRequest {
   @ApiProperty({ example: 'bob@example.com', format: 'email' })
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 
