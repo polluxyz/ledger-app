@@ -1,0 +1,50 @@
+/*
+ * 中間區最上方的橫條（spec 2i SC-38）。
+ *
+ * sticky 在中間欄的最上方：捲到頁面下方時，帳本切換器與「＋ 新增交易」仍然按得到。
+ * 底色帶一點透明加模糊，捲動時看得出下面有內容經過，但字不會糊在一起。
+ *
+ * 裡層與內容包裝同寬、同樣置中（修訂 3「對齊包裝」），左右兩端才會與下方的標題、
+ * 卡片切齊。
+ */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 0 var(--space-xl);
+  border-bottom: 1px solid var(--color-border);
+  background-color: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  max-width: var(--content-max);
+  min-height: 3.5rem;
+  margin-inline: auto;
+}
+
+.start {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* ≤ 900px 頂列是顯示的（☰ 在那裡），橫條要接在它下面。 */
+@media (max-width: 900px) {
+  .bar {
+    top: var(--topbar-height);
+    padding: 0 var(--space-md);
+  }
+}

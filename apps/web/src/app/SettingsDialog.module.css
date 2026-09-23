@@ -1,0 +1,119 @@
+/*
+ * 設定彈窗的內容（2i · SC-32.2，第二輪修訂）。外框（邊框、遮罩、標題列）
+ * 由 `components/Dialog.module.css` 負責，這裡只管彈窗**裡面**。
+ *
+ * ## 預覽卡的顏色為什麼不直接用 `--color-bg`
+ *
+ * 那些 token 會隨目前主題變動：淺色模式下 `--color-bg` 是象牙白，「深色」那張卡
+ * 就會畫成白的——預覽要顯示的是「選下去會變成什麼樣」，不是「現在長什麼樣」，
+ * 所以三張卡的顏色必須固定。
+ *
+ * 固定的顏色從 chrome 那一組取：它們兩種模式相同（見 `global.css` 的
+ * 「側欄與頂列」段），拿來當常數剛好，也不必自己寫色碼。
+ */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.groupLabel {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: 0.05em;
+}
+
+.cards {
+  /* 三張等寬，不隨名稱長短伸縮。 */
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+
+  /* 預覽用的兩個固定色，見檔頭說明。
+     深色用 chrome 的邊框色而不是最黑的那一階：與左邊那條側欄（`--color-chrome`）
+     放在一起才分得出「側欄」與「內容區」是兩塊。 */
+  --preview-dark: var(--color-chrome-border);
+  --preview-light: var(--color-chrome-active-text);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/* 選中的那張：金色外框 ＋ 文字轉為正常亮度。外框用 box-shadow 疊在 border 上，
+   不加寬邊框——加寬的話卡片會在選中的瞬間縮一圈。 */
+.cardSelected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* 一小塊示意圖：左邊一條深色側欄，右邊是該主題的內容區底色。 */
+.preview {
+  display: flex;
+  height: 2.75rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.previewChrome {
+  flex: none;
+  width: 0.625rem;
+  background-color: var(--color-chrome);
+}
+
+.previewContent {
+  flex: 1;
+}
+
+.card[data-value='dark'] .previewContent {
+  background-color: var(--preview-dark);
+}
+
+.card[data-value='light'] .previewContent {
+  background-color: var(--preview-light);
+}
+
+/* 跟隨系統：右半邊一半深一半淺，一眼看出「兩種都可能」。 */
+.card[data-value='system'] .previewContent {
+  background: linear-gradient(to right, var(--preview-dark) 0 50%, var(--preview-light) 50% 100%);
+}
+
+.cardLabel {
+  line-height: var(--leading-tight);
+  text-align: center;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}

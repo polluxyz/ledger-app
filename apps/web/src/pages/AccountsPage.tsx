@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Account } from '@ledger/shared';
+import { PageToolbarActions } from '../app/PageToolbar';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -53,20 +54,18 @@ export default function AccountsPage() {
 
   return (
     <section className={styles.page}>
-      <PageHeader
-        title="帳戶"
-        description="餘額由伺服器依交易即時計算"
-        actions={
-          <Button
-            // 按第二次收起：按鈕與展開的表單是同一個開關，狀態靠 aria-expanded 說出來。
-            aria-expanded={isCreating}
-            onClick={() => setEditing(isCreating ? null : 'new')}
-          >
-            <Icon name="plus" />
-            新增帳戶
-          </Button>
-        }
-      />
+      {/*
+        「新增帳戶」是頁面層級的主要按鈕，位置在橫條右邊（SC-38.3）。行為一個字都沒改：
+        按第二次收起，狀態仍然靠 aria-expanded 說出來，展開的表單還是出現在標題下方。
+      */}
+      <PageToolbarActions>
+        <Button aria-expanded={isCreating} onClick={() => setEditing(isCreating ? null : 'new')}>
+          <Icon name="plus" />
+          新增帳戶
+        </Button>
+      </PageToolbarActions>
+
+      <PageHeader title="帳戶" description="餘額由伺服器依交易即時計算" />
 
       <SlideDown open={isCreating}>
         {/* 面板本身沒有外框（Dialog 的 panel 變體刻意不畫），這張卡片就是它的外框。 */}

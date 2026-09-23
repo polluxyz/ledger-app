@@ -1,0 +1,78 @@
+/*
+ * 右側欄位置（spec 2i §4.2、§4.5）。
+ *
+ * ≥ 901px：外殼 grid 的第三欄。寬度在 0 與 `--panel-width` 之間過渡，中間欄跟著
+ * 平滑變寬變窄。sticky + 100vh 讓表單在列表捲動時留在原地（與 2h 的面板相同）。
+ *
+ * 抽屜感（第二輪修訂 6）：欄位變寬的同時，裡層從右邊滑進來；收起時反過來滑出。
+ * 只做裁切的話，內容看起來是被「切掉」而不是「收進去」。
+ *
+ * 裡層固定 `--panel-width` 寬：外層縮窄時內容被裁掉，而不是被擠成一條直排的字。
+ */
+.column {
+  grid-column: 3;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  width: 0;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  transition: width var(--motion-panel) var(--motion-ease);
+}
+
+.column[data-open] {
+  width: var(--panel-width);
+}
+
+.inner {
+  width: var(--panel-width);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  /* 左緣的分隔線畫在裡層，外層寬度 0 時就不會留下一條 1px 的線。 */
+  box-shadow: inset 1px 0 0 var(--color-border);
+  transition: transform var(--motion-panel) var(--motion-ease);
+}
+
+.column:not([data-open]) .inner {
+  transform: translateX(100%);
+}
+
+/*
+ * ≤ 900px：蓋在內容上的抽屜（spec 2i 假設 4）。脫離 grid，從右邊滑進來。
+ * `visibility` 晚一個動畫時間才變 hidden，收起的滑出動畫才看得到。
+ */
+@media (max-width: 900px) {
+  .column {
+    position: fixed;
+    top: var(--topbar-height);
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(var(--panel-width), 100vw);
+    height: auto;
+    box-shadow: var(--shadow-md);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition:
+      transform var(--motion-panel) var(--motion-ease),
+      visibility 0s linear var(--motion-panel);
+  }
+
+  .column[data-open] {
+    width: min(var(--panel-width), 100vw);
+    transform: none;
+    visibility: visible;
+    transition:
+      transform var(--motion-panel) var(--motion-ease),
+      visibility 0s;
+  }
+
+  /* 窄螢幕是整個欄位在滑動，裡層不必再滑一次。 */
+  .inner,
+  .column:not([data-open]) .inner {
+    width: 100%;
+    transform: none;
+  }
+}

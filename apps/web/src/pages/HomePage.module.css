@@ -1,80 +1,11 @@
-/* 標題與登出在共用的外殼（AppTopBar / AppSidebar）；這裡只剩頁面內容的樣式。 */
-
 /*
- * 登入後的兩欄工作台（phase-2h · D1）：左邊是交易列表，右邊是常駐面板。
- *
- * 右欄寬度用固定的 `--panel-width`、左欄 `minmax(0, 1fr)` 吃掉剩下的。
- * `minmax(0, ...)` 不能省：grid 欄的預設最小寬度是內容寬度，少了它，一筆很長的
- * 備註就會把左欄撐開、擠掉面板，並讓整頁出現橫向捲動。
+ * 首頁 dashboard（spec 2i §4.7）。三欄版面由外殼負責，右側欄的內容由
+ * `TransactionWorkbench` portal 過去，所以 2h 那組「兩欄 grid ＋ 貼邊面板 ＋
+ * 窄螢幕藏起左欄」的規則全部移除。
  */
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--panel-width);
-  align-items: start;
-}
-
-.primary {
-  min-width: 0;
-}
-
-/*
- * 右側面板貼齊 `<main>` 的右緣與上下緣，看起來像整面牆而不是一張卡片。
- *
- * `<main>` 有 `var(--space-xl)` 的內距，所以上下與右邊用**負 margin 抵銷**它，
- * 左邊補回同樣的距離當作兩欄的間隙——一正一負相加為零，面板的寬度仍然剛好是
- * `--panel-width`，只是整塊往右移到貼住視窗。
- *
- * `sticky` + `100vh` 讓面板跟著捲動留在原地：記帳是高頻動作，捲到列表下方時
- * 表單不該跟著跑掉。面板自己的內容太長時由它自己捲（`overflow-y`）。
- */
-.panel {
-  min-width: 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-  margin: calc(-1 * var(--space-xl)) calc(-1 * var(--space-xl)) calc(-1 * var(--space-xl))
-    var(--space-xl);
-  padding: var(--space-lg);
-  border-left: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-}
-
-/*
- * 900px 以下單欄（spec 假設 4：手機版另開一步，這裡只保證不壞）。
- *
- * 面板排到列表上方——記帳表單要先看得到——並改回一般卡片：貼邊的整面牆只在
- * 兩欄版面裡說得通。
- */
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .panel {
-    order: -1;
-    position: static;
-    height: auto;
-    overflow: visible;
-    margin: 0 0 var(--space-lg);
-    border: var(--card-border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-  }
-
-  /*
-   * 單欄時編輯中就把列表整個藏起來（D10）。
-   *
-   * 面板是**非 modal** 的 dialog，焦點不會被鎖住；列表若還在下面，鍵盤使用者
-   * 按 Tab 會走到螢幕外看不見的地方。斷點只寫在 CSS，JS 不重複判斷一次。
-   */
-  .layout:has(.panel dialog[open]) .primary {
-    display: none;
-  }
-}
 
 /* 三張「即將推出」的統計卡（D5：原樣保留，只換樣式）。 */
-/* 統計卡刻意壓矮（spec §4.8）：它們目前只是佔位，不該吃掉首屏的交易筆數。 */
+/* 統計卡刻意壓矮（spec §4.8）：它們目前只是佔位，不該吃掉首屏。 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -105,15 +36,154 @@
 }
 
 /*
- * 篩選列、列表、分頁包成一張卡片。`overflow: hidden` 讓裡面的表頭與分頁列
- * 貼齊圓角，不會在四個角落露出方角。
+ * 「最近交易」與「帳戶餘額」並排。2j 要加圖表時只是在這個 grid 裡多一列，
+ * 既有的兩張卡不必動（假設 9）。
+ *
+ * `minmax(0, 1fr)` 不能省：grid 欄的預設最小寬度是內容寬度，少了它，一筆很長的
+ * 備註會把那一欄撐開、擠掉另一張卡，並讓整頁出現橫向捲動。
  */
-.listCard {
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: var(--space-md);
+  align-items: start;
+}
+
+/* dashboard 的一張資料卡。 */
+.dataCard {
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
   border: var(--card-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.cardHeading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.cardLink {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+
+/* 五筆交易，一筆一列。`<li>` 只是結構，樣式全在裡面那顆按鈕上。 */
+.recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * 整列是一顆按鈕：點了就在右側欄編輯這一筆。按鈕預設的外觀（框線、背景、置中）
+ * 全部清掉，只留下 grid 排版與滑過的底色。
+ */
+.recentRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-sm);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fade) var(--motion-ease);
+}
+
+.recentRow:hover {
+  background-color: var(--color-fill);
+}
+
+/* 右側欄正在編輯的那一筆。看不出是哪一筆的話，面板裡的數字會很像憑空出現。 */
+.selected {
+  background-color: var(--color-primary-soft);
+}
+
+.recentText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recentMain {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.recentCategory {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  font-size: var(--text-sm);
+}
+
+/* 備註是附註，淡一階；太長就截斷，金額的位置是固定的。 */
+.recentNote {
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* 第二行：日期・帳戶。別人的帳戶被遮蔽時只剩日期。 */
+.recentMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.recentAmount {
+  font-weight: 600;
+  /* 等寬數字：金額靠右對齊成一直線，一眼比得出大小。 */
+  font-variant-numeric: tabular-nums;
+}
+
+.expense {
+  color: var(--color-expense);
+}
+
+.income {
+  color: var(--color-income);
+}
+
+/* 轉帳用中性色：錢只是換了帳戶，畫成收入的綠色會看起來像多了一筆錢。 */
+.transfer {
+  color: var(--color-transfer);
+}
+
+/* 載入中 / 失敗 / 沒有交易共用。高度與一列資料相近，載完不會整頁跳動。 */
+.status {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 
 /* 說明用的單張卡片（訪客引導、找不到帳本）。 */
@@ -124,6 +194,7 @@
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
   text-align: center;
+  margin-bottom: var(--space-md);
 }
 
 /* 訪客只有這一張卡，寬螢幕上不要拉成一長條。 */
@@ -135,10 +206,4 @@
 .note {
   margin: 0 0 var(--space-md);
   color: var(--color-text-muted);
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-sm);
-  justify-content: center;
 }

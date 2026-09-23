@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PageToolbarActions } from '../app/PageToolbar';
 import { Button } from '../components/Button';
 import { PageHeader } from '../components/PageHeader';
 import { SlideDown } from '../components/SlideDown';
@@ -23,14 +24,14 @@ export default function LedgersPage() {
 
   return (
     <section className={styles.page}>
-      <PageHeader
-        title="帳本"
-        actions={
-          <Button aria-expanded={creating} onClick={() => setCreating((open) => !open)}>
-            建立帳本
-          </Button>
-        }
-      />
+      {/* 頁面層級的主要按鈕放橫條右邊（SC-38.3）；展開的表單仍然在標題下方。 */}
+      <PageToolbarActions>
+        <Button aria-expanded={creating} onClick={() => setCreating((open) => !open)}>
+          建立帳本
+        </Button>
+      </PageToolbarActions>
+
+      <PageHeader title="帳本" />
 
       {/*
         開關交給 SlideDown：裡面的 LedgerDialog 恆為開啟，收起動畫播完才整個卸載，

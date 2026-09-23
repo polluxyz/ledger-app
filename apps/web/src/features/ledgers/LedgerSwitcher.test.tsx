@@ -1,12 +1,17 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
- * 頁首的帳本切換器（Slice 2 Step 4）。
+ * 頁首的帳本切換器（2i SC-33、§4.6）。
  *
- * 三件事要釘住：封存帳本不能被切過去、切換後首頁真的換了一本、只有一本時不畫下拉。
+ * 四件事要釘住：封存帳本不能被切過去、切換後首頁真的換了一本、只有一本時不畫下拉、
+ * 膠囊上看得到「私人／共享」。
+ *
+ * **查詢一律限縮在 `<main>` 之內。** 2i 把切換器從側欄搬到頁首，而側欄由另一位
+ * worker 移除它——兩邊都在的那段期間，整頁會有兩個「作用中帳本」。限定範圍之後，
+ * 這一檔驗的永遠是頁首那一份，不受側欄的進度影響。
  */
 describe('Ledger switcher', () => {
   const fetchMock = vi.fn();
@@ -34,6 +39,9 @@ describe('Ledger switcher', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  /** 頁首在 `<main>` 裡，側欄不在。 */
+  const page = () => within(screen.getByRole('main'));
 
   function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), {
@@ -88,7 +96,7 @@ describe('Ledger switcher', () => {
 
     expect(await screen.findByText('記在 led-1')).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText('作用中帳本'), 'led-2');
+    await user.selectOptions(page().getByLabelText('作用中帳本'), 'led-2');
 
     // query key 帶著 ledgerId，所以換一本就自然重取，不必手動失效。
     expect(await screen.findByText('記在 led-2')).toBeInTheDocument();
@@ -102,7 +110,7 @@ describe('Ledger switcher', () => {
     routeFetch([personal, family]);
     render(<App />);
 
-    const select = await screen.findByLabelText('作用中帳本');
+    const select = await page().findByLabelText('作用中帳本');
     const options = Array.from(select.querySelectorAll('option')).map(
       (option) => option.textContent,
     );
@@ -115,8 +123,18 @@ describe('Ledger switcher', () => {
     render(<App />);
 
     // 一個永遠只有一個選項的下拉只會誤導人。
-    expect(await screen.findByText('個人帳本')).toBeInTheDocument();
-    expect(screen.queryByLabelText('作用中帳本')).not.toBeInTheDocument();
+    expect(await page().findByText('個人帳本')).toBeInTheDocument();
+    expect(page().queryByLabelText('作用中帳本')).not.toBeInTheDocument();
+  });
+
+  it('labels the ledger as personal or shared on the pill', async () => {
+    // 膠囊上的小標籤（SC-33.1）。帳本名稱不會說出它是不是共享的，而「這筆記到
+    // 哪裡」在共享帳本裡是別人也看得到的事，值得一眼看見。
+    routeFetch([personal, family]);
+
+    render(<App />);
+
+    expect(await page().findByText('私人')).toBeInTheDocument();
   });
 
   it('stays out of the header while signed out', () => {

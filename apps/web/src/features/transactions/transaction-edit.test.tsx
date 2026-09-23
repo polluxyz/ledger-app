@@ -6,7 +6,7 @@ import App from '../../App';
 /**
  * 編輯與刪除交易（SC-10）。
  *
- * 查詢一律限縮在彈窗之內：首頁同時有「新增」表單與「編輯」彈窗，兩張表單的欄位
+ * 查詢一律限縮在彈窗之內：交易頁同時有「新增」表單與「編輯」彈窗，兩張表單的欄位
  * 標籤一模一樣，不縮小範圍會抓錯一個。
  */
 describe('Editing and deleting a transaction', () => {
@@ -39,7 +39,7 @@ describe('Editing and deleting a transaction', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/transactions');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
   });

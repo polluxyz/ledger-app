@@ -1,6 +1,6 @@
 import { listCategories, personalLedger } from './api';
 import { expect, test } from './fixtures';
-import { newTransactionForm } from './ui';
+import { newTransactionForm, openNewTransaction } from './ui';
 
 /**
  * Slice 4：分類管理頁（SC-9）。
@@ -30,6 +30,8 @@ test('新增的分類立刻出現在記帳表單的下拉裡', async ({ signedIn
   await expect(page.getByRole('listitem').filter({ hasText: '寵物' })).toBeVisible();
 
   await page.getByRole('link', { name: '首頁' }).click();
+  // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
+  await openNewTransaction(page);
 
   // 關鍵斷言：不重整頁面，下拉就該有這個選項。
   await expect(newTransactionForm(page).getByLabel('分類')).toContainText('寵物');
@@ -51,6 +53,7 @@ test('改名後的分類在記帳表單的下拉裡顯示新名字', async ({ si
   await expect(page.getByRole('listitem').filter({ hasText: '外食' })).toBeVisible();
 
   await page.getByRole('link', { name: '首頁' }).click();
+  await openNewTransaction(page);
 
   const categorySelect = newTransactionForm(page).getByLabel('分類');
   await expect(categorySelect).toContainText('外食');

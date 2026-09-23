@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { resetDb } from './db';
 import { API_BASE_URL } from './env';
+import { openUserMenu } from './ui';
 
 /**
  * 冒煙測試：整條路徑真的通。
@@ -63,6 +64,7 @@ test('用 API 建好的帳號可以從畫面登入', async ({ page, request }) =
   await dialog.getByLabel('密碼').fill(password);
   await dialog.getByRole('button', { name: '登入' }).click();
 
-  // 登入成功後彈窗關閉，頁首換成已登入的導覽。
+  // 登入成功後彈窗關閉，頁首換成已登入的導覽。「登出」收在使用者選單裡（spec 2i SC-32）。
+  await openUserMenu(page);
   await expect(page.getByRole('button', { name: '登出' })).toBeVisible();
 });

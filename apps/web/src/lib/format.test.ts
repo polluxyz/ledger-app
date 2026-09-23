@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney } from './format';
+import { formatMoney, formatTransactionAmount } from './format';
 
 /**
  * 帶貨幣符號的金額格式。
@@ -23,5 +23,20 @@ describe('formatMoney', () => {
   it('keeps small amounts without a separator', () => {
     expect(formatMoney(365)).toBe('$365');
     expect(formatMoney(-120)).toBe('-$120');
+  });
+});
+
+/**
+ * 交易金額的前綴（2i 從 TransactionList 與 HomePage 收攏到這裡）。釘住三種型別
+ * 各自的寫法——e2e 用這個字串找列，改了它兩頁的測試都會跟著壞。
+ */
+describe('formatTransactionAmount', () => {
+  it('prefixes expenses with a minus and incomes with a plus', () => {
+    expect(formatTransactionAmount('EXPENSE', 120)).toBe('-$120');
+    expect(formatTransactionAmount('INCOME', 5000)).toBe('+$5,000');
+  });
+
+  it('leaves transfers unsigned because no money was spent or earned', () => {
+    expect(formatTransactionAmount('TRANSFER', 500)).toBe('$500');
   });
 });

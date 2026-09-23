@@ -39,7 +39,7 @@ describe('Filtering and paging the transaction list', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/transactions');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
   });
