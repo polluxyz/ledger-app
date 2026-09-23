@@ -87,7 +87,7 @@ NestJS / Prisma 的細節見 `apps/api/CLAUDE.md`；React / Vite 的細節見 `a
 
 ## 4. 開發階段
 
-**目前在階段二**（Web 前端），Slice 0–3 與 2c/2d/2e/2f 已完成，剩 Slice 4（分類管理 + 個人資料）。
+**目前在階段三**（好友 + 借還帳），拆成 3a 好友系統與 3b 借還帳，先做 3a 的後端。階段二（含 2c～2g）已完成。
 
 完整階段表、每份 spec 的用途與狀態見 [`docs/README.md`](docs/README.md)。後續依序是：階段三 好友 + 借還帳 → 階段四 AI 文字版 → 階段五 語音 + 本地模型。
 
