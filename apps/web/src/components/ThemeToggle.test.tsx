@@ -44,8 +44,9 @@ describe('ThemeToggle', () => {
 
   /**
    * 「全站同一時間只有一組外觀控制項」——意圖不變，控制項的長相在 2i 變了：
-   * 登入後這顆循環鈕收進使用者選單，改成「設定 → 外觀」裡的三顆 radio（SC-32.2）。
-   * 訪客沒有側欄，頂列那顆循環鈕照舊。
+   * 登入後這顆循環鈕收進使用者選單，改成**設定彈窗**裡的三張預覽卡（SC-32.2，
+   * 第二輪修訂；第一輪是往右浮出的第二層）。所以選取步驟是「帳號選單 → 設定」，
+   * 開出來的是 `dialog`，radio 在它裡面。訪客沒有側欄，頂列那顆循環鈕照舊。
    */
   it('keeps exactly one appearance control on the page in any state', async () => {
     // 訪客：切換鈕在頂列。
@@ -73,7 +74,10 @@ describe('ThemeToggle', () => {
 
     await user.click(screen.getByRole('button', { name: '帳號選單' }));
     await user.click(screen.getByRole('button', { name: '設定' }));
-    expect(within(screen.getByRole('radiogroup', { name: '外觀' })).getAllByRole('radio')).toEqual([
+    const settings = within(screen.getByRole('dialog', { name: '設定' }));
+    expect(
+      within(settings.getByRole('radiogroup', { name: '外觀' })).getAllByRole('radio'),
+    ).toEqual([
       screen.getByRole('radio', { name: '跟隨系統' }),
       screen.getByRole('radio', { name: '淺色' }),
       screen.getByRole('radio', { name: '深色' }),

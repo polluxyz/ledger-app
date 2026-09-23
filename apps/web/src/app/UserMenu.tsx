@@ -2,26 +2,25 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../components/Icon';
-import type { IconName } from '../components/icon-paths';
 import { useAuth } from '../features/auth/use-auth';
 import { useCurrentUser } from '../features/auth/use-current-user';
-import { useTheme, type ThemePreference } from './use-theme';
+import { SettingsDialog } from './SettingsDialog';
 import styles from './UserMenu.module.css';
 
 /**
  * 側欄底部的使用者選單（2i · SC-32、D24）。
  *
- * 兩層：第一層是「設定 / 個人資料 / 登出」，「設定」再往右浮出第二層「外觀」。
+ * 一層：「設定 / 個人資料 / 登出」。點「設定」關掉選單並跳出設定彈窗
+ * （`SettingsDialog`，第二輪修訂取代了原本往右浮出的第二層）。
  * 2h 把登出與深淺切換各放一列在側欄裡；收合成 72px 後那些列只剩圖示，
  * 使用者認不出哪個是哪個，所以這一輪收進選單，入口統一成「使用者列」。
  *
  * 四件事值得先說明：
  *
  * 1. **這是揭露式面板（disclosure），不是 ARIA menu。** 裡面全部用原生
- *    `<button>`、`<a>`、`<input type="radio">`，不掛 `role="menuitem"`。
+ *    `<button>` 與 `<a>`，不掛 `role="menuitem"`。
  *    掛了的話「登出」就不再是 button，既有 e2e 與單元測試的
  *    `getByRole('button', { name: '登出' })` 會整批失效——那等於改了斷言。
- *    原生元素另外附帶一個好處：radio 群組的方向鍵移動是瀏覽器內建的。
  * 2. **選單用 `position: fixed`**，位置依觸發鈕的實際座標算。側欄本身有
  *    `overflow-y: auto`，用 `absolute` 會被裁掉；而 fixed 的元素不受祖先
  *    `overflow` 影響（祖先沒有 `transform` 時）。
@@ -42,59 +41,46 @@ interface UserMenuProps {
 /** 選單與觸發鈕之間的間隙，單位 px。 */
 const MENU_GAP = 8;
 
-/** 第二層放不放得下靠它估，單位 px；與 `.menu` 的 `min-width` 一致。 */
-const SETTINGS_MENU_WIDTH = 176;
-
-const THEME_OPTIONS: readonly { value: ThemePreference; label: string; icon: IconName }[] = [
-  { value: 'system', label: '跟隨系統', icon: 'monitor' },
-  { value: 'light', label: '淺色', icon: 'sun' },
-  { value: 'dark', label: '深色', icon: 'moon' },
-];
-
 export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProps) {
   const { logout } = useAuth();
   const { data: currentUser } = useCurrentUser();
-  const { preference, choose } = useTheme();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-  const [settingsStyle, setSettingsStyle] = useState<CSSProperties>({});
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const settingsRef = useRef<HTMLDivElement | null>(null);
-  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const menuId = useId();
-  const settingsId = useId();
-  const appearanceLabelId = useId();
-  // 同一頁可能同時有別的 radio 群組，名字帶上這個實例的 id 才不會混在一起。
-  const themeGroupName = `${useId()}-theme`;
 
   const displayName = currentUser?.name ?? '';
   const triggerLabel = displayName ? `${displayName}的選單` : '帳號選單';
 
-  const closeAll = useCallback(() => {
-    setIsSettingsOpen(false);
+  const closeMenuOnly = useCallback(() => {
     setIsOpen(false);
   }, []);
 
-  /** 關掉第二層並把焦點送回開啟它的「設定」（SC-32.3）。 */
-  const closeSettings = useCallback(() => {
-    setIsSettingsOpen(false);
-    settingsButtonRef.current?.focus();
+  /** 關掉選單並把焦點送回觸發鈕。不做的話焦點會掉到 `<body>`。 */
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+    triggerRef.current?.focus();
   }, []);
 
-  /** 關掉整層並把焦點送回觸發鈕。不做的話焦點會掉到 `<body>`。 */
-  const closeMenu = useCallback(() => {
-    closeAll();
+  /**
+   * 關掉設定彈窗，焦點回到**使用者觸發鈕**（SC-32.3）。
+   *
+   * 不是回到「設定」：開啟彈窗的同時選單就關了，那顆按鈕已經不在 DOM 裡。
+   * 觸發鈕是使用者最後看得見的那個入口，回到它才接得下去。
+   */
+  const closeSettings = useCallback(() => {
+    setIsSettingsOpen(false);
     triggerRef.current?.focus();
-  }, [closeAll]);
+  }, []);
 
-  // 點選單外面：兩層一起關。用 pointerdown 而不是 click，才不會與
-  // 觸發鈕自己的 onClick 打架（同一個問題的說明見 `use-disclosure.ts`）。
+  // 點選單外面就關。用 pointerdown 而不是 click，才不會與觸發鈕自己的
+  // onClick 打架（同一個問題的說明見 `use-disclosure.ts`）。
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -104,11 +90,11 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
       if (target && rootRef.current?.contains(target)) {
         return;
       }
-      closeAll();
+      closeMenuOnly();
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [isOpen, closeAll]);
+  }, [isOpen, closeMenuOnly]);
 
   // 開啟時焦點送到第一個項目（SC-32.3）。
   useEffect(() => {
@@ -116,15 +102,6 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
       menuItemsOf(menuRef.current)[0]?.focus();
     }
   }, [isOpen]);
-
-  // 第二層打開時焦點送到**目前選中**的那顆 radio，使用者一眼看得到自己在哪。
-  useEffect(() => {
-    if (!isSettingsOpen) {
-      return;
-    }
-    const radios = radiosOf(settingsRef.current);
-    (radios.find((radio) => radio.checked) ?? radios[0])?.focus();
-  }, [isSettingsOpen]);
 
   /*
    * 位置在畫面更新前算好（`useLayoutEffect`），使用者才不會看到選單先出現在
@@ -146,27 +123,6 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
     );
   }, [isOpen, collapsed]);
 
-  useLayoutEffect(() => {
-    if (!isSettingsOpen) {
-      return;
-    }
-    const button = settingsButtonRef.current?.getBoundingClientRect();
-    const menu = menuRef.current?.getBoundingClientRect();
-    if (!button || !menu) {
-      return;
-    }
-    // 預設在第一層右邊；右邊放不下就疊在第一層上方（spec §4.4）。
-    // 用 `bottom` 對齊第一層的底邊而不是用 `top` 對齊「設定」：選單在畫面最下方，
-    // 從「設定」往下長會超出視窗，最後一個選項被切掉。
-    const rightEdge = button.right + MENU_GAP;
-    const fitsOnTheRight = rightEdge + SETTINGS_MENU_WIDTH <= window.innerWidth;
-    setSettingsStyle(
-      fitsOnTheRight
-        ? { left: rightEdge, bottom: window.innerHeight - menu.bottom }
-        : { left: menu.left, bottom: window.innerHeight - menu.top + MENU_GAP },
-    );
-  }, [isSettingsOpen]);
-
   function handleTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -187,30 +143,14 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
     }
   }
 
-  /*
-   * 第二層是第一層的**兄弟節點**，不是子節點，所以這個 handler 不會接到
-   * 第一層的鍵盤事件，兩層的 Esc 各自管各自那一層。
-   *
-   * 這裡刻意不處理 ↑↓：radio 群組內的方向鍵移動是瀏覽器內建的，自己寫一份
-   * 只會與內建行為打架。← 要 `preventDefault`，否則會被當成「移到上一顆 radio」。
-   */
-  function handleSettingsKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'ArrowLeft' || event.key === 'Escape') {
-      event.preventDefault();
-      closeSettings();
-    }
-  }
-
-  function handleSettingsButtonKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    // Enter 與 Space 不必處理：原生 `<button>` 會轉成 click，由 onClick 接手。
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setIsSettingsOpen(true);
-    }
+  /** 選單收掉、彈窗跳出來。兩件事同時發生，使用者只會看到一個浮動層。 */
+  function openSettings() {
+    setIsOpen(false);
+    setIsSettingsOpen(true);
   }
 
   function handleNavigate() {
-    closeAll();
+    setIsOpen(false);
     onNavigate?.();
   }
 
@@ -246,15 +186,16 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
           style={menuStyle}
           onKeyDown={handleMenuKeyDown}
         >
+          {/*
+            `aria-haspopup="dialog"` 而不是 `aria-expanded`：它開的是彈窗，
+            不是一塊「展開在原地」的區域，兩者對螢幕閱讀器的意思不一樣。
+          */}
           <button
             type="button"
-            ref={settingsButtonRef}
             className={styles.item}
             data-menu-item=""
-            aria-expanded={isSettingsOpen}
-            aria-controls={settingsId}
-            onClick={() => setIsSettingsOpen((open) => !open)}
-            onKeyDown={handleSettingsButtonKeyDown}
+            aria-haspopup="dialog"
+            onClick={openSettings}
           >
             <span className={styles.itemIcon}>
               <Icon name="gear" />
@@ -280,47 +221,12 @@ export function UserMenu({ collapsed, labelClassName, onNavigate }: UserMenuProp
         </div>
       ) : null}
 
-      {isOpen && isSettingsOpen ? (
-        <div
-          id={settingsId}
-          ref={settingsRef}
-          className={`${styles.menu} ${styles.settingsMenu}`}
-          style={settingsStyle}
-          onKeyDown={handleSettingsKeyDown}
-        >
-          <p id={appearanceLabelId} className={styles.groupLabel}>
-            外觀
-          </p>
-          {/*
-            三個選項是一組單選，所以用原生 radio 包在 `radiogroup` 裡：方向鍵移動、
-            一次只能選一個、螢幕閱讀器報「第幾個、共三個」全部免費。
-            選完刻意**不關閉**：留著才看得到自己選了哪一個。
-          */}
-          <div role="radiogroup" aria-labelledby={appearanceLabelId}>
-            {THEME_OPTIONS.map((option) => (
-              <label key={option.value} className={styles.item}>
-                <input
-                  type="radio"
-                  className={styles.radio}
-                  name={themeGroupName}
-                  value={option.value}
-                  checked={preference === option.value}
-                  onChange={() => choose(option.value)}
-                />
-                <span className={styles.itemIcon}>
-                  <Icon name={option.icon} />
-                </span>
-                <span className={styles.itemLabel}>{option.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <SettingsDialog open={isSettingsOpen} onClose={closeSettings} />
     </div>
   );
 }
 
-/** 第一層裡可以被 ↑↓ 走到的項目，依 DOM 順序。 */
+/** 選單裡可以被 ↑↓ 走到的項目，依 DOM 順序。 */
 function menuItemsOf(container: HTMLElement | null): HTMLElement[] {
   if (!container) {
     return [];
@@ -328,14 +234,7 @@ function menuItemsOf(container: HTMLElement | null): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>('[data-menu-item]'));
 }
 
-function radiosOf(container: HTMLElement | null): HTMLInputElement[] {
-  if (!container) {
-    return [];
-  }
-  return Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
-}
-
-/** ↑↓ 在第一層之內循環。走到頭再按會回到另一端，不會卡住。 */
+/** ↑↓ 在選單之內循環。走到頭再按會回到另一端，不會卡住。 */
 function moveFocus(container: HTMLElement | null, step: number): void {
   const items = menuItemsOf(container);
   if (items.length === 0) {

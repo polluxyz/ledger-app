@@ -8,8 +8,15 @@
  * 1. **每一列固定 `height`**（品牌 48px、其餘 40px），沒有任何一列靠 padding 撐高。
  * 2. **左內距不隨收合改變**：`.panel` 的 8px 加上每一列自己的 8px，圖示永遠從
  *    左邊 16px 開始。2h 的收合規則會把水平 padding 從 16px 改成 8px，icon 就位移了。
- * 3. **收合只改一個東西：寬度**。文字用 `opacity` 淡出，仍然佔著原來的格子，
- *    只是被 `.panel` 的 `overflow-x: hidden` 裁掉。
+ * 3. **收合只改側欄寬度**。文字往左滑出並淡出（`transform` ＋ `opacity`），
+ *    仍然佔著原來的格子，只是被 `.panel` 的 `overflow-x: hidden` 裁掉。
+ *    `transform` 不影響版面，所以它動起來也不會推到 icon。
+ *
+ * ## 抽屜感從哪裡來（2i · SC-31.2、第二輪修訂 6）
+ *
+ * 寬度、文字位移、箭頭旋轉三者用**同一組**時間與緩動（`--motion-panel` 320ms
+ * ＋ `--motion-ease`）。文字若只是淡掉，看起來像「字消失了」；一起往左滑才像
+ * 「整個抽屜收進去」。減少動態效果時 `--motion-panel` 是 0ms，這裡不必再判斷。
  *
  * 所有圖示都包在 24px 見方的 `.rowIcon` 裡（品牌的 `.logo` 同寬），所以整排
  * 圖示的中心也在同一條垂直線上。
@@ -43,7 +50,11 @@
   /* 橫向一定要藏：收合後文字還在原位，沒有它會冒出橫向捲軸。 */
   overflow-x: hidden;
   overflow-y: auto;
-  transition: width var(--motion-panel) var(--motion-ease);
+  /* 901–1199px 浮動展開時，這一層才是真正變寬並浮起來的那個（見下方）。
+     陰影跟著寬度一起淡入，抽屜才像是「滑出來蓋在內容上」而不是憑空出現。 */
+  transition:
+    width var(--motion-panel) var(--motion-ease),
+    box-shadow var(--motion-panel) var(--motion-ease);
 }
 
 /* ---- 共用：列與圖示槽 ---- */
@@ -58,8 +69,11 @@
 }
 
 /*
- * 收合時淡出的文字。**不能用 `display: none`**——名稱一消失，螢幕閱讀器與
- * e2e 的選取器就一起找不到元素了。
+ * 收合時往左滑出並淡出的文字。**不能用 `display: none`**——名稱一消失，
+ * 螢幕閱讀器與 e2e 的選取器就一起找不到元素了。
+ *
+ * 時間與側欄寬度同一組，兩者才會一起動；用 `--motion-fade`（160ms）的話
+ * 字會在側欄收到一半時就不見了。
  */
 .collapsibleLabel {
   flex: 1;
@@ -68,7 +82,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 1;
-  transition: opacity var(--motion-fade) var(--motion-ease);
+  transform: translateX(0);
+  transition:
+    opacity var(--motion-panel) var(--motion-ease),
+    transform var(--motion-panel) var(--motion-ease);
 }
 
 /* ---- 站名列（48px）---- */
@@ -188,15 +205,17 @@
  * ================= 收合 =================
  *
  * ≥ 901px 才生效：≤ 900px 是浮動選單，收合沒有意義，也不該讓桌機的選擇跟過去。
- * 只改兩件事——側欄寬度與文字透明度。列高、內距、圖示位置一律不動。
+ * 只改兩件事——側欄寬度，以及文字的透明度與位移。列高、內距、圖示位置一律不動。
  */
 @media (min-width: 901px) {
   .sidebar.collapsed {
     width: var(--sidebar-collapsed-width);
   }
 
+  /* 往左退 12px 再淡出：距離夠短，不會在展開時看起來像「字從外面飛進來」。 */
   .sidebar.collapsed .collapsibleLabel {
     opacity: 0;
+    transform: translateX(-12px);
   }
 
   .sidebar.collapsed .collapseIcon {
@@ -216,6 +235,11 @@
     width: var(--sidebar-collapsed-width);
   }
 
+  /*
+   * 寬度與陰影都會過渡（`transition` 寫在 `.panel` 上），所以看得到抽屜滑出來
+   * 的過程。`position` 本身不能過渡，會在按下去的瞬間切換——那不影響觀感，
+   * 因為 72px 的位置在切換前後相同。
+   */
   .sidebar.floating .panel {
     position: absolute;
     top: 0;
