@@ -1,7 +1,7 @@
 # 任務清單：階段三 (3b-1) — 單邊借還
 
 > 依據：`docs/specs/phase-3b-debts.md`、`tasks/phase-3b1-plan.md`。
-> 依相依順序排列。
+> 依相依順序排列。worker 一律是 Claude Code + `claude-opus-5`。
 
 | #   | 任務                     | 負責   | 相依   |
 | --- | ------------------------ | ------ | ------ |
