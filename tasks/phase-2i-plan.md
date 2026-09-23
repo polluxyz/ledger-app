@@ -77,7 +77,8 @@ spec §4.4。兩層都是同一個 `Menu` 內部元件的實例；外層只管�
 
 - 開啟時焦點送到第一個項目；Esc 關閉當前這一層並把焦點送回開啟它的項目。
 - 點外面：用 `pointerdown` 監聽 document，事件目標不在任一層選單與觸發鈕裡就全部關閉。
-- `ThemeToggle` 從「按一下輪換」改成三個 `menuitemradio`。`use-theme` 的 `choose()` 已經存在（2h），不用改 hook。
+- 揭露式而不是 ARIA `menu`（spec §4.4）：`role="menuitem"` 會讓「登出」不再是 button，既有測試得改斷言。
+- 外觀是 radio 群組，呼叫 `use-theme` 的 `choose()`（2h 已有）。訪客頂列的 `ThemeToggle`（輪換鈕）不動。
 
 ### D25 — `TransactionWorkbench` 從 2h 的 `HomePage` 抽出
 

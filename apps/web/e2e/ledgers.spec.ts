@@ -1,6 +1,6 @@
 import { addMember, createLedger, createTransaction, listAccounts, listCategories } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
-import { newTransactionForm, parseAmount, switchLedger } from './ui';
+import { newTransactionForm, openDashboard, parseAmount, switchLedger } from './ui';
 
 /**
  * Slice 2 的六個情境（spec §7）。
@@ -156,6 +156,8 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await dialog.getByRole('button', { name: '封存', exact: true }).click();
 
   // SC-17：封存的帳本不再出現在切換器——切過去只會讓每一次記帳都是 409。
+  // 切換器在首頁與交易頁的頁首（spec 2i SC-33），帳本明細頁沒有。
+  await openDashboard(page);
   await expect(page.getByLabel('作用中帳本')).not.toContainText(TRIP_LEDGER_NAME);
 
   await page.getByRole('link', { name: '帳本' }).click();
