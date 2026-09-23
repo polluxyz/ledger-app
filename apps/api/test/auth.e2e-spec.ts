@@ -51,6 +51,33 @@ describe('Auth & Users (e2e)', () => {
     expect((res.body as { errorCode: string }).errorCode).toBe('EMAIL_ALREADY_EXISTS');
   });
 
+  // email 不分大小寫：DTO 層先轉小寫，所以大小寫不同的寫法都指向同一個帳號。
+  it('stores the email in lowercase and treats other casings as the same account', async () => {
+    const res = await request(server())
+      .post('/api/auth/register')
+      .send({ ...alice, email: '  Alice@Example.COM ' });
+    expect(res.status).toBe(201);
+    expect((res.body as AuthUser).email).toBe('alice@example.com');
+
+    const login = await request(server())
+      .post('/api/auth/login')
+      .send({ email: 'ALICE@example.com', password: PASSWORD });
+    expect(login.status).toBe(200);
+
+    const duplicate = await request(server())
+      .post('/api/auth/register')
+      .send({ ...alice, email: 'alice@EXAMPLE.com' });
+    expect(duplicate.status).toBe(409);
+    expect((duplicate.body as { errorCode: string }).errorCode).toBe('EMAIL_ALREADY_EXISTS');
+  });
+
+  // 資料庫的 CHECK 約束是最後防線：即使繞過 DTO 直接寫入，大寫也存不進去。
+  it('rejects an uppercase email at the database level', async () => {
+    await expect(
+      prisma.user.create({ data: { email: 'Bob@example.com', passwordHash: 'x', name: 'Bob' } }),
+    ).rejects.toThrow();
+  });
+
   it('logs in and reads the profile with the issued token', async () => {
     await request(server()).post('/api/auth/register').send(alice);
     const login = await request(server())
