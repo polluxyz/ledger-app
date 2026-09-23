@@ -97,7 +97,7 @@ export class FriendInviteLinksService {
   /**
    * 預覽：讓持有者在按下接受之前，先確認是誰邀請自己。
    *
-   * 預覽**不消耗連結**（spec §5）。這個端點不需要登入身分，只要拿得到 token 就能看，
+   * 預覽**不消耗連結**（spec §5）。端點仍需登入，但不看呼叫者是誰：任何拿到 token 的人都能看，
    * 所以回應只給產生者的顯示名稱，不含 email 或 userId。
    */
   async preview(token: string): Promise<FriendInviteLinkPreview> {

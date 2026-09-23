@@ -126,4 +126,10 @@ worker 一律用 Claude Code，模型釘 `claude-opus-5`（開發者 2026-09-23 
 
 ## 6. 實作紀錄
 
-（實作中遇到的計畫外問題與處置記在這裡。）
+- **CHECK 約束改用 `COLLATE "C"`**（T2）。§2.2 原本假設 UUID 在任何 collation 下都依 ASCII 排序，但某些 collation 會在第一輪比較時忽略 `-`。直接指定 `"C"`（位元組順序）比論證它不會出事可靠，也與 JavaScript 的字串比較一致。
+- **API 層由協調者寫**（T1～T3）。controller、DTO、service 方法簽章都是 API 介面，依 `CLAUDE.md` §11 不派給 worker；worker 只實作 service 內部與單元測試。
+- **token 格式不符回 400**。`FriendInviteTokenDto` 要求 43 個 base64url 字元，格式不符在 DTO 驗證就回 `400 VALIDATION_FAILED`，不查資料庫。格式正確但查無此連結仍是 `404 INVITE_LINK_INVALID`。spec §5 的錯誤表沒列 400，這是所有端點共通的驗證行為。
+- **worker 的 worktree 沒有從 `feature/friends` 分出**。`--worktree new-child` 建出的分支落後，三個 worker 都依 Task spec 的第 1 步自己 `git merge --ff-only feature/friends`。三人也都發現 `pnpm install` 回報 up to date、沒有重新產生 Prisma Client，手動跑了 `prisma generate` 與 `@ledger/shared` 的 build。下次派工把這兩步直接寫進 Task spec。
+- **T7 由協調者做**。流量限制測試只有一個檔案，寫 Task spec 比自己寫還久。OpenAPI 標註已在 T1～T3 寫 controller 時一併完成。
+- **修正 T5 的一行註解**：`preview` 的註解說「不需要登入身分」，實際上端點需要登入，只是不看呼叫者是誰。
+- 單元測試：API 15 個 suite、212 個測試全綠（新增 93 個）。
