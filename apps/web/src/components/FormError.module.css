@@ -1,9 +1,13 @@
+/*
+ * 表單送出後的錯誤提示。底色用 danger-soft（由 global.css 從 --color-danger
+ * 推導的半透明版本），深淺兩色都成立——不再寫死淺色系才對的 #fef2f2。
+ */
 .error {
   margin-bottom: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-danger);
   border-radius: var(--radius);
-  background-color: #fef2f2;
+  background-color: var(--color-danger-soft);
   color: var(--color-danger);
   font-size: 0.875rem;
 }

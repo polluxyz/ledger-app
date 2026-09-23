@@ -12,7 +12,13 @@
   flex: 1;
 }
 
+/*
+ * 危險確認鈕：實心底＋on-primary 字。選實心而不是「底透明＋危險色描邊」，
+ * 因為它是這個彈窗裡的主要動作（使用者開這個視窗就是為了按它），必須跟
+ * secondary 的「取消」拉開層級；描邊款會讓兩顆按鈕看起來一樣重要。
+ * 顏色全走 token，深淺兩色自動正確。
+ */
 .danger {
   background-color: var(--color-danger);
-  color: #fff;
+  color: var(--color-on-primary);
 }

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Account } from '@ledger/shared';
 import { Button } from '../../components/Button';
-import { Dialog } from '../../components/Dialog';
+import { Dialog, type DialogVariant } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { TextField } from '../../components/TextField';
 import { useCreateAccount, useUpdateAccount } from './use-accounts';
@@ -10,26 +10,41 @@ interface AccountDialogProps {
   /** null 代表關閉；`'new'` 為新增；給帳戶則是編輯那一筆。 */
   target: Account | 'new' | null;
   onClose: () => void;
+  /**
+   * `modal`（預設）＝編輯用的小視窗；`panel`＝嵌在頁面裡、往下展開的新增面板
+   * （phase-2h §4.7：新增往下展開、編輯維持小視窗）。表單內容完全共用，
+   * 差別只有外殼，所以只是把 prop 透傳給 Dialog。
+   */
+  variant?: DialogVariant;
 }
 
 /**
- * 新增／編輯帳戶的表單彈窗。兩種用途共用同一份表單，差別在預填的值、送出的端點，
+ * 新增／編輯帳戶的表單。兩種用途共用同一份內容，差別在預填的值、送出的端點，
  * 以及**初始餘額只有新增時才出現**——它是建立當下的歷史事實，之後不可更改
- * （後端的 `UpdateAccountDto` 也不接受這個欄位）。
+ * （後端的 `UpdateAccountDto` 也不接受這個欄位）。外殼（modal 小視窗或往下
+ * 展開的面板）由 variant 決定，見 Dialog 的說明。
  *
- * 送出失敗時**彈窗不關**（例如名稱重複的 409）：關掉的話使用者剛打的字全沒了，
+ * 送出失敗時**表單不關**（例如名稱重複的 409）：關掉的話使用者剛打的字全沒了，
  * 而且多半根本沒看到錯誤訊息。錯誤沿用 `FormError`，直接呈現後端的文字。
  */
-export function AccountDialog({ target, onClose }: AccountDialogProps) {
+export function AccountDialog({ target, onClose, variant = 'modal' }: AccountDialogProps) {
   if (!target) {
     return null;
   }
   // 用 key 讓「換一筆編輯」時整個重建，表單狀態不會殘留上一筆的值。
   const key = target === 'new' ? 'new' : target.id;
-  return <AccountDialogForm key={key} target={target} onClose={onClose} />;
+  return <AccountDialogForm key={key} target={target} onClose={onClose} variant={variant} />;
 }
 
-function AccountDialogForm({ target, onClose }: { target: Account | 'new'; onClose: () => void }) {
+function AccountDialogForm({
+  target,
+  onClose,
+  variant,
+}: {
+  target: Account | 'new';
+  onClose: () => void;
+  variant: DialogVariant;
+}) {
   const isNew = target === 'new';
   const [name, setName] = useState(isNew ? '' : target.name);
   const [initialBalance, setInitialBalance] = useState('0');
@@ -54,7 +69,7 @@ function AccountDialogForm({ target, onClose }: { target: Account | 'new'; onClo
   }
 
   return (
-    <Dialog open title={isNew ? '新增帳戶' : '編輯帳戶'} onClose={onClose}>
+    <Dialog open title={isNew ? '新增帳戶' : '編輯帳戶'} onClose={onClose} variant={variant}>
       <form onSubmit={handleSubmit} noValidate>
         <FormError error={mutation.error} />
 

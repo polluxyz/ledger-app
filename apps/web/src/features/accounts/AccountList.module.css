@@ -1,52 +1,61 @@
-/* 形狀刻意與 TransactionList 一致，讓兩個列表看起來屬於同一個 app。 */
+/*
+ * 帳戶列表的樣式。形狀刻意與 TransactionList、CategoryList 一致，
+ * 讓幾個列表看起來屬於同一個 app。
+ */
+
+/* 標準卡片寫法（spec §4.3）。overflow hidden 讓最後一列的底色不超出圓角。 */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
+/*
+ * 一列三格：名稱吃掉剩下的寬度、金額與兩顆鈕各自貼右。
+ * 列高固定 3.25rem——高度一致，眼睛掃清單時不必重新對焦每一列。
+ */
 .item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md);
+  height: 3.25rem;
+  padding: 0 var(--space-md);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.item + .item {
-  border-top: 1px solid var(--color-border);
-}
-
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
+/* 最後一列不畫線：卡片的邊已經是界線，再一條會變成雙線。 */
+.item:last-child {
+  border-bottom: none;
 }
 
 .name {
-  font-weight: 500;
-}
-
-.right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.balance {
-  font-variant-numeric: tabular-nums;
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 負餘額用與支出相同的紅色：信用卡欠款是正常狀態，不是錯誤，只是要一眼看得出來。 */
+/* 金額一律等寬數字＋右對齊：位數不同的數字才會上下對齊（spec §4.3）。 */
+.balance {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/*
+ * 負餘額用支出色，不用 danger。信用卡欠款是正常狀態，不是錯誤——
+ * 兩者分開是 token 表刻意的設計（spec §4.3）。
+ */
 .negative {
-  color: var(--color-danger);
+  color: var(--color-expense);
 }
 
 .actions {
@@ -54,31 +63,41 @@
   gap: var(--space-xs);
 }
 
+/*
+ * 28px 的圖示鈕。平常是安靜的 muted 色，滑過才浮出底色：
+ * 一頁 20 顆紅色刪除鈕是 2h 要修掉的問題之一（spec §1），
+ * 所以危險的紅色留到滑過或聚焦時才出現。
+ */
 .action {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 0.8125rem;
+  background: none;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .action:hover {
-  background-color: var(--color-bg);
+  border-color: var(--color-border);
+  background-color: var(--color-fill);
+  color: var(--color-text);
 }
 
-.remove {
+.remove:hover,
+.remove:focus-visible {
   color: var(--color-danger);
-  border-color: #f3c6c6;
 }
 
 .empty,
 .status {
+  margin: 0;
   padding: var(--space-lg);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
@@ -88,5 +107,5 @@
   display: block;
   margin-top: var(--space-xs);
   color: var(--color-text);
-  font-weight: 500;
+  font-weight: 600;
 }

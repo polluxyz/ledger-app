@@ -196,6 +196,45 @@ describe('Accounts page', () => {
     expect(await dialog().findByRole('alert')).toHaveTextContent('已經有交易在用');
     expect(screen.getByText('現金')).toBeInTheDocument();
   });
+
+  it('toggles the create form open and closed from the same button', async () => {
+    const user = userEvent.setup();
+    routeFetch();
+
+    render(<App />);
+
+    // 新增改成往下展開（phase-2h §4.7、SC-30）：按鈕與表單是同一個開關，
+    // 所以 aria-expanded 必須跟著變——少了它，鍵盤與螢幕閱讀器使用者按下去
+    // 只會聽到「按鈕」，不知道下面已經多出一張表單。
+    const toggle = await screen.findByRole('button', { name: '新增帳戶' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(toggle);
+
+    expect(screen.getByRole('dialog', { name: '新增帳戶' })).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(toggle);
+
+    expect(screen.queryByRole('dialog', { name: '新增帳戶' })).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('edits an existing account in a modal, not the panel', async () => {
+    const user = userEvent.setup();
+    routeFetch();
+    // jsdom 的 showModal 替身由 src/test/setup.ts 安裝；這裡包一層 spy 只為了數次數。
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: '編輯現金' }));
+
+    // 編輯針對某一列，維持小視窗（§4.7）。`showModal` 被呼叫就代表走的是 modal
+    // 那條路——往下展開的面板用的是 `show()`。
+    expect(screen.getByRole('dialog', { name: '編輯帳戶' })).toBeInTheDocument();
+    expect(showModal).toHaveBeenCalled();
+  });
 });
 
 /**

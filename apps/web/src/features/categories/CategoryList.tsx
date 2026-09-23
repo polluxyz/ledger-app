@@ -1,5 +1,6 @@
 import type { Category } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
+import { Icon } from '../../components/Icon';
 import styles from './CategoryList.module.css';
 
 interface CategoryListProps {
@@ -17,12 +18,15 @@ interface CategoryListProps {
 /**
  * 單一型別的分類列表（支出與收入各一份，由呼叫端渲染兩次）。
  *
- * 形狀比照 `AccountList`——同樣是一列一筆、右側動作，讓幾個管理頁看起來
- * 屬於同一個 app。列表的 key **一律用 id**：預設分類裡支出與收入各有一個
- * 「其他」，用 name 當 key 會在同一份清單之外又撞一次（React 只要求 key
- * 在同一個 list 內唯一，但元件一被複用，這個假設就碎了）。
+ * 形狀比照 `AccountList`——同樣是一列一筆、列尾兩顆圖示鈕（鉛筆＝改名、
+ * 垃圾桶＝刪除，SC-26.6），讓幾個管理頁看起來屬於同一個 app。`aria-label`
+ * 一字不改，另外補 `title` 讓滑鼠使用者也讀得到同一句話。
  *
- * 這裡只負責呈現與轉發：新增／改名／刪除的流程都在彈窗與呼叫端手裡。
+ * 列表的 key **一律用 id**：預設分類裡支出與收入各有一個「其他」，用 name 當
+ * key 會在同一份清單之外又撞一次（React 只要求 key 在同一個 list 內唯一，但
+ * 元件一被複用，這個假設就碎了）。
+ *
+ * 這裡只負責呈現與轉發：新增／改名／刪除的流程都在表單與呼叫端手裡。
  */
 export function CategoryList({
   categories,
@@ -54,16 +58,18 @@ export function CategoryList({
                 className={styles.action}
                 onClick={() => onEdit(category)}
                 aria-label={`改名${category.name}`}
+                title={`改名${category.name}`}
               >
-                改名
+                <Icon name="edit" />
               </button>
               <button
                 type="button"
                 className={`${styles.action} ${styles.remove}`}
                 onClick={() => onRemove(category)}
                 aria-label={`刪除${category.name}`}
+                title={`刪除${category.name}`}
               >
-                刪除
+                <Icon name="trash" />
               </button>
             </div>
           )}
