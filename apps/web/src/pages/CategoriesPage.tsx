@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { Category, CategoryType, LedgerSummary } from '@ledger/shared';
+import { RightPanelContent } from '../app/RightPanel';
+import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { Select } from '../components/Select';
-import { SlideDown } from '../components/SlideDown';
 import { CategoryDialog } from '../features/categories/CategoryDialog';
 import { CategoryList } from '../features/categories/CategoryList';
 import { useCategories, useDeleteCategory } from '../features/categories/use-categories';
@@ -134,19 +135,37 @@ export default function CategoriesPage() {
  * 單一帳本的分類區：支出與收入兩個區塊，加上新增／改名／刪除的表單。
  * 與外層分開，是為了讓 `key={ledger.id}` 能連彈窗狀態一起重置（見上方說明）。
  *
- * **`editing` 只存一個目標**，所以「同一時間只展開一個新增表單」（SC-30.5）
- * 是這個資料結構自然的結果，不必另外記一份開關。
+ * **`editing` 只存一個目標**，所以「同一時間只開一張新增表單」（SC-30.5、SC-42.4）
+ * 是這個資料結構自然的結果，不必另外記一份開關。兩張表單共用同一個右側欄，
+ * 開一張就換掉另一張。
  */
 function LedgerCategories({ ledger, canEdit }: { ledger: LedgerSummary; canEdit: boolean }) {
   const deleteCategory = useDeleteCategory(ledger.id);
+  const { isOpen, open, close } = useRightPanel();
 
   // null = 關閉；{ type } = 新增那個型別；分類物件 = 改名那一筆。
   const [editing, setEditing] = useState<Category | { type: CategoryType } | null>(null);
   const [removing, setRemoving] = useState<Category | null>(null);
 
-  // 新增（往下展開）與改名（小視窗）兩種目標拆開看，下面兩處各自只關心一種。
+  // 新增（右側欄）與改名（小視窗）兩種目標拆開看，下面兩處各自只關心一種。
   const creating = editing !== null && !('id' in editing) ? editing.type : null;
   const renaming = editing !== null && 'id' in editing ? editing : null;
+  // 「右側欄正開著這張表單」才算展開：右側欄也可能被外殼關掉（例如換頁）。
+  const openType = isOpen ? creating : null;
+
+  function toggleCreate(type: CategoryType) {
+    if (openType === type) {
+      closeCreate();
+      return;
+    }
+    setEditing({ type });
+    open();
+  }
+
+  function closeCreate() {
+    setEditing(null);
+    close();
+  }
 
   function closeRemove() {
     setRemoving(null);
@@ -171,17 +190,31 @@ function LedgerCategories({ ledger, canEdit }: { ledger: LedgerSummary; canEdit:
             ledgerId={ledger.id}
             type={type}
             canEdit={canEdit}
-            creating={creating === type}
+            creating={openType === type}
             // 按第二次收起。換成另一個型別時，上一個自然收起（同一份 state）。
-            onToggleCreate={() => setEditing(creating === type ? null : { type })}
-            onCloseCreate={() => setEditing(null)}
+            onToggleCreate={() => toggleCreate(type)}
             onEdit={setEditing}
             onRemove={setRemoving}
           />
         ))}
       </div>
 
-      {/* 改名維持小視窗（§4.7）。新增那一份在各自區塊的 SlideDown 裡。 */}
+      {/*
+        兩組共用同一個右側欄，所以表單掛在這一層而不是各自的區塊裡——掛兩份的話
+        右側欄會同時收到兩個 portal，切換型別時畫面上會閃出兩張表單。
+      */}
+      <RightPanelContent>
+        {openType !== null ? (
+          <CategoryDialog
+            ledgerId={ledger.id}
+            target={{ type: openType }}
+            variant="panel"
+            onClose={closeCreate}
+          />
+        ) : null}
+      </RightPanelContent>
+
+      {/* 改名維持小視窗（§4.7）。新增那一份在右側欄裡。 */}
       <CategoryDialog ledgerId={ledger.id} target={renaming} onClose={() => setEditing(null)} />
 
       <ConfirmDialog
@@ -202,16 +235,15 @@ interface CategoryGroupProps {
   ledgerId: string;
   type: CategoryType;
   canEdit: boolean;
-  /** 這一組的新增表單是不是展開著。 */
+  /** 這一組的新增表單是不是正開在右側欄。 */
   creating: boolean;
   onToggleCreate: () => void;
-  onCloseCreate: () => void;
   onEdit: (category: Category) => void;
   onRemove: (category: Category) => void;
 }
 
 /**
- * 一個型別的區塊：標題列（計數與新增鈕）、往下展開的新增表單、清單。
+ * 一個型別的區塊：標題列（計數與新增鈕）與清單。新增表單在右側欄，由上一層掛。
  *
  * 支出與收入只差型別，所以做成一個元件渲染兩次——複製兩份的話，下次改標題列
  * 就會有一邊忘記改。清單的請求放在這一層，計數才拿得到自己那一組的長度。
@@ -222,7 +254,6 @@ function CategoryGroup({
   canEdit,
   creating,
   onToggleCreate,
-  onCloseCreate,
   onEdit,
   onRemove,
 }: CategoryGroupProps) {
@@ -244,18 +275,6 @@ function CategoryGroup({
           </Button>
         )}
       </header>
-
-      <SlideDown open={creating}>
-        {/* 面板本身沒有外框（Dialog 的 panel 變體刻意不畫），這張卡片就是它的外框。 */}
-        <div className={styles.panel}>
-          <CategoryDialog
-            ledgerId={ledgerId}
-            target={{ type }}
-            variant="panel"
-            onClose={onCloseCreate}
-          />
-        </div>
-      </SlideDown>
 
       <CategoryList
         categories={categories.data ?? []}

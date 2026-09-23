@@ -8,8 +8,8 @@ import App from '../App';
  *
  * 帳戶頁本身的流程（新增、改名、刪除、錯誤路徑）由
  * `features/accounts/accounts.test.tsx` 負責，這一檔只驗「＋ 新增帳戶」搬到橫條
- * 之後**位置變了、行為沒變**：無障礙名稱一樣、`aria-expanded` 一樣、展開的表單
- * 仍然出現在標題下方。
+ * 之後**位置變了、行為沒變**：無障礙名稱一樣、`aria-expanded` 一樣。第三輪起
+ * 表單從右側欄滑出（SC-42），不再往下展開。
  *
  * 橫條的內容是 portal 進外殼的，第一次 render 可能晚一拍，所以用 `findBy*`。
  */
@@ -66,7 +66,7 @@ describe('Accounts page toolbar', () => {
     expect(header).toHaveTextContent('餘額由伺服器依交易即時計算');
   });
 
-  it('still opens the form under the title and still reports aria-expanded', async () => {
+  it('opens the form in the right panel and still reports aria-expanded', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -77,8 +77,8 @@ describe('Accounts page toolbar', () => {
 
     expect(button).toHaveAttribute('aria-expanded', 'true');
     const form = await screen.findByRole('dialog', { name: '新增帳戶' }, WAIT);
-    // 表單展開在標題下方，不是跟著按鈕跑到橫條上（SC-38.3）。
-    const heading = screen.getByRole('heading', { name: '帳戶' });
-    expect(heading.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    // SC-42：表單搬到右側欄，不再展開在標題下方。右側欄是 <main> 的兄弟，
+    // 所以「不在 main 裡」就是「在右側欄」，這個判準不依賴 CSS 類名。
+    expect(form.closest('main')).toBeNull();
   });
 });
