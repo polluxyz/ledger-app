@@ -71,9 +71,6 @@
   /* ---- 由上面推導出來的色（兩種模式共用同一條公式，不另訂色碼） ---- */
   --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, var(--color-bg));
   --color-danger-soft: color-mix(in srgb, var(--color-danger) 35%, transparent);
-  /* 過渡用別名：2h 之前叫 surface-hover，用途與 fill 相同。
-     Step 2 各模組改完之後移除（tasks/phase-2h-todo.md 3.5）。 */
-  --color-surface-hover: var(--color-fill);
 
   /* ---- 間距 ---- */
   --space-xs: 0.25rem;
