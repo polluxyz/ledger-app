@@ -127,7 +127,7 @@ spec §4 的 D1–D7 是開發者的決定。以下是實作怎麼落地。
 
 ### D15 — token 對比寫成單元測試
 
-`styles/tokens.test.ts` 用 `node:fs` 讀 `global.css`，抓出兩組 token，依 spec §4.3 的表算對比並斷言門檻。任何人改色碼導致不及格，`pnpm test` 就會紅。
+`styles/tokens.test.ts` 用 Vite 的 `?raw` 匯入讀 `global.css`（實作時從 `node:fs` 改過來，見 §10 步驟 1），抓出兩組 token，依 spec §4.3 的表算對比並斷言門檻。任何人改色碼導致不及格，`pnpm test` 就會紅。
 
 ### D16 — 交易表格的日期分組
 
@@ -312,3 +312,14 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 1. SC-24.3 改以 1440×900 驗收（spec §4.8）。
 2. PR-A 可以合併。
 3. worker 用 Claude Code Opus 5 **只限這次**，`CLAUDE.md` §11 不改。
+
+### PR-B 步驟 3–4（整合、驗證、文件）
+
+- **PR-A 已合併**（#53，squash）。`main` 併回本分支（`820fcf3`），順帶帶進 3a 好友後端。衝突 5 檔全部保留 2h 版本，帳戶列表與首頁餘額改用 PR-A 的 `formatMoney`。併完要重跑 `prisma generate` 與 shared build，否則 api 的 typecheck 找不到 `friendInviteLink`。
+- `global.css` 的 `--color-surface-hover` 別名已刪（3.5）。
+- `e2e/layout.spec.ts` 7 條：SC-24.3（1440×900 可見 ≥ 10 列）、篩選欄位同高、SC-24.5 標題左緣、SC-24.6 375px 不捲動、SC-29.3 兩條（擋掉 `/src/main.tsx`，只讓 `theme-init.js` 跑，驗 `data-theme`），以及 SC-26.7 日期欄位焦點框。
+- **計畫外（範圍內解決）**：鍵盤巡檢 Tab 45 步，篩選列的「起日」「迄日」沒有焦點框。Chromium 的日期欄位連 `:focus` 都不成立，只符合 `:focus-within`，全域 `:focus-visible` 與 TextField 的換框色都沒生效（2h 之前就是這樣）。`TextField.module.css` 加 `.input[type='date']:focus-within`，並補上 SC-26.7 那條 e2e。修完兩種主題 45 個焦點都看得見。
+- **spec 更正**：SC-24.2 原文「900–1199px 收合、< 900px 單欄」與實作差 1px。實作沿用 2f 的 `max-width: 900px`（900 本身算窄螢幕），改 spec 對齊實作，設計不變。
+- 驗證數字：web e2e 27 條（原 20 ＋ 新 7）、api e2e 65 條、根目錄 `pnpm test` api 212 ／ web 46 檔 294 條，lint、typecheck、format:check、build 全綠。
+- 截圖（假 API）：375／390／900／1024／1280／1440／2560 × 深淺兩色 × 7 頁，另加 1440 側欄收合，56 ＋ 42 張全部 0 橫向捲動、0 console 錯誤。
+- **未解決，待開發者決定**：2560px 時內容區沒有最大寬度，交易列的分類與帳戶欄距離很遠。SC-24.7 已宣告 SC-19.1 的 70rem 上限被取代，所以不算違反 spec；`--content-max` 目前沒有任何地方使用。
