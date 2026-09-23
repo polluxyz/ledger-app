@@ -15,14 +15,14 @@
 
 ## 開發階段
 
-| 階段 | 內容                                     | 狀態               |
-| ---- | ---------------------------------------- | ------------------ |
-| 零   | Repo、monorepo scaffolding、CI、分支保護 | 完成               |
-| 一   | 核心記帳：帳本、交易 CRUD、認證授權      | 完成               |
-| 二   | Web 前端                                 | 進行中，剩 Slice 4 |
-| 三   | 好友 + 借還帳（雙邊連動交易 + 債務物件） | 未開始             |
-| 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 未開始             |
-| 五   | 語音（STT）+ 本地模型 provider           | 未開始             |
+| 階段 | 內容                                     | 狀態           |
+| ---- | ---------------------------------------- | -------------- |
+| 零   | Repo、monorepo scaffolding、CI、分支保護 | 完成           |
+| 一   | 核心記帳：帳本、交易 CRUD、認證授權      | 完成           |
+| 二   | Web 前端                                 | 進行中，剩收尾 |
+| 三   | 好友 + 借還帳（雙邊連動交易 + 債務物件） | 未開始         |
+| 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 未開始         |
+| 五   | 語音（STT）+ 本地模型 provider           | 未開始         |
 
 階段二中途插入四個後端小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**，各有自己的 spec。
 
@@ -30,15 +30,15 @@
 
 ## 規格（`docs/specs/`）
 
-| 文件                                                       | 內容                                   | 狀態                 |
-| ---------------------------------------------------------- | -------------------------------------- | -------------------- |
-| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)   | 階段一：認證、帳本、成員、分類、交易   | 已完成               |
-| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)           | 階段二：Web 前端，含 Slice 0–4 的拆分  | 進行中（剩 Slice 4） |
-| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)       | 帳戶與即時餘額、轉帳型別、帳本連動設定 | 已完成               |
-| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md) | 帳本類型（`PERSONAL` / `SHARED`）      | 已完成               |
-| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)         | Playwright 端對端測試                  | 已完成               |
-| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)   | 版面重整為 dashboard shell             | 已完成               |
-| [`security-baseline.md`](specs/security-baseline.md)       | 跨階段的安全基準                       | 長期有效             |
+| 文件                                                       | 內容                                   | 狀態             |
+| ---------------------------------------------------------- | -------------------------------------- | ---------------- |
+| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)   | 階段一：認證、帳本、成員、分類、交易   | 已完成           |
+| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)           | 階段二：Web 前端，含 Slice 0–4 的拆分  | 進行中（剩收尾） |
+| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)       | 帳戶與即時餘額、轉帳型別、帳本連動設定 | 已完成           |
+| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md) | 帳本類型（`PERSONAL` / `SHARED`）      | 已完成           |
+| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)         | Playwright 端對端測試                  | 已完成           |
+| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)   | 版面重整為 dashboard shell             | 已完成           |
+| [`security-baseline.md`](specs/security-baseline.md)       | 跨階段的安全基準                       | 長期有效         |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
 

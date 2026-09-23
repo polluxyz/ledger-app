@@ -113,3 +113,9 @@
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
+
+/* 前往分類頁的連結。夾在基本資訊與成員之間，與兩者都拉開一點距離。 */
+.categoriesLink {
+  margin: var(--space-md) 0 0;
+  font-size: 0.875rem;
+}

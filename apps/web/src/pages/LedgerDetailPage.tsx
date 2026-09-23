@@ -185,6 +185,17 @@ function LedgerDetailView({
         )}
       </dl>
 
+      {/*
+        分類頁的帳本由 `?ledgerId=` 指定，所以這個連結只是「帶著這一本過去」，
+        **不會改動作用中帳本**——使用者為了看一眼分類，不該連記帳寫進哪一本都被改掉。
+        已封存的帳本不畫這個連結：分類頁的清單不含封存帳本，連過去也只會被退回。
+      */}
+      {!isArchived && (
+        <p className={styles.categoriesLink}>
+          <Link to={`/categories?ledgerId=${ledger.id}`}>管理這本帳本的分類</Link>
+        </p>
+      )}
+
       <div className={styles.membersHead}>
         <h3 className={styles.subtitle}>成員（{ledger.members.length}）</h3>
         {/* 私人帳本加不了人（後端回 409），所以連入口都不畫。 */}
