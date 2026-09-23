@@ -254,4 +254,34 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 
 ## 10. 實作紀錄
 
-（開工後填寫：偏離、計畫外的問題、實測數字。）
+### PR-A（#53，`fix/web-amount-display`）
+
+- 三個錯誤照 §2 修完。用假 API 在 375／390／1440px 量測：40 顆列內按鈕最高 29.5px、轉帳金額 `rgb(107, 114, 128)`、餘額 `-$6,820`、無橫向捲動。
+- **計畫外**：除了 3 行 e2e，還有 2 個單元測試的期望字串跟著改（`AccountBalances.test.tsx:65`、`accounts.test.tsx:65`：`'-12,000'` → `'-$12,000'`）。原本是子字串比對，新格式在負號與數字之間多了 `$`。意圖不變，已寫在 PR 描述。
+- 第一次在全新 worktree 跑 lint／typecheck 失敗：`packages/shared` 還沒 build。先 build 再跑就綠，與改動無關。CI 本來就先 build shared。
+- 全套測試第一次跑時 `transaction-edit.test.tsx` 有一條找不到「編輯」鈕；單獨跑 3/3 綠、全套再跑 2/2 綠。判斷是 api 與 web 測試同時跑時的負載造成的逾時，不是這次改動。
+- CI：Web e2e 20 條、API e2e 41 條、單元測試全綠；已 `update-branch` 到最新 `main`，狀態 CLEAN，等開發者同意合併。
+
+### PR-B 步驟 1（`c533e87`）
+
+- **偏離**：`vite.config.ts` 加了 `test.css.include: [/global\.css/]`。Vitest 預設把所有 `.css`（含 `?raw`）換成空字串，token 對比測試讀不到檔案。只影響測試環境，不影響建置與 CI 設定。
+- `Icon` 的筆畫資料拆到 `icon-paths.tsx`：React fast refresh 的 lint 規則不允許元件檔同時匯出常數。
+- token 測試的反向驗證：把深色的次要文字改成 `#4a4538` → 2 條對比失敗；只改一塊淺色 token → 「兩塊相同」失敗。還原後 32 條全綠。
+- `dist/index.html` 的順序確認：CSP `meta` → `theme-init.js`（無 defer／async）→ 應用程式 → CSS。
+- web 單元測試 34 檔 181 條 → 40 檔 259 條，既有測試一條都沒改。
+
+### PR-B 步驟 2（派工，2026-09-23）
+
+- **偏離**：W4 事先拆成 W4a（帳戶、分類、基礎表單元件）與 W4b（帳本、帳本明細、個人資料、登入註冊），共 5 個 worker。§8 原本寫「做不完再拆」；看過份量後判斷一開始就拆比較快，檔案清單互不重疊。
+- **偏離**：每個 worker 各開一個子 worktree（從本分支分出），不共用同一個簽出。同一個簽出裡 5 個 worker 同時跑測試，會看到彼此改到一半的檔案。做完由協調者逐一 merge 回本分支。
+- Run `run_15550d0eb5af`，全部是 Pi ＋ `zai/glm-5.3`：
+
+| Worker         | 分支                       | Task                | Dispatch           |
+| -------------- | -------------------------- | ------------------- | ------------------ |
+| W1 外殼        | `polluxyz/2h-w1-shell`     | `task_befd758f5df6` | `ctx_3e904410673f` |
+| W2 首頁        | `polluxyz/2h-w2-home`      | `task_735002314065` | `ctx_79839e3ff693` |
+| W3 表格        | `polluxyz/2h-w3-table`     | `task_8496e477b1ba` | `ctx_c0976e54bea0` |
+| W4a 帳戶／分類 | `polluxyz/2h-w4a-accounts` | `task_a2ea3371ad27` | `ctx_2f707f8999c0` |
+| W4b 帳本／個人 | `polluxyz/2h-w4b-ledgers`  | `task_abd184d45ec5` | `ctx_e793d533e67b` |
+
+- 介面約定：`TransactionList` 的 `selectedId` 由 W3 加、W2 不傳，整合時由協調者接上（兩邊平行做，避免 W2 的型別檢查依賴 W3）。
