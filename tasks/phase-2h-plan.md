@@ -285,3 +285,18 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 | W4b 帳本／個人 | `polluxyz/2h-w4b-ledgers`  | `task_abd184d45ec5` | `ctx_e793d533e67b` |
 
 - 介面約定：`TransactionList` 的 `selectedId` 由 W3 加、W2 不傳，整合時由協調者接上（兩邊平行做，避免 W2 的型別檢查依賴 W3）。
+
+**GLM 額度用完，改由 Claude Code 接手（2026-09-23 16:1x）**
+
+- 5 個 Pi worker 都在同一時間停住，錯誤原文：`429: {"code":"1308","message":"Usage limit reached for 5 hour. Your limit will reset at 2026-09-23 21:04:23"}`。Pi 自己重試 3 次後停止，沒有送出 `worker_done`，所以 dispatch 一直顯示 live——是開發者提醒後讀終端機才發現。**教訓**：Pi 的額度錯誤不會自動變成 escalation，協調者要定期讀終端機，不能只等訊息。
+- 依 `orca-multi-agent.md` §4 原本要換到 Antigravity。W1 試了一次：`agy` 第一次開啟 worktree 會跳「是否信任這個資料夾」，Orca 看到這個畫面就把那次 dispatch 判為失敗（`Agent startup blocked: agent-trust-workspace`）。
+- **開發者指示改用 Claude Code（Opus 5，`claude-opus-5`）跑所有 worker。** Pi 的 dispatch 用 `worker-abandon` 結束（`worker-stop` 對自己開的終端機無效，回 `stop_unknown`），再以 `--retry-of` 在同一個 Task 上重派。Claude Code 在這些 worktree 沒有信任提示，直接可用（auto mode）。
+- Pi 留下的未 commit 改動保留在各 worktree，每個新 worker 都收到一則接手說明，列出前手改了哪些檔案，要求先看 diff 再決定沿用或重寫。W2 的前手沒有留下任何改動。
+
+| Worker         | 新 Dispatch        | 前手留下的改動                                               |
+| -------------- | ------------------ | ------------------------------------------------------------ |
+| W1 外殼        | `ctx_90d7828d9a5b` | AppTopBar 兩檔（改）、ThemeToggle 三檔與收合 hook 兩檔（新） |
+| W2 首頁        | `ctx_519836d85837` | 無                                                           |
+| W3 表格        | `ctx_79b8ed5196a9` | `lib/format.ts`（改）                                        |
+| W4a 帳戶／分類 | `ctx_e1e7e6e3c24b` | 5 個基礎元件的 CSS／測試、`AccountDialog.tsx`                |
+| W4b 帳本／個人 | `ctx_3030a4343ec5` | 帳本與帳本明細 12 個檔案                                     |
