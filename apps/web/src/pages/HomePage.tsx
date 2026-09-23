@@ -255,25 +255,31 @@ function RecentBody({
             className={`${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`}
             onClick={() => onSelect(transaction)}
           >
-            <span className={styles.recentDate}>{formatDate(transaction.date)}</span>
-            <span className={styles.recentMain}>
-              {/* 分類為 null＝這是一筆轉帳（轉帳沒有分類）。 */}
-              <span className={styles.recentCategory}>
-                {transaction.category ? (
-                  transaction.category.name
-                ) : (
-                  <>
-                    <Icon name="transfer" />
-                    轉帳
-                  </>
-                )}
+            {/*
+              兩行：上行「分類 備註」、下行「日期・帳戶」。dashboard 的卡片只有交易頁
+              表格一半寬，擠成一行的話備註第一個被截掉。
+            */}
+            <span className={styles.recentText}>
+              <span className={styles.recentMain}>
+                {/* 分類為 null＝這是一筆轉帳（轉帳沒有分類）。 */}
+                <span className={styles.recentCategory}>
+                  {transaction.category ? (
+                    transaction.category.name
+                  ) : (
+                    <>
+                      <Icon name="transfer" />
+                      轉帳
+                    </>
+                  )}
+                </span>
+                {transaction.note && <span className={styles.recentNote}>{transaction.note}</span>}
               </span>
-              {transaction.note && <span className={styles.recentNote}>{transaction.note}</span>}
-            </span>
-            {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
-            <span className={styles.recentAccount}>
-              {transaction.account?.name}
-              {transaction.toAccount && ` → ${transaction.toAccount.name}`}
+              {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
+              <span className={styles.recentMeta}>
+                {formatDate(transaction.date)}
+                {transaction.account && `・${transaction.account.name}`}
+                {transaction.toAccount && ` → ${transaction.toAccount.name}`}
+              </span>
             </span>
             <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
               {formatTransactionAmount(transaction.type, transaction.amount)}

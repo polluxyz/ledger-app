@@ -78,7 +78,7 @@
   color: var(--color-accent);
 }
 
-/* 五筆交易，一行一筆。`<li>` 只是結構，樣式全在裡面那顆按鈕上。 */
+/* 五筆交易，一筆一列。`<li>` 只是結構，樣式全在裡面那顆按鈕上。 */
 .recent {
   list-style: none;
   margin: 0;
@@ -91,7 +91,7 @@
  */
 .recentRow {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-md);
   width: 100%;
@@ -115,11 +115,11 @@
   background-color: var(--color-primary-soft);
 }
 
-.recentDate {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  /* 等寬數字：日期欄寬度固定，右邊的分類才會對齊成一直線。 */
-  font-variant-numeric: tabular-nums;
+.recentText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .recentMain {
@@ -147,11 +147,14 @@
   font-size: var(--text-xs);
 }
 
-/* 帳戶與交易頁的列同一個位置：備註與金額之間。別人的帳戶被遮蔽時這裡是空的。 */
-.recentAccount {
+/* 第二行：日期・帳戶。別人的帳戶被遮蔽時只剩日期。 */
+.recentMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .recentAmount {
