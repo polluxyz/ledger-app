@@ -8,7 +8,7 @@
 >
 > 通用驗收（每個任務皆適用，不再重複）：
 > `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`、`pnpm build` 全綠。
-> 基準線：web 單元測試 **33 檔**（條數在 0.1 實測）、api **9 套 119 條**、e2e **20 條**。只能增加。
+> 基準線：web 單元測試 **34 檔 181 條**、api **9 套 119 條**、e2e **20 條**（2026-09-23 實測）。只能增加。
 
 ### 設計決策
 
@@ -86,7 +86,7 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
 
 - [ ] **1.1 token**
   - 檔案：`styles/global.css`。
-  - 內容：依 spec §4.3 寫兩組 token；深色在 `:root`、淺色在 `@media (prefers-color-scheme: light)`；加 `.visually-hidden`；更新斷點說明（900px、1200px）。
+  - 內容：依 spec §4.3 寫兩組 token；深色在 `:root`、淺色寫兩處（`[data-theme='light']` 與 `prefers-color-scheme: light`，D14）；加 `.visually-hidden` 與 `[data-chrome]` 的焦點色；更新斷點說明（900px、1200px）。
   - 驗收：既有畫面仍能開（顏色會變，版面不變）。
 
 - [ ] **1.2 token 對比測試**
@@ -178,6 +178,11 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
 - [ ] **3.4 鍵盤走一遍**
   - 內容：Tab 走完側欄、表格、面板；Esc 關面板；收合鈕、深淺切換鈕、四個往下展開的表單都能用鍵盤操作。
   - 驗收：兩種模式下焦點框都看得見。
+
+- [ ] **3.5 移除過渡用的 token 別名**
+  - 檔案：`styles/global.css`。
+  - 內容：刪掉 `--color-surface-hover`（Step 1 留給尚未改完的模組用）。
+  - 驗收：`grep -rn "color-surface-hover" apps/web/src` 沒有結果；畫面不變。
 
 ---
 

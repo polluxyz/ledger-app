@@ -6,7 +6,8 @@ import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
 
 /**
- * jsdom 尚未實作 `<dialog>` 的 `showModal()` 與 `close()`，補上最小的替身。
+ * jsdom 尚未實作 `<dialog>` 的 `showModal()`、`show()` 與 `close()`，補上最小的替身。
+ * `show()` 是非 modal 面板用的（`components/Dialog.tsx` 的 `panel` 變體，phase-2h）。
  *
  * 放在這裡是因為它與「測哪一個元件」無關——只要畫面上出現彈窗就需要它。
  * 這段原本在 7 個測試檔各有一份（Slice 1 的 S1-D5 刻意暫時重複，等重構被證明
@@ -17,6 +18,9 @@ import { beforeEach, vi } from 'vitest';
  */
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
+    this.open = true;
+  });
+  HTMLDialogElement.prototype.show = vi.fn(function (this: HTMLDialogElement) {
     this.open = true;
   });
   HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {

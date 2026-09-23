@@ -104,3 +104,76 @@ describe('Dialog', () => {
     expect(screen.getByLabelText('名稱')).toHaveValue('');
   });
 });
+
+/**
+ * 非 modal 的面板變體（phase-2h D8）。
+ *
+ * 它不經過 showModal()，所以原生 dialog 替 modal 做的事——Esc 關閉、焦點管理——
+ * 要由元件自己做。這裡逐項釘住，並確認角色與名稱跟 modal 一樣（e2e 靠它定位）。
+ */
+describe('Dialog panel variant', () => {
+  it('opens without showModal so the page behind stays usable', () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+    const show = vi.spyOn(HTMLDialogElement.prototype, 'show');
+
+    render(
+      <Dialog open variant="panel" title="編輯交易" onClose={vi.fn()}>
+        <input aria-label="金額" />
+      </Dialog>,
+    );
+
+    expect(show).toHaveBeenCalled();
+    expect(showModal).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog role and name so existing selectors still match', () => {
+    render(
+      <Dialog open variant="panel" title="編輯交易" onClose={vi.fn()}>
+        <input aria-label="金額" />
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '編輯交易' })).toBeInTheDocument();
+  });
+
+  it('closes on Escape', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Dialog open variant="panel" title="編輯交易" onClose={onClose}>
+        <input aria-label="金額" />
+      </Dialog>,
+    );
+
+    await user.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves focus to the first field and returns it to the trigger on close', async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            建立帳本
+          </button>
+          <Dialog open={open} variant="panel" title="建立帳本" onClose={() => setOpen(false)}>
+            <input aria-label="名稱" />
+          </Dialog>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: '建立帳本' });
+
+    await user.click(trigger);
+    expect(screen.getByLabelText('名稱')).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+  });
+});
