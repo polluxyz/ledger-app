@@ -28,7 +28,7 @@
 
 PR-A 不做任何設計變更，改動小，由協調者自己做（派工成本高於自己改）。
 
-### PR-B：設計主體（spec §3 的 SC-24～SC-28）
+### PR-B：設計主體（spec §3 的 SC-24～SC-30）
 
 範圍內：
 
@@ -56,7 +56,7 @@ global.css（token）──┬─> Icon.tsx ──┬─> AppSidebar（側欄、
                                                                               └─> AccountBalances（移進面板）
 ```
 
-**先做 token、`Icon`、`PageHeader`、`Dialog` 的 panel 變體**——它們是其他所有工作的介面。這四件由協調者先做完，worker 才能平行開工而不互相踩到。
+**先做 token、`Icon`、`PageHeader`、`Dialog` 的 panel 變體、`SlideDown`、`use-theme`**——它們是其他所有工作的介面。這六件由協調者先做完，worker 才能平行開工而不互相踩到。
 
 ---
 
