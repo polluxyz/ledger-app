@@ -59,7 +59,7 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('密碼'), 'wrong-password');
     await user.click(screen.getByRole('button', { name: '登入' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Email 或密碼不正確');
     // 失敗時不得留下 token，畫面也應停在登入頁。
     expect(localStorage.getItem('ledger.accessToken')).toBeNull();
     expect(screen.getByRole('heading', { name: '登入' })).toBeInTheDocument();

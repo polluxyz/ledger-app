@@ -1,13 +1,73 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { configDefaults } from 'vitest/config';
+
+/**
+ * 在**建置產物**的 `index.html` 注入 Content Security Policy（SEC-4，見
+ * `docs/specs/security-baseline.md`）。
+ *
+ * 為什麼是建置時的插件、而不是直接寫進 `index.html`：開發伺服器的 HMR 靠
+ * inline script 運作，頁面若一開始就帶 `script-src 'self'`，熱更新注入的
+ * 腳本會被瀏覽器擋掉，`pnpm dev` 直接壞掉。`apply: 'build'` 讓這條政策只在
+ * `vite build` 時生效，dev 完全不受影響——守著這條界線的測試在
+ * `e2e/csp.spec.ts`，它打的是 `vite preview` 的靜態產物，不是 dev server。
+ *
+ * CSP 在這個專案的定位是「token 存 localStorage」的補償措施：擋住 XSS 的
+ * 執行面，token 才不容易被偷走。它不是 token 不會外洩的保證。
+ */
+function cspMetaPlugin(): Plugin {
+  // configResolved 一定先於 transformIndexHtml 執行，政策在那時組好備用。
+  let policy = '';
+
+  return {
+    name: 'inject-content-security-policy',
+    apply: 'build',
+    configResolved(config) {
+      // loadEnv 與前端程式碼讀 `import.meta.env` 看到的是同一套值：process.env
+      // 加上 .env 檔。connect-src 是「建置時」決定的，所以建置環境必須帶對
+      // VITE_API_BASE_URL——e2e 的 preview webServer 為此在 build 時就指向
+      // 測試 API（3100），而不是開發用的 3000。
+      const env = loadEnv(config.mode, config.envDir ?? config.root, 'VITE_');
+      // 與 `src/lib/api-client.ts` 的預設值一致；來源不同就各建各的。
+      const baseUrl = env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+      // 只取 origin：CSP 管的是來源，不認路徑，`/api` 前綴留在 CSP 之外。
+      const apiOrigin = new URL(baseUrl).origin;
+
+      policy = [
+        "default-src 'self'",
+        // 絕不加 'unsafe-inline'——加了等於把這整件事取消掉。
+        "script-src 'self'",
+        // 目前建置產物只有一個外部 .css、沒有 inline style，所以不必放寬。
+        // 哪天真的被擋，先看違規訊息原文再決定對策，不要預先投降。
+        "style-src 'self'",
+        "img-src 'self' data:",
+        `connect-src 'self' ${apiOrigin}`,
+        "font-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join('; ');
+    },
+    transformIndexHtml() {
+      // 用 tags API 而不是字串替換，並插在 <head> 最前面：CSP 的 meta 標籤
+      // 只對出現在它「之後」的內容生效，愈早出現愈好。
+      return [
+        {
+          tag: 'meta',
+          attrs: { 'http-equiv': 'Content-Security-Policy', content: policy },
+          injectTo: 'head-prepend',
+        },
+      ];
+    },
+  };
+}
 
 /**
  * Vite 設定：開發伺服器、建置，以及 Vitest（測試沿用同一份設定，不必另立檔案）。
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cspMetaPlugin()],
   optimizeDeps: {
     /**
      * `@ledger/shared` 編譯成 CommonJS（`main: dist/index.js`，內容是 `require`

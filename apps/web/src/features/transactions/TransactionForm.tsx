@@ -32,7 +32,8 @@ interface TransactionFormProps {
  * 「元」，因此**不做任何換算**。
  *
  * 前端只做「體驗性」的必填與型別限制（required、type="number"）；真正的驗證
- * 一律由後端負責，失敗時原樣呈現後端訊息。
+ * 一律由後端負責。失敗時訊息的內容仍來自後端，前端只把 `errorCode` 換成
+ * 在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣顯示。
  *
  * ## 為什麼新增與編輯是同一個元件（D1）
  *

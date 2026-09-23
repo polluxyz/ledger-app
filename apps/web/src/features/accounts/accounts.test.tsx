@@ -155,7 +155,8 @@ describe('Accounts page', () => {
     await user.click(dialog().getByRole('button', { name: '新增' }));
 
     // 彈窗留著、輸入留著——關掉的話使用者剛打的字就沒了，也多半沒看到錯誤。
-    expect(await dialog().findByRole('alert')).toHaveTextContent('already exists');
+    // 訊息是 errorCode 對照出來的中文，不是後端原文。
+    expect(await dialog().findByRole('alert')).toHaveTextContent('已經有帳戶在用');
     expect(dialog().getByLabelText('名稱')).toHaveValue('現金');
   });
 
@@ -192,7 +193,7 @@ describe('Accounts page', () => {
     await user.click(dialog().getByRole('button', { name: '刪除' }));
 
     // 409 是按下確認之後才發生的，所以訊息必須留在彈窗裡。
-    expect(await dialog().findByRole('alert')).toHaveTextContent('transactions reference');
+    expect(await dialog().findByRole('alert')).toHaveTextContent('已經有交易在用');
     expect(screen.getByText('現金')).toBeInTheDocument();
   });
 });

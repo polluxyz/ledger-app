@@ -130,7 +130,7 @@ describe('AuthDialog on the home page', () => {
     await user.type(dialog().getByLabelText('密碼'), 'wrong');
     await user.click(dialog().getByRole('button', { name: '登入' }));
 
-    expect(await dialog().findByRole('alert')).toHaveTextContent('Invalid email or password.');
+    expect(await dialog().findByRole('alert')).toHaveTextContent('Email 或密碼不正確');
     expect(dialog().getByLabelText('密碼')).toBeInTheDocument();
   });
 });

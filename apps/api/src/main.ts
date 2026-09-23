@@ -20,6 +20,9 @@ async function bootstrap() {
    *
    * 不開 `credentials`：認證走 Authorization 標頭的 Bearer token，不使用
    * cookie，因此毋須允許跨來源夾帶憑證——維持較嚴的設定。
+   *
+   * `CORS_ORIGIN` 支援逗號分隔的多個來源，驗證時已經拆成陣列
+   * （見 `env.validation.ts`）。每一筆仍是完全比對，清單長短不影響嚴格程度。
    */
   app.enableCors({
     origin: config.get('CORS_ORIGIN', { infer: true }),

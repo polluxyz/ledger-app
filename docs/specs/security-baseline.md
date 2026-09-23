@@ -93,6 +93,16 @@
 - **SEC-4｜前端 CSP**：Web 頁面帶 Content Security Policy（限制頁面能載入與執行哪些來源的資源）。`script-src` 禁 inline 與外部來源；`style-src` 視實際情況可能需要放寬——Vite 產出的樣式注入方式會影響這點，實作時實測，不要照抄範本。
   驗證：瀏覽器 console 無 CSP 違規；故意插入一段 inline script 應被擋。
   **定位**：CSP 是 `localStorage` 存 token 的**補償措施**，用來降低 XSS 得手後的可利用性。**不得把 CSP 當成 token 不會外洩的保證**——攻擊者只要有辦法讓 script 在允許的來源下執行，token 一樣拿得到。真正的解法是 SEC-2：讓外洩的 token 活不久。
+
+  **目前狀態（2026-09-23，2g）：部分完成。** 政策由 `apps/web/vite.config.ts` 的插件在**建置時**注入
+  `<meta http-equiv>`（dev server 靠 inline script 做 HMR，寫死會讓它壞掉，所以只在 build 時生效）。
+  實測結果：`script-src 'self'` 與 `style-src 'self'` 都成立，不需要 `'unsafe-inline'`；
+  `connect-src` 從 `VITE_API_BASE_URL` 推導，跟著建置環境走。驗證在 `apps/web/e2e/csp.spec.ts`。
+
+  ⚠️ **還沒做完的部分**：`frame-ancestors` 與 `report-uri` 在 `meta` 裡**不生效**，瀏覽器會忽略它們。
+  這兩項與 SEC-3 的 Web 層一樣，都要等有靜態主機能設 HTTP 標頭時才補得上。
+  在那之前，**這個 app 沒有防止被嵌進 iframe 的保護**。
+
 - **SEC-5｜Swagger 不對外**：正式環境 `/docs` **直接回 `404`**。不接受 Basic Auth、IP 白名單這類替代作法——條件寫不清楚，測試就寫不出來。
   驗證：以正式環境設定啟動，打 `/docs` 回 `404`。
 - **SEC-6｜密鑰不弱、不重用、不寫死**：`JWT_SECRET` 由密碼學隨機來源產生，長度至少 256 bits（例如 `openssl rand -base64 32`）；正式與開發環境不同值；**禁止使用 `.env.example`、README 或程式碼裡出現過的任何值**。

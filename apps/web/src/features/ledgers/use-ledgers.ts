@@ -48,8 +48,9 @@ export function useLedger(ledgerId: string | null) {
 
 /**
  * 以下四個 mutation 都不攔截錯誤——`apiRequest` 已把後端的統一錯誤格式轉成
- * `ApiError`，呼叫端交給 `FormError` 呈現即可。前端不自行改寫錯誤訊息：
- * 那是後端的職責，重寫只會讓兩邊講法不一致。
+ * `ApiError`，呼叫端交給 `FormError` 呈現。訊息內容仍由後端定義；前端只負責把
+ * `errorCode` 對應到在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣
+ * 顯示後端訊息。
  */
 
 /** 建立帳本。`tracksBalance` 建立後即定案，之後無法變更。 */

@@ -59,8 +59,10 @@ describe('Categories page', () => {
 
   const ledgers = [personal, travel, family];
 
+  /** sortOrder 依呼叫順序給值——這一頁不拿它排序（後端排好了），但型別要求它存在。 */
+  let nextSortOrder = 0;
   function category(id: string, name: string, type: CategoryType): Category {
-    return { id, name, type, createdAt: '2026-08-01T00:00:00.000Z' };
+    return { id, name, type, sortOrder: nextSortOrder++, createdAt: '2026-08-01T00:00:00.000Z' };
   }
 
   beforeEach(() => {
@@ -138,6 +140,7 @@ describe('Categories page', () => {
             id: 'cat-created',
             name: body.name,
             type: body.type,
+            sortOrder: 99,
             createdAt: '2026-08-02T00:00:00.000Z',
           };
           group?.[body.type].push(created);
@@ -248,7 +251,7 @@ describe('Categories page', () => {
     expect(screen.getByText('娛樂')).toBeInTheDocument();
   });
 
-  it('keeps the create dialog open and shows the backend message on a name conflict', async () => {
+  it('keeps the create dialog open and shows the error on a name conflict', async () => {
     routeFetch({ nameTaken: true });
     const user = userEvent.setup();
     renderPage();
@@ -257,9 +260,9 @@ describe('Categories page', () => {
     await user.type(screen.getByLabelText('名稱'), '餐飲');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
-    // 後端的訊息原樣呈現，前端不翻譯。
+    // errorCode 有對照到中文就顯示中文；後端原文只是 mock 的一部分。
     expect(
-      await screen.findByText('A category with this name and type already exists.'),
+      await screen.findByText('這個名稱已經有同型別的分類在用了，換一個名稱。'),
     ).toBeInTheDocument();
     // 關掉的話使用者剛打的字全沒了，多半也沒看到錯誤。
     expect(screen.getByRole('dialog', { name: '新增支出分類' })).toBeInTheDocument();
@@ -290,7 +293,7 @@ describe('Categories page', () => {
     await user.click(screen.getByRole('button', { name: '刪除' }));
 
     expect(
-      await screen.findByText('Cannot delete a category that transactions reference.'),
+      await screen.findByText('這個分類已經有交易在用，不能刪除。可以改名，或先改那些交易的分類。'),
     ).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '刪除分類' })).toBeInTheDocument();
   });

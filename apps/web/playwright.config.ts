@@ -3,6 +3,8 @@ import {
   API_BASE_URL,
   API_PORT,
   API_READY_URL,
+  PREVIEW_ORIGIN,
+  PREVIEW_PORT,
   WEB_ORIGIN,
   WEB_PORT,
   loadTestEnv,
@@ -94,8 +96,13 @@ export default defineConfig({
         /**
          * 前端跑在另一個埠，屬不同來源。少了這一行，瀏覽器會擋掉每一個請求——
          * 這正是本專案發生過的第一次事故。
+         *
+         * 兩個來源都要列：dev server（5273）跑既有那 17 條，preview（5274）
+         * 跑 `csp.spec.ts`。**preview 那一條刻意走真正的跨來源請求**，因為
+         * 它要驗的就是 CSP 的 `connect-src` 有沒有放行 API 的來源；改用同源
+         * proxy 繞過去，測試會變綠但什麼都沒驗到。
          */
-        CORS_ORIGIN: WEB_ORIGIN,
+        CORS_ORIGIN: `${WEB_ORIGIN},${PREVIEW_ORIGIN}`,
         /** 停用限流，否則密集打 auth 端點會被擋（與 api 現有 e2e 一致）。 */
         NODE_ENV: 'test',
       },
@@ -116,6 +123,31 @@ export default defineConfig({
       stderr: 'pipe',
       env: {
         /** 讓前端打測試用的 API，而不是預設的 3000。 */
+        VITE_API_BASE_URL: API_BASE_URL,
+      },
+    },
+    {
+      /**
+       * CSP 由建置時的插件注入，只存在於產物裡（見 `vite.config.ts`），驗它的
+       * e2e（`csp.spec.ts`）必須打在建置產物上——dev server 上沒有那條政策，
+       * 拿 dev 測等於沒測。所以先 build 再 `vite preview`。
+       */
+      command: `pnpm --filter @ledger/web build && pnpm --filter @ledger/web preview --port ${PREVIEW_PORT} --strictPort`,
+      url: PREVIEW_ORIGIN,
+      /** 先 build 再起 preview，比單純起 dev 慢一截，上限給寬。 */
+      timeout: 240_000,
+      /**
+       * 與上面兩個一致：本機重跑時沿用已在跑的伺服器；CI 一律重開。
+       * 沿用時不會重新 build，產物是上次建的那份——若剛改過 src，先關掉舊的。
+       */
+      reuseExistingServer: !process.env.CI,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        /**
+         * CSP 的 connect-src 在建置時就決定，所以 **build 階段**就要帶測試 API
+         * 的位址；只給 preview 的話，燒進產物的會是預設的 3000。
+         */
         VITE_API_BASE_URL: API_BASE_URL,
       },
     },
