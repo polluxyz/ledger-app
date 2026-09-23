@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import styles from './Pagination.module.css';
 
 interface PaginationProps {
@@ -26,17 +27,19 @@ export function Pagination({ page, limit, total, onChange }: PaginationProps) {
 
   return (
     <nav className={styles.bar} aria-label="分頁">
+      <span className={styles.status}>
+        第 {page} / {totalPages} 頁
+      </span>
+      {/* 箭頭只是輔助，文字留著：只有圖示的按鈕沒有無障礙名稱。 */}
       <button
         type="button"
         className={styles.button}
         disabled={page <= 1}
         onClick={() => onChange(page - 1)}
       >
+        <Icon name="chevronLeft" />
         上一頁
       </button>
-      <span className={styles.status}>
-        第 {page} / {totalPages} 頁
-      </span>
       <button
         type="button"
         className={styles.button}
@@ -44,6 +47,7 @@ export function Pagination({ page, limit, total, onChange }: PaginationProps) {
         onClick={() => onChange(page + 1)}
       >
         下一頁
+        <Icon name="chevronRight" />
       </button>
     </nav>
   );
