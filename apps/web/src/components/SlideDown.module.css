@@ -30,8 +30,7 @@
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .wrap {
-    transition: none;
-  }
+/* 使用者在設定裡關掉動畫（spec 2i SC-39）。 */
+:global(:root[data-motion='off']) .wrap {
+  transition: none;
 }

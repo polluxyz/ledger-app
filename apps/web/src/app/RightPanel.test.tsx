@@ -25,6 +25,7 @@ function Controls() {
       <button onClick={panel.close}>收起</button>
       <button onClick={panel.requestFocus}>要求焦點</button>
       <button onClick={() => void navigate('/elsewhere')}>換網址</button>
+      <button onClick={() => void navigate('/')}>回原網址</button>
       <output aria-label="焦點請求">{panel.focusRequest}</output>
     </>
   );
@@ -127,6 +128,18 @@ describe('RightPanel', () => {
     await user.click(screen.getByRole('button', { name: '打開' }));
 
     await user.click(screen.getByRole('button', { name: '換網址' }));
+
+    expect(column()).not.toHaveAttribute('data-open');
+  });
+
+  it('is closed again after leaving and coming back (SC-44)', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+
+    await user.click(screen.getByRole('button', { name: '換網址' }));
+    await user.click(screen.getByRole('button', { name: '回原網址' }));
 
     expect(column()).not.toHaveAttribute('data-open');
   });

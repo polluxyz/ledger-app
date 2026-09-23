@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import source from '../../public/theme-init.js?raw';
+import { MOTION_STORAGE_KEY } from './use-motion';
 import { THEME_STORAGE_KEY } from './use-theme';
 
 /**
@@ -23,6 +24,7 @@ describe('theme-init.js', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-motion');
   });
 
   afterEach(() => {
@@ -31,6 +33,24 @@ describe('theme-init.js', () => {
 
   it('uses the same storage key as the React hook', () => {
     expect(source).toContain(`'${THEME_STORAGE_KEY}'`);
+  });
+
+  it('uses the same motion storage key as useMotion (spec 2i SC-39)', () => {
+    expect(source).toContain(`'${MOTION_STORAGE_KEY}'`);
+  });
+
+  it('turns motion off before the app runs when the user chose so', () => {
+    localStorage.setItem(MOTION_STORAGE_KEY, 'off');
+
+    runInitScript();
+
+    expect(document.documentElement).toHaveAttribute('data-motion', 'off');
+  });
+
+  it('leaves motion on when nothing was chosen', () => {
+    runInitScript();
+
+    expect(document.documentElement).not.toHaveAttribute('data-motion');
   });
 
   it.each(['light', 'dark'])('applies a saved "%s" choice before the app runs', (theme) => {

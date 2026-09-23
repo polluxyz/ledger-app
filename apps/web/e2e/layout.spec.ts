@@ -231,15 +231,24 @@ test('SC-31.1：側欄收合前後，icon 的位置不變', async ({ signedInPag
   });
 });
 
-test('SC-31.2：側欄開合有動畫；減少動態效果時沒有', async ({ signedInPage: page }) => {
+/**
+ * SC-31.2、SC-39：開合是 320ms 的抽屜動畫。動畫由網站裡的設定開關決定（第三輪），
+ * **不看**作業系統的「減少動態效果」——模擬系統要求減少動畫時仍然有動畫，
+ * 在設定裡關掉（localStorage 的 `ledger.motion`）才沒有。
+ */
+test('SC-31.2：側欄開合有動畫；只有在設定裡關掉才沒有', async ({ signedInPage: page }) => {
   const sidebar = page.getByRole('complementary');
   const duration = () =>
     sidebar.evaluate((element) => getComputedStyle(element).transitionDuration);
 
-  // 第二輪修訂 6：抽屜式，320ms。
   expect(await duration()).toMatch(/0\.32s/);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await duration()).toMatch(/0\.32s/);
+
+  await page.evaluate(() => window.localStorage.setItem('ledger.motion', 'off'));
+  await page.reload();
+  await expect(sidebar).toBeVisible();
   expect(await duration()).not.toMatch(/0\.32s/);
 });
 

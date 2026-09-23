@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { isMotionEnabled } from '../app/use-motion';
 import styles from './SlideDown.module.css';
 
 interface SlideDownProps {
@@ -10,14 +11,14 @@ interface SlideDownProps {
 const CLOSE_FALLBACK_MS = 300;
 
 /**
- * 使用者要求「不要動畫」，或環境根本無法判斷（jsdom 沒有 matchMedia）時，直接收起。
- * 這不是斷點判斷——與版面寬度無關，所以不違反「斷點只寫在 CSS」（phase-2h D10）。
+ * 使用者在設定裡關掉動畫（spec 2i SC-39），或環境根本不會播動畫（jsdom 沒有
+ * `matchMedia`，也不會觸發 `transitionend`）時，直接收起。
  */
 function prefersReducedMotion(): boolean {
   if (typeof window.matchMedia !== 'function') {
     return true;
   }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return !isMotionEnabled();
 }
 
 /**
