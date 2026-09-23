@@ -29,14 +29,40 @@ export function formatMoney(amount: number): string {
 }
 
 /**
+ * 7 種交易型別的中文名稱。交易頁與首頁共用同一份——兩邊各寫一份的話，同一筆
+ * 交易在兩頁會有兩個名字。
+ *
+ * 借還的 4 種尤其不能省：沒有分類的列原本一律寫「轉帳」（只有轉帳沒有分類），
+ * 但借還交易同樣沒有分類，照舊邏輯會被寫成「轉帳」——借出去的錢說成換帳戶，
+ * 是誤導。
+ */
+export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
+  EXPENSE: '支出',
+  INCOME: '收入',
+  TRANSFER: '轉帳',
+  LEND: '借出',
+  BORROW: '借入',
+  COLLECT: '收回',
+  REPAY: '償還',
+};
+
+/**
  * 交易金額的前綴。轉帳刻意**不用正負號**：錢只是換了帳戶，既不是支出也不是
- * 收入，用「−」會讓人以為花掉了。三種型別各自給值，而不是「非支出即收入」的
+ * 收入，用「−」會讓人以為花掉了。每種型別各自給值，而不是「非支出即收入」的
  * 二分法——後者在 TRANSFER 出現後就是錯的。
+ *
+ * 借還的 4 種看的是**錢對帳戶的方向**，不是收支：借出（LEND）與償還（REPAY）
+ * 錢從帳戶出去，記 `-`；借入（BORROW）與收回（COLLECT）錢進到帳戶，記 `+`。
+ * 它們一樣不計入收入或支出，顏色因此沿用轉帳的中性色（見 TransactionList）。
  */
 const TRANSACTION_SIGN: Record<TransactionType, string> = {
   EXPENSE: '-',
   INCOME: '+',
   TRANSFER: '',
+  LEND: '-',
+  REPAY: '-',
+  BORROW: '+',
+  COLLECT: '+',
 };
 
 /**

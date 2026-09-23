@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { LedgerSummary, Transaction } from '@ledger/shared';
+import { isDebtTransactionType, type LedgerSummary, type Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -15,7 +15,7 @@ import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
 import { useTransactions } from '../features/transactions/use-transactions';
-import { formatDate, formatTransactionAmount } from '../lib/format';
+import { formatDate, formatTransactionAmount, TRANSACTION_TYPE_LABELS } from '../lib/format';
 import styles from './HomePage.module.css';
 
 /** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
@@ -217,11 +217,15 @@ function RecentTransactions({
   );
 }
 
-/** 金額的語意色，同樣三種型別各自對一個 class。 */
+/** 金額的語意色，同樣每種型別各自對一個 class；借還的 4 種沿用轉帳的中性色。 */
 const AMOUNT_COLOR: Record<Transaction['type'], string> = {
   EXPENSE: styles.expense ?? '',
   INCOME: styles.income ?? '',
   TRANSFER: styles.transfer ?? '',
+  LEND: styles.transfer ?? '',
+  BORROW: styles.transfer ?? '',
+  COLLECT: styles.transfer ?? '',
+  REPAY: styles.transfer ?? '',
 };
 
 /** 載入中 / 失敗 / 沒有交易 / 有資料，四種呈現。 */
@@ -251,27 +255,24 @@ function RecentBody({
         守住標題的承諾：卡片寫著「最近交易」而後端多給了幾筆時，這張摘要卡不該
         默默長高、把下面的內容推走。不做任何排序、篩選或加總。
       */}
-      {transactions.slice(0, RECENT_LIMIT).map((transaction) => (
-        <li key={transaction.id}>
-          <button
-            type="button"
-            className={`${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`}
-            onClick={() => onSelect(transaction)}
-          >
-            {/*
-              兩行：上行「分類 備註」、下行「日期・帳戶」。dashboard 的卡片只有交易頁
-              表格一半寬，擠成一行的話備註第一個被截掉。
-            */}
+      {transactions.slice(0, RECENT_LIMIT).map((transaction) => {
+        const rowClass = `${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`;
+        /*
+          兩行：上行「分類 備註」、下行「日期・帳戶」。dashboard 的卡片只有交易頁
+          表格一半寬，擠成一行的話備註第一個被截掉。
+        */
+        const content = (
+          <>
             <span className={styles.recentText}>
               <span className={styles.recentMain}>
-                {/* 分類為 null＝這是一筆轉帳（轉帳沒有分類）。 */}
+                {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
                 <span className={styles.recentCategory}>
                   {transaction.category ? (
                     transaction.category.name
                   ) : (
                     <>
                       <Icon name="transfer" />
-                      轉帳
+                      {TRANSACTION_TYPE_LABELS[transaction.type]}
                     </>
                   )}
                 </span>
@@ -287,9 +288,26 @@ function RecentBody({
             <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
               {formatTransactionAmount(transaction.type, transaction.amount)}
             </span>
-          </button>
-        </li>
-      ))}
+          </>
+        );
+
+        /*
+          借還交易只能從債務端點改動，在一般交易端點是唯讀的（後端回 409
+          `DEBT_TRANSACTION_READ_ONLY`）。這一列因此不包成 `<button>`：沒有東西
+          可以開，包了就等於給鍵盤使用者一個按下去沒反應的焦點站。
+        */
+        return (
+          <li key={transaction.id}>
+            {isDebtTransactionType(transaction.type) ? (
+              <div className={rowClass}>{content}</div>
+            ) : (
+              <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>
+                {content}
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
