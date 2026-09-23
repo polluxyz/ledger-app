@@ -62,7 +62,7 @@ describe('Account balances on the home page', () => {
     expect(balances().getByLabelText('現金餘額')).toHaveTextContent('$3,800');
 
     const owed = balances().getByLabelText('信用卡餘額');
-    expect(owed).toHaveTextContent('-12,000');
+    expect(owed).toHaveTextContent('-$12,000');
     expect(owed.className).toMatch(/negative/);
   });
 

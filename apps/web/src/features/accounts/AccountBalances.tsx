@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Account } from '@ledger/shared';
 import { Icon } from '../../components/Icon';
-import { formatAmount } from '../../lib/format';
+import { formatMoney } from '../../lib/format';
 import { useAccounts } from './use-accounts';
 import styles from './AccountBalances.module.css';
 
@@ -82,7 +82,7 @@ function Body({
             className={`${styles.value} ${account.balance < 0 ? styles.negative : ''}`}
             aria-label={`${account.name}餘額`}
           >
-            ${formatAmount(account.balance)}
+            {formatMoney(account.balance)}
           </span>
         </div>
       ))}

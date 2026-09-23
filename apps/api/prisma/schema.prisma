@@ -39,6 +39,80 @@ model User {
   memberships  LedgerMember[]
   transactions Transaction[]  @relation("TransactionCreator")
   accounts     Account[]
+
+  // 好友系統（3a）。Friendship 一對只存一筆，所以一個人可能出現在 low 或 high 任一側。
+  friendshipsAsLow       Friendship[]       @relation("FriendshipLow")
+  friendshipsAsHigh      Friendship[]       @relation("FriendshipHigh")
+  friendRequestsSent     FriendRequest[]    @relation("FriendRequestSent")
+  friendRequestsReceived FriendRequest[]    @relation("FriendRequestReceived")
+  friendInviteLinks      FriendInviteLink[] @relation("FriendInviteLinkCreated")
+  friendInviteLinksUsed  FriendInviteLink[] @relation("FriendInviteLinkUsed")
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+/// 一對好友只存一筆。為了讓 (A, B) 與 (B, A) 不會各存一次，一律把 id 較小者放
+/// userLowId、較大者放 userHighId。存兩筆的話，只要有一條路徑漏寫一筆，關係就只剩單邊。
+///
+/// 資料庫另有 CHECK 約束 `Friendship_ordered`（userLowId < userHighId），擋住忘了排序
+/// 或兩個 id 相同的寫入。Prisma schema 表達不了 CHECK，只存在於 migration。
+model Friendship {
+  userLowId  String
+  userHighId String
+  createdAt  DateTime @default(now())
+
+  userLow  User @relation("FriendshipLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+
+  @@id([userLowId, userHighId])
+  @@index([userHighId])
+}
+
+/// 以 email 送出的好友邀請。狀態機見 spec §3.1：只有 PENDING 能轉換。
+///
+/// 同一對發起者與收件者最多一筆 PENDING——由部分唯一索引
+/// `FriendRequest_one_pending_per_pair` 保證（Prisma 不支援部分索引，只存在於 migration）。
+model FriendRequest {
+  id          String              @id @default(uuid())
+  requesterId String
+  recipientId String
+  status      FriendRequestStatus @default(PENDING)
+  /// 接受、拒絕或取消的時間。
+  respondedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  requester User @relation("FriendRequestSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("FriendRequestReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, status])
+  @@index([requesterId, status])
+}
+
+/// 好友邀請連結。10 分鐘過期、只能用一次；同一人產生新連結時，舊的未使用連結失效。
+/// 狀態不另存欄位，由 usedAt / revokedAt / expiresAt 推得（spec §3.2）。
+model FriendInviteLink {
+  id        String    @id @default(uuid())
+  inviterId String
+  /// token 的 SHA-256（hex）。原文只在產生當下回給產生者一次，資料庫外洩時有效連結不會跟著外洩。
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedById  String?
+  /// 同一人產生新連結時，舊的未使用連結在此標記失效。
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  inviter User  @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
+  // SetNull：使用者被刪掉，不該連帶刪掉別人產生過的連結紀錄。
+  usedBy  User? @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([inviterId])
 }
 
 /// 錢實際放在哪裡（現金、某家銀行、某張信用卡）。
@@ -99,10 +173,10 @@ model LedgerMember {
 }
 
 model Category {
-  id       String          @id @default(uuid())
-  ledgerId String
-  name     String
-  type     TransactionType
+  id        String          @id @default(uuid())
+  ledgerId  String
+  name      String
+  type      TransactionType
   /// 顯示順序。預設分類依 `DEFAULT_CATEGORIES` 的定義順序填 0..n，讓「餐飲」
   /// 這類常用分類排在前面。
   ///

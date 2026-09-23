@@ -14,6 +14,18 @@ export function formatAmount(amount: number): string {
   return amount.toLocaleString('zh-TW');
 }
 
+/**
+ * 帶貨幣符號的金額：`$3,240`、`-$6,820`。
+ *
+ * 負號放在 `$` 前面。直接寫 `` `$${formatAmount(n)}` `` 會得到 `$-6,820`，
+ * 而交易列表的支出寫成 `-$120`——同一個 app 兩種寫法，使用者得多想一下
+ * 哪個才是「欠錢」。負數餘額（信用卡欠款）是正常狀態，寫法要跟支出一致。
+ */
+export function formatMoney(amount: number): string {
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}$${formatAmount(Math.abs(amount))}`;
+}
+
 /** ISO 8601 時間字串轉成 `2026/08/12` 這種好讀的日期。 */
 export function formatDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString('zh-TW', {

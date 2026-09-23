@@ -14,3 +14,4 @@ export * from './types/ledger';
 export * from './types/category';
 export * from './types/account';
 export * from './types/pagination';
+export * from './types/friend';

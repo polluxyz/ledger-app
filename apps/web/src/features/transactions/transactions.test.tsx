@@ -134,6 +134,24 @@ describe('Transactions on the home page', () => {
     expect(within(item).getByText(/國泰世華/)).toBeInTheDocument();
   });
 
+  it('colors a transfer neutrally instead of as income', async () => {
+    // 原本只分「支出」與「其他」兩種顏色，轉帳因此被畫成收入的綠色，
+    // 看起來像多了一筆錢。
+    const transfer = {
+      ...lunch,
+      type: 'TRANSFER',
+      category: null,
+      toAccount: { id: 'acc-2', name: '國泰世華' },
+    };
+    routeFetch({ transactions: { items: [transfer], page: 1, limit: 20, total: 1 } });
+
+    render(<App />);
+
+    const amount = within(await screen.findByRole('listitem')).getByText('$120');
+    expect(amount.className).toMatch(/transfer/);
+    expect(amount.className).not.toMatch(/income/);
+  });
+
   it('shows an empty state when there are no transactions', async () => {
     routeFetch();
 

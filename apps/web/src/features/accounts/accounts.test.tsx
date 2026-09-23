@@ -62,7 +62,7 @@ describe('Accounts page', () => {
     expect(within(items[0]!).getByText('$3,800')).toBeInTheDocument();
     // 信用卡欠款是負的，且要一眼看得出來。
     const balance = within(items[1]!).getByLabelText('信用卡餘額');
-    expect(balance).toHaveTextContent('-12,000');
+    expect(balance).toHaveTextContent('-$12,000');
     expect(balance.className).toMatch(/negative/);
   });
 
