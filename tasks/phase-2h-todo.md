@@ -15,7 +15,7 @@
 | #   | 結論                                                      | 出處      |
 | --- | --------------------------------------------------------- | --------- |
 | D1  | L1 可收合側欄 ＋ L3 表格與右側面板                        | spec §4.1 |
-| D2  | 黑金；D3 淺色版為「象牙金」，跟隨 `prefers-color-scheme`  | spec §4.3 |
+| D2  | 黑金；D3 淺色版為「象牙金」，預設跟隨系統、可手動切換     | spec §4.3 |
 | D4  | 列操作是鉛筆（編輯）與垃圾桶（刪除）圖示鈕，名稱不變      | spec §4.1 |
 | D5  | 統計卡原樣保留                                            | spec §4.1 |
 | D6  | 系統字體；圖示自己寫 inline SVG                           | spec §4.1 |
@@ -26,11 +26,13 @@
 | D11 | 收合記在 `localStorage['ledger.sidebarCollapsed']`        | plan §4   |
 | D12 | 登入後 `h1` 在側欄；窄螢幕頂列的站名不是 heading          | plan §4   |
 | D13 | 收合時的文字用 `.visually-hidden`，不用 `display: none`   | plan §4   |
-| D14 | 深色寫在 `:root`，淺色寫在 `prefers-color-scheme: light`  | plan §4   |
+| D14 | 深色寫在 `:root`，淺色寫兩處（手動選的、跟系統的）        | plan §4   |
 | D15 | token 對比寫成單元測試                                    | plan §4   |
 | D16 | 日期分組：標題是 `<p>`，每組一個 `<ul>`；不顯示每日小計   | plan §4   |
 | D17 | 整列可點開編輯；鍵盤走鉛筆鈕                              | plan §4   |
 | D18 | 收合時帳本切換器仍是同一個 `<select>`，疊在方塊上         | plan §4   |
+| D19 | 深淺切換：`theme-init.js` 防閃爍，狀態只看 `data-theme`   | plan §4   |
+| D20 | 四個建立表單改成 `SlideDown`＋panel；編輯類維持 modal     | plan §4   |
 
 ---
 
@@ -107,6 +109,18 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
   - 內容：`variant: 'modal' | 'panel'`，預設 `modal`。`panel` 用 `show()`、自己接 Esc。`setup.ts` 補 `show()` 替身。
   - 驗收：既有 `Dialog.test.tsx` 全綠；新增三條——panel 不呼叫 `showModal`、Esc 會觸發 `onClose`、角色與名稱正確。
 
+- [ ] **1.6 深淺色的基礎（D19）**
+  - 檔案：`public/theme-init.js`（新）、`index.html`、`app/use-theme.ts`（新）、`use-theme.test.ts`、`theme-init.test.ts`（新）、`styles/tokens.test.ts`。
+  - 內容：`theme-init.js` 同步設定 `<html data-theme>`；`use-theme` 讀寫 `localStorage['ledger.theme']`、`system` 時移除屬性；兩組 token 各設 `color-scheme`。
+  - 驗收：
+    - 測試：`theme-init.js` 對 `light`／`dark`／`system`／讀取會拋錯四種情況的結果；`use-theme` 依序切換並寫入；兩塊淺色 token 內容相同。
+    - `pnpm --filter @ledger/web build` 後，`dist/index.html` 的 `<head>` 裡 CSP `meta` 之後、CSS 之前有這個 script，且沒有 `defer`／`async`。
+
+- [ ] **1.7 `SlideDown` 元件（D20）**
+  - 檔案：`components/SlideDown.tsx`、`SlideDown.module.css`、`SlideDown.test.tsx`（新）。
+  - 內容：`open` 為 true 時往下展開；轉成 false 時播完收起動畫再卸載子元件；`prefers-reduced-motion` 時直接卸載。
+  - 驗收：測試——展開時子元件在；收起後子元件被卸載；收起後再開，子元件是新的（輸入不殘留）。
+
 ---
 
 ## Step 2：四個 worker 平行（Pi + `zai/glm-5.3`）
@@ -115,10 +129,10 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
 
 - [ ] **2.1 W1 外殼**
   - 檔案：plan §8 的 W1 清單。
-  - 內容：側欄（`h1` 站名、帳本卡、導覽＋圖示、使用者、看得見的「登出」、收合鈕）、`use-sidebar-collapsed`、900–1199px 自動收合、訪客頂列、窄螢幕頂列（站名非 heading）、收合時的帳本方塊（D18）。
+  - 內容：側欄（`h1` 站名、帳本卡、導覽＋圖示、使用者、看得見的「登出」、收合鈕、深淺切換鈕）、`use-sidebar-collapsed`、900–1199px 自動收合、訪客頂列（含深淺切換鈕）、窄螢幕頂列（站名非 heading）、收合時的帳本方塊（D18）。
   - 驗收：
     - `AppShell.test.tsx` 四條原有斷言不改就綠。
-    - 新增測試：收合選擇重新渲染後仍保留；收合時「作用中帳本」只有一個、導覽連結名稱不變；任何狀態只有一個 `h1`。
+    - 新增測試：收合選擇重新渲染後仍保留；收合時「作用中帳本」只有一個、導覽連結名稱不變；任何狀態只有一個 `h1`；`ThemeToggle` 依序切換三種狀態、文字跟著變、任何狀態頁面上只有一顆。
 
 - [ ] **2.2 W2 首頁工作台**
   - 檔案：plan §8 的 W2 清單。
@@ -136,8 +150,10 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
 
 - [ ] **2.4 W4 其他頁面與基礎元件**
   - 檔案：plan §8 的 W4 清單。
-  - 內容：5 個管理頁套用 `PageHeader`、內容左緣對齊；表格化的列表；基礎元件與彈窗改走 token；危險操作的「刪除帳本」用危險樣式。
-  - 驗收：這些頁面的既有測試不改就綠；`*.module.css` 沒有色碼。
+  - 內容：5 個管理頁套用 `PageHeader`、內容左緣對齊；表格化的列表；基礎元件與彈窗改走 token；危險操作的「刪除帳本」用危險樣式；spec §4.7 表上的四個建立表單改成往下展開（D20）。
+  - 驗收：
+    - 這些頁面的既有測試只允許改選取方式（SC-27.2）；`*.module.css` 沒有色碼。
+    - 新增測試：四個按鈕各自展開與收起、`aria-expanded` 跟著變、收起後焦點回到按鈕；分類頁同時只展開一個；編輯帳戶、改名分類仍是 modal。
 
 - [ ] **2.5 協調者逐一驗收 worker 產出**
   - 內容：假 API 截圖逐頁比對；`git diff` 檢查沒有刪掉任何 `aria-label`、按鈕文字、`<label>`。
@@ -148,7 +164,7 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
 ## Step 3：整合與驗證（協調者）
 
 - [ ] **3.1 新增 `e2e/layout.spec.ts`**
-  - 內容：建 21 筆交易，驗 1280×800 可見 ≥ 10 筆、篩選欄位同高、五個頁面的頁首左緣相同、375px 沒有橫向捲動。
+  - 內容：建 21 筆交易，驗 1280×800 可見 ≥ 10 筆、篩選欄位同高、五個頁面的頁首左緣相同、375px 沒有橫向捲動；另外驗「`localStorage` 設成淺色後重新整理，第一次繪製前 `<html>` 就帶 `data-theme="light"`」（SC-29.3）。
   - 驗收：新測試綠。
 
 - [ ] **3.2 跑完整 e2e**
@@ -160,7 +176,7 @@ A.4 會改 3 行 e2e，已於 2026-09-23 取得同意（spec §2 假設 6）。
   - 驗收：沒有橫向捲動；截圖附在 PR 描述（`docs/artifacts/` 的 HTML 不進版控，截圖只貼 PR）。
 
 - [ ] **3.4 鍵盤走一遍**
-  - 內容：Tab 走完側欄、表格、面板；Esc 關面板；收合鈕可用鍵盤操作。
+  - 內容：Tab 走完側欄、表格、面板；Esc 關面板；收合鈕、深淺切換鈕、四個往下展開的表單都能用鍵盤操作。
   - 驗收：兩種模式下焦點框都看得見。
 
 ---

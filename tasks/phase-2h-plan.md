@@ -32,7 +32,9 @@ PR-A 不做任何設計變更，改動小，由協調者自己做（派工成本
 
 範圍內：
 
-- `global.css` 兩組 token（深色黑金、淺色象牙金），跟隨 `prefers-color-scheme`。
+- `global.css` 兩組 token（深色黑金、淺色象牙金），預設跟隨 `prefers-color-scheme`。
+- 深淺色切換鈕，載入時不閃（D19）。
+- 四個「新增／建立」小視窗改成往下展開（D20）。
 - 可收合側欄、訪客頂列、窄螢幕頂列。
 - 首頁三欄工作台：表格、右側面板（新增／編輯）、帳戶餘額移進面板。
 - 統一頁首 `PageHeader`，套用到 6 頁。
@@ -120,7 +122,7 @@ spec §4 的 D1–D7 是開發者的決定。以下是實作怎麼落地。
 
 - 沿用 `--color-*` 前綴，新增 spec §4.3 表上的 token。
 - 既有的 `--color-surface-hover` 改名為 `--color-fill`（兩者用途相同）。`--color-primary-hover` 保留，改成用 `color-mix()` 從 `--color-primary` 推導，不另訂色碼。`--color-focus-ring` 保留名稱、改值。
-- 深色值寫在 `:root`（預設），淺色寫在 `@media (prefers-color-scheme: light)`。**反過來寫的理由**：黑金的本體是深色；不支援這個媒體查詢的舊瀏覽器應該看到品牌本體。
+- 深色值寫在 `:root`（預設）；淺色寫兩處：`:root[data-theme='light']` 與 `@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) }`（切換鈕見 D19）。**深色當預設的理由**：黑金的本體是深色；不支援這個媒體查詢的舊瀏覽器應該看到品牌本體。
 - 9 處寫死的色碼改成 token（`#fff` → `--color-on-primary`、`#f3c6c6` → `--color-danger` 的半透明版本，用 `color-mix()`）。
 
 ### D15 — token 對比寫成單元測試
@@ -143,18 +145,34 @@ spec §4 的 D1–D7 是開發者的決定。以下是實作怎麼落地。
 
 `LedgerSwitcher` 的 `<select>` 仍是同一個元素。收合時 CSS 把它變成覆蓋在方塊上的透明層（`opacity: 0`、`position: absolute; inset: 0`），方塊顯示帳本名的第一個字。點方塊就是點 `<select>`，原生下拉照常展開、鍵盤照常操作。只有一本帳本時（現在是 `<span>`）方塊不可點，只顯示字。
 
+### D19 — 深淺色切換的實作（spec §4.6、SC-29）
+
+- **狀態的唯一來源是 `<html data-theme>`。** `theme-init.js` 在載入時設它；React 裡的 `use-theme` 讀寫 `localStorage` 並同步更新它。CSS 只看這個屬性與媒體查詢，不看 React state。
+- `theme-init.js` 放 `apps/web/public/`，Vite 會原樣複製到建置產物，`<script src="/theme-init.js">` 放在 `index.html` 的 `<head>`、CSP `meta` 之後、任何 CSS 之前。**不加 `defer` 或 `async`**——它必須在第一次繪製前跑完。檔案只有十幾行，不會拖慢載入。
+- `theme-init.js` 裡所有 `localStorage` 存取包在 `try` 裡；失敗就不設屬性，等於跟隨系統。
+- `system` 時**移除** `data-theme` 屬性，而不是設成 `system`——CSS 就只需要處理 `light`、`dark`、沒有屬性三種情況。
+- 單元測試：在 jsdom 裡讀入 `theme-init.js` 的文字執行，驗三種 `localStorage` 值與「讀取會拋錯」各自的結果。
+- `csp.spec.ts` 會打 `vite preview` 的產物，它本來就驗「console 沒有 CSP 違規」，外部腳本不會觸發違規。
+
+### D20 — 往下展開的建立表單（spec §4.7、SC-30）
+
+- 用步驟 1 做好的 `Dialog` `panel` 變體（非 modal、角色 `dialog`、名稱不變），外面包一個新的 `components/SlideDown.tsx` 負責展開與收起的動畫。
+- 動畫用 `grid-template-rows: 0fr → 1fr` 加 `transition`。收起時先播完動畫（約 200ms，監聽 `transitionend`）再卸載，這樣 `Dialog`「關閉就卸載、下次打開是乾淨的」的保證照舊。`prefers-reduced-motion` 時直接卸載。
+- 開關狀態留在各頁面（`LedgersPage` 已經有 `creating`，其他頁比照），按鈕加 `aria-expanded`。
+- `AccountDialog` 與 `CategoryDialog` 同時負責「新增」與「編輯」：**新增模式用 `SlideDown`＋panel，編輯模式維持 modal**。分成兩種外殼，表單內容共用。
+
 ---
 
 ## 5. 實作順序
 
-| 步驟 | 內容                                                                                 | 誰     | 相依 |
-| ---- | ------------------------------------------------------------------------------------ | ------ | ---- |
-| A    | PR-A：三個顯示錯誤（3 行 e2e 已同意）                                                | 協調者 | 無   |
-| 0    | 基準線：跑五個指令、記下測試數、量測截圖                                             | 協調者 | 無   |
-| 1    | token、`.visually-hidden`、`Icon`、`PageHeader`、`Dialog` panel 變體、token 對比測試 | 協調者 | 0    |
-| 2    | 四個 worker 平行（見 §8）                                                            | worker | 1    |
-| 3    | 整合、兩種模式 × 七種寬度截圖、`layout.spec.ts`、e2e                                 | 協調者 | 2    |
-| 4    | 文件：`phase-2-web-mvp.md` §3、`docs/README.md`                                      | 協調者 | 3    |
+| 步驟 | 內容                                                                                                                                          | 誰     | 相依 |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| A    | PR-A：三個顯示錯誤（3 行 e2e 已同意）                                                                                                         | 協調者 | 無   |
+| 0    | 基準線：跑五個指令、記下測試數、量測截圖                                                                                                      | 協調者 | 無   |
+| 1    | token（含淺色兩處）、`.visually-hidden`、`Icon`、`PageHeader`、`Dialog` panel 變體、`SlideDown`、`theme-init.js`＋`use-theme`、token 對比測試 | 協調者 | 0    |
+| 2    | 四個 worker 平行（見 §8）                                                                                                                     | worker | 1    |
+| 3    | 整合、兩種模式 × 七種寬度截圖、`layout.spec.ts`、e2e                                                                                          | 協調者 | 2    |
+| 4    | 文件：`phase-2-web-mvp.md` §3、`docs/README.md`                                                                                               | 協調者 | 3    |
 
 PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branch` 把 `main` 併進來再處理衝突（`TransactionList`、`AccountList` 兩邊都有改）。
 
@@ -173,22 +191,28 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 | 與 PR-A 在 `TransactionList`、`AccountList` 衝突                | PR-A 先合；PR-B 併 `main` 後以 PR-B 的版本為準，但保留 PR-A 的 `formatMoney` 與轉帳色 |
 | e2e 與別的 worktree 撞資料庫                                    | 跑之前先查 3100／5273／5274 埠與 `ledger_test` 連線；被占用就等                       |
 | SC 編號與階段三撞號                                             | spec §2 假設 7                                                                        |
+| 淺色 token 兩處寫法日後不同步，某一種情況的顏色變錯             | token 測試比對兩塊內容完全相同（SC-29.4）                                             |
+| `theme-init.js` 載入失敗或被改成非同步，載入時閃一下            | `layout.spec.ts` 驗「選淺色後重新整理，第一個畫面就是淺色」（SC-29.3）                |
+| 往下展開的面板收起動畫還沒播完就被卸載，或卸載後殘留舊輸入      | D20：等 `transitionend` 再卸載；單元測試驗「收起後再開，欄位是空的」                  |
+| 分類頁兩個展開面板同時開，頁面上出現兩個同類表單                | SC-30.5：同時只展開一個，單元測試釘住                                                 |
 
 ---
 
 ## 7. 驗證點
 
-| 驗什麼       | 怎麼驗                                                                         |
-| ------------ | ------------------------------------------------------------------------------ |
-| SC-24.1–2    | 單元測試（收合記憶）＋ 截圖（1440、1280、1024、900）                           |
-| SC-24.3、5   | `e2e/layout.spec.ts`                                                           |
-| SC-24.4      | 390px 截圖：單欄、☰ 可用、新增與編輯走得完、無橫向捲動（只驗不壞）            |
-| SC-24.6      | 截圖腳本量 `scrollWidth - clientWidth`（375、768、2560）                       |
-| SC-25        | 單元測試（面板切換、焦點回歸、互斥）＋ 既有 e2e                                |
-| SC-26.1      | `grep -rnE "#[0-9a-fA-F]{3,8}\b" apps/web/src --include=*.module.css` 只剩註解 |
-| SC-26.2–3、7 | `styles/tokens.test.ts`                                                        |
-| SC-26.4–6、8 | 截圖人工比對（深淺兩色）                                                       |
-| SC-27        | 五個指令 ＋ 完整 e2e（20 條既有 ＋ 新增）                                      |
+| 驗什麼       | 怎麼驗                                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| SC-24.1–2    | 單元測試（收合記憶）＋ 截圖（1440、1280、1024、900）                                                                    |
+| SC-24.3、5   | `e2e/layout.spec.ts`                                                                                                    |
+| SC-24.4      | 390px 截圖：單欄、☰ 可用、新增與編輯走得完、無橫向捲動（只驗不壞）                                                     |
+| SC-24.6      | 截圖腳本量 `scrollWidth - clientWidth`（375、768、2560）                                                                |
+| SC-25        | 單元測試（面板切換、焦點回歸、互斥）＋ 既有 e2e                                                                         |
+| SC-26.1      | `grep -rnE "#[0-9a-fA-F]{3,8}\b" apps/web/src --include=*.module.css` 只剩註解                                          |
+| SC-26.2–3、7 | `styles/tokens.test.ts`                                                                                                 |
+| SC-26.4–6、8 | 截圖人工比對（深淺兩色）                                                                                                |
+| SC-27        | 五個指令 ＋ 完整 e2e（20 條既有 ＋ 新增）                                                                               |
+| SC-29        | 單元測試（`use-theme`、`ThemeToggle`、`theme-init.js`、兩塊淺色 token 相同）＋ `layout.spec.ts`（不閃）＋ `csp.spec.ts` |
+| SC-30        | 單元測試（開關、焦點、同時只開一個、收起後再開是乾淨的）＋ 既有 e2e 三處不改就過                                        |
 
 截圖用的假 API 與 Playwright 腳本放在協調者的 scratchpad，**不進 repo**（新增開發工具要另外取得同意）。提案 v2 的截圖就是這樣產生的，沒有連任何資料庫。
 
@@ -202,14 +226,15 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
 
 步驟 2 四個 worker 一次全部派出，全部用 **Pi + `zai/glm-5.3`**（需要判斷，不用 flash）：
 
-| Worker    | 負責的檔案（只能改這些）                                                                                                                                                                                      |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W1 外殼   | `App.tsx`、`App.module.css`、`app/AppSidebar.*`、`app/AppTopBar.*`、`app/use-sidebar-collapsed.ts`（新）、`features/ledgers/LedgerSwitcher.*`、`app/AppShell.test.tsx`                                        |
-| W2 首頁   | `pages/HomePage.*`、`features/transactions/TransactionDialog.tsx`、`features/transactions/TransactionForm.*`、`features/accounts/AccountBalances.*`、`transaction-edit.test.tsx`、`use-transactions.test.tsx` |
-| W3 表格   | `features/transactions/TransactionList.*`、`features/transactions/TransactionFilters.*`、`components/Pagination.*`、`lib/format.ts`（只加 `formatGroupDate`）                                                 |
-| W4 其他頁 | 帳戶、分類、帳本、帳本明細、個人資料、登入、註冊七頁與它們 `features/` 底下的列表與彈窗、`Button`、`TextField`、`Select`、`FormError`、`ConfirmDialog` 的樣式                                                 |
+| Worker    | 負責的檔案（只能改這些）                                                                                                                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W1 外殼   | `App.tsx`、`App.module.css`、`app/AppSidebar.*`、`app/AppTopBar.*`、`app/use-sidebar-collapsed.ts`（新）、`components/ThemeToggle.*`（新，用步驟 1 的 `use-theme`）、`features/ledgers/LedgerSwitcher.*`、`app/AppShell.test.tsx` |
+| W2 首頁   | `pages/HomePage.*`、`features/transactions/TransactionDialog.tsx`、`features/transactions/TransactionForm.*`、`features/accounts/AccountBalances.*`、`transaction-edit.test.tsx`、`use-transactions.test.tsx`                     |
+| W3 表格   | `features/transactions/TransactionList.*`、`features/transactions/TransactionFilters.*`、`components/Pagination.*`、`lib/format.ts`（只加 `formatGroupDate`）                                                                     |
+| W4 其他頁 | 帳戶、分類、帳本、帳本明細、個人資料、登入、註冊七頁與它們 `features/` 底下的列表與彈窗（含 D20 的四個往下展開表單）、`Button`、`TextField`、`Select`、`FormError`、`ConfirmDialog` 的樣式                                        |
 
-- 每份 Task spec 附：spec 路徑、token 表、提案頁路徑、該 worker 的檔案清單、**不准碰的檔案**（別的 worker 的清單＋步驟 1 的四個檔）。
+- W4 的份量比其他三個大（多了 D20）。若 worker 回報做不完，拆成 W4a（帳戶、分類）與 W4b（帳本、帳本明細、個人資料、登入、註冊、基礎元件）重派。
+- 每份 Task spec 附：spec 路徑、token 表、提案頁路徑、該 worker 的檔案清單、**不准碰的檔案**（別的 worker 的清單＋步驟 1 的檔案）。
 - `CLAUDE.md` 沒寫、每次都要寫的四條（`docs/orca-multi-agent.md` §5）：不准動 Prisma 與 API、不要跑 e2e、完成前跑四個指令、provider 錯誤帶原文回來。
 - 額度用盡往下換層：Antigravity（`gemini-3.8-flash-high`）→ Claude Code（`opus`）。
 - 驗收：協調者跑假 API 截圖逐頁比對，並檢查可及性名稱沒被改（`grep` 每個 worker 的 diff 裡被刪掉的 `aria-label` 與按鈕文字）。
@@ -222,7 +247,7 @@ PR-A 與 PR-B 可以同時進行。PR-A 合併後，PR-B 用 `gh pr update-branc
   標題：`fix(web): color transfers neutrally and format negative balances as -$`。
 - **PR-B**：本分支 `polluxyz/web-redesign`。
   標題：`feat(web): redesign the shell and home page with a black-gold theme`。
-  描述必須列出：修改過選取方式的單元測試（SC-27.2）、`:has()` 的使用、沒有新增相依。
+  描述必須列出：修改過選取方式的單元測試（SC-27.2）、`:has()` 的使用、`index.html` 多了一個外部 script（CSP 未改）、沒有新增相依。
 - 兩個 PR 都**不自動合併**。CI 綠了之後停下來，等開發者說可以合。
 
 ---
