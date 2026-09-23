@@ -100,11 +100,11 @@ Pi 的模型有兩條路：
 
 ### 備援順序
 
-| 層  | agent                | 模型                                                        | 什麼時候       |
-| --- | -------------------- | ----------------------------------------------------------- | -------------- |
-| 1   | Pi                   | `zai/glm-5.3`（簡單任務 `zai/glm-5.3-flash`）               | 預設           |
-| 2   | Antigravity（`agy`） | `gemini-3.1-pro-high`（簡單任務 `gemini-3.8-flash-medium`） | GLM 額度用完   |
-| 3   | Claude Code          | `opus`                                                      | 前兩層都不能用 |
+| 層  | agent                | 模型                                          | 什麼時候       |
+| --- | -------------------- | --------------------------------------------- | -------------- |
+| 1   | Pi                   | `zai/glm-5.3`（簡單任務 `zai/glm-5.3-flash`） | 預設           |
+| 2   | Antigravity（`agy`） | `gemini-3.8-flash-high`（不分任務難度）       | GLM 額度用完   |
+| 3   | Claude Code          | `opus`                                        | 前兩層都不能用 |
 
 換層時用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
 
@@ -113,11 +113,13 @@ Pi 的模型有兩條路：
 跟 Pi 一樣要兩段式（Orca 的 `--model` 只認 Claude / Codex / Cursor）：
 
 ```bash
-orca terminal create --worktree <selector> --command "agy --model gemini-3.1-pro-high" --json
+orca terminal create --worktree <selector> --command "agy --model gemini-3.8-flash-high" --json
 orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 ```
 
+- **這一層不分任務難度，一律 `gemini-3.8-flash-high`。** 第 1 層才有便宜 / 一般的分流。
 - **努力程度寫在模型 id 裡**（`-high` / `-medium` / `-low`），不要再另外傳 `--effort`。
+- §3「一律不用 flash」指的是 `zai/glm-5.3-flash` 這個成本層級，**跟 Gemini 模型名稱裡的 flash 無關**。Gemini 3.8 Flash 比清單上的 3.1 Pro 新一代，不是弱化版。
 - `agy models` 列出當下可用的模型，換模型前先跑一次，**不要憑記憶填**。它除了 Gemini 也有 `claude-sonnet-4-6`、`gpt-oss-120b-medium`。
 - ⚠️ **未實測**：`agy` 當 worker 時會不會卡在權限確認。它有 `--dangerously-skip-permissions`，但那會自動核准所有工具請求——只在拋棄式 worktree 裡用，而且 Task spec 要把不准碰的東西寫清楚。
 
