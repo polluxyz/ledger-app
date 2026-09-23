@@ -25,6 +25,16 @@ const AMOUNT_SIGN: Record<Transaction['type'], string> = {
 };
 
 /**
+ * 金額顏色，理由同上。原本寫成「支出用紅、其餘用綠」，轉帳就被畫成收入的綠色，
+ * 看起來像多了一筆錢。轉帳用中性色。
+ */
+const AMOUNT_CLASS: Record<Transaction['type'], string | undefined> = {
+  EXPENSE: styles.expense,
+  INCOME: styles.income,
+  TRANSFER: styles.transfer,
+};
+
+/**
  * 一列的口語描述，給編輯／刪除鈕當無障礙名稱用。
  *
  * 列表上每一列的按鈕文字都是「編輯」「刪除」，光靠文字分不出是哪一筆——
@@ -79,11 +89,7 @@ export function TransactionList({
             )}
           </div>
           <div className={styles.right}>
-            <span
-              className={`${styles.amount} ${
-                transaction.type === 'EXPENSE' ? styles.expense : styles.income
-              }`}
-            >
+            <span className={`${styles.amount} ${AMOUNT_CLASS[transaction.type]}`}>
               {AMOUNT_SIGN[transaction.type]}${formatAmount(transaction.amount)}
             </span>
             {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列

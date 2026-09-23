@@ -32,8 +32,10 @@
   font-weight: 500;
 }
 
+/* 同 TransactionList：金額與按鈕不讓出寬度，窄螢幕上按鈕才不會被擠成直排。 */
 .right {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-md);
 }
@@ -62,6 +64,7 @@
   color: var(--color-text);
   font: inherit;
   font-size: 0.8125rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 

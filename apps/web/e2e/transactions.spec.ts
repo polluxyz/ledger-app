@@ -59,7 +59,7 @@ test('情境 7：編輯金額後帳戶餘額跟著變', async ({ signedInPage: p
   // fixture 在資料建立之前就開過首頁了，重新載入才看得到這一筆。
   await page.reload();
 
-  await expect(page.getByLabel('現金餘額')).toHaveText('$-120');
+  await expect(page.getByLabel('現金餘額')).toHaveText('-$120');
 
   await transactionRow(page, '-$120').getByRole('button', { name: /^編輯/ }).click();
 
@@ -69,7 +69,7 @@ test('情境 7：編輯金額後帳戶餘額跟著變', async ({ signedInPage: p
 
   // 列表與餘額都要跟著變。只驗其中一個的話，漏掉快取失效仍然會綠。
   await expect(transactionRow(page, '-$200')).toBeVisible();
-  await expect(page.getByLabel('現金餘額')).toHaveText('$-200');
+  await expect(page.getByLabel('現金餘額')).toHaveText('-$200');
 });
 
 test('情境 8：刪除後那一筆從列表消失', async ({ signedInPage: page, userA, request }) => {
@@ -87,7 +87,7 @@ test('情境 8：刪除後那一筆從列表消失', async ({ signedInPage: page
   });
 
   await page.reload();
-  await expect(page.getByLabel('現金餘額')).toHaveText('$-120');
+  await expect(page.getByLabel('現金餘額')).toHaveText('-$120');
 
   await transactionRow(page, '-$120').getByRole('button', { name: /^刪除/ }).click();
 
