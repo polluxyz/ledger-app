@@ -153,7 +153,7 @@ export function TransactionForm({
    * 三選一的選項清單。轉帳不一定畫得出來（見 `showTransferButton`），所以清單是
    * 動態的——滑動方塊的寬度與位移都依這份清單算，少一格時位置才不會算歪。
    */
-  const typeOptions: { value: TransactionType; label: string }[] = [
+  const typeOptions: { value: ManualTransactionType; label: string }[] = [
     { value: 'EXPENSE', label: '支出' },
     { value: 'INCOME', label: '收入' },
     ...(showTransferButton ? [{ value: 'TRANSFER' as const, label: '轉帳' }] : []),
