@@ -7,7 +7,7 @@
 
 ## Step 0：開工前（協調者）
 
-- [ ] **0.1 基準線**
+- [x] **0.1 基準線**
   - 內容：`pnpm install`、shared build、五個指令，記下 api／web 單元測試數與 e2e 條數。
   - 驗收：數字寫進 plan §10。
 
@@ -15,22 +15,22 @@
 
 ## Step 1：共用介面（協調者）
 
-- [ ] **1.1 token**
+- [x] **1.1 token**
   - 檔案：`styles/global.css`。
   - 內容：`--content-max-wide: 72rem`、`--content-max-narrow: 52rem`、`--motion-panel: 220ms`、`--motion-fade: 160ms`、`--motion-ease`；`prefers-reduced-motion` 時三個時間是 0ms；刪 `--content-max`。
   - 驗收：`grep -rn "content-max\b" apps/web/src` 沒有結果；`tokens.test.ts` 綠。
 
-- [ ] **1.2 `PageContent` 並套到五個管理頁**
+- [x] **1.2 `PageContent` 並套到五個管理頁**
   - 檔案：`components/PageContent.*`（新）、帳本、帳本明細、帳戶、分類、個人資料五頁。
   - 內容：`width="wide" | "narrow"`，`margin-inline: auto` 置中。拿掉各頁自己的 `max-width`。
   - 驗收：單元測試驗兩種寬度的 class；既有測試全綠。
 
-- [ ] **1.3 右側欄的地基**
+- [x] **1.3 右側欄的地基**
   - 檔案：`app/right-panel-context.tsx`（新）、`app/RightPanel.*`（新）、`App.tsx`、`App.module.css`。
   - 內容：plan D21 的 API；外殼三欄 grid 與 `grid-template-columns` 過渡；≤ 900px 抽屜；`RightPanelContent` 的登記與 portal。
   - 驗收：單元測試——沒有登記時第三欄寬度 0；登記後預設打開；收起後重新 mount 仍收起；unmount 取消登記；`requestFocus` 遞增。
 
-- [ ] **1.4 `/transactions` 路由**
+- [x] **1.4 `/transactions` 路由**
   - 檔案：`app/routes.tsx`、`pages/TransactionsPage.tsx`（先放最小骨架，W2 填內容）。
   - 內容：掛在 `ProtectedRoute` 下；導覽的「交易」連結由 W1 加。
   - 驗收：路由測試——未登入進 `/transactions` 被導走。

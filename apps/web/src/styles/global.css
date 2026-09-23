@@ -100,7 +100,19 @@
   --sidebar-collapsed-width: 4.5rem;
   --panel-width: 22.5rem;
   --topbar-height: 3.5rem;
-  --content-max: 70rem;
+
+  /* ---- 內容寬度（2i）----
+     內容在「側欄之間」置中，最大寬度分兩種（spec 2i §4.8）：記帳頁（總覽、交易）
+     用寬的；管理頁（帳本、帳戶、分類、個人資料）用窄的——清單只有「名稱……金額」，
+     拉太寬會讓兩端遠到不好讀。用法見 `components/PageContent`。 */
+  --content-max-wide: 72rem;
+  --content-max-narrow: 52rem;
+
+  /* ---- 動畫（2i）----
+     側欄與右側欄的開合、文字淡出、選單。減少動態效果時下面整組歸零。 */
+  --motion-panel: 220ms;
+  --motion-fade: 160ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   /*
    * ⚠️ 斷點只能寫在這裡當**文件**，媒體查詢讀不到 CSS 變數——
    * `@media (max-width: var(--breakpoint-md))` 是無效的，瀏覽器會整條忽略，
@@ -117,6 +129,17 @@
   line-height: var(--leading-normal);
   color: var(--color-text);
   background-color: var(--color-bg);
+}
+
+/*
+ * 使用者要求減少動態效果：所有開合直接切換。只改時間，不改 `transition` 本身——
+ * 各元件照常寫 `transition: … var(--motion-panel)`，不必各自再判斷一次。
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-panel: 0ms;
+    --motion-fade: 0ms;
+  }
 }
 
 /* 淺色「象牙金」：使用者選了淺色。⚠️ 內容必須與下一塊逐字相同。 */

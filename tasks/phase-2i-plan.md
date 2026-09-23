@@ -174,4 +174,15 @@ spec §4.6。沿用 2h 的「透明原生 `<select>` 疊在外觀上」，只換
 
 ## 10. 實作紀錄
 
-（開工後填寫）
+### Step 0（基準線，2026-09-23）
+
+- 五個指令全綠。api 單元測試 212 條；web 46 檔 294 條；web e2e 27 條；api e2e 65 條（2h 收尾時實測）。
+
+### Step 1（共用介面）
+
+- **偏離**：管理頁不包 `<PageContent>`，改用 CSS Modules 的 `composes: narrow from '../components/PageContent.module.css'`。五個管理頁共有 11 個 `<section className={styles.page}>` 的 return 分支，逐一改包元件容易漏；`composes` 讓寬度仍只有一個來源。記帳頁用 `<PageContent width="wide">`。
+- 外殼 grid 兩側欄是 `auto`：側欄與右側欄各自對自己的 `width` 做過渡，中間欄逐格跟著變。外殼因此不需要知道收合狀態，W1 改側欄時不會碰到外殼。
+- 右側欄拆成三個檔：`right-panel-context.ts`（型別、hook、鍵名）、`RightPanelProvider.tsx`、`RightPanel.tsx`（欄位＋`RightPanelContent`）。原因是 React fast refresh 的 lint 規則不允許元件檔同時匯出 hook。
+- 收起時裡層設 `inert`（React 19 支援布林值），寬度 0 的表單不會被 Tab 走到。
+- 分類頁從 64rem 改成 52rem（spec 假設 10）；≥ 1200px 支出與收入兩張卡仍然並排，各約 400px。
+- web 單元測試 46 檔 294 條 → 48 檔 304 條。

@@ -30,6 +30,15 @@ describe('ProtectedRoute', () => {
     });
   }
 
+  it('protects the transactions page too (spec 2i SC-34.3)', () => {
+    window.history.pushState({}, '', '/transactions');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: '登入' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login');
+  });
+
   it('sends a signed-out visitor to the login page', () => {
     window.history.pushState({}, '', '/accounts');
 

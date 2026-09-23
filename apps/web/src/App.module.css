@@ -11,24 +11,34 @@
   background-color: var(--color-bg);
 }
 
+/*
+ * 三欄 grid（spec 2i §4.2）：側欄、中間、右側欄。
+ *
+ * 兩側都是 `auto`：寬度由側欄與右側欄**自己**決定並自己做過渡動畫，中間欄
+ * `minmax(0, 1fr)` 每一格都跟著重新分配。所以外殼不需要知道「側欄收合了沒」、
+ * 「右側欄開著沒」，中間內容的移動卻是連續的。
+ *
+ * ≤ 900px 時側欄與右側欄都改成 `position: fixed` 脫離 grid，兩側欄位自然變成 0。
+ * 訪客沒有側欄，第一欄同樣是 0。
+ */
 .body {
   flex: 1;
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
 }
 
 /*
- * 內容區。`min-width: 0` 不能省——flex 子元素的預設最小寬度是內容寬度，
+ * 內容區。`min-width: 0` 不能省——grid 子元素的預設最小寬度是內容寬度，
  * 少了它，寬表格或長備註會把整個版面撐出橫向捲動，而側欄跟著被擠掉。
  *
- * 2h 拿掉了 `max-width` 與置中（2f 的做法）：三欄版面要用滿整個寬度，
- * 各頁自己決定內容的最大寬度。留白必須是 `--space-xl`——首頁的右側面板
- * 用負 margin 貼齊 main 的邊緣，那個負值對應的就是這個數字。
+ * 最大寬度與置中由各頁的 `PageContent` 決定（寬／窄兩種，spec 2i §4.8），
+ * 這裡只負責留白。`grid-column: 2` 要寫明：訪客沒有側欄時，自動排版會把 main
+ * 放進第一欄。
  */
 .main {
-  flex: 1;
+  grid-column: 2;
   min-width: 0;
-  width: 100%;
   padding: var(--space-xl);
 }
 
