@@ -1,11 +1,17 @@
 /*
- * 右側面板的下半（phase-2h）。上面是記帳表單，靠一條分隔線隔開——面板本身已經
- * 是一個框，再給餘額區加一個框會變成框中框。
+ * dashboard 的「帳戶餘額」卡（spec 2i §4.7、假設 2）。
+ *
+ * 2h 時它是右側面板的下半，靠一條分隔線與記帳表單隔開。2i 把右側欄讓給交易表單，
+ * 餘額搬到 dashboard，變成與「最近交易」並排的一張卡——所以外框從「上方一條線」
+ * 換成完整的卡片。
  */
 .section {
-  margin-top: var(--space-lg);
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .head {
@@ -38,7 +44,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-sm) 0;
+  padding: var(--space-sm);
   min-width: 0;
 }
 

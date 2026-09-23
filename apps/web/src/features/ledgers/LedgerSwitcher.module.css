@@ -1,53 +1,79 @@
 /*
- * 帳本卡裡的一行。展開時是「粗體帳本名 ＋ 箭頭」，側欄收合時縮成 44px 的方塊，
- * 方塊裡只剩帳本名的第一個字。
+ * 頁首的帳本切換器：一顆帶邊框的膠囊（spec 2i §4.6、plan D26）。
  *
- * 收合的判斷不在這個元件裡：側欄的根元素帶著 `data-sidebar-collapsed`
- * （使用者按了收合鈕），901–1199px 則一律收合。屬性選取器不會被 CSS Modules
- * 改寫，所以跨 module 只能用它當鉤子。⚠️ 兩塊規則要一起改。
+ * 裡面依序是帳本 icon、粗體帳本名、「私人／共享」小標籤、向下箭頭。整顆膠囊
+ * 就是那個透明 `<select>` 的可點範圍，所以 `position: relative` 不能省。
+ *
+ * 2h 為側欄收合寫的 `[data-sidebar-collapsed]` 規則全部移除——切換器不再住在側欄。
  */
 .field {
   position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  width: 100%;
+  max-width: 100%;
   min-width: 0;
-  color: var(--color-chrome-active-text);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
   font-size: var(--text-sm);
-  font-weight: 600;
+  transition:
+    border-color var(--motion-fade) var(--motion-ease),
+    color var(--motion-fade) var(--motion-ease);
+}
+
+/*
+ * 滑過的變化只給「真的可以切換」的時候（只有一本帳本時沒有 `data-switchable`）。
+ * 一顆會亮起來卻點不動的膠囊，比一顆安靜的膠囊更讓人困惑。
+ */
+.field[data-switchable]:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  cursor: pointer;
 }
 
 /*
  * `<select>` 是透明的，焦點框畫在它身上會跟著看不見（opacity 連 outline 一起吃掉）。
- * 所以焦點框畫在這一行上。
+ * 所以焦點框畫在膠囊上，用的是全站共用的焦點框顏色。
  */
 .field:focus-within {
-  outline: 2px solid var(--color-chrome-focus-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
-  border-radius: var(--radius);
 }
 
+.icon {
+  flex: none;
+  color: var(--color-accent);
+}
+
+/* 帳本名是這顆膠囊的主角，加粗；太長就截斷，膠囊的寬度不被一個長名字撐爆。 */
 .name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 700;
+}
+
+/* 「私人 / 共享」是附註，用小一階的字與次要色，不跟帳本名搶視線。 */
+.kind {
+  flex: none;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .chevron {
   flex: none;
-  color: var(--color-chrome-muted);
-}
-
-/* 首字方塊只在收合時出現。 */
-.initial {
-  display: none;
+  color: var(--color-text-muted);
 }
 
 /*
- * 原生下拉鋪滿整行且完全透明：使用者看到的是上面那兩個 span，點到的是這個元素。
+ * 原生下拉鋪滿整顆膠囊且完全透明：使用者看到的是上面那幾個元素，點到的是這個。
  * `opacity: 0` 而不是 `visibility: hidden`——後者連點擊都收不到。
  */
 .select {
@@ -58,77 +84,10 @@
   margin: 0;
   padding: 0;
   border: none;
+  border-radius: 999px;
   background: none;
   color: inherit;
   font: inherit;
   opacity: 0;
   cursor: pointer;
-}
-
-/* 使用者按了收合鈕（只在 ≥ 901px 生效，≤ 900px 是浮動選單）。 */
-@media (min-width: 901px) {
-  [data-sidebar-collapsed] .field {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-  }
-
-  /* 照抄 global.css 的 `.visually-hidden`。只有一本帳本時這個 span 就是名稱的
-     唯一來源，用 `display: none` 會讓它消失，所以一律用視覺隱藏。 */
-  [data-sidebar-collapsed] .name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  [data-sidebar-collapsed] .chevron {
-    display: none;
-  }
-
-  [data-sidebar-collapsed] .initial {
-    display: grid;
-    place-items: center;
-    width: 100%;
-    height: 100%;
-    font-size: var(--text-base);
-  }
-}
-
-/* 901–1199px：側欄一律收合。內容與上面那塊相同。 */
-@media (min-width: 901px) and (max-width: 1199px) {
-  .field {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-  }
-
-  .name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .chevron {
-    display: none;
-  }
-
-  .initial {
-    display: grid;
-    place-items: center;
-    width: 100%;
-    height: 100%;
-    font-size: var(--text-base);
-  }
 }
