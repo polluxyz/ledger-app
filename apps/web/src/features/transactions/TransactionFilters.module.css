@@ -22,8 +22,9 @@
   margin-bottom: calc(-1 * var(--space-md));
 }
 
+/* 7.25rem：側欄收合的 1024px 寬時，四個欄位剛好排得下一列（8rem 會把「迄日」擠到第二列）。 */
 .fields > * {
-  flex: 1 1 8rem;
+  flex: 1 1 7.25rem;
 }
 
 /*
