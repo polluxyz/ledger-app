@@ -70,6 +70,18 @@ describe('AppSidebar 的浮動選單', () => {
     expect(await screen.findByRole('heading', { name: '帳戶' })).toBeInTheDocument();
   });
 
+  /**
+   * Slice 4 新增了「分類」與「個人資料」兩個連結。釘住它們的存在與去向：
+   * 導覽連結的文字同時是 e2e 的選取器，改字就是改契約。
+   */
+  it('links to the categories and profile pages', () => {
+    render(<App />);
+
+    // 分類連結刻意不帶 `?ledgerId=`——從導覽進去就是看作用中帳本那一本。
+    expect(screen.getByRole('link', { name: '分類' })).toHaveAttribute('href', '/categories');
+    expect(screen.getByRole('link', { name: '個人資料' })).toHaveAttribute('href', '/profile');
+  });
+
   it('hides the menu button from signed-out visitors', () => {
     localStorage.clear();
 

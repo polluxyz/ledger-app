@@ -1,9 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AccountsPage from '../pages/AccountsPage';
+import CategoriesPage from '../pages/CategoriesPage';
 import HomePage from '../pages/HomePage';
 import LedgerDetailPage from '../pages/LedgerDetailPage';
 import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
+import ProfilePage from '../pages/ProfilePage';
 import RegisterPage from '../pages/RegisterPage';
 import { GuestOnlyRoute } from './GuestOnlyRoute';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -32,6 +34,10 @@ export function AppRoutes() {
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/ledgers" element={<LedgersPage />} />
         <Route path="/ledgers/:ledgerId" element={<LedgerDetailPage />} />
+        {/* 分類頁的帳本由 `?ledgerId=` 指定，不是路徑參數——它與側邊欄的作用中
+            帳本各自獨立，網址帶得走才能從帳本明細頁直接連過來。 */}
+        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
       {/* 未知路徑導回首頁。 */}

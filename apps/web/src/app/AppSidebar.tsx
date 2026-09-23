@@ -56,6 +56,14 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
         <NavLink to="/accounts" className={navLinkClass} onClick={onNavigate}>
           帳戶
         </NavLink>
+        {/* 分類連結刻意不帶 `?ledgerId=`：從導覽進去就是看作用中帳本那一本。
+            要看別本的分類，入口在帳本明細頁，那裡才知道是哪一本。 */}
+        <NavLink to="/categories" className={navLinkClass} onClick={onNavigate}>
+          分類
+        </NavLink>
+        <NavLink to="/profile" className={navLinkClass} onClick={onNavigate}>
+          個人資料
+        </NavLink>
       </nav>
 
       <div className={styles.footer}>

@@ -1,0 +1,49 @@
+/*
+ * 與帳戶頁、帳本明細同寬。個人資料只有一個輸入欄位，更寬的版面只會拉長視線。
+ */
+.page {
+  max-width: 52rem;
+}
+
+/* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
+.title {
+  margin: 0 0 var(--space-lg);
+  font-size: var(--text-xl);
+}
+
+/* 唯讀資訊（載入中、載入失敗）的共用樣式。 */
+.status {
+  padding: var(--space-lg);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* Email 區塊。卡片式的唯讀呈現，與帳本明細的「基本資訊」同一種語彙。 */
+.email {
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+}
+
+.emailLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.emailValue {
+  margin: var(--space-xs) 0 0;
+  font-weight: 500;
+}
+
+/* 「Email 不可變更」這類說明。放在值的下面，不與值混在同一行。 */
+.emailNote {
+  display: block;
+  margin-top: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}

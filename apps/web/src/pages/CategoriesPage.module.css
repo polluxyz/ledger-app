@@ -1,0 +1,81 @@
+/*
+ * 單欄的管理頁不吃滿 70rem，與 AccountsPage 一致（52rem）。
+ * 一列只有「名稱 …… 改名 刪除」，拉太寬反而難讀。
+ */
+.page {
+  max-width: 52rem;
+}
+
+.header {
+  margin-bottom: var(--space-lg);
+}
+
+/* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+/* 標題下方的一行小字：講清楚現在管的是哪一本帳本。 */
+.subtitle {
+  margin: var(--space-xs) 0 0;
+  color: var(--color-text-muted);
+}
+
+/* 網址上的 ledgerId 對不上清單時的一行說明（D11）。不是錯誤，用 muted 而非紅色。 */
+.notice {
+  margin: 0 0 var(--space-lg);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 不一致提示條（D8）。它講的是「兩個選擇」的狀態，所以長得要跟一般內容不一樣
+ * ——有框、有底、可以放一顆按鈕，但仍用既有的 token，不另造警告色。
+ */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+}
+
+.bannerText {
+  margin: 0;
+}
+
+/* 檢視者的說明。與 .notice 同一款式：告知現況，不是錯誤。 */
+.readonly {
+  margin: 0 0 var(--space-lg);
+  color: var(--color-text-muted);
+}
+
+.status {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* 兩個型別的區塊上下並列，用 xl 撐出層次。 */
+.group + .group {
+  margin-top: var(--space-xl);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+
+/* 區塊標題比頁面標題小一級。 */
+.groupTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+}
