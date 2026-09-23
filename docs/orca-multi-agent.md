@@ -7,7 +7,7 @@
 ## 1. 角色分工
 
 - **預設 agent 是 Claude Code**，它是 coordinator（協調者），負責拆工、派工、驗收、開 PR。**它的主要工作是規劃與驗收，不是實作。**
-- **實作預設派給 worker**，優先用 Pi（跑 GLM 模型）。GLM 額度用盡時改用 Claude Code 當 worker。
+- **實作預設派給 worker**，優先用 Pi（跑 GLM 模型）。額度用盡就往下換層：Antigravity → Claude Code（見 §4）。
 - **不要用 Claude Code 內建的 Agent tool 派工。** 它只開得了 Claude subagent，指定不了 Pi，也指定不了 GLM。要平行工作就走 `orca orchestration`。
 
 協調者該做與不該做：
@@ -155,7 +155,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - **Ownership**：這個 worker 可以改什麼、與其他 worker 的界線。
 - **Observable acceptance**：證明完成的測試、輸出或證據。
 
-`Constraints` 每次都要寫的三條（`CLAUDE.md` 沒有，或 worker 容易誤判）：
+`Constraints` 每次都要寫的四條（`CLAUDE.md` 沒有，或 worker 容易誤判）：
 
 - **不准動 Prisma schema 與 API 介面**；需要動就回報，不要自己改。
 - **不要跑 e2e**，除非 spec 指定由你跑。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
