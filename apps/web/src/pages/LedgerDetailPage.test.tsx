@@ -110,6 +110,44 @@ describe('Ledger detail page', () => {
     expect(screen.queryByText(/家庭帳本/)).not.toBeInTheDocument();
   });
 
+  it('puts the back link and the rename button in the page toolbar', async () => {
+    // SC-38.2、SC-38.3。判準刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列
+    // 之外，所以它裡面的東西一定不在 `<header>` 裡，而且排在標題之前。
+    routeFetch();
+
+    render(<App />);
+
+    const heading = await screen.findByRole('heading', { name: '家庭帳本' });
+
+    const back = screen.getByRole('link', { name: '回到帳本列表' });
+    expect(back).toHaveAttribute('href', '/ledgers');
+    expect(back.closest('header')).toBeNull();
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    const rename = screen.getByRole('button', { name: '改名' });
+    expect(rename.closest('header')).toBeNull();
+    expect(rename.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    // SC-38.5：標題上方不再有任何一行字。
+    expect(heading.closest('header')?.firstElementChild).toBe(heading);
+  });
+
+  it('keeps the way back to the list when the ledger cannot be loaded', async () => {
+    // 讀不到帳本時最需要那條返回的路。它只出現一次——同一個無障礙名稱在頁面上
+    // 出現兩遍的話，螢幕閱讀器與 e2e 都分不出該用哪一個。
+    routeFetch({
+      detail: () =>
+        Promise.resolve(
+          jsonResponse(404, { statusCode: 404, errorCode: 'NOT_FOUND', message: 'Not found' }),
+        ),
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('找不到這本帳本。')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '回到帳本列表' })).toHaveLength(1);
+  });
+
   it('hides the rename button from someone who is not the owner', async () => {
     // 以 Bob（EDITOR）的身分看同一本帳本。
     routeFetch({ me: { id: 'u2', email: 'bob@example.com', name: 'Bob' } });

@@ -10,8 +10,9 @@ import App from '../App';
  * 以及整列可點會在右側欄開啟編輯。篩選與分頁各自的行為仍由
  * `features/transactions/transaction-filters.test.tsx` 負責，這裡不重複。
  *
- * 頁首的帳本切換器一律用 `within(<main>)` 限定範圍：側欄那一份由另一位 worker
- * 移除，兩邊都在的那段期間整頁會有兩個「作用中帳本」。
+ * 橫條的帳本切換器一律用 `within(<main>)` 限定範圍：側欄那一份由另一位 worker
+ * 移除，兩邊都在的那段期間整頁會有兩個「作用中帳本」。橫條在 `<main>` 之內，
+ * 所以這個範圍同時涵蓋橫條與內容。
  */
 describe('Transactions page', () => {
   const fetchMock = vi.fn();
@@ -75,8 +76,17 @@ describe('Transactions page', () => {
 
   const WAIT = { timeout: 5000 };
 
-  /** 頁首在 `<main>` 裡，側欄不在。 */
+  /** 橫條與內容都在 `<main>` 裡，側欄不在。 */
   const page = () => within(screen.getByRole('main'));
+
+  /**
+   * 「在橫條裡」的判準，刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，
+   * 所以它裡面的東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
+   */
+  function expectInToolbar(element: HTMLElement, heading: HTMLElement) {
+    expect(element.closest('header')).toBeNull();
+    expect(element.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  }
 
   it('lists the ledger transactions with the filters and the pager', async () => {
     render(<App />);
@@ -90,15 +100,21 @@ describe('Transactions page', () => {
     expect(screen.getByRole('navigation', { name: '分頁' })).toBeInTheDocument();
   });
 
-  it('puts the ledger switcher and the add button in the page header', async () => {
+  it('puts the ledger switcher and the add button in the page toolbar', async () => {
     render(<App />);
 
     // 標題在帳本載入前就有了，所以等的是只有載完才出現的「＋ 新增交易」。
-    expect(await page().findByRole('button', { name: '新增交易' }, WAIT)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '交易' })).toBeInTheDocument();
+    const addButton = await page().findByRole('button', { name: '新增交易' }, WAIT);
+    const heading = screen.getByRole('heading', { name: '交易' });
+
+    // 兩者都在橫條裡（SC-38.2、SC-38.3）。
+    expectInToolbar(addButton, heading);
     // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
-    expect(page().getByText('我的帳本')).toBeInTheDocument();
+    expectInToolbar(page().getByText('我的帳本'), heading);
     expect(page().queryByLabelText('作用中帳本')).not.toBeInTheDocument();
+
+    // SC-38.5：標題上方不再有任何一行字。
+    expect(heading.closest('header')?.firstElementChild).toBe(heading);
   });
 
   it('opens the editor in the right panel when a row is clicked', async () => {

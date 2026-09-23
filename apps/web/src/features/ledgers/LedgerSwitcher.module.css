@@ -1,5 +1,5 @@
 /*
- * 頁首的帳本切換器：一顆帶邊框的膠囊（spec 2i §4.6、plan D26）。
+ * 上方橫條的帳本切換器：一顆帶邊框的膠囊（spec 2i SC-33、SC-38.2、plan D26）。
  *
  * 裡面依序是帳本 icon、粗體帳本名、「私人／共享」小標籤、向下箭頭。整顆膠囊
  * 就是那個透明 `<select>` 的可點範圍，所以 `position: relative` 不能省。
@@ -13,7 +13,9 @@
   gap: var(--space-sm);
   max-width: 100%;
   min-width: 0;
-  padding: var(--space-xs) var(--space-md);
+  /* 固定高度，與橫條上的返回連結一致（SC-38.1：膠囊要與橫條協調，不是越高越好）。 */
+  height: 2.125rem;
+  padding: 0 var(--space-md);
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background-color: var(--color-surface);
