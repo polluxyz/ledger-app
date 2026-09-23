@@ -1,41 +1,63 @@
 /*
- * `min-width: 0` 是必要的，不是保險。
+ * TextField 的樣式，Select 也共用這一份（兩者外觀必須一致）。
  *
- * 這個容器常常是 grid 或 flex 的子項（表單的兩欄列、篩選列），而那種子項的
- * 預設最小寬度是「內容的最小寬度」。`<input type="date">` 與 `<select>` 的預設
- * 尺寸都很寬，於是欄位撐著容器不肯縮，整張表單超出彈窗，使用者得左右捲。
+ * `min-width: 0` 是必要的，不是保險：這個容器常常是 grid 或 flex 的子項（表單的
+ * 兩欄列、篩選列），而那種子項的預設最小寬度是「內容的最小寬度」。`<input
+ * type="date">` 與 `<select>` 的預設尺寸都很寬，於是欄位撐著容器不肯縮，整張
+ * 表單超出彈窗，使用者得左右捲。
  */
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  /* 表單排版依賴這個下邊距（欄位與欄位之間的節奏），保留。 */
   margin-bottom: var(--space-md);
   min-width: 0;
 }
 
+/* label 用小一級的 muted 字：說明欄位是什麼，但不跟使用者輸入的內容搶視覺。 */
 .label {
-  font-size: 0.875rem;
+  font-size: var(--text-xs);
   font-weight: 500;
+  color: var(--color-text-muted);
 }
 
+/*
+ * 輸入框與下拉同高 2.25rem、border-box——篩選列要求所有欄位（含日期）切齊
+ * （SC-28）。高度交給 height、垂直 padding 歸零，才不會因字體行高差一兩像素。
+ */
 .input {
-  /* 跟著容器縮放，而不是撐著自己的預設尺寸（見上方 .field 的說明）。 */
   width: 100%;
   min-width: 0;
-  padding: var(--space-sm);
+  box-sizing: border-box;
+  height: 2.25rem;
+  padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   font: inherit;
-  background-color: var(--color-surface);
+  background-color: var(--color-fill);
   color: var(--color-text);
 }
 
+/* 聚焦只換框色；鍵盤焦點框交給全域的 :focus-visible（global.css），
+   這裡再畫一圈 outline 會變成雙框。 */
 .input:focus {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  border-color: var(--color-accent);
+}
+
+/*
+ * 例外：Chromium 的日期欄位，焦點其實落在裡面的年 / 月 / 日小格，欄位本身
+ * 連 :focus 都不符合，只符合 :focus-within——用 Tab 走到這裡時全域焦點框與
+ * 上面的換框色都不會出現（2h 用 e2e 以外的鍵盤巡檢發現）。
+ * 所以日期欄位用 :focus-within 畫框。文字欄位本來就是點一下也會畫框，行為一致。
+ */
+.input[type='date']:focus-within {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .hint {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }

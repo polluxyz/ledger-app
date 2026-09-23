@@ -70,4 +70,20 @@ describe('AppShell', () => {
     expect(await screen.findAllByRole('heading', { name: '帳戶' })).toHaveLength(1);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
+
+  /**
+   * D12 的回歸測試。2h 把登入後的 `h1` 從頂列搬進側欄，頂列只留一段普通文字——
+   * 兩邊都做成 `h1` 的話，jsdom 不套 CSS，看不出哪一個被隱藏，這裡會數到兩個。
+   */
+  it('keeps exactly one site-name h1 for guests and for signed-in users', () => {
+    const guest = render(<App />);
+
+    expect(screen.getAllByRole('heading', { level: 1, name: '記帳系統' })).toHaveLength(1);
+    guest.unmount();
+
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    render(<App />);
+
+    expect(screen.getAllByRole('heading', { level: 1, name: '記帳系統' })).toHaveLength(1);
+  });
 });

@@ -1,5 +1,6 @@
 import type { Account } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
+import { Icon } from '../../components/Icon';
 import { formatMoney } from '../../lib/format';
 import styles from './AccountList.module.css';
 
@@ -12,10 +13,14 @@ interface AccountListProps {
 }
 
 /**
- * 帳戶列表。形狀比照 `TransactionList`（同樣是一列一筆、右側對齊金額），
+ * 帳戶列表。形狀比照 `TransactionList`（一列一筆、金額右對齊、列尾兩顆圖示鈕），
  * 讓兩個列表看起來屬於同一個 app。
  *
  * 餘額由後端算好送來，前端只負責顯示——不在這裡做任何加總或換算。
+ *
+ * 列尾的動作是**圖示鈕**（鉛筆＝編輯、垃圾桶＝刪除，SC-26.6）。文字版的兩顆鈕
+ * 讓每一列都有兩塊搶眼的方塊；圖示把重量還給名稱與金額。`aria-label` 一字不改，
+ * 另外補 `title` 讓滑鼠使用者也讀得到同一句話。
  */
 export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: AccountListProps) {
   if (isLoading) {
@@ -39,37 +44,35 @@ export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: Ac
     <ul className={styles.list}>
       {accounts.map((account) => (
         <li className={styles.item} key={account.id}>
-          <div className={styles.main}>
-            {/* 只顯示名稱與目前餘額。初始餘額建立後就不能改，列出來只是佔位置，
-                看的人真正在意的是「現在還有多少」。 */}
-            <span className={styles.name}>{account.name}</span>
-          </div>
-          <div className={styles.right}>
-            <span
-              className={`${styles.balance} ${account.balance < 0 ? styles.negative : ''}`}
-              // 讓螢幕閱讀器知道這個數字是什麼，不必依賴視覺上的位置。
-              aria-label={`${account.name}餘額`}
+          {/* 只顯示名稱與目前餘額。初始餘額建立後就不能改，列出來只是佔位置，
+              看的人真正在意的是「現在還有多少」。 */}
+          <span className={styles.name}>{account.name}</span>
+          <span
+            className={`${styles.balance} ${account.balance < 0 ? styles.negative : ''}`}
+            // 讓螢幕閱讀器知道這個數字是什麼，不必依賴視覺上的位置。
+            aria-label={`${account.name}餘額`}
+          >
+            {formatMoney(account.balance)}
+          </span>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => onEdit(account)}
+              aria-label={`編輯${account.name}`}
+              title={`編輯${account.name}`}
             >
-              {formatMoney(account.balance)}
-            </span>
-            <div className={styles.actions}>
-              <button
-                type="button"
-                className={styles.action}
-                onClick={() => onEdit(account)}
-                aria-label={`編輯${account.name}`}
-              >
-                編輯
-              </button>
-              <button
-                type="button"
-                className={`${styles.action} ${styles.remove}`}
-                onClick={() => onRemove(account)}
-                aria-label={`刪除${account.name}`}
-              >
-                刪除
-              </button>
-            </div>
+              <Icon name="edit" />
+            </button>
+            <button
+              type="button"
+              className={`${styles.action} ${styles.remove}`}
+              onClick={() => onRemove(account)}
+              aria-label={`刪除${account.name}`}
+              title={`刪除${account.name}`}
+            >
+              <Icon name="trash" />
+            </button>
           </div>
         </li>
       ))}

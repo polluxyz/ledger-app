@@ -1,0 +1,24 @@
+/*
+ * 深淺切換鈕：跟側欄導覽連結同一種「圖示＋文字」的一行。
+ * 放在訪客頂列時不撐滿——inline-flex 只包內容，靠父層決定對齊。
+ * 顏色全走 chrome token：它只出現在側欄與頂列，兩處底色都是黑。
+ */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-chrome-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background-color: var(--color-chrome-active-bg);
+}

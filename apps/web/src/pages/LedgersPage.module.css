@@ -1,29 +1,31 @@
-/* 與帳戶頁同寬。兩個管理頁的版面一致，看起來才屬於同一個 app（2f）。 */
+/*
+ * 帳本頁：52rem、靠左（SC-24.5）。「不置中」是刻意的——所有登入後頁面的
+ * 內容左緣要落在同一條線上，置中會讓寬窄不同的頁面左緣跳來跳去。
+ */
 .page {
   max-width: 52rem;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
+/*
+ * 往下展開的建立表單。標準卡片寫法；Dialog 的 panel 變體自帶標題列與關閉鈕，
+ * 這裡只提供外框與內距，看起來與清單卡片是同一種東西。
+ */
+.createCard {
   margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
-/* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
-.title {
-  margin: 0;
-  font-size: var(--text-xl);
-}
-
+/* 勾選框列。次要文字用 muted，游標用 pointer——整列文字都點得到。 */
 .toggle {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   margin-bottom: var(--space-md);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }

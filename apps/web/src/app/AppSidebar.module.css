@@ -1,25 +1,118 @@
 /*
- * 寬螢幕：固定寬度的一欄，sticky 在頂列底下。
- * 內容區會很長（交易列表可以到 20 筆），導覽跟著捲走的話換頁就得先捲回頂端。
+ * 側欄（黑金 chrome）。三種形態，差別只在 CSS——元件本身只輸出一份 DOM。
+ *
+ * 這裡是預設形態：≥ 1200px 且使用者沒收合時的全高側欄。
+ * 檔案後半依序是「收合」與「≤ 900px 浮動選單」兩組覆寫。
+ *
+ * 高度是整個 100vh、`top: 0`：登入後 ≥ 901px 沒有頂列，側欄自己就是畫面的左緣。
+ * sticky 而不是 fixed——內容區很長時導覽要跟著留在原地，但它仍佔一欄的寬度。
  */
 .sidebar {
   position: sticky;
-  top: var(--topbar-height);
+  top: 0;
   flex: none;
-  width: var(--sidebar-width);
-  height: calc(100vh - var(--topbar-height));
-  padding: var(--space-lg) var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  background-color: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  width: var(--sidebar-width);
+  height: 100vh;
+  padding: var(--space-lg) var(--space-md);
+  background-color: var(--color-chrome);
+  border-right: 1px solid var(--color-chrome-border);
+  color: var(--color-chrome-text);
   overflow-y: auto;
 }
 
-.switcher {
-  min-width: 0;
+/* ---- 站名列 ---- */
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-chrome-active-text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* 「帳」字標誌方塊。頂列有同一套規格的一份（各自的 module 各寫一份）。 */
+.logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background-color: var(--color-chrome-accent);
+  color: var(--color-on-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.collapseButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-chrome-muted);
+  cursor: pointer;
+}
+
+.collapseButton:hover {
+  background-color: var(--color-chrome-active-bg);
+  color: var(--color-chrome-active-text);
+}
+
+/*
+ * 收合鈕只在 ≥ 1200px 有意義：901–1199px 一律收合、≤ 900px 是浮動選單，
+ * 兩種情況按了都不會有反應，不如不顯示。
+ */
+@media (max-width: 1199px) {
+  .collapseButton {
+    display: none;
+  }
+}
+
+/* ---- 帳本卡 ---- */
+
+.ledgerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-chrome-active-bg);
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--radius-lg);
+}
+
+.ledgerCardLabel {
+  margin: 0;
+  color: var(--color-chrome-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+/* ---- 導覽 ---- */
 
 .nav {
   display: flex;
@@ -28,34 +121,212 @@
 }
 
 .link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   padding: var(--space-sm);
   border-radius: var(--radius);
-  color: var(--color-primary);
+  color: var(--color-chrome-text);
   font-size: var(--text-base);
   text-decoration: none;
 }
 
 .link:hover {
-  background-color: var(--color-surface-hover);
+  background-color: var(--color-chrome-active-bg);
 }
 
-/* 所在頁面：改用一般文字色並加粗，看得出「你在這裡」。 */
+/* 所在頁面。左緣那條 2px 金線用 inset box-shadow 畫，不佔版面寬度——
+   用 border-left 的話所有連結都得預留 2px，否則選中時文字會跳一下。 */
 .active {
-  background-color: var(--color-surface-hover);
-  color: var(--color-text);
+  background-color: var(--color-chrome-active-bg);
+  color: var(--color-chrome-active-text);
   font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--color-chrome-accent);
 }
+
+/* ---- 底部：深淺切換、使用者、登出 ---- */
 
 .footer {
   /* 推到底部。登出是低頻且不希望誤觸的操作，離導覽越遠越好。 */
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border);
+}
+
+.themeRow {
+  display: flex;
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-top: 1px solid var(--color-chrome-border);
+  padding-top: var(--space-md);
+}
+
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background-color: var(--color-chrome-active-bg);
+  color: var(--color-chrome-active-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.userName {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-chrome-active-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-chrome-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.logout:hover {
+  background-color: var(--color-chrome-active-bg);
+}
+
+/* 展開時不做任何事；收合時才被下面兩組規則變成「視覺隱藏」。 */
+.collapsibleLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /*
- * 窄螢幕：脫離文件流，變成由 ☰ 展開的浮動面板。
- * 斷點硬寫 900px——媒體查詢讀不到 CSS 變數（見 global.css 的說明）。
+ * ================= 收合 =================
+ *
+ * 兩個觸發條件，樣式必須寫兩份（D10、D13）：
+ *
+ * 1. 使用者按了收合鈕 → 根元素多一個 `.collapsed`，只在 ≥ 901px 生效
+ *    （≤ 900px 是浮動選單，收合沒有意義，也不該讓桌機的選擇跟過去）。
+ * 2. 901–1199px → 一律收合。
+ *
+ * 媒體查詢讀不到 class，class 也管不到視窗寬度，CSS 沒有辦法把兩者合成一條。
+ * ⚠️ 改其中一塊時，另一塊要一起改。
+ */
+@media (min-width: 901px) {
+  .sidebar.collapsed {
+    width: var(--sidebar-collapsed-width);
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+    align-items: center;
+  }
+
+  .sidebar.collapsed .title {
+    flex: none;
+  }
+
+  .sidebar.collapsed .brandRow,
+  .sidebar.collapsed .themeRow,
+  .sidebar.collapsed .userRow {
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .link,
+  .sidebar.collapsed .logout {
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .ledgerCard {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  /* 照抄 global.css 的 `.visually-hidden`：名稱還在，眼睛看不到。
+     用 `display: none` 的話無障礙名稱會一起消失，e2e 與螢幕閱讀器都找不到。 */
+  .sidebar.collapsed .collapsibleLabel,
+  .sidebar.collapsed .ledgerCardLabel,
+  .sidebar.collapsed .userName {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* 901–1199px：三欄放不下展開的側欄，一律收合。內容與上面那塊相同。 */
+@media (min-width: 901px) and (max-width: 1199px) {
+  .sidebar {
+    width: var(--sidebar-collapsed-width);
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+    align-items: center;
+  }
+
+  .title {
+    flex: none;
+  }
+
+  .brandRow,
+  .themeRow,
+  .userRow {
+    justify-content: center;
+  }
+
+  .link,
+  .logout {
+    justify-content: center;
+  }
+
+  .ledgerCard {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .collapsibleLabel,
+  .ledgerCardLabel,
+  .userName {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/*
+ * ================= ≤ 900px：浮動選單 =================
+ *
+ * 脫離文件流，變成由 ☰ 展開、浮在內容之上的面板（2f 的做法不變）。
+ * 這裡的 `top` 要扣掉頂列——≤ 900px 的頂列是顯示的。
  */
 @media (max-width: 900px) {
   .sidebar {
@@ -68,8 +339,7 @@
     width: min(18rem, 85vw);
     height: auto;
     max-height: calc(100vh - var(--topbar-height));
-    border-right: 1px solid var(--color-border);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-chrome-border);
     border-bottom-right-radius: var(--radius);
     /* 比卡片重得多的陰影，才看得出它蓋在內容上面。 */
     box-shadow: var(--shadow-md);

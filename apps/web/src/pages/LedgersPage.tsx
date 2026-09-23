@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../components/Button';
+import { PageHeader } from '../components/PageHeader';
+import { SlideDown } from '../components/SlideDown';
 import { LedgerDialog } from '../features/ledgers/LedgerDialog';
 import { LedgerList } from '../features/ledgers/LedgerList';
 import { useLedgers } from '../features/ledgers/use-ledgers';
@@ -10,6 +12,9 @@ import styles from './LedgersPage.module.css';
  *
  * 「顯示已封存」交給後端處理（`includeArchived`），前端不自行過濾。query key 帶著
  * 這個值，所以兩份清單各有各的快取，切換時不會互相覆蓋。
+ *
+ * 「建立帳本」不是彈窗，而是頁首下方往下展開的表單（2h §4.7）：建立是在清單上
+ * 多加一項，展開在清單上方，送出後直接看到新帳本出現在哪裡。
  */
 export default function LedgersPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -18,11 +23,24 @@ export default function LedgersPage() {
 
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
-        {/* 站名是 AppTopBar 的 h1，頁面標題往下一級。 */}
-        <h2 className={styles.title}>帳本</h2>
-        <Button onClick={() => setCreating(true)}>建立帳本</Button>
-      </header>
+      <PageHeader
+        title="帳本"
+        actions={
+          <Button aria-expanded={creating} onClick={() => setCreating((open) => !open)}>
+            建立帳本
+          </Button>
+        }
+      />
+
+      {/*
+        開關交給 SlideDown：裡面的 LedgerDialog 恆為開啟，收起動畫播完才整個卸載，
+        下次展開的表單因此是乾淨的。Dialog 的 panel 變體沒有外框，外框由這張卡片提供。
+      */}
+      <SlideDown open={creating}>
+        <div className={styles.createCard}>
+          <LedgerDialog open variant="panel" onClose={() => setCreating(false)} />
+        </div>
+      </SlideDown>
 
       <label className={styles.toggle}>
         <input
@@ -38,8 +56,6 @@ export default function LedgersPage() {
         isLoading={ledgers.isLoading}
         error={ledgers.error}
       />
-
-      <LedgerDialog open={creating} onClose={() => setCreating(false)} />
     </section>
   );
 }

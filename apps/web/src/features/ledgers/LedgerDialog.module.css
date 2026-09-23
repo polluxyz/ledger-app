@@ -1,13 +1,20 @@
+/*
+ * 建立帳本表單的內部樣式。外框由 Dialog 變體決定：modal 是彈窗，
+ * panel 嵌在帳本頁的卡片裡——兩種情境只共用這一份內容排版。
+ */
+
+/* 帳本類型、連動與否兩組「建立後不可變更」的選擇，用淺一層的底色分組。 */
 .choice {
   margin: 0 0 var(--space-md);
   padding: var(--space-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  background-color: var(--color-fill);
 }
 
 .legend {
   padding: 0 var(--space-xs);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
@@ -22,16 +29,19 @@
 .hint {
   margin: var(--space-xs) 0 0;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
-/* 部分失敗後的說明。用中性色而非紅色——帳本確實建好了，紅框會讓人以為整件事失敗。 */
+/*
+ * 部分失敗後的說明。用中性色而非紅色——帳本確實建好了，紅框會讓人以為整件事失敗。
+ * 底色用 fill：這份表單可能落在彈窗（surface）或頁面卡片（surface）上，fill 才浮得起來。
+ */
 .notice {
   margin: 0 0 var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background-color: var(--color-bg);
+  background-color: var(--color-fill);
   color: var(--color-text);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }

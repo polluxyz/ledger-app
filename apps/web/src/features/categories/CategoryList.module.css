@@ -1,31 +1,43 @@
 /*
- * 形狀與類名沿用 AccountList.module.css——同一種「一列一筆、右側動作」的清單。
- * 餘額相關（.main／.right／.balance／.negative）在分類沒有對應物，不帶過來。
+ * 形狀與類名沿用 AccountList.module.css——同一種「一列一筆、列尾圖示鈕」的清單。
+ * 餘額相關（.balance／.negative）在分類沒有對應物，不帶過來。
  */
+
+/* 標準卡片寫法（spec §4.3）。overflow hidden 讓最後一列的底色不超出圓角。 */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
+/* 列高與帳戶列一致（3.25rem）：兩頁的清單並排看時節奏才一樣。
+   檢視者看到的列沒有按鈕，`justify-content` 對它沒有影響。 */
 .item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md);
+  height: 3.25rem;
+  padding: 0 var(--space-md);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.item + .item {
-  border-top: 1px solid var(--color-border);
+/* 最後一列不畫線：卡片的邊已經是界線，再一條會變成雙線。 */
+.item:last-child {
+  border-bottom: none;
 }
 
 .name {
-  font-weight: 500;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .actions {
@@ -33,33 +45,40 @@
   gap: var(--space-xs);
 }
 
+/*
+ * 28px 的圖示鈕，與 AccountList 同一套。平常安靜、滑過才浮出底色；
+ * 刪除的紅色也留到滑過或聚焦才出現（一頁滿是紅鈕是 2h 要修掉的問題）。
+ */
 .action {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--text-sm);
+  background: none;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .action:hover {
-  background-color: var(--color-bg);
+  border-color: var(--color-border);
+  background-color: var(--color-fill);
+  color: var(--color-text);
 }
 
-/* 刪除是危險動作，用紅色讓它與「改名」有明顯區別。淡紅邊框沿用 AccountList
-   的做法——危險的邊框色還沒有專屬 token，不為了這裡新造一個。 */
-.remove {
+.remove:hover,
+.remove:focus-visible {
   color: var(--color-danger);
-  border-color: #f3c6c6;
 }
 
 .empty,
 .status {
+  margin: 0;
   padding: var(--space-lg);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;

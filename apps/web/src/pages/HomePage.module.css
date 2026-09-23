@@ -1,83 +1,138 @@
-/* 標題與登出移到共用的外殼（AppTopBar / AppSidebar）；這裡只剩頁面內容的樣式。 */
+/* 標題與登出在共用的外殼（AppTopBar / AppSidebar）；這裡只剩頁面內容的樣式。 */
 
 /*
- * 已登入時的兩欄版面（2f · D2）：左邊是交易列表，右邊是記帳表單與餘額。
+ * 登入後的兩欄工作台（phase-2h · D1）：左邊是交易列表，右邊是常駐面板。
  *
- * `minmax(0, ...)` 兩欄都要寫。grid 欄的預設最小寬度是內容寬度，少了它，
- * 一筆很長的備註就會把整欄撐開、擠掉另一欄，並讓整頁出現橫向捲動。
- *
- * 只設 column-gap，row-gap 留 0——各區塊（表單、篩選、餘額）本身已經帶著
- * `margin-bottom`，再加 row-gap 會變成雙倍間距。
+ * 右欄寬度用固定的 `--panel-width`、左欄 `minmax(0, 1fr)` 吃掉剩下的。
+ * `minmax(0, ...)` 不能省：grid 欄的預設最小寬度是內容寬度，少了它，一筆很長的
+ * 備註就會把左欄撐開、擠掉面板，並讓整頁出現橫向捲動。
  */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 0 var(--space-lg);
+  grid-template-columns: minmax(0, 1fr) var(--panel-width);
   align-items: start;
 }
 
-.primary,
-.rail {
+.primary {
   min-width: 0;
 }
 
 /*
- * 1100px 以下退回單欄。**斷點比側邊欄的 900px 早**：側邊欄佔掉 14rem 之後，
- * 視窗 1100px 時右欄只剩不到 300px，表單欄位會擠成兩行。
+ * 右側面板貼齊 `<main>` 的右緣與上下緣，看起來像整面牆而不是一張卡片。
  *
- * 退回單欄時把右側欄排到前面——記帳表單要在列表上方，與 2f 之前的順序一致。
+ * `<main>` 有 `var(--space-xl)` 的內距，所以上下與右邊用**負 margin 抵銷**它，
+ * 左邊補回同樣的距離當作兩欄的間隙——一正一負相加為零，面板的寬度仍然剛好是
+ * `--panel-width`，只是整塊往右移到貼住視窗。
+ *
+ * `sticky` + `100vh` 讓面板跟著捲動留在原地：記帳是高頻動作，捲到列表下方時
+ * 表單不該跟著跑掉。面板自己的內容太長時由它自己捲（`overflow-y`）。
  */
-@media (max-width: 1100px) {
+.panel {
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  margin: calc(-1 * var(--space-xl)) calc(-1 * var(--space-xl)) calc(-1 * var(--space-xl))
+    var(--space-xl);
+  padding: var(--space-lg);
+  border-left: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+/*
+ * 900px 以下單欄（spec 假設 4：手機版另開一步，這裡只保證不壞）。
+ *
+ * 面板排到列表上方——記帳表單要先看得到——並改回一般卡片：貼邊的整面牆只在
+ * 兩欄版面裡說得通。
+ */
+@media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
   }
 
-  .rail {
+  .panel {
     order: -1;
+    position: static;
+    height: auto;
+    overflow: visible;
+    margin: 0 0 var(--space-lg);
+    border: var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /*
+   * 單欄時編輯中就把列表整個藏起來（D10）。
+   *
+   * 面板是**非 modal** 的 dialog，焦點不會被鎖住；列表若還在下面，鍵盤使用者
+   * 按 Tab 會走到螢幕外看不見的地方。斷點只寫在 CSS，JS 不重複判斷一次。
+   */
+  .layout:has(.panel dialog[open]) .primary {
+    display: none;
   }
 }
 
+/* 三張「即將推出」的統計卡（D5：原樣保留，只換樣式）。 */
+/* 統計卡刻意壓矮（spec §4.8）：它們目前只是佔位，不該吃掉首屏的交易筆數。 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-sm);
-  margin-bottom: var(--space-lg);
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
 }
 
 .stat {
-  padding: var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .statLabel {
   display: block;
-  font-size: 0.8125rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
+/* 數字還沒接上，先用次要色——它現在是佔位，不該搶走視線。 */
 .statValue {
   display: block;
   margin-top: var(--space-xs);
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.pending {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  font-weight: 400;
 }
 
-.panel {
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+/*
+ * 篩選列、列表、分頁包成一張卡片。`overflow: hidden` 讓裡面的表頭與分頁列
+ * 貼齊圓角，不會在四個角落露出方角。
+ */
+.listCard {
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* 說明用的單張卡片（訪客引導、找不到帳本）。 */
+.card {
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
   text-align: center;
 }
 
-.panelText {
+/* 訪客只有這一張卡，寬螢幕上不要拉成一長條。 */
+.guest {
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.note {
   margin: 0 0 var(--space-md);
   color: var(--color-text-muted);
 }

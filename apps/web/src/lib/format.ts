@@ -35,6 +35,21 @@ export function formatDate(isoDate: string): string {
   });
 }
 
+/** 星期縮寫，索引對 `Date.getDay()`（0＝星期日）。 */
+const WEEKDAY_SHORT_NAMES = ['日', '一', '二', '三', '四', '五', '六'] as const;
+
+/**
+ * 交易列表「日期分組」的標題文字，如 `8月16日 星期日`（phase-2h D16）。
+ *
+ * 與 `formatDate` 同樣用本地時區解讀 ISO 字串，兩者對同一筆交易算出的日期
+ * 才會一致（分組的判斷就是拿 `formatDate` 的結果比較的）。不加零填充——
+ * 標題是給人掃視的，`9月1日` 比 `09月01日` 好讀。
+ */
+export function formatGroupDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  return `${date.getMonth() + 1}月${date.getDate()}日 星期${WEEKDAY_SHORT_NAMES[date.getDay()]}`;
+}
+
 /** 產生 `<input type="date">` 需要的 `YYYY-MM-DD` 字串（預設今天）。 */
 export function toDateInputValue(date: Date = new Date()): string {
   const year = date.getFullYear();

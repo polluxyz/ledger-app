@@ -1,14 +1,19 @@
 import { Link } from 'react-router-dom';
 import type { Account } from '@ledger/shared';
+import { Icon } from '../../components/Icon';
 import { formatMoney } from '../../lib/format';
 import { useAccounts } from './use-accounts';
 import styles from './AccountBalances.module.css';
 
 /**
- * 首頁的帳戶餘額列（S5-B）。
+ * 首頁的帳戶餘額（S5-B）。
  *
- * 位置在「本月支出 / 收入 / 結餘」三張統計卡**下方、自成一列**（D4）：統計卡講的是
- * 「這段期間發生了什麼」，餘額講的是「現在還有多少」，混在一起會被誤讀成本月數字。
+ * phase-2h 起它住在右側面板的下半：上面是記帳表單，中間隔一條線。兩者都在講
+ * 「我的錢」，統計卡講的則是「這段期間發生了什麼」——分開放才不會被誤讀成
+ * 本月數字（沿用 2f · D4 的理由）。
+ *
+ * 排成直式清單而不是格子：面板只有 22.5rem 寬，一行一個帳戶才放得下完整名稱，
+ * 金額也才能靠右對齊成一直線，一眼比得出大小。
  *
  * 刻意**不做總餘額**——跨帳戶加總是金額運算，屬後端職責（見 `lib/format.ts`）。
  *
@@ -66,10 +71,13 @@ function Body({
   }
 
   return (
-    <div className={styles.grid}>
+    <div className={styles.list}>
       {accounts.map((account) => (
-        <div className={styles.cell} key={account.id}>
-          <span className={styles.name}>{account.name}</span>
+        <div className={styles.row} key={account.id}>
+          <span className={styles.name}>
+            <Icon name="wallet" />
+            {account.name}
+          </span>
           <span
             className={`${styles.value} ${account.balance < 0 ? styles.negative : ''}`}
             aria-label={`${account.name}餘額`}

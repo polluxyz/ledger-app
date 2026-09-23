@@ -90,3 +90,79 @@ describe('AppSidebar 的浮動選單', () => {
     expect(screen.queryByRole('button', { name: '主選單' })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * 側欄的收合（2h · D11、D13、D18、SC-24.2）。
+ *
+ * 收合的「觸發條件」有兩個，其中一個是 901–1199px 的媒體查詢——jsdom 不套 CSS，
+ * 那一條只能交給 e2e。這裡驗的是另一半：**按鈕記得住選擇**，以及**收合之後
+ * 每一個無障礙名稱都還在**。後者才是真正的風險：用 `display: none` 藏文字的話
+ * 畫面看起來對，但 e2e 的 74 個選取器會整批找不到元素。
+ */
+describe('AppSidebar 的收合', () => {
+  const fetchMock = vi.fn();
+
+  const personal = {
+    id: 'led-1',
+    name: '個人帳本',
+    currency: 'TWD',
+    kind: 'PERSONAL',
+    tracksBalance: true,
+    archivedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    role: 'OWNER',
+  };
+  const family = { ...personal, id: 'led-2', name: '家庭帳本', kind: 'SHARED' };
+
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    window.history.pushState({}, '', '/');
+    fetchMock.mockReset();
+    // 兩本帳本，切換器才會畫成 `<select>`（只有一本時是純文字，驗不到重複）。
+    fetchMock.mockImplementation((url: string) => {
+      const body = String(url).endsWith('/ledgers') ? [personal, family] : [];
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  it('remembers the collapse choice across a remount', async () => {
+    const user = userEvent.setup();
+    const first = render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '收合側欄' }));
+    expect(localStorage.getItem('ledger.sidebarCollapsed')).toBe('true');
+    first.unmount();
+
+    // 「重新整理後仍是收合」在 jsdom 裡的等價說法：重新掛載後讀回同一個選擇。
+    render(<App />);
+    expect(screen.getByRole('button', { name: '展開側欄' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('keeps every accessible name while collapsed', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByLabelText('作用中帳本')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '收合側欄' }));
+
+    // 收合狀態不能另外渲染一份切換器（D18）。
+    expect(screen.getAllByLabelText('作用中帳本')).toHaveLength(1);
+
+    for (const name of ['首頁', '帳本', '帳戶', '分類', '個人資料']) {
+      expect(screen.getByRole('link', { name })).toBeInTheDocument();
+    }
+
+    // 登出永遠看得見，不能收進選單（spec §4.2）。
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument();
+  });
+});

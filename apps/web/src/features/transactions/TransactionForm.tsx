@@ -23,6 +23,11 @@ interface TransactionFormProps {
   transaction?: Transaction;
   /** 編輯成功後呼叫（通常用來關閉彈窗）。新增模式不會呼叫。 */
   onSaved?: () => void;
+  /**
+   * 編輯模式的「取消」。有傳才渲染那顆按鈕——新增表單是常駐的，沒有「取消」
+   * 可言（phase-2h · D9）。
+   */
+  onCancel?: () => void;
 }
 
 /**
@@ -51,7 +56,7 @@ interface TransactionFormProps {
  *
  * 所以欄位不能只是「停用」，必須整個不存在，送出的 body 也不能帶 `accountId`。
  */
-export function TransactionForm({ ledger, transaction, onSaved }: TransactionFormProps) {
+export function TransactionForm({ ledger, transaction, onSaved, onCancel }: TransactionFormProps) {
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined;
 
@@ -185,7 +190,7 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
    */
   if (showAccountField && !accounts.isLoading && (accounts.data?.length ?? 0) === 0) {
     return (
-      <section className={styles.form}>
+      <section>
         <p className={styles.legend}>新增一筆交易</p>
         <p className={styles.blocked}>
           記帳前要先有一個帳戶。<Link to="/accounts">前往新增帳戶</Link>
@@ -195,7 +200,8 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
   }
 
   return (
-    <form className={isEdit ? undefined : styles.form} onSubmit={handleSubmit} noValidate>
+    // 外框由放它的地方給（右側面板，或窄螢幕的卡片），表單自己不畫框。
+    <form onSubmit={handleSubmit} noValidate>
       <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
         {/* 編輯模式在彈窗裡，標題由彈窗負責，這裡再放一個會重複。 */}
         {!isEdit && <legend className={styles.legend}>新增一筆交易</legend>}
@@ -231,7 +237,8 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
           )}
         </div>
 
-        <div className={styles.row}>
+        {/* 金額自成一列並放大：它是這張表單唯一非填不可的數字，要一眼看到。 */}
+        <div className={styles.amount}>
           <TextField
             label="金額"
             type="number"
@@ -242,6 +249,9 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
             required
             onChange={(event) => setAmount(event.target.value)}
           />
+        </div>
+
+        <div className={styles.row}>
           <TextField
             label="日期"
             type="date"
@@ -249,24 +259,24 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
             required
             onChange={(event) => setDate(event.target.value)}
           />
+          {/* 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別），欄位整個不渲染。
+              那時這一列只剩日期，auto-fit 會讓它自己撐滿。 */}
+          {type !== 'TRANSFER' && (
+            <Select
+              label="分類"
+              value={categoryId}
+              required
+              onChange={(event) => setCategoryId(event.target.value)}
+            >
+              <option value="">請選擇</option>
+              {categories.data?.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
-
-        {/* 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別），欄位整個不渲染。 */}
-        {type !== 'TRANSFER' && (
-          <Select
-            label="分類"
-            value={categoryId}
-            required
-            onChange={(event) => setCategoryId(event.target.value)}
-          >
-            <option value="">請選擇</option>
-            {categories.data?.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </Select>
-        )}
 
         {/* 非連動帳本沒有帳戶欄位。停用而非移除是不夠的——後端連「帶著空值」都會
             擋下（400 ACCOUNT_NOT_ALLOWED），而且一個停用的欄位會讓人以為
@@ -321,9 +331,17 @@ export function TransactionForm({ ledger, transaction, onSaved }: TransactionFor
           onChange={(event) => setNote(event.target.value)}
         />
 
-        <Button type="submit" block disabled={pending || transferBlocked}>
-          {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
-        </Button>
+        {/* 編輯模式才有「取消」。新增表單常駐在面板裡，沒有東西可以取消。 */}
+        <div className={styles.actions}>
+          <Button type="submit" block disabled={pending || transferBlocked}>
+            {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
+          </Button>
+          {isEdit && onCancel && (
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              取消
+            </Button>
+          )}
+        </div>
       </fieldset>
     </form>
   );

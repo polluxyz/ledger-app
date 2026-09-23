@@ -118,7 +118,12 @@ describe('Ledger detail page', () => {
 
     expect(await screen.findByRole('heading', { name: '家庭帳本' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '改名' })).not.toBeInTheDocument();
-    expect(screen.getByText('可編輯')).toBeInTheDocument();
+    // 「可編輯」在畫面上會出現兩次：「我的角色」與 Bob 那一列的角色標籤。原本整頁
+    // getByText 只對到一個，是因為「我的角色」要等 /users/me 回來，斷言時多半還是「—」
+    // ——測試靠的是這個 race。2h 的側欄也讀目前使用者，身分提早載入，race 就消失了。
+    // 改成限定在「我的角色」這一格、等它載入完成，驗的是同一件事，而且不再靠運氣。
+    const myRole = screen.getByText('我的角色').closest('div');
+    await waitFor(() => expect(myRole).toHaveTextContent('可編輯'));
   });
 
   it('renames the ledger and sends only the name', async () => {
@@ -188,6 +193,20 @@ describe('Ledger detail page', () => {
       expect(archive).toBeDefined();
       expect((archive?.[1] as RequestInit | undefined)?.method).toBe('POST');
     });
+  });
+
+  /**
+   * 危險操作區裡兩顆按鈕的後果差很多：封存可以只是收起來，刪除是連資料一起消失。
+   * 2h 之後只有刪除帶危險樣式，靠 class 驗——顏色本身在單元測試裡讀不到。
+   */
+  it('marks only 刪除帳本 with the dangerous styling', async () => {
+    routeFetch();
+
+    render(<App />);
+
+    const remove = await screen.findByRole('button', { name: '刪除帳本' });
+    expect(remove.className).toMatch(/deleteButton/);
+    expect(screen.getByRole('button', { name: '封存帳本' }).className).not.toMatch(/deleteButton/);
   });
 
   it('deletes the ledger with the name as confirm and returns to the list', async () => {

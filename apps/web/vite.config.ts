@@ -103,6 +103,12 @@ export default defineConfig({
      */
     exclude: [...configDefaults.exclude, 'e2e/**'],
     globals: true,
+    /**
+     * Vitest 預設把所有 `.css` 換成空字串（連 `?raw` 也是），元件測試不需要樣式。
+     * 唯一的例外是 `global.css`：`styles/tokens.test.ts` 要讀它的原始文字，
+     * 驗淺色 token 兩塊相同與每一組對比都及格（phase-2h D15）。
+     */
+    css: { include: [/global\.css/] },
     setupFiles: ['./src/test/setup.ts'],
   },
 });

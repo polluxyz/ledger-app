@@ -1,27 +1,47 @@
-.form {
-  margin-bottom: var(--space-lg);
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
-}
+/*
+ * 表單本身不畫外框（phase-2h）：它住在右側面板裡，窄螢幕時住在一張卡片裡，
+ * 兩者都已經有框。再畫一層會變成框中框。
+ */
 
+/* 新增模式的標題，做成面板標題的樣子——它和編輯面板的「編輯交易」同一個位階。 */
 .legend {
   padding: 0;
   margin-bottom: var(--space-md);
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.types {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  font-size: var(--text-lg);
+  font-weight: 700;
 }
 
 /*
- * 金額與日期並排。窄到放不下兩欄時（彈窗裡就是），自動改成上下兩列——
- * 硬塞兩欄會把日期輸入框壓到看不清楚。
+ * 支出 / 收入 / 轉帳做成一條分段控制（segmented control）：三顆鈕擠在同一個框裡
+ * 等寬撐滿，看得出「只能選一個」。選中的那顆是金色，由 Button 的 primary 負責，
+ * 這裡只管排版。
+ */
+.types {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--space-md);
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+.types > button {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 金額是這張表單的主角，字級與字重都比其他欄位大一階。 */
+.amount input {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  /* 等寬數字：邊打邊看的時候位數不會跳動。 */
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 日期與分類並排。窄到放不下兩欄時自動改成上下兩列——硬塞兩欄會把日期輸入框
+ * 壓到看不清楚。轉帳時分類不渲染，這一列只剩日期，auto-fit 會讓它撐滿。
  */
 .row {
   display: grid;
@@ -29,12 +49,24 @@
   gap: var(--space-md);
 }
 
+/* 主要動作撐滿一整列；編輯模式的「取消」貼在它右邊，只佔自己需要的寬度。 */
+.actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.actions > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 /* 沒有任何帳戶時取代整張表單的引導文字（見 TransactionForm 的 early return）。 */
 .blocked {
   margin: 0;
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
   border-radius: var(--radius);
+  background-color: var(--color-fill);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -44,9 +76,8 @@
 .notice {
   margin: 0 0 var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background-color: var(--color-bg);
+  background-color: var(--color-fill);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }

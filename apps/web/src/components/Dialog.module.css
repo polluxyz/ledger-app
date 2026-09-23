@@ -1,18 +1,43 @@
 /**
- * 彈窗的外殼樣式。由 AuthDialog.module.css 搬移而來，內容未變——
- * 抽出的目的是讓所有彈窗長得一樣，而不是趁機改設計。
+ * 彈窗與面板的外殼樣式（phase-2h 換成黑金 token）。
  */
+
+/* ---- modal：蓋在頁面上 ---- */
 .dialog {
-  width: min(22rem, calc(100vw - 2 * var(--space-md)));
+  width: min(24rem, calc(100vw - 2 * var(--space-md)));
   padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   color: var(--color-text);
+  box-shadow: var(--shadow-md);
 }
 
 .dialog::backdrop {
-  background-color: rgb(0 0 0 / 0.4);
+  background-color: rgb(0 0 0 / 55%);
+}
+
+/*
+ * ---- panel：嵌在版面裡的非 modal 面板 ----
+ * 瀏覽器預設的 <dialog> 樣式是 position: absolute、置中、白底黑字——那是給浮動
+ * 彈窗用的。面板要乖乖待在版面的流裡，所以把這些預設全部蓋掉。
+ * 外框（背景、邊框、陰影）由放它的地方決定：右側面板與往下展開的卡片長得不一樣。
+ */
+.panel {
+  position: static;
+  display: block;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+/* 面板本身可聚焦（tabIndex -1），但它不是互動元件，不該畫焦點框。 */
+.panel:focus {
+  outline: none;
 }
 
 .header {
@@ -25,21 +50,24 @@
 
 .title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-lg);
+  font-weight: 700;
 }
 
 .close {
-  padding: var(--space-xs) var(--space-sm);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   border: none;
   border-radius: var(--radius);
   background: none;
   color: var(--color-text-muted);
-  font: inherit;
-  font-size: 1.25rem;
-  line-height: 1;
   cursor: pointer;
 }
 
 .close:hover {
-  background-color: var(--color-bg);
+  background-color: var(--color-fill);
+  color: var(--color-text);
 }

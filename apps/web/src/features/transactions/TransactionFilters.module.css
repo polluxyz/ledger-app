@@ -1,40 +1,48 @@
 /*
- * 篩選列。欄位橫向排開，窄畫面時自動換行——每個欄位都保有可讀的最小寬度。
- *
- * 下方不留 padding：TextField / Select 自己帶了 1rem 的下邊距，由它們充當
- * 這一列的底部留白。這樣就不必跨檔案去蓋掉那個邊距（兩邊的選擇器權重相同，
- * 誰贏取決於載入順序，那種樣式很難維護）。
+ * 篩選列。它坐在首頁交易卡片的最上方，所以**不畫自己的外框與底色**——
+ * 那會在卡片裡再切出一張卡片。只留一條下邊框跟列表分開。
  */
 .bar {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/*
+ * 欄位橫向排開，窄畫面時自動換行——每個欄位都保有可讀的最小寬度。
+ *
+ * 負的下邊距是拿來抵銷欄位自帶的 1rem 下邊距（`TextField.module.css` 的
+ * `.field`）。不從這裡去蓋掉那個 class：兩邊的選擇器權重相同，誰贏取決於
+ * CSS 的載入順序，那種樣式很難維護。
+ */
+.fields {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0 var(--space-md);
-  margin-bottom: var(--space-md);
-  padding: var(--space-md) var(--space-md) 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
+  gap: var(--space-sm);
+  margin-bottom: calc(-1 * var(--space-md));
 }
 
-.bar > * {
-  flex: 1 1 8rem;
+/* 7.25rem：側欄收合的 1024px 寬時，四個欄位剛好排得下一列（8rem 會把「迄日」擠到第二列）。 */
+.fields > * {
+  flex: 1 1 7.25rem;
 }
 
-/* 「清除篩選」不是表單欄位，用文字鈕的樣子，也不跟著欄位一起長寬。 */
+/*
+ * 「清除篩選」不是表單欄位：用文字鈕的樣子，也不跟著欄位一起長寬。
+ * 下邊距與欄位相同，才會跟輸入框的底線切齊。
+ */
 .clear {
   flex: 0 0 auto;
   margin-bottom: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
-  color: var(--color-text);
+  padding: var(--space-xs) 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
 .clear:hover {
-  background-color: var(--color-bg);
+  text-decoration: underline;
 }

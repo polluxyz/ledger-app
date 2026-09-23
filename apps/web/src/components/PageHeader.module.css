@@ -1,0 +1,46 @@
+/*
+ * 頁首：左邊標題、右邊動作，底部對齊。
+ * 動作按鈕與標題的「底」對齊，而不是置中——有說明文字時標題區變高，
+ * 置中的話按鈕會浮在兩行之間，看起來沒對齊任何東西。
+ */
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.text {
+  min-width: 0;
+}
+
+.context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0 0 var(--space-xs);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.description {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}

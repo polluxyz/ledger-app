@@ -52,4 +52,14 @@ describe('Button', () => {
 
     expect(screen.getByRole('button', { name: '停用中' })).toBeDisabled();
   });
+
+  it('merges a custom className into the variant classes', () => {
+    render(<Button className="danger">刪除</Button>);
+
+    // ConfirmDialog 靠這個機制做危險樣式：variant 的 class 要在，
+    // 外來的 class 也要併進去，任何一邊被覆蓋都會讓那個樣式失效。
+    const button = screen.getByRole('button', { name: '刪除' });
+    expect(button.className).toMatch(/primary/);
+    expect(button.className).toMatch(/danger/);
+  });
 });

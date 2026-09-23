@@ -1,36 +1,24 @@
 /*
- * 單欄的管理頁不吃滿 70rem，與 AccountsPage 一致（52rem）。
- * 一列只有「名稱 …… 改名 刪除」，拉太寬反而難讀。
+ * 分類頁的版面。
+ *
+ * 比帳戶頁寬（64rem）：≥ 1200px 時支出與收入要並排兩欄，52rem 放不下兩張卡片。
+ * **靠左、不置中**：所有登入後頁面的內容左緣要落在同一條線上（SC-24.5），
+ * `margin: auto` 會讓左緣隨視窗寬度浮動，換頁時標題就跳位置。
  */
 .page {
-  max-width: 52rem;
-}
-
-.header {
-  margin-bottom: var(--space-lg);
-}
-
-/* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
-.title {
-  margin: 0;
-  font-size: var(--text-xl);
-}
-
-/* 標題下方的一行小字：講清楚現在管的是哪一本帳本。 */
-.subtitle {
-  margin: var(--space-xs) 0 0;
-  color: var(--color-text-muted);
+  max-width: 64rem;
 }
 
 /* 網址上的 ledgerId 對不上清單時的一行說明（D11）。不是錯誤，用 muted 而非紅色。 */
 .notice {
   margin: 0 0 var(--space-lg);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
 /*
  * 不一致提示條（D8）。它講的是「兩個選擇」的狀態，所以長得要跟一般內容不一樣
- * ——有框、有底、可以放一顆按鈕，但仍用既有的 token，不另造警告色。
+ * ——用標準卡片寫法浮出來，但仍走既有 token，不另造警告色。
  */
 .banner {
   display: flex;
@@ -39,19 +27,22 @@
   gap: var(--space-md);
   flex-wrap: wrap;
   margin-bottom: var(--space-lg);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  padding: var(--space-md);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .bannerText {
   margin: 0;
+  font-size: var(--text-sm);
 }
 
 /* 檢視者的說明。與 .notice 同一款式：告知現況，不是錯誤。 */
 .readonly {
   margin: 0 0 var(--space-lg);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
@@ -60,9 +51,32 @@
   color: var(--color-text-muted);
 }
 
-/* 兩個型別的區塊上下並列，用 xl 撐出層次。 */
-.group + .group {
-  margin-top: var(--space-xl);
+/*
+ * 支出與收入兩個區塊。
+ *
+ * ⚠️ 斷點硬寫 1200px：媒體查詢讀不到 CSS 變數（見 global.css 的說明）。
+ * 1200px 以上並排兩欄——那個寬度側欄仍展開著，兩張 30rem 左右的卡片剛好放得下；
+ * 窄一點就上下排，硬擠成兩欄會讓分類名稱一直被截斷。
+ * `minmax(0, 1fr)` 而不是 `1fr`：格子的預設最小寬度是內容寬度，長名稱會把欄位撐爆。
+ */
+.ledgerPicker {
+  max-width: 20rem;
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-xl);
+}
+
+@media (min-width: 1200px) {
+  .groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.group {
+  min-width: 0;
 }
 
 .groupHeader {
@@ -78,4 +92,18 @@
 .groupTitle {
   margin: 0;
   font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+/*
+ * 往下展開的「新增分類」表單外框（§4.7）。用標準卡片寫法，看起來是清單上方
+ * 臨時多出來的一張卡；下邊距把它與清單隔開，收起後整塊卸載，不留空白。
+ */
+.panel {
+  margin-bottom: var(--space-md);
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }

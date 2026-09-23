@@ -3,6 +3,8 @@ import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
+import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { AccountBalances } from '../features/accounts/AccountBalances';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
@@ -27,7 +29,7 @@ import styles from './HomePage.module.css';
  * - **未登入**：顯示介面預覽——統計卡片是純粹的空狀態（固定 0，不做任何計算），
  *   讓人先看懂這個 app 長什麼樣，再引導去登入 / 註冊。不保存任何訪客資料，
  *   因此前端毋須實作任何業務邏輯。
- * - **已登入**：顯示自己的記帳畫面（交易列表與新增表單於 Slice 0 後半實作）。
+ * - **已登入**：左邊是交易列表、右邊是常駐的工作面板（phase-2h · D8/D9）。
  *
  * 統計卡片在登入後標示為「即將推出」：正確的數字必須由後端彙總端點提供，
  * 拿前端當頁的交易自行加總會是錯的（只算得到那一頁），也違反單一後端原則。
@@ -37,27 +39,23 @@ export default function HomePage() {
   // null = 彈窗關閉；登入 / 註冊共用同一個彈窗，只是預設顯示哪張表單不同。
   const [authDialog, setAuthDialog] = useState<AuthDialogMode | null>(null);
 
+  if (isAuthenticated) {
+    return <LedgerView />;
+  }
+
   return (
     <>
-      <div className={styles.stats}>
-        <Stat label="本月支出" authenticated={isAuthenticated} />
-        <Stat label="本月收入" authenticated={isAuthenticated} />
-        <Stat label="結餘" authenticated={isAuthenticated} />
-      </div>
+      <StatsRow authenticated={false} />
 
-      {isAuthenticated ? (
-        <LedgerView />
-      ) : (
-        <section className={styles.panel}>
-          <p className={styles.panelText}>登入後即可開始記帳，並在這裡看到你的收支。</p>
-          <div className={styles.actions}>
-            <Button onClick={() => setAuthDialog('login')}>登入</Button>
-            <Button variant="secondary" onClick={() => setAuthDialog('register')}>
-              註冊
-            </Button>
-          </div>
-        </section>
-      )}
+      <section className={`${styles.card} ${styles.guest}`}>
+        <p className={styles.note}>登入後即可開始記帳，並在這裡看到你的收支。</p>
+        <div className={styles.actions}>
+          <Button onClick={() => setAuthDialog('login')}>登入</Button>
+          <Button variant="secondary" onClick={() => setAuthDialog('register')}>
+            註冊
+          </Button>
+        </div>
+      </section>
 
       {/* 登入成功後彈窗關閉，本頁就地換成已登入狀態——使用者不會被跳走。 */}
       <AuthDialog mode={authDialog} onClose={() => setAuthDialog(null)} />
@@ -67,40 +65,36 @@ export default function HomePage() {
 
 /**
  * 已登入者的記帳畫面。這一層只負責找出「記進哪一本帳本」
- * （由 ActiveLedgerProvider 決定，Slice 2 Step 2），其餘交給 `LedgerTransactions`。
+ * （由 ActiveLedgerProvider 決定，Slice 2 Step 2），其餘交給 `LedgerWorkbench`。
  *
- * `key={ledger.id}` 是刻意的：換一本帳本就換一組篩選條件與頁碼。用 key 讓 React
- * 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠——漏掉一個的症狀是
- * 「切到只有 3 筆的帳本卻停在第 5 頁」，畫面一片空白而看不出原因。
+ * `key={ledger.id}` 是刻意的：換一本帳本就換一組篩選條件、頁碼與編輯中的那一筆。
+ * 用 key 讓 React 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠——
+ * 漏掉一個的症狀是「切到只有 3 筆的帳本卻停在第 5 頁」，畫面一片空白而看不出原因。
+ *
+ * 帳本還沒好的三種狀態（載入中 / 失敗 / 一本都沒有）走下面那條路。它們仍然用
+ * 同一個兩欄版面，因為**餘額不受帳本狀態影響**：帳戶屬於使用者、跨帳本共用，
+ * 就算一本帳本都沒有，「我現在有多少錢」仍然該看得到。
  */
 function LedgerView() {
   const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
 
+  if (ledger) {
+    return <LedgerWorkbench key={ledger.id} ledger={ledger} />;
+  }
+
   return (
     <div className={styles.layout}>
-      {/* 左主欄：篩選、列表、分頁。帳本還沒好的三種狀態也都落在這裡。 */}
       <div className={styles.primary}>
-        {ledgerLoading && <p className={styles.panelText}>載入中…</p>}
+        <StatsRow authenticated />
+        {ledgerLoading && <p className={styles.note}>載入中…</p>}
         {ledgerError && <FormError error={ledgerError} />}
-        {!ledgerLoading && !ledgerError && !ledger && (
-          <section className={styles.panel}>
-            <p className={styles.panelText}>找不到任何帳本。</p>
+        {!ledgerLoading && !ledgerError && (
+          <section className={styles.card}>
+            <p className={styles.note}>找不到任何帳本。</p>
           </section>
         )}
-        {ledger && <LedgerTransactions key={ledger.id} ledger={ledger} />}
       </div>
-
-      {/*
-        右側欄：記帳表單與餘額。表單常駐而不是藏進彈窗——記帳是高頻動作，
-        少一次點擊有感（2f · D2）。
-
-        餘額列**不受帳本狀態影響**：帳戶屬於使用者、跨帳本共用，就算一本帳本都
-        沒有，「我現在有多少錢」仍然該看得到。它只需要已登入，而這裡就在
-        `isAuthenticated` 之下——hook 不能有條件呼叫，訪客渲染它就是一個註定
-        401 的 `/accounts` 請求。
-      */}
-      <aside className={styles.rail}>
-        {ledger && <TransactionForm key={ledger.id} ledger={ledger} />}
+      <aside className={styles.panel}>
         <AccountBalances />
       </aside>
     </div>
@@ -108,23 +102,30 @@ function LedgerView() {
 }
 
 /**
- * 一本帳本的交易區：篩選、列表、分頁，以及編輯與刪除的彈窗。
+ * 一本帳本的工作台：左欄是頁首、統計卡與交易列表，右欄是常駐面板。
  *
- * **新增表單不在這裡**——它被移到右側欄（2f · D2）。之所以搬得動，是因為
- * `TransactionForm` 只吃一個 `ledger` prop，與篩選、頁碼沒有任何共用狀態。
- * 它在那邊有自己的 `key={ledger.id}`，換帳本一樣會整個重建。
+ * ## 為什麼編輯狀態放在這一層（D9）
+ *
+ * 面板要顯示「新增」還是「編輯」，取決於列表上點了哪一筆。列表在左欄、面板在
+ * 右欄，兩者只有這個共同的父層，`editing` 只能放這裡。
+ *
+ * **新增表單與編輯面板互斥**（D9 的警告）：兩張表單的欄位標籤一模一樣，同時
+ * 存在的話 `getByLabelText('金額')` 會對到兩個，測試與螢幕閱讀器都分不出來。
+ *
+ * `key={editing.id}` 讓編輯中直接點另一列時表單整個重建——少了它，React 會沿用
+ * 同一個元件實例，欄位仍留著上一筆的值。
  *
  * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`TransactionDialog` 與
  * `ConfirmDialog` 只負責呈現與回報操作，mutation、載入中與錯誤都在這裡。
  */
-function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
+function LedgerWorkbench({ ledger }: { ledger: LedgerSummary }) {
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
 
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
   const deleteTransaction = useDeleteTransaction(ledger.id);
 
-  // null = 彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
+  // null = 面板顯示新增表單 / 確認彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [removing, setRemoving] = useState<Transaction | null>(null);
 
@@ -153,26 +154,67 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      <TransactionFilterBar ledgerId={ledger.id} filters={filters} onChange={handleFiltersChange} />
+      <div className={styles.layout}>
+        <div className={styles.primary}>
+          <PageHeader
+            title="總覽"
+            context={
+              <>
+                <Icon name="book" size={14} />
+                {ledger.name}・{ledger.kind === 'PERSONAL' ? '私人帳本' : '共享帳本'}
+              </>
+            }
+          />
 
-      <TransactionList
-        transactions={transactions.data?.items ?? []}
-        isLoading={transactions.isLoading}
-        error={transactions.error}
-        isFiltered={hasAnyFilter(filters)}
-        onEdit={setEditing}
-        onRemove={setRemoving}
-      />
+          <StatsRow authenticated />
 
-      <Pagination
-        page={transactions.data?.page ?? page}
-        limit={transactions.data?.limit ?? 20}
-        total={transactions.data?.total ?? 0}
-        onChange={setPage}
-      />
+          {/* 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。 */}
+          <section className={styles.listCard}>
+            <TransactionFilterBar
+              ledgerId={ledger.id}
+              filters={filters}
+              onChange={handleFiltersChange}
+            />
 
-      <TransactionDialog ledger={ledger} transaction={editing} onClose={() => setEditing(null)} />
+            <TransactionList
+              transactions={transactions.data?.items ?? []}
+              isLoading={transactions.isLoading}
+              error={transactions.error}
+              isFiltered={hasAnyFilter(filters)}
+              onEdit={setEditing}
+              onRemove={setRemoving}
+              // 右側面板正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
+              selectedId={editing?.id ?? null}
+            />
 
+            <Pagination
+              page={transactions.data?.page ?? page}
+              limit={transactions.data?.limit ?? 20}
+              total={transactions.data?.total ?? 0}
+              onChange={setPage}
+            />
+          </section>
+        </div>
+
+        <aside className={styles.panel}>
+          {editing === null ? (
+            <TransactionForm ledger={ledger} />
+          ) : (
+            <TransactionDialog
+              key={editing.id}
+              ledger={ledger}
+              transaction={editing}
+              onClose={() => setEditing(null)}
+            />
+          )}
+          <AccountBalances />
+        </aside>
+      </div>
+
+      {/*
+        刪除確認刻意留在版面之外：它是 modal，不屬於任何一欄，而且窄螢幕編輯時
+        左欄會被 CSS 整個隱藏（D10），放在裡面會跟著消失。
+      */}
       <ConfirmDialog
         open={removing !== null}
         title="刪除交易"
@@ -189,6 +231,17 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   );
 }
 
+/** 三張「即將推出」的統計卡（phase-2h · D5：原樣保留，只換樣式）。 */
+function StatsRow({ authenticated }: { authenticated: boolean }) {
+  return (
+    <div className={styles.stats}>
+      <Stat label="本月支出" authenticated={authenticated} />
+      <Stat label="本月收入" authenticated={authenticated} />
+      <Stat label="結餘" authenticated={authenticated} />
+    </div>
+  );
+}
+
 /**
  * 單張統計卡片。未登入時顯示 0（空狀態示意）；已登入時顯示「即將推出」，
  * 等後端彙總端點完成後再點亮。
@@ -197,9 +250,7 @@ function Stat({ label, authenticated }: { label: string; authenticated: boolean 
   return (
     <div className={styles.stat}>
       <span className={styles.statLabel}>{label}</span>
-      <span className={`${styles.statValue} ${authenticated ? styles.pending : ''}`}>
-        {authenticated ? '即將推出' : '$0'}
-      </span>
+      <span className={styles.statValue}>{authenticated ? '即將推出' : '$0'}</span>
     </div>
   );
 }
