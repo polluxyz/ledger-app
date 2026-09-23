@@ -1,46 +1,34 @@
-/* 與帳戶頁、帳本列表同寬（2f）。 */
+/*
+ * 帳本明細頁：52rem、靠左（SC-24.5）。內容由上到下是頁首、基本資訊卡、
+ * 成員區塊、危險操作區——三張卡片用同一套寫法，看起來屬於同一個 app。
+ */
 .page {
   max-width: 52rem;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
-}
-
-/* 是 h2（站名才是 h1），但視覺上仍是頁面標題的大小。 */
-.title {
-  margin: 0;
-  font-size: var(--text-xl);
-}
-
-.subtitle {
-  margin: var(--space-lg) 0 var(--space-md);
-  font-size: 1.125rem;
-}
-
+/* 唯讀狀態（載入中）的提示。 */
 .status {
   padding: var(--space-lg);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
 
+/* ---- 基本資訊卡 ----
+   四欄（窄時自動換行）：標籤小字 muted、值粗體、註記再小一級，
+   層級靠字級與顏色拉開，不靠多餘的框線。 */
 .facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: var(--space-md);
   margin: 0;
-  padding: var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .fact {
@@ -49,12 +37,12 @@
 
 .factLabel {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-xs);
 }
 
 .factValue {
   margin: var(--space-xs) 0 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* 「建立後不可更改」這類說明。放在值的下面，不與值混在同一行。 */
@@ -62,50 +50,84 @@
   display: block;
   margin-top: var(--space-xs);
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 400;
 }
 
+/* ---- 前往分類頁的連結 ----
+   夾在基本資訊與成員之間，與兩者都拉開一點距離。強調色、不帶底線，
+   滑過才出現——與側欄導覽的視覺語彙一致。 */
+.categoriesLink {
+  margin: var(--space-md) 0 0;
+}
+
+.categoriesAnchor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.categoriesAnchor:hover {
+  text-decoration: underline;
+}
+
+/* ---- 成員區塊 ---- */
 .membersHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: wrap;
+  margin-top: var(--space-lg);
 }
 
-.membersHead .subtitle {
-  margin-bottom: var(--space-md);
+/* 區塊標題（成員、危險操作共用）。間距交給各自的容器，這裡只管字級。 */
+.subtitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+/* 往下展開的加入成員表單，外框由這張卡片提供（Dialog 的 panel 變體沒有外框）。 */
+.addMemberCard {
+  margin: var(--space-md) 0;
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 封存帳本的成員區塊整個唯讀。說明為什麼沒有任何按鈕，不要讓人以為壞了。 */
 .readonly {
-  margin: 0 0 var(--space-md);
+  margin: var(--space-md) 0;
   padding: var(--space-sm) var(--space-md);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius);
   background-color: var(--color-surface);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
-/* 危險操作獨立成一區，用紅框與上面的內容明顯分開，避免順手點到。 */
+/* ---- 危險操作區 ----
+   卡片，但框用半透明的 danger：一眼知道「這裡的按鈕要想清楚」，
+   又不至於紅到像出錯。 */
 .danger {
-  margin-top: var(--space-lg);
-  padding: var(--space-md);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius);
-}
-
-/* 區塊本身已有上緣間距，標題不必再撐開一次。 */
-.danger .subtitle {
-  margin-top: 0;
+  margin-top: var(--space-xl);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-danger-soft);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .dangerNote {
-  margin: 0 0 var(--space-md);
+  margin: var(--space-sm) 0 var(--space-md);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
 .dangerActions {
@@ -114,8 +136,16 @@
   flex-wrap: wrap;
 }
 
-/* 前往分類頁的連結。夾在基本資訊與成員之間，與兩者都拉開一點距離。 */
-.categoriesLink {
-  margin: var(--space-md) 0 0;
-  font-size: 0.875rem;
+/*
+ * 刪除帳本的危險樣式：底透明、字與框 danger、滑過底轉 danger-soft。
+ * 用 `button.` 前綴墊高權重，蓋過 Button 的 secondary（同權重時拚載入順序不可靠）。
+ */
+button.deleteButton {
+  background-color: transparent;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+button.deleteButton:hover:not(:disabled) {
+  background-color: var(--color-danger-soft);
 }

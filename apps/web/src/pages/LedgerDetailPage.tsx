@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { LedgerDetail, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Icon } from '../components/Icon';
+import { PageHeader } from '../components/PageHeader';
+import { SlideDown } from '../components/SlideDown';
 import { useCurrentUser } from '../features/auth/use-current-user';
 import { LedgerRenameDialog } from '../features/ledgers/LedgerRenameDialog';
 import { MemberDialog } from '../features/ledgers/MemberDialog';
@@ -34,7 +37,7 @@ export default function LedgerDetailPage() {
     const notFound = ledger.error instanceof ApiError && ledger.error.statusCode === 404;
     return (
       <section className={styles.page}>
-        <h2 className={styles.title}>帳本</h2>
+        <PageHeader title="帳本" />
         <p className={styles.status}>
           {notFound ? '找不到這本帳本。' : '無法載入這本帳本，請稍後再試。'}
         </p>
@@ -62,6 +65,8 @@ function LedgerDetailView({
   // 這裡從不用角色決定「資料能不能拿」，只決定「按鈕畫不畫」。
   const isOwner = myRole === 'OWNER';
   const isArchived = ledger.archivedAt !== null;
+  // 私人帳本加不了人（後端回 409），所以連入口都不畫；已封存則整頁唯讀。
+  const canAddMembers = isOwner && ledger.kind === 'SHARED' && !isArchived;
 
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<LedgerMemberInfo | null>(null);
@@ -158,14 +163,16 @@ function LedgerDetailView({
 
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
-        <h2 className={styles.title}>{ledger.name}</h2>
-        {isOwner && ledger.archivedAt === null && (
-          <Button variant="secondary" onClick={() => onRename(ledger)}>
-            改名
-          </Button>
-        )}
-      </header>
+      <PageHeader
+        title={ledger.name}
+        actions={
+          isOwner && !isArchived ? (
+            <Button variant="secondary" onClick={() => onRename(ledger)}>
+              改名
+            </Button>
+          ) : undefined
+        }
+      />
 
       <dl className={styles.facts}>
         <Fact
@@ -192,19 +199,42 @@ function LedgerDetailView({
       */}
       {!isArchived && (
         <p className={styles.categoriesLink}>
-          <Link to={`/categories?ledgerId=${ledger.id}`}>管理這本帳本的分類</Link>
+          <Link className={styles.categoriesAnchor} to={`/categories?ledgerId=${ledger.id}`}>
+            <Icon name="tag" size={16} />
+            管理這本帳本的分類
+          </Link>
         </p>
       )}
 
       <div className={styles.membersHead}>
         <h3 className={styles.subtitle}>成員（{ledger.members.length}）</h3>
-        {/* 私人帳本加不了人（後端回 409），所以連入口都不畫。 */}
-        {isOwner && ledger.kind === 'SHARED' && !isArchived && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
+        {canAddMembers && (
+          <Button
+            variant="secondary"
+            aria-expanded={adding}
+            onClick={() => setAdding((open) => !open)}
+          >
             加入成員
           </Button>
         )}
       </div>
+
+      {/*
+        「加入成員」與帳本頁的「建立帳本」同一套互動（2h §4.7）：往下展開、
+        開關交給 SlideDown、Dialog 恆為開啟。收起動畫播完才卸載，重開時欄位是空的。
+      */}
+      {canAddMembers && (
+        <SlideDown open={adding}>
+          <div className={styles.addMemberCard}>
+            <MemberDialog
+              open
+              ledgerId={ledger.id}
+              variant="panel"
+              onClose={() => setAdding(false)}
+            />
+          </div>
+        </SlideDown>
+      )}
 
       {isArchived && (
         <p className={styles.readonly}>帳本已封存，僅可讀取。成員無法變更，目前也無法退出。</p>
@@ -233,14 +263,17 @@ function LedgerDetailView({
             <Button variant="secondary" onClick={() => setDanger('archive')}>
               封存帳本
             </Button>
-            <Button variant="secondary" onClick={() => setDanger('delete')}>
+            {/* 刪除是不可逆且連資料一起消失，用危險樣式與封存明顯區隔。 */}
+            <Button
+              variant="secondary"
+              className={styles.deleteButton}
+              onClick={() => setDanger('delete')}
+            >
               刪除帳本
             </Button>
           </div>
         </section>
       )}
-
-      <MemberDialog open={adding} ledgerId={ledger.id} onClose={() => setAdding(false)} />
 
       <ConfirmDialog
         open={removing !== null}

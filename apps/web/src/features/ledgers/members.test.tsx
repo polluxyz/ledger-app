@@ -187,6 +187,34 @@ describe('Ledger members', () => {
 
   // ── 加入成員 ─────────────────────────────────────────────────────────────
 
+  /**
+   * 2h 之後「加入成員」是往下展開的面板，不再是蓋住畫面的彈窗（SC-30）。
+   * 這條驗兩件面板才需要自己負責的事：aria-expanded 跟著開關變，以及
+   * Esc 收起後焦點回到按鈕——少了後者，鍵盤使用者得從頁面最上面重新 Tab。
+   */
+  it('expands the add-member form in place and returns focus on Escape', async () => {
+    routeFetch();
+    const user = userEvent.setup();
+
+    render(<App />);
+    await waitForMyRole();
+
+    const trigger = screen.getByRole('button', { name: '加入成員' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+
+    // 展開後它仍然是 dialog、名稱不變——e2e 靠這個名稱找表單。
+    expect(screen.getByRole('dialog', { name: '加入成員' })).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: '加入成員' })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
   it('adds a member and closes the dialog', async () => {
     routeFetch();
     const user = userEvent.setup();

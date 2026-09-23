@@ -1,5 +1,9 @@
+/*
+ * 「加入成員」表單的內部樣式。外框由 Dialog 變體決定（modal 彈窗或
+ * 帳本明細頁往下展開的面板），這裡只有提示文字一項。
+ */
 .hint {
   margin: 0 0 var(--space-md);
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }

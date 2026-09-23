@@ -1,11 +1,15 @@
-/* 形狀刻意與 AccountList 一致，讓兩個列表看起來屬於同一個 app。 */
+/*
+ * 帳本列表：一張卡片、一列一本。列高下限讓只有短名稱的列也點得到；
+ * 名稱是本列的主要動作，用粗體，滑過轉強調色表示可以點。
+ */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -14,7 +18,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md);
+  min-height: 3.25rem;
+  padding: var(--space-sm) var(--space-md);
 }
 
 .item + .item {
@@ -26,15 +31,18 @@
   flex-direction: column;
   gap: var(--space-xs);
   min-width: 0;
+  padding: var(--space-xs) 0;
 }
 
+/* 帳本名是這一列的主體與唯一動作：粗體、正文色，滑過才亮成強調色。 */
 .name {
   color: var(--color-text);
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
 }
 
 .name:hover {
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
@@ -44,23 +52,25 @@
   gap: var(--space-xs);
 }
 
+/* 標籤是小膠囊：圓角全圓、髮絲框、次要文字，點綴用不搶名稱的視覺重量。 */
 .tag {
   padding: 0 var(--space-xs);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: 999px;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   line-height: 1.5;
   white-space: nowrap;
 }
 
-/* 共享帳本用主色描邊：一眼看得出「這本別人也看得到」，那是最需要先注意到的事。 */
+/* 共享帳本用強調色描邊：一眼看得出「這本別人也看得到」，那是最需要先注意到的事。 */
 .tagShared {
   composes: tag;
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
+/* 已封存用虛線框：既不像正常列那樣實心，也不到危險的紅。 */
 .tagArchived {
   composes: tag;
   border-style: dashed;
@@ -70,7 +80,7 @@
 .status {
   padding: var(--space-lg);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;

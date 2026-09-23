@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../components/Button';
-import { Dialog } from '../../components/Dialog';
+import { Dialog, type DialogVariant } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { MemberFields } from './MemberFields';
 import { newParticipant } from './participant-draft';
@@ -11,6 +11,8 @@ interface MemberDialogProps {
   open: boolean;
   ledgerId: string;
   onClose: () => void;
+  /** `modal`（預設）是彈窗；`panel` 是帳本明細往下展開的非 modal 面板（2h D20）。 */
+  variant?: DialogVariant;
 }
 
 /**
@@ -20,17 +22,25 @@ interface MemberDialogProps {
  * （見 `tasks/phase-2b-slice-2-plan.md` D10）。這裡只需要一列，所以不用
  * `LedgerParticipants` 那層清單。
  *
- * 送出失敗時彈窗不關：`USER_NOT_FOUND` 與 `ALREADY_MEMBER` 都是按下按鈕之後才發生的，
+ * 送出失敗時表單不關：`USER_NOT_FOUND` 與 `ALREADY_MEMBER` 都是按下按鈕之後才發生的，
  * 關掉的話使用者只會看到「什麼都沒發生」。錯誤訊息由後端提供，前端不改寫。
  */
-export function MemberDialog({ open, ledgerId, onClose }: MemberDialogProps) {
+export function MemberDialog({ open, ledgerId, onClose, variant = 'modal' }: MemberDialogProps) {
   if (!open) {
     return null;
   }
-  return <MemberDialogForm ledgerId={ledgerId} onClose={onClose} />;
+  return <MemberDialogForm ledgerId={ledgerId} onClose={onClose} variant={variant} />;
 }
 
-function MemberDialogForm({ ledgerId, onClose }: { ledgerId: string; onClose: () => void }) {
+function MemberDialogForm({
+  ledgerId,
+  onClose,
+  variant,
+}: {
+  ledgerId: string;
+  onClose: () => void;
+  variant: DialogVariant;
+}) {
   const [draft, setDraft] = useState(() => newParticipant());
   const addMember = useAddMember(ledgerId);
 
@@ -40,7 +50,7 @@ function MemberDialogForm({ ledgerId, onClose }: { ledgerId: string; onClose: ()
   }
 
   return (
-    <Dialog open title="加入成員" onClose={onClose}>
+    <Dialog open title="加入成員" onClose={onClose} variant={variant}>
       <form onSubmit={handleSubmit} noValidate>
         <FormError error={addMember.error} />
 
