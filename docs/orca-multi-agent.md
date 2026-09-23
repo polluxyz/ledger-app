@@ -80,12 +80,50 @@ Pi 的模型有兩條路：
 
 ## 4. 額度用盡時的切換
 
-worker 回報 provider 額度或速率限制時：
+### 怎麼判斷額度真的用完了
 
-1. **不要靜默重試**，也不要換個講法再問一次。
-2. 用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task，改成 `--agent claude --model opus`。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
+⚠️ **`pi auth check` 判斷不出來。** 實測 `pi auth check --provider zai --json` 只回 `{"status":"ready","provider":"zai","authType":"api_key"}`——它驗的是憑證有沒有效，不看用量。額度用完它一樣說 ready。
 
-Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定。
+**唯一可靠的訊號是 worker 帶回來的錯誤原文**，所以每個 Task spec 都要寫這條：
+
+> 遇到 provider 錯誤時，用 escalation 或 `worker_done --outcome failed` 把**錯誤訊息原文**帶回來。不要自己重試，不要換個說法再問一次，不要只寫「失敗」。
+
+協調者收到之後依訊息內容分流：
+
+| 錯誤訊息講什麼                              | 判定       | 做什麼                                   |
+| ------------------------------------------- | ---------- | ---------------------------------------- |
+| rate limit、too many requests、請稍後再試   | 暫時性     | 同一個模型 `--retry-of` 重派一次，並報告 |
+| quota、insufficient balance、用量／方案額度 | 真的用完   | 換下一層                                 |
+| 看不出來                                    | 先當暫時性 | 重派一次；同樣錯誤再出現就換層           |
+
+「重派一次」不違反「不要靜默重試」——差別在於它是**講出來的一次**，不是默默試到通。
+
+### 備援順序
+
+| 層  | agent                | 模型                                                        | 什麼時候       |
+| --- | -------------------- | ----------------------------------------------------------- | -------------- |
+| 1   | Pi                   | `zai/glm-5.3`（簡單任務 `zai/glm-5.3-flash`）               | 預設           |
+| 2   | Antigravity（`agy`） | `gemini-3.1-pro-high`（簡單任務 `gemini-3.8-flash-medium`） | GLM 額度用完   |
+| 3   | Claude Code          | `opus`                                                      | 前兩層都不能用 |
+
+換層時用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
+
+### 第 2 層：Antigravity
+
+跟 Pi 一樣要兩段式（Orca 的 `--model` 只認 Claude / Codex / Cursor）：
+
+```bash
+orca terminal create --worktree <selector> --command "agy --model gemini-3.1-pro-high" --json
+orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
+```
+
+- **努力程度寫在模型 id 裡**（`-high` / `-medium` / `-low`），不要再另外傳 `--effort`。
+- `agy models` 列出當下可用的模型，換模型前先跑一次，**不要憑記憶填**。它除了 Gemini 也有 `claude-sonnet-4-6`、`gpt-oss-120b-medium`。
+- ⚠️ **未實測**：`agy` 當 worker 時會不會卡在權限確認。它有 `--dangerously-skip-permissions`，但那會自動核准所有工具請求——只在拋棄式 worktree 裡用，而且 Task spec 要把不准碰的東西寫清楚。
+
+### 第 3 層：Claude Code
+
+不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定 `--agent claude --model opus`。
 
 | 要什麼              | 填什麼                                            |
 | ------------------- | ------------------------------------------------- |
@@ -99,7 +137,7 @@ Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude �
 
 `--effort` 要搭配 `--model` 一起給，兩者都不能與 `--terminal` 並用。
 
-這是暫時安排。之後有其他模型可用時回來改這一節。
+三層的順序是成本與可用性的取捨，不是品質排名。有新模型可用時回來改這一節。
 
 ## 5. Task spec 必須自足
 
@@ -122,6 +160,7 @@ Claude Code 不需要兩段式：`worker-start --model` 本來就支援 Claude �
 - **不准動 Prisma schema 與 API 介面**；需要動就回報，不要自己改。
 - **不要跑 e2e**，除非 spec 指定由你跑。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
 - 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
+- **遇到 provider 錯誤時把錯誤原文帶回來**，不要自己重試，也不要只寫「失敗」（理由見 §4）。
 
 其餘規則（金額不用浮點數、授權 deny by default、不在前端寫業務邏輯、註解用繁體中文）`CLAUDE.md` 已經有，不必重抄。
 

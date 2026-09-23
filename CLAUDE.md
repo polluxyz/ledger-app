@@ -242,7 +242,8 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 - 自己動手實作的例外只有三種：涉及授權與資料隔離、要動 Prisma schema 或 API 介面、派工成本明顯高於自己做的瑣碎改動。
 
 - **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Pi 或 GLM。
-- worker 優先用 **Pi + `zai/glm-5.3`**；單一檔案、不需判斷、驗收條件機器可驗的任務才用 `zai/glm-5.3-flash`。GLM 額度用盡改用 Claude Code 當 worker。
+- worker 優先用 **Pi + `zai/glm-5.3`**；單一檔案、不需判斷、驗收條件機器可驗的任務才用 `zai/glm-5.3-flash`。額度用盡就往下一層換：**Antigravity（`agy` + `gemini-3.1-pro-high`）→ Claude Code（`opus`）**。
+- **額度有沒有用完，只認 worker 帶回來的錯誤原文**（`pi auth check` 驗的是憑證不是用量，判斷不出來）。所以 Task spec 要求 worker 遇到 provider 錯誤時原文回報、不要自己重試。
 - **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
 - ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
