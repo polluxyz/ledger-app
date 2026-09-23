@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
+import { EmailField } from '../../components/EmailField';
 import { TextField } from '../../components/TextField';
 import { useAuth } from './use-auth';
 
@@ -42,14 +43,7 @@ export function LoginForm({ onSuccess, footer }: LoginFormProps) {
       <FormError error={error} />
 
       <form onSubmit={(event) => void handleSubmit(event)} noValidate>
-        <TextField
-          label="Email"
-          type="email"
-          value={email}
-          autoComplete="email"
-          required
-          onChange={(event) => setEmail(event.target.value)}
-        />
+        <EmailField label="Email" value={email} autoComplete="email" required onChange={setEmail} />
         <TextField
           label="密碼"
           type="password"

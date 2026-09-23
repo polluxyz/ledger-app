@@ -1,6 +1,6 @@
 import type { LedgerRole } from '@ledger/shared';
 import { Select } from '../../components/Select';
-import { TextField } from '../../components/TextField';
+import { EmailField } from '../../components/EmailField';
 import type { MemberDraft } from './participant-draft';
 
 interface MemberFieldsProps {
@@ -34,13 +34,12 @@ export function MemberFields({ value, onChange, position, disabled }: MemberFiel
   // 「參與者 1 的角色」不要——所以兩個標籤各自組，不共用一個 prefix。
   return (
     <>
-      <TextField
+      <EmailField
         label={position === undefined ? 'email' : `參與者 ${position} 的 email`}
-        type="email"
         value={value.email}
         disabled={disabled}
         placeholder="someone@example.com"
-        onChange={(event) => onChange({ ...value, email: event.target.value })}
+        onChange={(email) => onChange({ ...value, email })}
       />
       <Select
         label={position === undefined ? '角色' : `參與者 ${position} 的角色`}

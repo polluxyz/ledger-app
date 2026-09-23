@@ -1,10 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import type { RegisterRequest } from '@ledger/shared';
 
 /** 註冊請求的驗證形狀（email／password／name）。 */
 export class RegisterDto implements RegisterRequest {
   @ApiProperty({ example: 'alice@example.com', format: 'email' })
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

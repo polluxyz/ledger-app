@@ -28,6 +28,8 @@ enum TransactionType {
 
 model User {
   id           String   @id @default(uuid())
+  /// 只存小寫。DTO 層會先轉小寫，資料庫另有 CHECK 約束 `User_email_lowercase`
+  /// 兜底（見 migration `20260923120000_lowercase_user_email`；Prisma schema 表達不了 CHECK）。
   email        String   @unique
   passwordHash String
   name         String

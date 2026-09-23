@@ -94,6 +94,19 @@ describe('Ledgers & members (e2e)', () => {
     expect(dup.status).toBe(409);
   });
 
+  // 加成員時 email 也不分大小寫：輸入的大小寫與註冊時不同，仍然找得到同一個人。
+  it('finds the member regardless of email casing', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    await registerAndLogin(app, 'bob@example.com', 'Bob');
+    const ledgerId = await createSharedLedger(app, alice.token);
+
+    const added = await request(server())
+      .post(`/api/ledgers/${ledgerId}/members`)
+      .set(auth(alice.token))
+      .send({ email: 'Bob@Example.com', role: 'VIEWER' });
+    expect(added.status).toBe(201);
+  });
+
   it('protects the last owner from demotion and self-removal', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const ledgerId = await firstLedgerId(app, alice.token);

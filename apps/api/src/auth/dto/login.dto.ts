@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength } from 'class-validator';
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import type { LoginRequest } from '@ledger/shared';
 
 /**
@@ -8,6 +9,7 @@ import type { LoginRequest } from '@ledger/shared';
  */
 export class LoginDto implements LoginRequest {
   @ApiProperty({ example: 'alice@example.com', format: 'email' })
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 
