@@ -87,7 +87,7 @@ NestJS / Prisma 的細節見 `apps/api/CLAUDE.md`；React / Vite 的細節見 `a
 
 ## 4. 開發階段
 
-**目前在階段二**（Web 前端），Slice 0–3 與 2c/2d/2e/2f 已完成，剩 Slice 4（分類管理 + 個人資料）。
+**目前在階段三**（好友 + 借還帳），拆成 3a 好友系統與 3b 借還帳，先做 3a 的後端。階段二（含 2c～2g）已完成。
 
 完整階段表、每份 spec 的用途與狀態見 [`docs/README.md`](docs/README.md)。後續依序是：階段三 好友 + 借還帳 → 階段四 AI 文字版 → 階段五 語音 + 本地模型。
 
@@ -247,6 +247,8 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 - **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
 - ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
+
+- **交接之後舊 session 要收掉。** 一次交接只留下一個活著的 session——兩個 agent 留在同一個 worktree，使用者對著舊分頁打字就會變成兩個 agent 改同一批檔案。舊 session **不要自己關自己**（指令送出的瞬間對話就沒了，使用者拿不到說明），而是報告自己的 handle 與關閉指令，由使用者收掉。程序見 `docs/orca-multi-agent.md` §6.0。
 
 派工指令、模型分流準則、額度切換、Task spec 格式、**context 快滿時的 session 交接程序**，全部見 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
 

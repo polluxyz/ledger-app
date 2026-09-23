@@ -170,18 +170,46 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 ## 6. Session 交接（context 快滿時）
 
+### 6.0 開了新的，舊的就要丟掉（兩種交接都適用）
+
+**一次交接只能留下一個活著的 session。** 新 session 接手之後，舊 session 的終端機要關掉。
+
+為什麼：兩個 agent 留在**同一個 worktree** 時，使用者哪天對著舊分頁打字，就會變成兩個
+agent 同時改同一批檔案。兩邊都不知道對方存在，衝突要等 `git status` 才看得出來。
+
+⚠️ **舊 session 不要自己關自己。** 指令送出的瞬間對話就結束了，使用者只會看到分頁消失、
+拿不到任何說明。正確的收尾是：
+
+1. 交接信送出、確認 `accepted: true` 之後，**立刻停手**，不要再改任何檔案。
+2. 報告三件事：新 session 的終端機 handle、自己的 handle、以及關閉指令：
+   ```bash
+   orca terminal close --terminal <舊 session 的 handle>
+   ```
+3. 由**使用者**關掉舊分頁。使用者明說「你自己關」時才自己執行，而且那是最後一個動作——
+   執行後不會再有回覆，這件事要先講。
+
+自己的 handle 哪裡來：`orca orchestration run-current --json` 的 `coordinator_handle`，
+或 `orca terminal list --json` 裡對到自己那一列。
+
+> 2026-09-23 補上這一節。當天交接後舊 session 沒有收掉，兩個 Claude 同時留在
+> `D:\Projects\ledger-app`，是使用者發現的。
+
+---
+
 Orca 的 Run 是 daemon 端的持久狀態：Task、Dispatch、未 ack 的信都在裡面。所以交接**不是寫一份工作摘要**，是把 `run_id` 交出去，讓新 session 自己去讀。
 
-**前提**：這一節只適用於有 Run 的監督式協調。純交接（不監督）用 `orca-cli`，不建 Run。
+**前提**：6.1 與 6.2 只適用於有 Run 的監督式協調。純交接（不監督）用 `orca-cli`，不建 Run。
+**但 6.0 兩種都適用**——不管有沒有 Run，舊的都要收掉。
 
-**舊 session（交接前）**
+### 6.1 舊 session（交接前）
 
 1. 把已經處理完的 Delivery `--ack` 掉，不要留半處理狀態。
 2. 留一則交接信：
    `orca orchestration send --to run:<run_id> --subject "handoff" --body "<見下>" --json`
 3. 把 `run_id` 交給使用者，然後**停手**。不要兩個 coordinator 同時在跑。
+4. 依 6.0 報告自己的 handle 與關閉指令，等使用者收掉這個分頁。
 
-**新 session**
+### 6.2 新 session
 
 ```bash
 orca orchestration run-use     --id <run_id> --json    # 綁定
