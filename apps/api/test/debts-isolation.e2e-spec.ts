@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import type { Debt, Paginated, Transaction } from '@ledger/shared';
+import type { CreateDebtEntryResponse, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
@@ -13,17 +13,15 @@ import {
 } from './e2e-utils';
 
 /**
- * 借還帳的授權與資料隔離（spec §3.5）。
+ * 往來帳的授權與資料隔離（spec 3b 往來帳版 §3.5）。
  *
- * ⚠️ 協調者先寫的驗收門檻（SEC-10），worker 不准修改。
- *
- * - SC-D10：把借還交易記進帳本時，帳本權限的判斷與一般交易端點**完全一致**。每一組都把
- *   同樣的情境各打一次債務端點與交易端點，比對兩邊的狀態碼，並確認債務端點失敗時沒有
- *   留下半筆債務。
- * - SC-D12：共享帳本的其他成員看得到借還交易，但 `debtId` 是 `null`，也讀不到、改不到那筆
- *   債務。
+ * - SC-L11：把往來記進帳本時，帳本權限的判斷與一般交易端點**完全一致**。每一組都把同樣的
+ *   情境各打一次往來帳端點與交易端點，比對兩邊的狀態碼；往來帳端點失敗時，新對象、往來
+ *   紀錄、交易一樣都不能留下。
+ * - SC-L12：共享帳本的其他成員看得到借還交易與代付支出，但交易回應的 `debt` 是 `null`，
+ *   也讀不到、改不到背後的對象與往來紀錄。
  */
-describe('Debts isolation (e2e)', () => {
+describe('Debt ledger isolation (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -61,190 +59,216 @@ describe('Debts isolation (e2e)', () => {
       .expect(201);
   }
 
-  /** 同一個「記進哪本帳本、用哪個帳戶」，分別走債務端點與交易端點。 */
-  async function bothPaths(who: Person, ledgerId: string, accountId: string) {
-    const viaDebt = await request(server()).post('/api/debts').set(auth(who.token)).send({
-      direction: 'LENT',
-      counterpartyName: '小明',
-      principal: 100,
-      date: DAY,
-      record: { ledgerId, accountId },
-    });
-
-    // 交易端點需要一個該帳本的支出分類；拿不到（非成員）就隨便給一個 uuid，反正會先被擋。
+  async function expenseCategoryId(who: Person, ledgerId: string): Promise<string> {
     const categories = await request(server())
       .get(`/api/ledgers/${ledgerId}/categories`)
       .query({ type: 'EXPENSE' })
       .set(auth(who.token));
-    const categoryId =
-      categories.status === 200
-        ? (categories.body as Array<{ id: string }>)[0]!.id
-        : '00000000-0000-4000-8000-000000000000';
+    return categories.status === 200
+      ? (categories.body as Array<{ id: string }>)[0]!.id
+      : '00000000-0000-4000-8000-000000000000';
+  }
+
+  /** 同一個「記進哪本帳本、用哪個帳戶」，分別走往來帳端點與交易端點。新對象用名字建立。 */
+  async function bothPaths(who: Person, ledgerId: string, accountId: string) {
+    const viaEntry = await request(server())
+      .post('/api/debt-entries')
+      .set(auth(who.token))
+      .send({
+        counterparty: { name: '小明' },
+        kind: 'LEND',
+        amount: 100,
+        date: DAY,
+        record: { ledgerId, accountId },
+      });
     const viaTransaction = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
       .set(auth(who.token))
-      .send({ type: 'EXPENSE', amount: 100, date: DAY, accountId, categoryId });
-
-    return { viaDebt, viaTransaction };
+      .send({
+        type: 'EXPENSE',
+        amount: 100,
+        date: DAY,
+        accountId,
+        categoryId: await expenseCategoryId(who, ledgerId),
+      });
+    return { viaEntry, viaTransaction };
   }
 
-  describe('SC-D10: recording into a ledger follows the same rules as ordinary transactions', () => {
-    it('a non-member gets 404 on both paths, and no debt is left behind', async () => {
+  /** 失敗的寫入不可以留下任何東西——連新名字建立的對象都不行。 */
+  async function expectNothingLeft() {
+    expect(await prisma.counterparty.count()).toBe(0);
+    expect(await prisma.debtEntry.count()).toBe(0);
+    expect(await prisma.transaction.count({ where: { type: 'LEND' } })).toBe(0);
+  }
+
+  describe('SC-L11: recording into a ledger follows the same rules as ordinary transactions', () => {
+    it('a non-member gets 404 on both paths, and nothing is left behind', async () => {
       const bob = await person('bob@example.com', 'Bob');
       const carol = await person('carol@example.com', 'Carol');
       const shared = await createSharedLedger(app, bob.token);
 
-      const { viaDebt, viaTransaction } = await bothPaths(carol, shared, carol.cashId);
+      const { viaEntry, viaTransaction } = await bothPaths(carol, shared, carol.cashId);
       expect(viaTransaction.status).toBe(404);
-      expect(viaDebt.status).toBe(404);
-      expect(await prisma.debt.count()).toBe(0);
+      expect(viaEntry.status).toBe(404);
+      await expectNothingLeft();
     });
 
-    it('a VIEWER gets 403 on both paths, and no debt is left behind', async () => {
+    it('a VIEWER gets 403 on both paths', async () => {
       const bob = await person('bob@example.com', 'Bob');
-      const alice = await person('alice@example.com', 'Alice');
+      const carol = await person('carol@example.com', 'Carol');
       const shared = await createSharedLedger(app, bob.token);
-      await addMember(bob, shared, 'alice@example.com', 'VIEWER');
+      await addMember(bob, shared, 'carol@example.com', 'VIEWER');
 
-      const { viaDebt, viaTransaction } = await bothPaths(alice, shared, alice.cashId);
+      const { viaEntry, viaTransaction } = await bothPaths(carol, shared, carol.cashId);
       expect(viaTransaction.status).toBe(403);
-      expect(viaDebt.status).toBe(403);
-      expect(await prisma.debt.count()).toBe(0);
+      expect(viaEntry.status).toBe(403);
+      await expectNothingLeft();
     });
 
     it("someone else's account gets 404 on both paths", async () => {
       const bob = await person('bob@example.com', 'Bob');
-      const alice = await person('alice@example.com', 'Alice');
+      const carol = await person('carol@example.com', 'Carol');
 
-      const { viaDebt, viaTransaction } = await bothPaths(alice, alice.ledgerId, bob.cashId);
+      const { viaEntry, viaTransaction } = await bothPaths(carol, carol.ledgerId, bob.cashId);
       expect(viaTransaction.status).toBe(404);
-      expect(viaDebt.status).toBe(404);
-      expect(await prisma.debt.count()).toBe(0);
+      expect(viaEntry.status).toBe(404);
+      await expectNothingLeft();
     });
 
     it('an archived ledger gets 409 LEDGER_ARCHIVED on both paths', async () => {
-      const alice = await person('alice@example.com', 'Alice');
-      const created = await request(server())
-        .post('/api/ledgers')
-        .set(auth(alice.token))
-        .send({ name: 'Old' });
-      const oldLedger = (created.body as { id: string }).id;
+      const bob = await person('bob@example.com', 'Bob');
+      const shared = await createSharedLedger(app, bob.token);
       await request(server())
-        .post(`/api/ledgers/${oldLedger}/archive`)
-        .set(auth(alice.token))
+        .post(`/api/ledgers/${shared}/archive`)
+        .set(auth(bob.token))
         .expect(201);
 
-      const { viaDebt, viaTransaction } = await bothPaths(alice, oldLedger, alice.cashId);
+      const { viaEntry, viaTransaction } = await bothPaths(bob, shared, bob.cashId);
       expect(viaTransaction.status).toBe(409);
-      expect(viaDebt.status).toBe(409);
-      expect((viaDebt.body as { errorCode: string }).errorCode).toBe('LEDGER_ARCHIVED');
-      expect(await prisma.debt.count()).toBe(0);
-    });
-
-    it('the same rules apply when a repayment is recorded into another ledger', async () => {
-      const bob = await person('bob@example.com', 'Bob');
-      const alice = await person('alice@example.com', 'Alice');
-      const shared = await createSharedLedger(app, bob.token);
-      await addMember(bob, shared, 'alice@example.com', 'VIEWER');
-
-      const debt = await request(server())
-        .post('/api/debts')
-        .set(auth(alice.token))
-        .send({
-          direction: 'LENT',
-          counterpartyName: '小明',
-          principal: 1000,
-          date: DAY,
-          record: { ledgerId: alice.ledgerId, accountId: alice.cashId },
-        });
-      expect(debt.status).toBe(201);
-
-      const res = await request(server())
-        .post(`/api/debts/${(debt.body as Debt).id}/payments`)
-        .set(auth(alice.token))
-        .send({ amount: 100, date: DAY, record: { ledgerId: shared, accountId: alice.cashId } });
-      expect(res.status).toBe(403);
-      expect(await prisma.debtPayment.count()).toBe(0);
+      expect(viaEntry.status).toBe(409);
+      expect((viaEntry.body as { errorCode: string }).errorCode).toBe('LEDGER_ARCHIVED');
+      await expectNothingLeft();
     });
   });
 
-  describe('SC-D12: other ledger members see the transaction but not the debt', () => {
+  describe('SC-L12: other ledger members see the transactions, not the ledger behind them', () => {
     async function setup() {
       const bob = await person('bob@example.com', 'Bob');
-      const alice = await person('alice@example.com', 'Alice');
-      const shared = await createSharedLedger(app, bob.token, 'Household');
-      await addMember(bob, shared, 'alice@example.com', 'EDITOR');
+      const carol = await person('carol@example.com', 'Carol');
+      const shared = await createSharedLedger(app, bob.token);
+      await addMember(bob, shared, 'carol@example.com', 'EDITOR');
 
-      const created = await request(server())
-        .post('/api/debts')
-        .set(auth(alice.token))
+      const lend = await request(server())
+        .post('/api/debt-entries')
+        .set(auth(bob.token))
         .send({
-          direction: 'LENT',
-          counterpartyName: '小明',
-          principal: 5000,
+          counterparty: { name: '小明' },
+          kind: 'LEND',
+          amount: 500,
           date: DAY,
-          note: '私人備註',
-          record: { ledgerId: shared, accountId: alice.cashId },
-        });
-      expect(created.status).toBe(201);
-      return { bob, alice, shared, debt: created.body as Debt };
+          record: { ledgerId: shared, accountId: bob.cashId },
+        })
+        .expect(201);
+      await request(server())
+        .post('/api/debt-entries')
+        .set(auth(bob.token))
+        .send({
+          counterparty: { name: '小明' },
+          kind: 'PAID_FOR_ME',
+          amount: 400,
+          date: DAY,
+          record: { ledgerId: shared },
+          categoryId: await expenseCategoryId(bob, shared),
+        })
+        .expect(201);
+
+      const body = lend.body as CreateDebtEntryResponse;
+      return {
+        bob,
+        carol,
+        shared,
+        counterpartyId: body.counterparty.id,
+        entryId: body.entries[0]!.id,
+      };
     }
 
-    it('the owner sees the debt id on the transaction; the other member sees null', async () => {
-      const { bob, alice, shared, debt } = await setup();
+    it('shows debt only to the owner of the entries', async () => {
+      const { bob, carol, shared } = await setup();
 
-      const asAlice = await request(server())
-        .get(`/api/ledgers/${shared}/transactions`)
-        .set(auth(alice.token));
-      expect((asAlice.body as Paginated<Transaction>).items[0]).toMatchObject({
-        type: 'LEND',
-        debtId: debt.id,
+      const list = async (who: Person) =>
+        (
+          (
+            await request(server())
+              .get(`/api/ledgers/${shared}/transactions`)
+              .set(auth(who.token))
+              .expect(200)
+          ).body as Paginated<Transaction>
+        ).items;
+
+      const bobs = await list(bob);
+      expect(bobs).toHaveLength(2);
+      for (const txn of bobs) {
+        expect(txn.debt).toMatchObject({ counterpartyName: '小明' });
+      }
+
+      const carols = await list(carol);
+      expect(carols).toHaveLength(2);
+      for (const txn of carols) {
+        expect(txn.debt).toBeNull();
+      }
+    });
+
+    it("gives another member 404 on the owner's counterparty and entries", async () => {
+      const { carol, counterpartyId, entryId } = await setup();
+      const as = (method: 'get' | 'patch' | 'delete' | 'post', path: string) =>
+        request(server())[method](path).set(auth(carol.token));
+
+      expect((await as('get', `/api/counterparties/${counterpartyId}`)).status).toBe(404);
+      expect((await as('get', `/api/counterparties/${counterpartyId}/entries`)).status).toBe(404);
+      expect(
+        (await as('patch', `/api/counterparties/${counterpartyId}`).send({ name: 'x' })).status,
+      ).toBe(404);
+      expect((await as('post', `/api/counterparties/${counterpartyId}/forgive`)).status).toBe(404);
+      expect((await as('delete', `/api/counterparties/${counterpartyId}`)).status).toBe(404);
+      expect((await as('patch', `/api/debt-entries/${entryId}`).send({ amount: 1 })).status).toBe(
+        404,
+      );
+      expect((await as('delete', `/api/debt-entries/${entryId}`)).status).toBe(404);
+
+      // 用對方的對象 id 記帳，同樣 404。
+      const viaId = await as('post', '/api/debt-entries').send({
+        counterparty: { id: counterpartyId },
+        kind: 'LEND',
+        amount: 1,
+        date: DAY,
+        record: null,
       });
+      expect(viaId.status).toBe(404);
 
-      const asBob = await request(server())
-        .get(`/api/ledgers/${shared}/transactions`)
-        .set(auth(bob.token));
-      const seen = (asBob.body as Paginated<Transaction>).items[0]!;
-      expect(seen).toMatchObject({ type: 'LEND', amount: 5000, debtId: null, account: null });
-      expect(JSON.stringify(asBob.body)).not.toContain('私人備註');
+      const carolsList = (await as('get', '/api/counterparties').expect(200))
+        .body as Paginated<unknown>;
+      expect(carolsList.items).toHaveLength(0);
     });
 
-    it('the other member cannot read, list, change, repay, forgive or delete the debt', async () => {
-      const { bob, debt } = await setup();
-      const asBob = auth(bob.token);
+    it("stops another EDITOR from changing or deleting the owner's debt transactions", async () => {
+      const { carol, shared } = await setup();
+      const txns = (
+        (
+          await request(server())
+            .get(`/api/ledgers/${shared}/transactions`)
+            .set(auth(carol.token))
+            .expect(200)
+        ).body as Paginated<Transaction>
+      ).items;
 
-      await request(server()).get(`/api/debts/${debt.id}`).set(asBob).expect(404);
-      const list = await request(server()).get('/api/debts').set(asBob);
-      expect((list.body as Paginated<Debt>).items).toEqual([]);
-      const summary = await request(server()).get('/api/debts/summary').set(asBob);
-      expect((summary.body as { items: unknown[] }).items).toEqual([]);
-
-      await request(server())
-        .patch(`/api/debts/${debt.id}`)
-        .set(asBob)
-        .send({ principal: 1 })
-        .expect(404);
-      await request(server())
-        .post(`/api/debts/${debt.id}/payments`)
-        .set(asBob)
-        .send({ amount: 1, date: DAY })
-        .expect(404);
-      await request(server()).post(`/api/debts/${debt.id}/forgive`).set(asBob).expect(404);
-      await request(server()).delete(`/api/debts/${debt.id}`).set(asBob).expect(404);
-
-      // 帳本擁有者也不能從交易端點繞過去改它。
-      await request(server())
-        .delete(`/api/ledgers/${(await firstShared(bob)).id}/transactions/${debt.transactionId!}`)
-        .set(asBob)
-        .expect(409);
-
-      const stored = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
-      expect(stored).toMatchObject({ principal: 5000, deletedAt: null, forgivenAt: null });
+      for (const txn of txns) {
+        const patch = await request(server())
+          .patch(`/api/ledgers/${shared}/transactions/${txn.id}`)
+          .set(auth(carol.token))
+          .send({ amount: 1 });
+        expect(patch.status).toBe(409);
+        expect((patch.body as { errorCode: string }).errorCode).toBe('DEBT_TRANSACTION_READ_ONLY');
+      }
     });
-
-    async function firstShared(owner: Person): Promise<{ id: string }> {
-      const res = await request(server()).get('/api/ledgers').set(auth(owner.token));
-      return (res.body as Array<{ id: string; kind: string }>).find((l) => l.kind === 'SHARED')!;
-    }
   });
 });

@@ -1,6 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
-  DEBT_TRANSACTION_TYPES,
   DEFAULT_CATEGORIES,
   ErrorCode,
   LedgerDetail,
@@ -222,10 +221,11 @@ export class LedgersService {
       );
     }
 
-    // 借還帳（3b 決策 21）：真刪會 cascade 刪掉借還交易，債務的本金與還款就跟帳戶對不起來。
-    // 同樣不過濾 deletedAt——軟刪除的借還交易仍被債務的紀錄引用。
-    const debtTransactions = await this.prisma.transaction.count({
-      where: { ledgerId, type: { in: [...DEBT_TRANSACTION_TYPES] } },
+    // 借還帳（3b 決策 21）：真刪會 cascade 刪掉往來紀錄產生的交易（借還交易與代付支出），
+    // 往來帳就跟帳戶對不起來；外鍵是 Restrict，真刪也會直接失敗。所以先用明確的錯誤擋下。
+    // 同樣不過濾 deletedAt——軟刪除的紀錄與交易仍然互相引用。
+    const debtTransactions = await this.prisma.debtEntry.count({
+      where: { transaction: { ledgerId } },
     });
     if (debtTransactions > 0) {
       throw new AppException(

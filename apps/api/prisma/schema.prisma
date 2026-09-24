@@ -54,7 +54,7 @@ model User {
   friendInviteLinksUsed  FriendInviteLink[] @relation("FriendInviteLinkUsed")
 
   // 借還帳（3b）。債務屬於使用者，不屬於帳本（spec 決策 17）。
-  debts Debt[]
+  counterparties Counterparty[]
 }
 
 enum FriendRequestStatus {
@@ -231,8 +231,7 @@ model Transaction {
   creator   User      @relation("TransactionCreator", fields: [creatorId], references: [id])
 
   // 借還帳（3b）：這筆交易若是某筆債務的本金或還款，由債務那一側持有外鍵（spec §4.4）。
-  debtPrincipal Debt?        @relation("DebtPrincipal")
-  debtPayment   DebtPayment? @relation("DebtPaymentTransaction")
+  debtEntry DebtEntry?
 
   @@index([ledgerId, date])
   @@index([ledgerId, categoryId])
@@ -240,62 +239,56 @@ model Transaction {
   @@index([toAccountId])
 }
 
-/// 從擁有者的角度看，這筆債務的方向。
-enum DebtDirection {
-  LENT // 我借出：我是債權人
-  BORROWED // 我借入：我是債務人
+/// 往來紀錄的種類（spec 3b §3.2）。前 5 種由使用者記；SETTLEMENT、FORGIVE 是系統算出的調整紀錄。
+enum DebtEntryKind {
+  LEND // 借出：對方多欠我（delta > 0），帳戶 −
+  BORROW // 借入：我多欠對方（delta < 0），帳戶 +
+  COLLECT // 對方還我（delta < 0），帳戶 +
+  REPAY // 我還對方（delta > 0），帳戶 −
+  PAID_FOR_ME // 對方幫我付我那份（delta < 0），產生一筆不經過帳戶的支出
+  SETTLEMENT // 以此結清的差額，讓往來餘額歸零；不產生交易
+  FORGIVE // 免除對方欠我的剩餘金額（delta < 0）；不產生交易
 }
 
-/// 一個人記下的一筆債務（「我借出了／我借入了」）。永遠只屬於一位擁有者（spec 決策 15）。
+/// 記帳者的一個往來對象，只存名字（spec 3b 決策 33）。一個對象一本往來帳。
 ///
-/// 未清餘額與狀態**不存欄位**：未清餘額 = 本金 − Σ 未刪除的還款，狀態再由它與 forgivenAt
-/// 推得（spec §3.2）。存下來的數字只要有一條路徑忘了更新，就會永遠錯下去。
-///
-/// 資料庫另有 CHECK 約束 `Debt_principal_positive`（principal > 0），只存在於 migration。
-model Debt {
-  id               String        @id @default(uuid())
-  ownerId          String
-  direction        DebtDirection
-  /// 對方的名字。3b-1 一律是擁有者輸入的。
-  counterpartyName String
-  /// 最小貨幣單位，> 0。
-  principal        Int
-  date             DateTime
-  note             String?
-  /// 本金那筆 LEND / BORROW 交易。舊債可以沒有交易（spec 決策 7）。
-  transactionId    String?       @unique
-  forgivenAt       DateTime?
-  deletedAt        DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+/// 資料庫另有 CHECK 約束 `Counterparty_name_trimmed`（名字已去掉前後空白、1～100 字）。
+model Counterparty {
+  id        String   @id @default(uuid())
+  ownerId   String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  // Restrict：仍被債務引用的交易不可被真刪。帳本真刪會 cascade 刪交易，所以帳本那一側
+  owner   User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  entries DebtEntry[]
+
+  @@unique([ownerId, name])
+}
+
+/// 一筆往來紀錄。往來餘額 = Σ 未刪除紀錄的 delta，**不存欄位**（spec 3b 決策 34）。
+///
+/// 資料庫另有兩條 CHECK 約束，只存在於 migration：
+/// - `DebtEntry_delta_sign`：delta ≠ 0，且正負號與 kind 相符。
+/// - `DebtEntry_transaction_by_kind`：調整紀錄沒有交易；PAID_FOR_ME 一定有交易。
+model DebtEntry {
+  id             String        @id @default(uuid())
+  counterpartyId String
+  kind           DebtEntryKind
+  /// 對往來餘額的影響，有正負號。正數＝這筆讓對方多欠我。最小貨幣單位。
+  delta          Int
+  date           DateTime
+  note           String?
+  /// 產生的交易。調整紀錄與「不記入帳本」為 null。
+  transactionId  String?       @unique
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+  // Restrict：仍被往來紀錄引用的交易不可被真刪。帳本真刪會 cascade 刪交易，所以帳本那一側
   // 另外先擋（LEDGER_HAS_DEBT_TRANSACTIONS，spec 決策 21），這裡是最後防線。
-  transaction Transaction?  @relation("DebtPrincipal", fields: [transactionId], references: [id], onDelete: Restrict)
-  payments    DebtPayment[]
+  transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
 
-  @@index([ownerId, deletedAt])
-}
-
-/// 一筆還款。資料庫另有 CHECK 約束 `DebtPayment_amount_positive`（amount > 0）。
-model DebtPayment {
-  id            String    @id @default(uuid())
-  debtId        String
-  /// 最小貨幣單位，> 0。
-  amount        Int
-  date          DateTime
-  note          String?
-  /// 對應的 COLLECT / REPAY 交易。可以沒有（本金沒有交易時，還款預設也不產生）。
-  transactionId String?   @unique
-  /// 「以此結清」（spec 決策 30）：記下這筆之後債務就是 SETTLED，金額可以不等於當時的未清餘額。
-  /// 一筆債務最多一筆未刪除的結清還款，由 migration 手寫的部分唯一索引保證。
-  settles       Boolean   @default(false)
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-
-  debt        Debt         @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  transaction Transaction? @relation("DebtPaymentTransaction", fields: [transactionId], references: [id], onDelete: Restrict)
-
-  @@index([debtId])
+  @@index([counterpartyId, deletedAt])
 }
