@@ -232,6 +232,8 @@ Orca 的 Run 是 daemon 端的持久狀態：Task、Dispatch、未 ack 的信都
 
 ### 6.1 舊 session（交接前）
 
+0. **先更新 `docs/handoff.md`**（只寫重點：現況、下一步、開發者當場給的偏好、已知問題），開 PR 合併。新 session 一律用 `claude --dangerously-skip-permissions` 開，第一件事讀它。沒有 Run 的純交接也照做。
+
 1. 把已經處理完的 Delivery `--ack` 掉，不要留半處理狀態。
 2. 留一則交接信：
    `orca orchestration send --to run:<run_id> --subject "handoff" --body "<見下>" --json`

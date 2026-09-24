@@ -248,6 +248,7 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 - ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
 
+- **換 session 時先讀 `docs/handoff.md`**；交接前由舊 session 更新它（只寫重點）。新 session 用 `claude --dangerously-skip-permissions` 開。
 - **交接之後舊 session 要收掉。** 一次交接只留下一個活著的 session——兩個 agent 留在同一個 worktree，使用者對著舊分頁打字就會變成兩個 agent 改同一批檔案。舊 session **不要自己關自己**（指令送出的瞬間對話就沒了，使用者拿不到說明），而是報告自己的 handle 與關閉指令，由使用者收掉。程序見 `docs/orca-multi-agent.md` §6.0。
 
 派工指令、模型分流準則、額度切換、Task spec 格式、**context 快滿時的 session 交接程序**，全部見 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
