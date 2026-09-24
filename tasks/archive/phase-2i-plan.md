@@ -1,9 +1,9 @@
 # Plan：階段二 (2i) — Web 版面第二輪
 
-> 對應 spec：[`docs/specs/phase-2i-web-layout-v2.md`](../docs/specs/phase-2i-web-layout-v2.md)（SC-31～SC-37）。
+> 對應 spec：[`docs/specs/phase-2i-web-layout-v2.md`](../../docs/specs/phase-2i-web-layout-v2.md)（SC-31～SC-37）。
 > 任務清單：[`phase-2i-todo.md`](phase-2i-todo.md)。
-> 分支：`feature/web-layout-v2`（worktree `web-redesign`，從 `main` 分出）。
-> 狀態：**已核可**（2026-09-23），實作中。
+> 分支：`feature/web-layout-v2`（第一、二輪）、`feature/web-layout-v3`（第三輪），worktree `web-redesign`。
+> 狀態：**已完成**（2026-09-24）。三輪分別合併於 PR #56、PR #58。
 
 ---
 
