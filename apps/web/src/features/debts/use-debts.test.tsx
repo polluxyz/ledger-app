@@ -3,20 +3,21 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  useCreateDebt,
-  useCreateDebtPayment,
-  useDebts,
-  useDeleteDebt,
-  useDeleteDebtPayment,
-  useForgiveDebt,
-  useUpdateDebt,
+  useCounterparties,
+  useCounterpartyEntries,
+  useCreateDebtEntry,
+  useDeleteCounterparty,
+  useDeleteDebtEntry,
+  useForgiveCounterparty,
+  useRenameCounterparty,
+  useUpdateDebtEntry,
 } from './use-debts';
 
 /**
- * 借還 hooks 的兩件事：**打對端點**（路徑、方法、body 原樣送出），以及**寫入後的快取
+ * 借還（往來帳版）hooks 的兩件事：**打對端點**（路徑、方法、body 原樣送出），以及**寫入後的快取
  * 失效**。
  *
- * 失效是這一檔的重點：債務寫入會同時改到債務、淨額、任何一本帳本的交易列表與帳戶
+ * 失效是這一檔的重點：往來寫入會同時改到對象與往來紀錄、任何一本帳本的交易列表與帳戶
  * 餘額（見 `use-debts.ts` 檔頭）。少失效一個不會拋錯，只會讓某個畫面停在舊數字，
  * 所以每一個 mutation 都用同一條斷言釘住整組前綴。
  *
@@ -67,65 +68,80 @@ describe('Debt hooks', () => {
     const calls = invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>;
     const keys = calls.map(([filters]) => filters.queryKey);
     expect(keys).toEqual(
-      expect.arrayContaining([['debts'], ['transactions'], ['accounts']]) as unknown,
+      expect.arrayContaining([['counterparties'], ['transactions'], ['accounts']]) as unknown,
     );
   }
 
-  it('lists debts with the status filter and paging in the query string', async () => {
-    renderHook(() => useDebts({ status: 'OPEN', page: 2, limit: 20 }), { wrapper });
-
+  it('lists counterparties and their entries with paging in the query string', async () => {
+    renderHook(() => useCounterparties({ page: 2, limit: 20 }), { wrapper });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(lastRequest().url).toMatch(/\/debts\?status=OPEN&page=2&limit=20$/);
+    expect(lastRequest().url).toMatch(/\/counterparties\?page=2&limit=20$/);
+
+    renderHook(() => useCounterpartyEntries('cp-1', { page: 1 }), { wrapper });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/entries\?page=1$/);
   });
 
   it.each([
     {
-      name: 'create',
-      hook: useCreateDebt,
-      variables: { direction: 'LENT', counterpartyName: '小明', principal: 5000, date: 'd' },
-      method: 'POST',
-      path: /\/debts$/,
-    },
-    {
-      name: 'update',
-      hook: useUpdateDebt,
-      variables: { debtId: 'debt-1', input: { note: '改' } },
-      method: 'PATCH',
-      path: /\/debts\/debt-1$/,
-      body: { note: '改' },
-    },
-    {
-      name: 'delete',
-      hook: useDeleteDebt,
-      variables: 'debt-1',
-      method: 'DELETE',
-      path: /\/debts\/debt-1$/,
-    },
-    {
-      name: 'create payment',
-      hook: useCreateDebtPayment,
+      name: 'create entry',
+      hook: useCreateDebtEntry,
       variables: {
-        debtId: 'debt-1',
-        input: { amount: 90, date: 'd', record: null, settles: true },
+        counterparty: { name: '小明' },
+        kind: 'COLLECT',
+        amount: 90,
+        date: 'd',
+        record: null,
+        settle: true,
       },
       method: 'POST',
-      path: /\/debts\/debt-1\/payments$/,
-      // `record: null` 必須原樣送出，不能被當成「沒給」丟掉（plan §2.4）。
-      body: { amount: 90, date: 'd', record: null, settles: true },
+      path: /\/debt-entries$/,
+      // `record: null` 必須原樣送出，不能被當成「沒給」丟掉——後端會把省略當成 400。
+      body: {
+        counterparty: { name: '小明' },
+        kind: 'COLLECT',
+        amount: 90,
+        date: 'd',
+        record: null,
+        settle: true,
+      },
     },
     {
-      name: 'delete payment',
-      hook: useDeleteDebtPayment,
-      variables: { debtId: 'debt-1', paymentId: 'p-1' },
+      name: 'update entry',
+      hook: useUpdateDebtEntry,
+      variables: { entryId: 'e-1', input: { note: null } },
+      method: 'PATCH',
+      path: /\/debt-entries\/e-1$/,
+      body: { note: null },
+    },
+    {
+      name: 'delete entry',
+      hook: useDeleteDebtEntry,
+      variables: 'e-1',
       method: 'DELETE',
-      path: /\/debts\/debt-1\/payments\/p-1$/,
+      path: /\/debt-entries\/e-1$/,
+    },
+    {
+      name: 'rename counterparty',
+      hook: useRenameCounterparty,
+      variables: { counterpartyId: 'cp-1', name: '明明' },
+      method: 'PATCH',
+      path: /\/counterparties\/cp-1$/,
+      body: { name: '明明' },
+    },
+    {
+      name: 'delete counterparty',
+      hook: useDeleteCounterparty,
+      variables: 'cp-1',
+      method: 'DELETE',
+      path: /\/counterparties\/cp-1$/,
     },
     {
       name: 'forgive',
-      hook: useForgiveDebt,
-      variables: 'debt-1',
+      hook: useForgiveCounterparty,
+      variables: 'cp-1',
       method: 'POST',
-      path: /\/debts\/debt-1\/forgive$/,
+      path: /\/counterparties\/cp-1\/forgive$/,
     },
   ])(
     '$name hits the right endpoint and invalidates debts, transactions and accounts',

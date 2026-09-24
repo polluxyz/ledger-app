@@ -50,11 +50,12 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   ACCOUNT_NOT_ALLOWED: '這本帳本不連動帳戶餘額，記帳時不需指定帳戶。',
   TRANSFER_SAME_ACCOUNT: '轉帳的轉出與轉入不能是同一個帳戶，請換其中一個。',
 
-  // ── 借還（3b-1，spec phase-3b1-web.md §4.5）──────────────────────────────
-  DEBT_OVERPAYMENT: '金額超過未清餘額。如果對方多給了，請勾選「以此結清」。',
-  DEBT_NOT_OPEN: '這筆借還已經結清或免除了。要改本金，請先刪除結清的那筆還款。',
-  DEBT_NOT_FORGIVABLE: '只有借出去的錢可以免除。',
-  DEBT_TRANSACTION_READ_ONLY: '借還交易要從借還詳情修改。',
+  // ── 借還（3b-1 往來帳版，spec phase-3b1-web.md §4.6）──────────────────────
+  COUNTERPARTY_NAME_TAKEN: '已經有同名的對象了，換一個名字。',
+  COUNTERPARTY_HAS_ENTRIES: '這個對象還有往來紀錄，不能刪除。',
+  NOTHING_TO_FORGIVE: '對方目前沒有欠你錢，沒有東西可以免除。',
+  DEBT_ENTRY_NOT_EDITABLE: '結清差額與免除不能修改，要調整請刪除後重記。',
+  DEBT_TRANSACTION_READ_ONLY: '這筆交易來自借還，請到借還的往來帳修改。',
   LEDGER_HAS_DEBT_TRANSACTIONS: '這本帳本有借還交易，不能刪除。請改用封存。',
 };
 

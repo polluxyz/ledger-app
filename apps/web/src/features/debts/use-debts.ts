@@ -6,45 +6,47 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import type {
-  CreateDebtPaymentRequest,
-  CreateDebtRequest,
-  Debt,
-  DebtSummary,
-  ListDebtsQuery,
+  Counterparty,
+  CreateDebtEntryRequest,
+  CreateDebtEntryResponse,
+  DebtEntry,
+  ListCounterpartiesQuery,
   Paginated,
-  UpdateDebtRequest,
+  UpdateDebtEntryRequest,
 } from '@ledger/shared';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 import { apiRequest } from '../../lib/api-client';
 
 /**
- * 借還（3b-1）的伺服器狀態。規格見 `docs/specs/phase-3b1-web.md`。
+ * 借還（3b-1 往來帳版）的伺服器狀態。規格見 `docs/specs/phase-3b1-web.md`。
  *
- * 債務屬於使用者、不屬於帳本（`phase-3b-debts.md` 決策 17），所以 query key 不帶帳本。
+ * 往來帳屬於使用者、不屬於帳本（`phase-3b-debts.md` 決策 17），所以 query key 不帶帳本。
  *
  * ## 寫入之後要失效的東西比交易多
  *
- * 一次債務寫入可能同時改到：債務本身、每人淨額、**任何一本帳本**的交易列表（本金與
- * 每筆還款可以各記在不同帳本，決策 18），以及帳戶餘額。所以交易快取失效的是整個
- * `['transactions']` 前綴，不是某一本帳本。少失效一個不會拋錯，只會讓畫面停在舊
- * 數字直到重整——`use-debts.test.tsx` 為每個 mutation 釘住這一整組。
+ * 一次往來寫入可能同時改到：對象清單與餘額、那個對象的往來紀錄、**任何一本帳本**的交易
+ * 列表（紀錄可以記進不同帳本），以及帳戶餘額。所以對象與往來紀錄共用 `['counterparties']`
+ * 前綴一次失效，交易失效的是整個 `['transactions']` 前綴。少失效一個不會拋錯，只會讓畫面
+ * 停在舊數字直到重整——`use-debts.test.tsx` 為每個 mutation 釘住這一整組。
  *
- * ## 前端不算任何金額
+ * ## 前端不算往來餘額
  *
- * 未清餘額、狀態、淨額、結清差額全部來自回應（spec W9）。這裡只負責打 API。
+ * 餘額、`balanceAfter` 全部來自回應（spec W16 之外沒有例外）。這裡只負責打 API。
  */
 
-/** 所有債務查詢的共同前綴：列表、單筆、淨額一次失效。 */
-export const DEBTS_KEY = ['debts'] as const;
+/** 對象與往來紀錄的共同前綴：清單、單一對象、往來紀錄一次失效。 */
+export const COUNTERPARTIES_KEY = ['counterparties'] as const;
 
-const debtListKey = (query: ListDebtsQuery) => [...DEBTS_KEY, 'list', query] as const;
-const debtKey = (debtId: string) => [...DEBTS_KEY, 'detail', debtId] as const;
-const DEBT_SUMMARY_KEY = [...DEBTS_KEY, 'summary'] as const;
+const counterpartyListKey = (query: ListCounterpartiesQuery) =>
+  [...COUNTERPARTIES_KEY, 'list', query] as const;
+const counterpartyKey = (id: string) => [...COUNTERPARTIES_KEY, 'detail', id] as const;
+const entriesKey = (id: string, query: ListCounterpartiesQuery) =>
+  [...COUNTERPARTIES_KEY, 'entries', id, query] as const;
 
 /** 交易快取的前綴（見 `use-transactions.ts` 的 `transactionsKey`），不分帳本。 */
 const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 
-function toQueryString(query: ListDebtsQuery): string {
+function toQueryString(query: ListCounterpartiesQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) {
@@ -55,100 +57,111 @@ function toQueryString(query: ListDebtsQuery): string {
   return queryString === '' ? '' : `?${queryString}`;
 }
 
-/** 我的債務清單。狀態篩選、分頁、排序（依日期新到舊）都由後端負責。 */
-export function useDebts(query: ListDebtsQuery = {}) {
+/** 我的往來對象與餘額。排序（有餘額的在前）與分頁由後端負責。 */
+export function useCounterparties(query: ListCounterpartiesQuery = {}) {
   return useQuery({
-    queryKey: debtListKey(query),
-    queryFn: () => apiRequest<Paginated<Debt>>(`/debts${toQueryString(query)}`),
+    queryKey: counterpartyListKey(query),
+    queryFn: () => apiRequest<Paginated<Counterparty>>(`/counterparties${toQueryString(query)}`),
     placeholderData: keepPreviousData,
   });
 }
 
-/** 單筆債務，含還款紀錄。`null` 時不發請求（右側欄還沒選任何一筆）。 */
-export function useDebt(debtId: string | null) {
+/** 單一對象。`null` 時不發請求（右側欄還沒選任何人）。 */
+export function useCounterparty(counterpartyId: string | null) {
   return useQuery({
-    queryKey: debtKey(debtId ?? ''),
-    queryFn: () => apiRequest<Debt>(`/debts/${debtId!}`),
-    enabled: debtId !== null,
+    queryKey: counterpartyKey(counterpartyId ?? ''),
+    queryFn: () => apiRequest<Counterparty>(`/counterparties/${counterpartyId!}`),
+    enabled: counterpartyId !== null,
   });
 }
 
-/** 每人淨額。只計未結清的債務（後端規則，spec §5.4）。 */
-export function useDebtSummary() {
+/** 某個對象的往來紀錄，新到舊，每筆附 `balanceAfter`。 */
+export function useCounterpartyEntries(
+  counterpartyId: string | null,
+  query: ListCounterpartiesQuery = {},
+) {
   return useQuery({
-    queryKey: DEBT_SUMMARY_KEY,
-    queryFn: () => apiRequest<DebtSummary>('/debts/summary'),
+    queryKey: entriesKey(counterpartyId ?? '', query),
+    queryFn: () =>
+      apiRequest<Paginated<DebtEntry>>(
+        `/counterparties/${counterpartyId!}/entries${toQueryString(query)}`,
+      ),
+    enabled: counterpartyId !== null,
+    placeholderData: keepPreviousData,
   });
 }
 
-/** 任何債務寫入成功後都跑這一段。理由見檔頭「寫入之後要失效的東西比交易多」。 */
-function invalidateAfterDebtWrite(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: DEBTS_KEY });
+/** 任何往來寫入成功後都跑這一段。理由見檔頭「寫入之後要失效的東西比交易多」。 */
+function invalidateAfterWrite(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
   void queryClient.invalidateQueries({ queryKey: ALL_TRANSACTIONS_KEY });
   void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
 }
 
-/** 建立一筆借出或借入。不帶 `record` 就是舊債，不產生交易（決策 7）。 */
-export function useCreateDebt() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateDebtRequest) =>
-      apiRequest<Debt>('/debts', { method: 'POST', body: input }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
-  });
-}
-
-/** 改對方名字、本金、日期、備註。結清後改本金會被後端擋下（決策 30）。 */
-export function useUpdateDebt() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ debtId, input }: { debtId: string; input: UpdateDebtRequest }) =>
-      apiRequest<Debt>(`/debts/${debtId}`, { method: 'PATCH', body: input }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
-  });
-}
-
-/** 刪除債務：後端連同所有還款與交易一起軟刪除，帳戶餘額回到記這筆借還之前。 */
-export function useDeleteDebt() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (debtId: string) => apiRequest<void>(`/debts/${debtId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
-  });
-}
-
 /**
- * 記一筆還款。
- *
- * Web 一律明確給 `record`：要記就給帳本與帳戶，不記就給 `null`。**不使用「省略」**——
- * 省略時後端會沿用本金交易的帳本與帳戶，畫面上顯示的與實際記下的可能不同（plan §2.4）。
- * 型別上仍允許省略，是因為那是 API 的合法寫法；由表單保證一定有給。
+ * 記一筆往來。`record` 一定要明確給（物件或 `null`）——後端不再有「省略就沿用」的行為，
+ * 省略會得到 400（`phase-3b-debts.md` §5.2）。
  */
-export function useCreateDebtPayment() {
+export function useCreateDebtEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ debtId, input }: { debtId: string; input: CreateDebtPaymentRequest }) =>
-      apiRequest<Debt>(`/debts/${debtId}/payments`, { method: 'POST', body: input }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
+    mutationFn: (input: CreateDebtEntryRequest) =>
+      apiRequest<CreateDebtEntryResponse>('/debt-entries', { method: 'POST', body: input }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
   });
 }
 
-/** 刪除一筆還款，連同它的交易。刪掉結清的那筆，債務會回到未結清。 */
-export function useDeleteDebtPayment() {
+/** 改一筆往來的金額、日期、備註。結清差額與免除不能改（409 `DEBT_ENTRY_NOT_EDITABLE`）。 */
+export function useUpdateDebtEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ debtId, paymentId }: { debtId: string; paymentId: string }) =>
-      apiRequest<void>(`/debts/${debtId}/payments/${paymentId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
+    mutationFn: ({ entryId, input }: { entryId: string; input: UpdateDebtEntryRequest }) =>
+      apiRequest<DebtEntry>(`/debt-entries/${entryId}`, { method: 'PATCH', body: input }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
   });
 }
 
-/** 免除剩餘金額。只限借出且未結清；不可撤銷（決策 28）。 */
-export function useForgiveDebt() {
+/** 刪除一筆往來，連同它的交易。帳戶餘額與往來餘額都回到記這筆之前。 */
+export function useDeleteDebtEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (debtId: string) =>
-      apiRequest<Debt>(`/debts/${debtId}/forgive`, { method: 'POST' }),
-    onSuccess: () => invalidateAfterDebtWrite(queryClient),
+    mutationFn: (entryId: string) =>
+      apiRequest<void>(`/debt-entries/${entryId}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/** 對象改名。撞名回 409 `COUNTERPARTY_NAME_TAKEN`。名字也出現在交易列表，所以一樣全部失效。 */
+export function useRenameCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ counterpartyId, name }: { counterpartyId: string; name: string }) =>
+      apiRequest<Counterparty>(`/counterparties/${counterpartyId}`, {
+        method: 'PATCH',
+        body: { name },
+      }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/** 刪除對象。還有往來紀錄時回 409 `COUNTERPARTY_HAS_ENTRIES`。 */
+export function useDeleteCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (counterpartyId: string) =>
+      apiRequest<void>(`/counterparties/${counterpartyId}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/** 免除對方欠我的剩餘金額。對方沒欠我時回 409 `NOTHING_TO_FORGIVE`。 */
+export function useForgiveCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (counterpartyId: string) =>
+      apiRequest<CreateDebtEntryResponse>(`/counterparties/${counterpartyId}/forgive`, {
+        method: 'POST',
+      }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
   });
 }
