@@ -1,6 +1,6 @@
 # Spec：階段三 (3b-1) — 借還的 Web 畫面
 
-> 狀態：**已實作**（2026-09-24；已知問題見 `tasks/phase-3b1-web-plan.md` §7）
+> 狀態：**已實作**（2026-09-24；已知問題見 `tasks/archive/phase-3b1-web-plan.md` §7）
 > 依據：`phase-3b-debts.md`（後端規則）；2026-09-24 與開發者的討論，詳見 §2。
 > 前置：3b-1 後端（PR #59）已合併；**3b-1 修訂「以此結清」**（`phase-3b-debts.md` 決策 30）要先合併，本步的還款表單會用到它。
 > 定位：只動 Web。不改 API、不改 schema。做畫面時發現後端規則要改，先停下來改 `phase-3b-debts.md`，另開後端 PR。

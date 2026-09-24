@@ -121,7 +121,14 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - **努力程度寫在模型 id 裡**（`-high` / `-medium` / `-low`），不要再另外傳 `--effort`。
 - §3「一律不用 flash」指的是 `zai/glm-5.3-flash` 這個成本層級，**跟 Gemini 模型名稱裡的 flash 無關**。Gemini 3.8 Flash 比清單上的 3.1 Pro 新一代，不是弱化版。
 - `agy models` 列出當下可用的模型，換模型前先跑一次，**不要憑記憶填**。它除了 Gemini 也有 `claude-sonnet-4-6`、`gpt-oss-120b-medium`。
-- ⚠️ **未實測**：`agy` 當 worker 時會不會卡在權限確認。它有 `--dangerously-skip-permissions`，但那會自動核准所有工具請求——只在拋棄式 worktree 裡用，而且 Task spec 要把不准碰的東西寫清楚。
+- **實測（2026-09-24，3b-1 Web 的 B3、B4）**：`agy` 當 worker 會卡在權限確認，而且有三種提示——執行指令（`Run this command?`）、修改檔案（`Accept this file edit?`）、建立檔案（`Allow creation of this file?`）。**每一個都要有人回答**，否則 worker 就停著。
+  - 這次的做法：協調者用 `orca terminal read --screen` 盯畫面，指令只放行白名單（`orca orchestration`、`pnpm lint/typecheck/test/format`、`git` 唯讀、讀檔搜尋），改檔與建檔只放行該 Task 的 Target 檔案，其餘停下來由協調者判斷；回答用 `orca terminal send --text "1"`。
+  - `--dangerously-skip-permissions` 仍然只在拋棄式 worktree 裡用。
+- **啟動的兩個坑**，解法都是「關掉那個終端機，重開一個新的」：
+  1. 第一次在某個資料夾啟動會問「信任這個資料夾嗎」。答完之後，提示文字仍留在終端機歷史裡，Orca 會一直判定 `agent-trust-workspace` 而擋下 `worker-start`（`Agent startup blocked`）。信任設定已經存起來了，新終端機不會再問。
+  2. 啟動當下若 Google 的登入驗證剛好回 503，整個 session 會一直回 `Eligibility check failed: UNAVAILABLE (code 503)`，之後服務恢復也一樣。log 在 `~/.gemini/antigravity-cli/log/`，找 `Validation failed`。
+- `worker-start --terminal <agy 的 handle>` 第一次呼叫有時回 `agent_unconfigured`，同一個指令再呼叫一次就成功。原因未查明。
+- ⚠️ agy worker 回報的「全部通過」不可盡信：B4 回報全綠，實際有 1 個型別錯誤與 1 條逾時的測試。驗收時一定自己跑 `pnpm typecheck` 與 `pnpm test`。
 
 ### 第 3 層：Claude Code
 
