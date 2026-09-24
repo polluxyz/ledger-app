@@ -98,6 +98,24 @@ function groupByDate(transactions: Transaction[]): DateGroup[] {
  * DOM 結構刻意寫成「一個日期標題 `<p>` ＋ 一個 `<ul>`」：標題**不是** `<li>`，
  * 這樣整個列表的 `<li>` 數量就等於交易筆數（e2e 拿它斷言筆數）。
  */
+/** 一列的標題：分類（或型別的中文名）加上備註。 */
+function rowTitle(transaction: Transaction) {
+  return (
+    <>
+      {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
+      {transaction.category ? (
+        <span className={styles.category}>{transaction.category.name}</span>
+      ) : (
+        <span className={styles.category}>
+          <Icon name="transfer" />
+          {TRANSACTION_TYPE_LABELS[transaction.type]}
+        </span>
+      )}
+      {transaction.note && <span className={styles.note}>{transaction.note}</span>}
+    </>
+  );
+}
+
 export function TransactionList({
   transactions,
   isLoading,
@@ -135,6 +153,11 @@ export function TransactionList({
     if ((event.target as Element).closest('button')) {
       return;
     }
+    openRow(transaction);
+  }
+
+  /** 點一列（或它的第一格按鈕）要做的事：一般交易開編輯，自己的借還交易開債務詳情。 */
+  function openRow(transaction: Transaction) {
     if (isDebtTransactionType(transaction.type)) {
       if (onOpenDebt && transaction.debtId !== null) {
         onOpenDebt(transaction.debtId);
@@ -177,18 +200,27 @@ export function TransactionList({
                   className={rowClassNames}
                   onClick={(event) => handleRowClick(event, transaction)}
                 >
-                  <span className={styles.main}>
-                    {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
-                    {transaction.category ? (
-                      <span className={styles.category}>{transaction.category.name}</span>
-                    ) : (
-                      <span className={styles.category}>
-                        <Icon name="transfer" />
-                        {TRANSACTION_TYPE_LABELS[transaction.type]}
-                      </span>
-                    )}
-                    {transaction.note && <span className={styles.note}>{transaction.note}</span>}
-                  </span>
+                  {/*
+                    第一格在可點的列上是一顆「看起來不像按鈕」的按鈕：滑鼠點整列就夠了，
+                    但鍵盤與螢幕閱讀器需要一個聚焦得到的入口，否則拿掉鉛筆圖示之後就
+                    再也進不了編輯。它的點擊由自己處理，列的 onClick 看到目標在按鈕裡會略過。
+                  */}
+                  {isClickable ? (
+                    <button
+                      type="button"
+                      className={`${styles.main} ${styles.mainButton}`}
+                      aria-label={
+                        isDebt
+                          ? `查看${describe(transaction)}的借還`
+                          : `編輯${describe(transaction)}`
+                      }
+                      onClick={() => openRow(transaction)}
+                    >
+                      {rowTitle(transaction)}
+                    </button>
+                  ) : (
+                    <span className={styles.main}>{rowTitle(transaction)}</span>
+                  )}
                   {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
                   <span className={styles.account}>
                     {transaction.account?.name}
@@ -197,32 +229,20 @@ export function TransactionList({
                   <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
                     {formatTransactionAmount(transaction.type, transaction.amount)}
                   </span>
-                  {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列
-                    都有入口，不依成員身分判斷。唯一的例外是借還交易：它們只能從
-                    債務端點改動，這裡放兩顆必定得到 409 的按鈕只是在騙人。
-                    那一格仍然留著（`<span>` 照渲染），欄寬才不會一列一個樣。 */}
+                  {/* 只剩刪除：編輯就是點這一列（開發者 2026-09-24），鉛筆圖示是重複的入口。
+                    借還交易只能從債務端點改動，放一顆必定得到 409 的刪除鈕只是在騙人。
+                    那一格仍然留著、而且欄寬固定，金額才不會一列一個位置。 */}
                   <span className={styles.actions}>
-                    {!isDebtTransactionType(transaction.type) && (
-                      <>
-                        <button
-                          type="button"
-                          className={styles.action}
-                          title="編輯"
-                          onClick={() => onEdit(transaction)}
-                          aria-label={`編輯${describe(transaction)}`}
-                        >
-                          <Icon name="edit" />
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.action} ${styles.remove}`}
-                          title="刪除"
-                          onClick={() => onRemove(transaction)}
-                          aria-label={`刪除${describe(transaction)}`}
-                        >
-                          <Icon name="trash" />
-                        </button>
-                      </>
+                    {!isDebt && (
+                      <button
+                        type="button"
+                        className={`${styles.action} ${styles.remove}`}
+                        title="刪除"
+                        onClick={() => onRemove(transaction)}
+                        aria-label={`刪除${describe(transaction)}`}
+                      >
+                        <Icon name="trash" />
+                      </button>
                     )}
                   </span>
                 </li>
