@@ -36,6 +36,19 @@ describe('TextField', () => {
     expect(field).toBeRequired();
   });
 
+  // 瀏覽器自動填入會把 email 之類的舊輸入推薦到金額欄；預設關掉，需要的欄位自己打開。
+  it('turns browser autofill off by default but lets a field opt back in', () => {
+    render(
+      <>
+        <TextField label="金額" type="number" onChange={() => {}} />
+        <TextField label="Email" autoComplete="email" onChange={() => {}} />
+      </>,
+    );
+
+    expect(screen.getByLabelText('金額')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');
+  });
+
   it('omits the hint element when no hint is given', () => {
     render(<TextField label="名稱" onChange={() => {}} />);
 
