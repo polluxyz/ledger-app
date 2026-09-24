@@ -74,6 +74,10 @@ export const ErrorCode = {
   COUNTERPARTY_HAS_ENTRIES: 'COUNTERPARTY_HAS_ENTRIES',
   /** 對方目前沒有欠我（往來餘額 ≤ 0），沒有東西可以免除。 */
   NOTHING_TO_FORGIVE: 'NOTHING_TO_FORGIVE',
+  /** 往來餘額為 0，沒有欠款可以還。 */
+  NOTHING_TO_REPAY: 'NOTHING_TO_REPAY',
+  /** 還款超過目前欠款、又沒有勾以此結清；寫入會讓欠款方向反過來。 */
+  REPAYMENT_EXCEEDS_BALANCE: 'REPAYMENT_EXCEEDS_BALANCE',
   /** 結清差額與免除是系統算出的調整紀錄，不能改金額；要調整就刪除後重記。 */
   DEBT_ENTRY_NOT_EDITABLE: 'DEBT_ENTRY_NOT_EDITABLE',
   /** 由往來紀錄產生的交易（借還交易、代付支出）只能從往來帳端點修改或刪除。 */

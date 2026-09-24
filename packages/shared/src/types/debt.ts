@@ -23,18 +23,18 @@ export const DEBT_ENTRY_KINDS = [
 ] as const;
 export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
 
-/** 使用者自己記的 5 種。`POST /debt-entries` 的 `kind` 只接受這些。 */
-export const MANUAL_DEBT_ENTRY_KINDS = [
-  'LEND',
-  'BORROW',
-  'COLLECT',
-  'REPAY',
-  'PAID_FOR_ME',
-] as const;
-export type ManualDebtEntryKind = (typeof MANUAL_DEBT_ENTRY_KINDS)[number];
+/**
+ * `POST /debt-entries` 接受的種類（修訂 1，決策 46、49）。
+ *
+ * 還款只有一種 `REPAYMENT`：後端依寫入當下的往來餘額，存成 `COLLECT`（對方還我）或
+ * `REPAY`（我還對方）。方向是業務規則，所以前端不能直接送 `COLLECT`／`REPAY`。
+ * `PAID_FOR_ME` 畫面上暫時拿掉，之後與代墊一起設計；API 先保留。
+ */
+export const CREATE_DEBT_ENTRY_KINDS = ['LEND', 'BORROW', 'REPAYMENT', 'PAID_FOR_ME'] as const;
+export type CreateDebtEntryKind = (typeof CREATE_DEBT_ENTRY_KINDS)[number];
 
 /** 可以帶 `settle: true`（以此結清）的種類：只有還款。 */
-export const SETTLEABLE_DEBT_ENTRY_KINDS = ['COLLECT', 'REPAY'] as const;
+export const SETTLEABLE_DEBT_ENTRY_KINDS = ['REPAYMENT'] as const;
 
 /** 往來對象。 */
 export interface Counterparty {
@@ -81,8 +81,12 @@ export interface DebtEntryRecordTarget {
 export interface CreateDebtEntryRequest {
   /** 既有對象用 `{ id }`；新對象用 `{ name }`（名字對得上既有對象時就用那一個）。 */
   counterparty: { id: string } | { name: string };
-  kind: ManualDebtEntryKind;
-  /** 正整數。`delta` 的正負號由 `kind` 決定。 */
+  kind: CreateDebtEntryKind;
+  /**
+   * 正整數。`delta` 的正負號由 `kind` 決定；`REPAYMENT` 由目前餘額決定。
+   * `REPAYMENT` 在往來餘額為 0 時回 409 `NOTHING_TO_REPAY`；沒帶 `settle` 又超過欠款時回
+   * 409 `REPAYMENT_EXCEEDS_BALANCE`。
+   */
   amount: number;
   /** ISO 8601。 */
   date: string;
@@ -94,7 +98,7 @@ export interface CreateDebtEntryRequest {
   record: DebtEntryRecordTarget | null;
   /** `PAID_FOR_ME` 必填，須為該帳本的支出分類；其他種類不可帶。 */
   categoryId?: string;
-  /** 以此結清（決策 38）。只有 `COLLECT`、`REPAY` 可以帶。 */
+  /** 以此結清（決策 38）。只有 `REPAYMENT` 可以帶；帶了就不受「不能超過欠款」限制。 */
   settle?: boolean;
 }
 
