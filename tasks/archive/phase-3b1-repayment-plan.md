@@ -75,4 +75,6 @@ A1 shared 契約 ──► A2 後端規則（純函式＋單元測試） ──�
 
 ## 實作紀錄
 
-（實作時補）
+- **結清差額的排序**（計畫外，範圍內解掉）：`createdAt` 只到毫秒，還款與結清差額在同一個資料庫交易裡連寫，偶爾落在同一毫秒，SC-L13 的順序就不固定（加鎖後跑 e2e 時出現一次）。改成結清差額的 `createdAt` 明確設為還款那筆加 1 毫秒。不改 schema、不改 API。
+- **鎖的驗證**：暫時拿掉 `lockCounterparty` 跑 SC-L21，3 筆同時送出有 2 筆成功（測試失敗）；加回後通過。證明這條測試確實測得到鎖。
+- **型別命名**：shared 的 `MANUAL_DEBT_ENTRY_KINDS`／`ManualDebtEntryKind` 改名為 `CREATE_DEBT_ENTRY_KINDS`／`CreateDebtEntryKind`（語意是「`POST` 接受的種類」）。後端另有 `RecordedDebtEntryKind` 表示存下來的 5 種。

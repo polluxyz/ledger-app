@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import type { LedgerSummary, ManualDebtEntryKind, CreateDebtEntryRequest } from '@ledger/shared';
+import type { CreateDebtEntryKind, CreateDebtEntryRequest, LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatAmount, formatMoney, toDateInputValue } from '../../lib/format';
 import { useAccounts } from '../accounts/use-accounts';
-import { useCategories } from '../categories/use-categories';
 import { CounterpartyPicker, findCounterparty } from './CounterpartyPicker';
 import { useCounterparties, useCreateDebtEntry } from './use-debts';
 import styles from './DebtEntryForm.module.css';
@@ -17,23 +16,22 @@ interface DebtEntryFormProps {
   initialCounterpartyName?: string;
 }
 
-const KIND_OPTIONS: { value: ManualDebtEntryKind; label: string }[] = [
+type DebtEntryFormKind = Exclude<CreateDebtEntryKind, 'PAID_FOR_ME'>;
+
+const KIND_OPTIONS: { value: DebtEntryFormKind; label: string }[] = [
   { value: 'LEND', label: '借出' },
   { value: 'BORROW', label: '借入' },
-  { value: 'COLLECT', label: '對方還我' },
-  { value: 'REPAY', label: '我還對方' },
-  { value: 'PAID_FOR_ME', label: '對方幫我付' },
+  { value: 'REPAYMENT', label: '還款' },
 ];
 
-const ACCOUNT_LABELS: Record<Exclude<ManualDebtEntryKind, 'PAID_FOR_ME'>, string> = {
+const ACCOUNT_LABELS: Record<DebtEntryFormKind, string> = {
   LEND: '從哪個帳戶借出',
   BORROW: '借到的錢進哪個帳戶',
-  COLLECT: '收進哪個帳戶',
-  REPAY: '從哪個帳戶付出',
+  REPAYMENT: '收進哪個帳戶',
 };
 
 /**
- * 借還分頁負責收集一筆往來紀錄需要的輸入，帳戶與分類選項仍由各自的 API hooks 提供。
+ * 借還分頁負責收集一筆往來紀錄需要的輸入，帳戶與對象餘額仍由各自的 API hooks 提供。
  * 只有送出前的餘額預覽依 W16 在畫面上試算；紀錄成功後餘額以伺服器回應為準。
  */
 export function DebtEntryForm({
@@ -41,12 +39,11 @@ export function DebtEntryForm({
   amountFieldId,
   initialCounterpartyName = '',
 }: DebtEntryFormProps) {
-  const [kind, setKind] = useState<ManualDebtEntryKind>('LEND');
+  const [kind, setKind] = useState<DebtEntryFormKind>('LEND');
   const [counterpartyName, setCounterpartyName] = useState(initialCounterpartyName);
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => toDateInputValue());
   const [accountId, setAccountId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
   const [note, setNote] = useState('');
   const [doNotRecord, setDoNotRecord] = useState(false);
   const [settle, setSettle] = useState(false);
@@ -54,23 +51,49 @@ export function DebtEntryForm({
   const counterpartiesQuery = useCounterparties({ limit: 100 });
   const counterparties = counterpartiesQuery.data?.items ?? [];
   const accounts = useAccounts();
-  const categories = useCategories(ledger.id, 'EXPENSE');
   const createEntry = useCreateDebtEntry();
 
   const normalizedName = counterpartyName.trim();
   const counterparty = findCounterparty(counterpartyName, counterparties);
-  const isPaidForMe = kind === 'PAID_FOR_ME';
-  const canSettle = kind === 'COLLECT' || kind === 'REPAY';
-  const showAccountField = ledger.tracksBalance && !isPaidForMe;
+  const repaymentAvailable = Boolean(counterparty && counterparty.balance !== 0);
+  const canSettle = kind === 'REPAYMENT';
+  const showAccountField = ledger.tracksBalance;
   const needsAccount = showAccountField && !doNotRecord;
   const amountNumber = Number(amount);
+  const repaymentOverage =
+    kind === 'REPAYMENT' &&
+    counterparty &&
+    Number.isFinite(amountNumber) &&
+    amountNumber > Math.abs(counterparty.balance)
+      ? amountNumber - Math.abs(counterparty.balance)
+      : null;
+  const repaymentExceedsBalance = repaymentOverage !== null && !settle;
   const submitDisabled =
     normalizedName === '' ||
     amount === '' ||
     !(amountNumber > 0) ||
     (needsAccount && accountId === '') ||
-    (isPaidForMe && categoryId === '') ||
+    (kind === 'REPAYMENT' && !repaymentAvailable) ||
+    repaymentExceedsBalance ||
     createEntry.isPending;
+
+  let repaymentHint: string | null = null;
+  if (normalizedName !== '') {
+    if (kind === 'REPAYMENT') {
+      repaymentHint =
+        counterparty && counterparty.balance > 0
+          ? `${counterparty.name}還你`
+          : counterparty && counterparty.balance < 0
+            ? `你還${counterparty.name}`
+            : '目前沒有欠款';
+    } else if (!repaymentAvailable) {
+      repaymentHint = '目前沒有欠款';
+    }
+  }
+  const accountLabel =
+    kind === 'REPAYMENT' && counterparty && counterparty.balance < 0
+      ? '從哪個帳戶付出'
+      : ACCOUNT_LABELS[kind];
 
   const kindIndex = Math.max(
     KIND_OPTIONS.findIndex((option) => option.value === kind),
@@ -81,8 +104,9 @@ export function DebtEntryForm({
   let preview: string | null = null;
   if (normalizedName !== '' && amount !== '' && Number.isFinite(amountNumber)) {
     const before = counterparty?.balance ?? 0;
-    const delta = kind === 'LEND' || kind === 'REPAY' ? amountNumber : -amountNumber;
-    const after = before + delta;
+    const delta = kind === 'LEND' ? amountNumber : -amountNumber;
+    const repaymentDelta = before > 0 ? -amountNumber : amountNumber;
+    const after = before + (kind === 'REPAYMENT' ? repaymentDelta : delta);
 
     if (canSettle && settle) {
       if (after === 0) {
@@ -92,15 +116,11 @@ export function DebtEntryForm({
         const sign = difference < 0 ? '−' : '+';
         const absoluteDifference = Math.abs(difference);
         const description =
-          kind === 'COLLECT'
-            ? difference < 0
-              ? '少收'
-              : '多收'
-            : difference > 0
-              ? '少付'
-              : '多付';
+          before > 0 ? (difference < 0 ? '少收' : '多收') : difference > 0 ? '少付' : '多付';
         preview = `記完後兩清，差額 ${sign}${formatAmount(absoluteDifference)}（${description} ${formatAmount(absoluteDifference)} 元）`;
       }
+    } else if (repaymentExceedsBalance && repaymentOverage !== null) {
+      preview = `超過欠款 ${formatMoney(repaymentOverage)}。要兩清請勾『以此結清』，或把多出的部分記成${before > 0 ? '借入' : '借出'}`;
     } else if (after === 0) {
       preview = '記完後：兩清';
     } else if (after > 0) {
@@ -110,11 +130,26 @@ export function DebtEntryForm({
     }
   }
 
-  function handleKindChange(nextKind: ManualDebtEntryKind) {
+  function handleKindChange(nextKind: DebtEntryFormKind) {
     setKind(nextKind);
-    // 結清與「不記入帳本」只適用部分種類；切換時清掉，避免隱藏的勾選影響下一筆。
+    // 結清只適用還款；切換種類時清掉，避免勾選套用到下一筆。
     setSettle(false);
-    setDoNotRecord(false);
+  }
+
+  function handleCounterpartyChange(nextName: string) {
+    setCounterpartyName(nextName);
+    const nextCounterparty = findCounterparty(nextName, counterparties);
+    if (kind === 'REPAYMENT' && (nextName.trim() === '' || nextCounterparty?.balance === 0)) {
+      setKind('LEND');
+      setSettle(false);
+    }
+  }
+
+  function handleCounterpartyBlur() {
+    if (kind === 'REPAYMENT' && !repaymentAvailable) {
+      setKind('LEND');
+      setSettle(false);
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -132,18 +167,21 @@ export function DebtEntryForm({
         ? null
         : {
             ledgerId: ledger.id,
-            ...(kind !== 'PAID_FOR_ME' && ledger.tracksBalance ? { accountId } : {}),
+            ...(ledger.tracksBalance ? { accountId } : {}),
           },
       ...(note === '' ? {} : { note }),
-      ...(isPaidForMe ? { categoryId } : {}),
       ...(canSettle && settle ? { settle: true } : {}),
     };
 
     createEntry.mutate(request, {
-      onSuccess: () => {
+      onSuccess: (response) => {
         // 一個對象常會連續記多筆；保留對象與種類，只清掉每筆通常不同的內容。
         setAmount('');
         setNote('');
+        if (kind === 'REPAYMENT' && response.counterparty.balance === 0) {
+          setKind('LEND');
+          setSettle(false);
+        }
       },
     });
   }
@@ -152,11 +190,13 @@ export function DebtEntryForm({
     <form className={styles.form} onSubmit={handleSubmit} noValidate>
       <FormError error={createEntry.error} />
 
-      <CounterpartyPicker
-        value={counterpartyName}
-        onChange={setCounterpartyName}
-        counterparties={counterparties}
-      />
+      <div onBlur={handleCounterpartyBlur}>
+        <CounterpartyPicker
+          value={counterpartyName}
+          onChange={handleCounterpartyChange}
+          counterparties={counterparties}
+        />
+      </div>
 
       <div className={styles.types} role="group" aria-label="往來種類">
         <span className={styles.thumbTrack} aria-hidden="true">
@@ -174,12 +214,20 @@ export function DebtEntryForm({
             type="button"
             className={styles.type}
             aria-pressed={kind === option.value}
+            aria-label={option.label}
+            disabled={option.value === 'REPAYMENT' && !repaymentAvailable}
             onClick={() => handleKindChange(option.value)}
           >
             {option.label}
           </button>
         ))}
       </div>
+
+      {repaymentHint && (
+        <p className={styles.repaymentHint} role="status">
+          {repaymentHint}
+        </p>
+      )}
 
       <div className={styles.amount}>
         <TextField
@@ -205,7 +253,7 @@ export function DebtEntryForm({
 
       {showAccountField && (
         <Select
-          label={ACCOUNT_LABELS[kind]}
+          label={accountLabel}
           value={accountId}
           required={!doNotRecord}
           disabled={doNotRecord}
@@ -220,22 +268,6 @@ export function DebtEntryForm({
         </Select>
       )}
 
-      {isPaidForMe && (
-        <Select
-          label="分類"
-          value={categoryId}
-          required
-          onChange={(event) => setCategoryId(event.target.value)}
-        >
-          <option value="">請選擇</option>
-          {categories.data?.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </Select>
-      )}
-
       <TextField
         label="備註（選填）"
         value={note}
@@ -243,16 +275,14 @@ export function DebtEntryForm({
         onChange={(event) => setNote(event.target.value)}
       />
 
-      {!isPaidForMe && (
-        <label className={styles.toggle}>
-          <input
-            type="checkbox"
-            checked={doNotRecord}
-            onChange={(event) => setDoNotRecord(event.target.checked)}
-          />
-          不記入帳本
-        </label>
-      )}
+      <label className={styles.toggle}>
+        <input
+          type="checkbox"
+          checked={doNotRecord}
+          onChange={(event) => setDoNotRecord(event.target.checked)}
+        />
+        不記入帳本
+      </label>
 
       {canSettle && (
         <label className={styles.toggle}>

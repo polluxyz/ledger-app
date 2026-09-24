@@ -8,7 +8,8 @@ import { newTransactionForm, openNewTransaction, openTransactions, transactionRo
  *
  * 元件測試把 API 整個 mock 掉，證不出兩件最要緊的事：**帳戶餘額真的跟著變**，以及
  * **往來餘額、結清差額、`balanceAfter` 真的是後端算的**。這裡走真的後端，一條主線依序驗
- * SC-W20 → W26，另一條驗代付（SC-W23）與右側欄保留（SC-W27）。
+ * SC-W20 → W26，另一條驗修訂 1 的還款（SC-W31～W34）與右側欄保留（SC-W27）。
+ * 「對方幫我付」已從畫面拿掉（W20），代付的顯示改由元件測試驗。
  *
  * 餘額一律用 API 讀：交易頁上沒有帳戶餘額，繞去首頁會整頁重載、清掉快取，反而驗不到畫面的更新。
  */
@@ -81,8 +82,9 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 9);
 
-  // SC-W22：對方還我 5 並以此結清 → 差 4 元算了。
-  await fill(form, '小明', '對方還我', 5, { account: '現金', settle: true });
+  // SC-W22（修訂 1）：還款 5 並以此結清 → 差 4 元算了。方向由目前餘額決定：小明欠我，所以是收錢。
+  await fill(form, '小明', '還款', 5, { account: '現金', settle: true });
+  await expect(form.getByText('小明還你')).toBeVisible();
   await expect(form.getByText('記完後兩清，差額 −4（少收 4 元）')).toBeVisible();
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 4);
@@ -132,7 +134,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
   await expect.poll(() => cash(request, userA.token)).toBe(before - 34);
 });
 
-test('對方幫我付：記成我的支出、不扣帳戶、明細看得到代付的人', async ({
+test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款要結清', async ({
   signedInPage: page,
   userA,
   request,
@@ -140,19 +142,36 @@ test('對方幫我付：記成我的支出、不扣帳戶、明細看得到代�
   const before = await cash(request, userA.token);
   await openTransactions(page);
   const form = await openDebtTab(page);
+  const kinds = form.getByRole('group', { name: '往來種類' });
 
-  // SC-W23
-  await fill(form, '小華', '對方幫我付', 400);
-  await expect(form.getByRole('combobox', { name: /帳戶/ })).toHaveCount(0);
-  await form.getByLabel('分類').selectOption({ index: 1 });
-  await expect(form.getByText('記完後：你欠小華 $400')).toBeVisible();
+  // SC-W31：只有 3 個種類。
+  await expect(kinds.getByRole('button')).toHaveText(['借出', '借入', '還款']);
+
+  // SC-W33：新對象沒有欠款，還款停用。
+  await form.getByLabel('對象').fill('小華');
+  await expect(kinds.getByRole('button', { name: '還款' })).toBeDisabled();
+  await expect(form.getByText('目前沒有欠款')).toBeVisible();
+
+  // 向小華借 400 → 我欠小華。
+  await fill(form, '小華', '借入', 400, { account: '現金' });
   await form.getByRole('button', { name: '新增' }).click();
+  await expect.poll(() => cash(request, userA.token)).toBe(before + 400);
 
-  await expect(transactionRow(page, '小華代付')).toBeVisible();
-  expect(await cash(request, userA.token)).toBe(before);
+  // SC-W32：我欠對方時，還款是「你還小華」、從帳戶付出。
+  await fill(form, '小華', '還款', 450);
+  await expect(form.getByText('你還小華')).toBeVisible();
+  await form.getByRole('combobox', { name: '從哪個帳戶付出' }).selectOption({ label: '現金' });
+
+  // SC-W34：超過欠款又沒勾結清 → 提示並停用送出；勾了結清就能送，差額 +50（少付 50 元）。
+  await expect(form.getByText(/超過欠款 \$50/)).toBeVisible();
+  await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
+  await fill(form, '小華', '還款', 350, { settle: true });
+  await expect(form.getByText('記完後兩清，差額 +50（少付 50 元）')).toBeVisible();
+  await form.getByRole('button', { name: '新增' }).click();
+  await expect.poll(() => cash(request, userA.token)).toBe(before + 50);
 
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
-  await expect(page.getByRole('button', { name: /小華.*我欠 \$400/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /小華.*兩清/ })).toBeVisible();
 
   // 換到別的頁面再回來，右側欄照 2i 的規則是關的（SC-W27 後半、SC-44）。
   await page
