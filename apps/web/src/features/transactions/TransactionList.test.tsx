@@ -45,7 +45,7 @@ describe('TransactionList', () => {
       account,
       toAccount: null,
       creator,
-      debtId: null,
+      debt: null,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };
@@ -179,146 +179,80 @@ describe('TransactionList', () => {
     expect(onEdit).toHaveBeenCalledWith(transactions[0]);
   });
 
-  /**
-   * 借還帳（3b spec §7）產生的 4 種交易，在一般交易端點是唯讀的——後端改與刪
-   * 都回 409 `DEBT_TRANSACTION_READ_ONLY`。這一段釘住三件事：
-   *
-   * 1. **正負號**看的是錢對帳戶的方向，不是收支：借出、償還為 `-`，借入、收回為 `+`。
-   * 2. **列上的名稱**是型別的中文名。這些交易沒有分類，舊邏輯會一律寫成「轉帳」。
-   * 3. **沒有編輯與刪除的入口**：兩顆鈕不渲染，整列也不開編輯面板。
-   *
-   * 每個案例只渲染那一筆，斷言才不必先從 5 列裡把它挑出來。
-   */
-  describe('debt transactions are read-only here', () => {
-    const debtRows = [
-      { type: 'LEND', label: '借出', amount: 1000, amountText: '-$1,000' },
-      { type: 'BORROW', label: '借入', amount: 2000, amountText: '+$2,000' },
-      { type: 'COLLECT', label: '收回', amount: 300, amountText: '+$300' },
-      { type: 'REPAY', label: '償還', amount: 400, amountText: '-$400' },
-    ] as const;
+  describe('entries linked to a counterparty', () => {
+    const debt = {
+      entryId: 'entry-1',
+      counterpartyId: 'person-1',
+      counterpartyName: '小明',
+    };
 
-    function renderDebtRow(type: Transaction['type'], amount: number) {
-      const onEdit = vi.fn();
-      const onRemove = vi.fn();
-      render(
-        <TransactionList
-          transactions={[
-            makeTransaction({ id: 'txn-debt', type, amount, category: null, debtId: 'debt-1' }),
-          ]}
-          isLoading={false}
-          error={null}
-          onEdit={onEdit}
-          onRemove={onRemove}
-        />,
-      );
-      return { onEdit, onRemove };
-    }
-
-    it.each(debtRows)(
-      'shows $label as $amountText with no edit or delete button',
-      async ({ type, label, amount, amountText }) => {
-        const user = userEvent.setup();
-        const { onEdit, onRemove } = renderDebtRow(type, amount);
-
-        expect(screen.getByText(label)).toBeInTheDocument();
-        // 沒有分類就寫「轉帳」是舊邏輯，借出的錢說成換帳戶是誤導。
-        expect(screen.queryByText('轉帳')).not.toBeInTheDocument();
-        // 既不是支出也不是收入，沿用轉帳的中性色。
-        expect(screen.getByText(amountText)).toHaveClass(cssClass('transfer'));
-
-        expect(screen.queryByRole('button', { name: /^編輯/ })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
-
-        // 整列可點是一般交易的規則（D17），借還交易點了不該有任何反應。
-        await user.click(screen.getByText(label));
-        expect(onEdit).not.toHaveBeenCalled();
-        expect(onRemove).not.toHaveBeenCalled();
-      },
-    );
-
-    it('calls onOpenDebt when clicking a debt row that has debtId and onOpenDebt is provided', async () => {
+    it('shows a counterparty name on debt transactions and opens its ledger without a delete action', async () => {
       const user = userEvent.setup();
-      const onOpenDebt = vi.fn();
-      render(
-        <TransactionList
-          transactions={[
-            makeTransaction({
-              id: 'txn-debt-1',
-              type: 'LEND',
-              amount: 1000,
-              category: null,
-              debtId: 'debt-1',
-            }),
-          ]}
-          isLoading={false}
-          error={null}
-          onEdit={vi.fn()}
-          onRemove={vi.fn()}
-          onOpenDebt={onOpenDebt}
-        />,
-      );
+      const onOpenCounterparty = vi.fn();
+      const transaction = makeTransaction({
+        id: 'txn-lend',
+        type: 'LEND',
+        amount: 1000,
+        category: null,
+        debt,
+      });
+      renderList({ transactions: [transaction], onOpenCounterparty });
 
-      const debtRow = screen.getByRole('listitem');
-      expect(debtRow).toHaveClass(cssClass('clickable'));
+      const listRow = row(0);
+      expect(screen.getByText('借出 · 小明')).toBeInTheDocument();
+      expect(listRow).toHaveClass(cssClass('clickable'));
+      expect(within(listRow).getByRole('button', { name: '查看小明的借還' })).toBeInTheDocument();
+      expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByText('借出'));
-      expect(onOpenDebt).toHaveBeenCalledWith('debt-1');
+      await user.click(within(listRow).getByRole('button', { name: '查看小明的借還' }));
+      expect(onOpenCounterparty).toHaveBeenCalledWith('person-1');
     });
 
-    it('does not call onOpenDebt and does not have clickable class when debtId is null', async () => {
+    it('labels a paid expense and makes it open the counterparty ledger', async () => {
       const user = userEvent.setup();
-      const onOpenDebt = vi.fn();
-      render(
-        <TransactionList
-          transactions={[
-            makeTransaction({
-              id: 'txn-debt-null',
-              type: 'LEND',
-              amount: 1000,
-              category: null,
-              debtId: null,
-            }),
-          ]}
-          isLoading={false}
-          error={null}
-          onEdit={vi.fn()}
-          onRemove={vi.fn()}
-          onOpenDebt={onOpenDebt}
-        />,
-      );
+      const onOpenCounterparty = vi.fn();
+      renderList({
+        transactions: [
+          makeTransaction({ id: 'txn-paid', category: { id: 'cat-1', name: '餐飲' }, debt }),
+        ],
+        onOpenCounterparty,
+      });
 
-      const debtRow = screen.getByRole('listitem');
-      expect(debtRow).not.toHaveClass(cssClass('clickable'));
-
-      await user.click(screen.getByText('借出'));
-      expect(onOpenDebt).not.toHaveBeenCalled();
+      const listRow = row(0);
+      expect(screen.getByText('餐飲 · 小明代付')).toBeInTheDocument();
+      expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
+      await user.click(within(listRow).getByRole('button', { name: '查看小明的借還' }));
+      expect(onOpenCounterparty).toHaveBeenCalledWith('person-1');
     });
 
-    it('is not clickable when onOpenDebt is not provided even if debtId is present', async () => {
+    it('keeps an unlinked debt transaction unclickable and without a delete action', async () => {
       const user = userEvent.setup();
-      const onEdit = vi.fn();
-      render(
-        <TransactionList
-          transactions={[
-            makeTransaction({
-              id: 'txn-debt-1',
-              type: 'LEND',
-              amount: 1000,
-              category: null,
-              debtId: 'debt-1',
-            }),
-          ]}
-          isLoading={false}
-          error={null}
-          onEdit={onEdit}
-          onRemove={vi.fn()}
-        />,
-      );
+      const onOpenCounterparty = vi.fn();
+      renderList({
+        transactions: [
+          makeTransaction({ id: 'txn-other', type: 'LEND', category: null, debt: null }),
+        ],
+        onOpenCounterparty,
+      });
 
-      const debtRow = screen.getByRole('listitem');
-      expect(debtRow).not.toHaveClass(cssClass('clickable'));
-
+      const listRow = row(0);
+      expect(listRow).not.toHaveClass(cssClass('clickable'));
+      expect(within(listRow).queryByRole('button')).not.toBeInTheDocument();
       await user.click(screen.getByText('借出'));
+      expect(onOpenCounterparty).not.toHaveBeenCalled();
+    });
+
+    it('is not clickable without an onOpenCounterparty handler even when debt is present', async () => {
+      const onEdit = vi.fn();
+      renderList({
+        transactions: [makeTransaction({ id: 'txn-linked', type: 'LEND', category: null, debt })],
+        onEdit,
+      });
+
+      const listRow = row(0);
+      expect(listRow).not.toHaveClass(cssClass('clickable'));
+      expect(within(listRow).queryByRole('button')).not.toBeInTheDocument();
+      await userEvent.setup().click(screen.getByText('借出 · 小明'));
       expect(onEdit).not.toHaveBeenCalled();
     });
   });

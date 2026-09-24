@@ -32,19 +32,22 @@ describe('Transactions page', () => {
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
-  const debt = {
-    id: 'debt-1',
-    direction: 'LENT',
-    counterpartyName: '小明',
-    principal: 5000,
+  const counterparty = {
+    id: 'counterparty-1',
+    name: '小明',
+    balance: 5000,
+    createdAt: '2026-09-01T04:00:00.000Z',
+    updatedAt: '2026-09-01T04:00:00.000Z',
+  };
+  const debtEntry = {
+    id: 'entry-1',
+    counterpartyId: 'counterparty-1',
+    kind: 'LEND',
+    delta: 5000,
     date: '2026-09-01T04:00:00.000Z',
     note: null,
-    outstanding: 5000,
-    status: 'OPEN',
-    settlementDifference: null,
     transactionId: 'txn-debt',
-    payments: [],
-    forgivenAt: null,
+    balanceAfter: 5000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
   };
@@ -58,6 +61,7 @@ describe('Transactions page', () => {
     account: { id: account.id, name: account.name },
     toAccount: null,
     creator: { id: 'u1', name: 'Alice' },
+    debt: null,
     createdAt: '2026-08-12T04:00:00.000Z',
   };
 
@@ -86,16 +90,14 @@ describe('Transactions page', () => {
       if (url.includes('/accounts')) {
         return json([account]);
       }
-      if (url.includes('/debts/summary')) {
-        return json({
-          items: [{ counterpartyName: '小明', counterpartyUserId: null, net: 5000 }],
-        });
+      if (url.includes('/counterparties/counterparty-1/entries')) {
+        return json({ items: [debtEntry], page: 1, limit: 20, total: 1 });
       }
-      if (url.includes('/debts/debt-1')) {
-        return json(debt);
+      if (url.includes('/counterparties/counterparty-1')) {
+        return json(counterparty);
       }
-      if (url.includes('/debts')) {
-        return json({ items: [debt], page: 1, limit: 20, total: 1 });
+      if (url.includes('/counterparties')) {
+        return json({ items: [counterparty], page: 1, limit: 20, total: 1 });
       }
       return json([ledger]);
     });
@@ -194,10 +196,8 @@ describe('Transactions page', () => {
     render(<App />);
 
     expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
-    // 淨額卡片與債務列表都出來了，切換鈕停在「借還」。右側欄的新增表單之後也會
-    // 有「借還」分頁（B3），所以這顆鈕限定在主內容區找。
     expect(await screen.findByText('欠我 $5,000', undefined, WAIT)).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /借給小明/ }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /小明/ }, WAIT)).toBeInTheDocument();
     expect(page().getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
 
     // 明細那套（篩選列與交易列表）不該同時出現。
@@ -210,7 +210,7 @@ describe('Transactions page', () => {
     window.history.pushState({}, '', '/transactions?view=debts');
     render(<App />);
 
-    await screen.findByRole('button', { name: /借給小明/ }, WAIT);
+    await screen.findByRole('button', { name: /小明/ }, WAIT);
 
     await user.click(page().getByRole('button', { name: '明細' }));
 
@@ -227,12 +227,29 @@ describe('Transactions page', () => {
     window.history.pushState({}, '', '/transactions?view=debts');
     render(<App />);
 
-    const debtButton = await screen.findByRole('button', { name: /借給小明/ }, WAIT);
+    const debtButton = await screen.findByRole('button', { name: /小明/ }, WAIT);
     await user.click(debtButton);
 
-    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
-    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
-    expect(within(dialog).getByText('未清餘額')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
+    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
+    expect(within(dialog).getByText('往來紀錄')).toBeInTheDocument();
+  });
+
+  it('starts a prefilled debt entry when 記一筆 is selected in the counterparty panel', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions?view=debts');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: /小明/ }, WAIT));
+    const detail = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
+    await user.click(within(detail).getByRole('button', { name: '記一筆' }));
+
+    const form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
+    expect(within(form).getByRole('button', { name: '借還' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(form).getByLabelText('對象')).toHaveValue('小明');
   });
 
   it('opens debt detail in right panel when clicking a debt transaction in details view', async () => {
@@ -246,7 +263,11 @@ describe('Transactions page', () => {
       account: { id: account.id, name: account.name },
       toAccount: null,
       creator: { id: 'u1', name: 'Alice' },
-      debtId: 'debt-1',
+      debt: {
+        entryId: 'entry-1',
+        counterpartyId: 'counterparty-1',
+        counterpartyName: '小明',
+      },
       createdAt: '2026-09-01T04:00:00.000Z',
     };
     fetchMock.mockImplementation((url: string) => {
@@ -266,14 +287,14 @@ describe('Transactions page', () => {
       if (url.includes('/accounts')) {
         return json([account]);
       }
-      if (url.includes('/debts/summary')) {
-        return json({ items: [] });
+      if (url.includes('/counterparties/counterparty-1/entries')) {
+        return json({ items: [debtEntry], page: 1, limit: 20, total: 1 });
       }
-      if (url.includes('/debts/debt-1')) {
-        return json(debt);
+      if (url.includes('/counterparties/counterparty-1')) {
+        return json(counterparty);
       }
-      if (url.includes('/debts')) {
-        return json({ items: [debt], page: 1, limit: 20, total: 1 });
+      if (url.includes('/counterparties')) {
+        return json({ items: [counterparty], page: 1, limit: 20, total: 1 });
       }
       return json([ledger]);
     });
@@ -283,9 +304,25 @@ describe('Transactions page', () => {
     render(<App />);
 
     const item = await screen.findByRole('listitem', undefined, WAIT);
-    await user.click(within(item).getByText('借出'));
+    await user.click(within(item).getByRole('button', { name: '查看小明的借還' }));
 
-    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
-    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
+    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
+  });
+
+  it('keeps an open add panel open while switching between details and debts', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const addButton = await page().findByRole('button', { name: '新增交易' }, WAIT);
+    await user.click(addButton);
+    const addForm = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
+    const panel = addForm.closest('[data-open]');
+    expect(panel).toHaveAttribute('data-open');
+
+    await user.click(page().getByRole('button', { name: '借還' }));
+
+    expect(panel).toHaveAttribute('data-open');
+    expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
   });
 });

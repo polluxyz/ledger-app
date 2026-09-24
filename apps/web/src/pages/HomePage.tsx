@@ -296,13 +296,12 @@ function RecentBody({
         );
 
         /*
-          借還交易只能從債務端點改動，在一般交易端點是唯讀的（後端回 409
-          `DEBT_TRANSACTION_READ_ONLY`）。這一列因此不包成 `<button>`：沒有東西
-          可以開，包了就等於給鍵盤使用者一個按下去沒反應的焦點站。
+          往來產生的交易要到交易頁開啟對象往來帳；首頁摘要沒有那個入口，
+          所以借還交易與代付支出都維持純展示，避免放一顆沒有正確目的地的按鈕。
         */
         return (
           <li key={transaction.id}>
-            {isDebtTransactionType(transaction.type) ? (
+            {isDebtTransactionType(transaction.type) || transaction.debt ? (
               <div className={rowClass}>{content}</div>
             ) : (
               <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>

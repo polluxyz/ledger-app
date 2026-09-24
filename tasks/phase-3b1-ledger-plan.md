@@ -85,4 +85,16 @@ ALTER TABLE "DebtEntry" ADD CONSTRAINT "DebtEntry_transaction_by_kind" CHECK (
 
 ## 5. 實作紀錄
 
-（實作時填寫偏離與計畫外的問題。）
+### 後端（A1～A6，2026-09-24）
+
+- 與計畫一致。migration `20260924200000_replace_debts_with_ledger`：Prisma 產生的 drop / create，加上手寫的「刪除舊借還交易」與 3 條 CHECK（與 §2.6 相同）。
+- 偏離：隔離測試沒有「先寫、先看紅燈」，而是與實作同一輪寫完（實作與測試由同一人做，當輪就驗到紅綠）。
+- 計畫外：`POST /debt-entries` 的 service 方法改成 `async`，組合規則的 400 才會是被拒絕的 Promise，而不是同步丟出。
+- 驗證：api 單元測試 270 條、e2e 91 條全部通過（含繞過 service 直接寫入被 CHECK 擋下的測試）。
+
+### 畫面（B1～B5）
+
+- B1 完成：`use-debts.ts` 改成對象／往來紀錄 API，hooks 測試 7 條；錯誤訊息換成往來帳版。
+- worker：Codex `gpt-6-luna` max，W-A（表單）、W-B（檢視、往來帳、明細、右側欄保留）平行。
+- **Codex 啟動的兩個提示**（之後補進 `docs/orca-multi-agent.md` 第 1 層）：第一次在這個 repo 啟動會問「信任這個資料夾」（信任範圍是 repo 根目錄）；有新版時會問「是否更新」（選 3「Skip until next version」，不替開發者更新全域套件）。兩者答完都關掉終端機重開，避免 Orca 從歷史輸出誤判卡住。
+- `worker-start --terminal` 對 Codex 有一次只把任務貼進輸入框、沒有送出（畫面顯示 `[Pasted Content 9337 chars]`），補送一次 Enter 才開始。

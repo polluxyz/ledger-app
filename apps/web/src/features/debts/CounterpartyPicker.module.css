@@ -1,0 +1,6 @@
+/* 對象餘額是輸入時的輔助資訊，用次要文字避免搶過欄位本身。 */
+.hint {
+  margin: calc(var(--space-xs) - var(--space-md)) 0 var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

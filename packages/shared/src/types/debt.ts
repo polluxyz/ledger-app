@@ -24,7 +24,13 @@ export const DEBT_ENTRY_KINDS = [
 export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
 
 /** 使用者自己記的 5 種。`POST /debt-entries` 的 `kind` 只接受這些。 */
-export const MANUAL_DEBT_ENTRY_KINDS = ['LEND', 'BORROW', 'COLLECT', 'REPAY', 'PAID_FOR_ME'] as const;
+export const MANUAL_DEBT_ENTRY_KINDS = [
+  'LEND',
+  'BORROW',
+  'COLLECT',
+  'REPAY',
+  'PAID_FOR_ME',
+] as const;
 export type ManualDebtEntryKind = (typeof MANUAL_DEBT_ENTRY_KINDS)[number];
 
 /** 可以帶 `settle: true`（以此結清）的種類：只有還款。 */
