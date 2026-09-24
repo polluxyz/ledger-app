@@ -161,7 +161,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
           「明細／借還」的檢視切換（spec 4.2）。狀態在網址上，這裡只反映目前值。
           借還也是交易（錢進出帳戶），所以它住在交易頁，側欄不加項目（決策 W1）。
         */}
-        <div className={styles.viewSwitch}>
+        <div className={styles.viewSwitch} role="group" aria-label="檢視">
           <button
             type="button"
             className={styles.viewSwitchButton}

@@ -43,7 +43,7 @@
 | [`phase-2i-web-layout-v2.md`](specs/phase-2i-web-layout-v2.md) | 版面第二輪：側欄動畫、dashboard、交易分頁 | 已完成    |
 | [`phase-3a-friends.md`](specs/phase-3a-friends.md)             | 階段三：好友邀請、邀請連結、好友清單      | 已完成    |
 | [`phase-3b-debts.md`](specs/phase-3b-debts.md)                 | 階段三：借還帳（單邊借還、連動）          | 3b-1 完成 |
-| [`phase-3b1-web.md`](specs/phase-3b1-web.md)                   | 階段三：3b-1 的借還畫面（放在交易頁）     | 已核可    |
+| [`phase-3b1-web.md`](specs/phase-3b1-web.md)                   | 階段三：3b-1 的借還畫面（放在交易頁）     | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)           | 跨階段的安全基準                          | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
