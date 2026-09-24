@@ -288,6 +288,9 @@ model DebtPayment {
   note          String?
   /// 對應的 COLLECT / REPAY 交易。可以沒有（本金沒有交易時，還款預設也不產生）。
   transactionId String?   @unique
+  /// 「以此結清」（spec 決策 30）：記下這筆之後債務就是 SETTLED，金額可以不等於當時的未清餘額。
+  /// 一筆債務最多一筆未刪除的結清還款，由 migration 手寫的部分唯一索引保證。
+  settles       Boolean   @default(false)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
 

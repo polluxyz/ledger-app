@@ -14,7 +14,9 @@ import { assertLedgerWritable } from './debt-ledger-access';
 import {
   DEBT_INCLUDE,
   computeDebtState,
+  debtNotOpen,
   debtOverpayment,
+  hasActiveSettlement,
   loadOwnedDebt,
   paidTotal,
   principalTransactionType,
@@ -125,6 +127,8 @@ export class DebtsService {
    * 修改債務。只有送出的欄位會變；`note` 送 `null` 表示清除備註。
    *
    * 任何狀態都可以改：spec §3.2 那張表限制的是記還款與免除，那兩件事在 `DebtPaymentsService`。
+   * 唯一的例外是**以結清還款結清的債務不能改本金**（決策 30）：差額由本金算出，本金一改，
+   * 已經談定的差額就會默默變掉。要改得先刪掉那筆結清還款。送回相同的本金不算改。
    *
    * 本金改小到低於已還總額 → `409 DEBT_OVERPAYMENT`，且什麼都不寫。本金或日期變了，本金
    * 那筆交易要跟著改，否則帳戶餘額會和債務對不起來——所以連同檢查一起放在同一個
@@ -134,7 +138,13 @@ export class DebtsService {
     const row = await this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedDebt(tx, userId, debtId);
 
-      if (input.principal !== undefined && input.principal < paidTotal(existing.payments)) {
+      const newPrincipal = input.principal;
+      const principalChanges = newPrincipal !== undefined && newPrincipal !== existing.principal;
+      if (principalChanges && hasActiveSettlement(existing.payments)) {
+        throw debtNotOpen();
+      }
+      // 只在本金真的改變時檢查：結清時多收的債務，已還總額本來就大於本金。
+      if (principalChanges && newPrincipal < paidTotal(existing.payments)) {
         throw debtOverpayment();
       }
 

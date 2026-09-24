@@ -1,5 +1,6 @@
 import {
   computeDebtState,
+  hasActiveSettlement,
   loadOwnedDebt,
   paidTotal,
   paymentTransactionType,
@@ -11,41 +12,103 @@ import {
  * （決策 3），以及「讀出我的債務」一律把別人的、已刪除的、不存在的回成同一個 404。
  */
 describe('debt-state', () => {
-  const alive = (amount: number) => ({ amount, deletedAt: null });
-  const deleted = (amount: number) => ({ amount, deletedAt: new Date() });
+  const alive = (amount: number) => ({ amount, deletedAt: null, settles: false });
+  const deleted = (amount: number) => ({ amount, deletedAt: new Date(), settles: false });
+  const settling = (amount: number) => ({ amount, deletedAt: null, settles: true });
+  const lent = { direction: 'LENT' as const, forgivenAt: null };
 
   describe('computeDebtState', () => {
     it('is OPEN while something is still owed', () => {
-      expect(
-        computeDebtState({ principal: 5000, forgivenAt: null, payments: [alive(2000)] }),
-      ).toEqual({ outstanding: 3000, status: 'OPEN' });
+      expect(computeDebtState({ ...lent, principal: 5000, payments: [alive(2000)] })).toEqual({
+        outstanding: 3000,
+        status: 'OPEN',
+        settlementDifference: null,
+      });
     });
 
     it('is SETTLED once the payments add up to the principal', () => {
       expect(
-        computeDebtState({
-          principal: 5000,
-          forgivenAt: null,
-          payments: [alive(2000), alive(3000)],
-        }),
-      ).toEqual({ outstanding: 0, status: 'SETTLED' });
+        computeDebtState({ ...lent, principal: 5000, payments: [alive(2000), alive(3000)] }),
+      ).toEqual({ outstanding: 0, status: 'SETTLED', settlementDifference: null });
     });
 
     it('ignores soft-deleted payments, so deleting one reopens the debt', () => {
       expect(
-        computeDebtState({
-          principal: 5000,
-          forgivenAt: null,
-          payments: [alive(2000), deleted(3000)],
-        }),
-      ).toEqual({ outstanding: 3000, status: 'OPEN' });
+        computeDebtState({ ...lent, principal: 5000, payments: [alive(2000), deleted(3000)] }),
+      ).toEqual({ outstanding: 3000, status: 'OPEN', settlementDifference: null });
     });
 
     it('is FORGIVEN regardless of the outstanding amount', () => {
       expect(
-        computeDebtState({ principal: 5000, forgivenAt: new Date(), payments: [alive(1000)] }),
-      ).toEqual({ outstanding: 4000, status: 'FORGIVEN' });
+        computeDebtState({
+          direction: 'LENT',
+          principal: 5000,
+          forgivenAt: new Date(),
+          payments: [alive(1000)],
+        }),
+      ).toEqual({ outstanding: 4000, status: 'FORGIVEN', settlementDifference: null });
     });
+
+    /*
+     * 以此結清（決策 30）：差額的正負號從擁有者的角度看——對我有利是正數。
+     * 同樣是「少了 3 元」，借出時是少收（不利），借入時是少付（有利）。
+     */
+    describe('with a settling payment', () => {
+      it('settles a LENT debt short of the principal with a negative difference', () => {
+        expect(computeDebtState({ ...lent, principal: 93, payments: [settling(90)] })).toEqual({
+          outstanding: 0,
+          status: 'SETTLED',
+          settlementDifference: -3,
+        });
+      });
+
+      it('settles a LENT debt above the principal with a positive difference', () => {
+        expect(computeDebtState({ ...lent, principal: 93, payments: [settling(95)] })).toEqual({
+          outstanding: 0,
+          status: 'SETTLED',
+          settlementDifference: 2,
+        });
+      });
+
+      it('flips the sign for a BORROWED debt: paying less is in my favour', () => {
+        expect(
+          computeDebtState({
+            direction: 'BORROWED',
+            forgivenAt: null,
+            principal: 93,
+            payments: [settling(90)],
+          }),
+        ).toEqual({ outstanding: 0, status: 'SETTLED', settlementDifference: 3 });
+      });
+
+      it('counts earlier partial payments towards the difference', () => {
+        expect(
+          computeDebtState({ ...lent, principal: 5000, payments: [alive(2000), settling(2990)] }),
+        ).toEqual({ outstanding: 0, status: 'SETTLED', settlementDifference: -10 });
+      });
+
+      it('reports a zero difference when the settling payment matches exactly', () => {
+        expect(computeDebtState({ ...lent, principal: 93, payments: [settling(93)] })).toEqual({
+          outstanding: 0,
+          status: 'SETTLED',
+          settlementDifference: 0,
+        });
+      });
+
+      it('reopens the debt once the settling payment is soft-deleted', () => {
+        const removed = { ...settling(90), deletedAt: new Date() };
+        expect(computeDebtState({ ...lent, principal: 93, payments: [removed] })).toEqual({
+          outstanding: 93,
+          status: 'OPEN',
+          settlementDifference: null,
+        });
+      });
+    });
+  });
+
+  it('hasActiveSettlement ignores soft-deleted settling payments', () => {
+    expect(hasActiveSettlement([alive(10), settling(5)])).toBe(true);
+    expect(hasActiveSettlement([alive(10), { ...settling(5), deletedAt: new Date() }])).toBe(false);
   });
 
   it('paidTotal skips soft-deleted payments', () => {

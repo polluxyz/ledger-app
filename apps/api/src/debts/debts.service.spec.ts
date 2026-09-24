@@ -27,6 +27,7 @@ describe('DebtsService', () => {
       date: new Date('2026-09-10T00:00:00.000Z'),
       note: null as string | null,
       transactionId: null as string | null,
+      settles: false,
       deletedAt: null as Date | null,
       createdAt: new Date('2026-09-10T00:00:00.000Z'),
       ...over,
@@ -234,6 +235,35 @@ describe('DebtsService', () => {
       expect((error as AppException).errorCode).toBe('DEBT_OVERPAYMENT');
       expect(prisma.debt.update).not.toHaveBeenCalled();
       expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+    });
+
+    // 決策 30：結清之後差額由本金算出，本金一改差額就默默跟著變，所以擋下。
+    it('refuses to change the principal once a settling payment exists', async () => {
+      prisma.debt.findFirst.mockResolvedValue(
+        debtRow({
+          transactionId: 'tx-1',
+          principal: 93,
+          payments: [paymentRow({ amount: 95, settles: true })],
+        }),
+      );
+
+      await expect(service.update(OWNER, DEBT_ID, { principal: 100 })).rejects.toMatchObject({
+        status: 409,
+        errorCode: 'DEBT_NOT_OPEN',
+      });
+      expect(prisma.debt.update).not.toHaveBeenCalled();
+      expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+    });
+
+    it('still lets a settled-with-difference debt change its note', async () => {
+      const row = debtRow({ principal: 93, payments: [paymentRow({ amount: 95, settles: true })] });
+      prisma.debt.findFirst.mockResolvedValue(row);
+      prisma.debt.update.mockResolvedValue(row);
+
+      // 送出與原本相同的本金也不算「改本金」：Web 的編輯視窗會把整張表單送回來。
+      await service.update(OWNER, DEBT_ID, { note: '算了', principal: 93 });
+
+      expect(prisma.debt.update).toHaveBeenCalled();
     });
 
     it('moves the principal transaction when the principal or the date changes', async () => {
