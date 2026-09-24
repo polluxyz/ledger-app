@@ -124,7 +124,10 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - `-c model_reasoning_effort=max`：`-c` 的值先當 TOML 解析，失敗就當字串，所以 `max` 不必加引號。
 - 旗標會跳過所有許可確認與沙箱，和 Antigravity 的 `--dangerously-skip-permissions` 同一類，代價與對策也相同：Task spec 寫清楚邊界，驗收看完整的 `git status` 與 `git diff`。
 - ⚠️ **Codex 讀的指引檔是 `AGENTS.md`，不是 `CLAUDE.md`**。這個 repo 刻意沒有 `AGENTS.md`（會蓋掉 Pi 讀的 `CLAUDE.md`，見 §5），所以派給 Codex 的 Task spec 開頭一定要寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。
-- ⚠️ **尚未實際派過工**。第一次派工時把踩到的坑補在這裡。
+- **實測（2026-09-24，3b-1 往來帳版的 W-A、W-B）**：兩個 worker 平行，產出品質好，回報與協調者重跑的結果一致。踩到的坑：
+  1. 第一次在某個 repo 啟動會問「信任這個資料夾」（信任範圍是 repo 根目錄）；有新版時會問「是否更新」。答完（更新選 3「Skip until next version」，不替開發者更新全域套件）都要**關掉終端機重開**，否則提示文字留在歷史裡，Orca 會誤判卡住（`codex-trust-workspace`、`codex-update-prompt`）。
+  2. `worker-start --terminal` 有時只把任務貼進輸入框、沒有送出（畫面顯示 `[Pasted Content N chars]`）。派工後讀一次畫面，看到這行就補送 `orca terminal send --terminal <handle> --enter`。
+  3. Task spec 若叫它跑根目錄 `pnpm format`，平行時會改到別的 worker 的檔案。改成只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`。
 
 ### 第 3 層：Antigravity
 

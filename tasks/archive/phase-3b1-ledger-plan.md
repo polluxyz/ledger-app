@@ -98,3 +98,7 @@ ALTER TABLE "DebtEntry" ADD CONSTRAINT "DebtEntry_transaction_by_kind" CHECK (
 - worker：Codex `gpt-6-luna` max，W-A（表單）、W-B（檢視、往來帳、明細、右側欄保留）平行。
 - **Codex 啟動的兩個提示**（之後補進 `docs/orca-multi-agent.md` 第 1 層）：第一次在這個 repo 啟動會問「信任這個資料夾」（信任範圍是 repo 根目錄）；有新版時會問「是否更新」（選 3「Skip until next version」，不替開發者更新全域套件）。兩者答完都關掉終端機重開，避免 Orca 從歷史輸出誤判卡住。
 - `worker-start --terminal` 對 Codex 有一次只把任務貼進輸入框、沒有送出（畫面顯示 `[Pasted Content 9337 chars]`），補送一次 Enter 才開始。
+- W-A 收尾時問：根目錄 `pnpm format` 會動到另一個 worker 的檔案，怎麼辦？回覆：只對自己的檔案跑 `prettier --write`。
+- 驗收：兩個 worker 的回報與實際重跑一致（web 單元 62 檔 441 條、lint、typecheck 全過）。唯一的格式問題在協調者自己寫的 `packages/shared/src/types/debt.ts`。W-B 的右側欄保留另外多做一步：換頁時明確收起，讓「上一頁回到原頁」也不會自己打開，比原本嚴格，接受。
+- B5：`e2e/debts.spec.ts` 改寫成往來帳版 2 條（主線 SC-W20～W28、代付 SC-W23 與 SC-W27 後半）。寫的時候發現：右側欄關著時內容仍在 DOM、只是 `inert`，所以「欄位還在」證明不了沒收起，改成直接驗 `inert`（與 layout 的 SC-44 同一種判斷）。web e2e 全部 40 條通過。
+- SC-W29：`features/debts` 只有 `DebtEntryForm` 的預覽有加減。
