@@ -15,8 +15,12 @@ import { TextField } from '../../components/TextField';
 import { toDateInputValue } from '../../lib/format';
 import { useAccounts } from '../accounts/use-accounts';
 import { useCategories } from '../categories/use-categories';
+import { DebtEntryForm } from '../debts/DebtEntryForm';
 import { useCreateTransaction, useUpdateTransaction } from './use-transactions';
 import styles from './TransactionForm.module.css';
+
+/** 新增模式的分段控制多一格「借還」：它不是交易型別，只是改渲染 DebtEntryForm。 */
+type EntryTab = ManualTransactionType | 'DEBT';
 
 interface TransactionFormProps {
   ledger: LedgerSummary;
@@ -31,7 +35,7 @@ interface TransactionFormProps {
   onCancel?: () => void;
   /**
    * 金額欄位的 `id`。右側欄要在「＋ 新增交易」被按下時把焦點送到金額欄
-   * （spec 2i SC-35.3），但 `TextField` 不轉送 ref，所以改用呼叫端指定的 id
+   * （spec 2i SC-35.3），但 `TextField` 不轉發 ref，所以改用呼叫端指定的 id
    * 去 `document.getElementById` 找它。不傳就沿用 `useId` 產生的值。
    */
   amountFieldId?: string;
@@ -62,6 +66,12 @@ interface TransactionFormProps {
  * - **非連動帳本**：帳戶不可給，給了就是 400 `ACCOUNT_NOT_ALLOWED`。
  *
  * 所以欄位不能只是「停用」，必須整個不存在，送出的 body 也不能帶 `accountId`。
+ *
+ * ## 新增模式的第 4 格「借還」（3b-1 · W2）
+ *
+ * 選了「借還」，下面的欄位換成 `DebtEntryForm`（借出／借入／還款）。借還交易
+ * 不能進編輯表單（後端 409 `DEBT_TRANSACTION_READ_ONLY`），所以那一格只在
+ * 新增模式出現。
  */
 export function TransactionForm({
   ledger,
@@ -81,7 +91,7 @@ export function TransactionForm({
    * 這裡仍然問一次而不是直接斷言型別：斷言只是把編譯器噤聲，真有借還交易被送
    * 進來時會一路送出一個後端必拒的 body；退回「支出」至少是個講得通的狀態。
    */
-  const [type, setType] = useState<ManualTransactionType>(
+  const [tab, setTab] = useState<EntryTab>(
     transaction && !isDebtTransactionType(transaction.type) ? transaction.type : 'EXPENSE',
   );
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '');
@@ -92,6 +102,14 @@ export function TransactionForm({
   const [accountId, setAccountId] = useState(transaction?.account?.id ?? '');
   const [toAccountId, setToAccountId] = useState(transaction?.toAccount?.id ?? '');
   const [note, setNote] = useState(transaction?.note ?? '');
+
+  /**
+   * 「借還」分頁選中時，交易欄位整個不渲染、改渲染 `DebtEntryForm`。對交易
+   * 欄位來說，型別仍是原本的 3 種（借還時借用 `EXPENSE`——那些欄位根本不會
+   * 畫出來，拿到的資料不會被用到，與轉帳借用分類的寫法同一個道理）。
+   */
+  const isDebtTab = !isEdit && tab === 'DEBT';
+  const type: ManualTransactionType = tab === 'DEBT' ? 'EXPENSE' : tab;
 
   /**
    * 轉帳沒有分類，但 hook 需要一個型別。這時沿用支出即可——分類欄位根本不會渲染，
@@ -150,28 +168,30 @@ export function TransactionForm({
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
 
   /**
-   * 三選一的選項清單。轉帳不一定畫得出來（見 `showTransferButton`），所以清單是
-   * 動態的——滑動方塊的寬度與位移都依這份清單算，少一格時位置才不會算歪。
+   * 分段控制的選項清單。轉帳不一定畫得出來（見 `showTransferButton`）、借還只在
+   * 新增模式存在，所以清單是動態的——滑動方塊的寬度與位移都依這份清單算，
+   * 少一格時位置才不會算歪。
    */
-  const typeOptions: { value: ManualTransactionType; label: string }[] = [
+  const typeOptions: { value: EntryTab; label: string }[] = [
     { value: 'EXPENSE', label: '支出' },
     { value: 'INCOME', label: '收入' },
     ...(showTransferButton ? [{ value: 'TRANSFER' as const, label: '轉帳' }] : []),
+    ...(!isEdit ? [{ value: 'DEBT' as const, label: '借還' }] : []),
   ];
   // 找不到（理論上不會）就當第一格，方塊至少停在一個合理的位置。
   const selectedTypeIndex = Math.max(
-    typeOptions.findIndex((option) => option.value === type),
+    typeOptions.findIndex((option) => option.value === tab),
     0,
   );
 
   /**
-   * 切換型別時一併清掉已選分類——換了型別就是換一組分類，先前選的多半已不在清單中。
+   * 切換分頁時一併清掉已選分類——換了型別就是換一組分類，先前選的多半已不在清單中。
    *
    * 刻意在事件處理裡一次改完，而非用 useEffect 事後補救：後者會多觸發一輪
    * 渲染（cascading render），React 也不建議這樣用。
    */
-  function handleTypeChange(nextType: ManualTransactionType) {
-    setType(nextType);
+  function handleTypeChange(nextType: EntryTab) {
+    setTab(nextType);
     setCategoryId('');
   }
 
@@ -237,150 +257,182 @@ export function TransactionForm({
     );
   }
 
+  /* 分段控制兩種模式都畫，差別只在選項清單（編輯模式沒有「借還」那格）。 */
+  const segmented = (
+    <div className={styles.types}>
+      {/*
+        滑動的選中方塊（SC-43.2）。它疊在按鈕上方、不吃點擊，寬度是一格、
+        位移是「第幾格 × 100%」——按鈕本身不再各自畫底色，切換時方塊滑過去。
+        寬度與位移依**實際畫出來的按鈕數**算，所以沒有轉帳鈕時也對得準。
+      */}
+      <span className={styles.thumbTrack} aria-hidden="true">
+        <span
+          className={styles.thumb}
+          style={{
+            width: `${100 / typeOptions.length}%`,
+            transform: `translateX(${selectedTypeIndex * 100}%)`,
+          }}
+        />
+      </span>
+      {typeOptions.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={styles.type}
+          aria-pressed={tab === option.value}
+          onClick={() => handleTypeChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  /* 欄位與動作鈕在兩種模式長得一樣，抽出來讓兩個 return 共用。 */
+  const transactionFields = (
+    <>
+      {/* 金額自成一列並放大：它是這張表單唯一非填不可的數字，要一眼看到。 */}
+      <div className={styles.amount}>
+        <TextField
+          label="金額"
+          id={amountFieldId}
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
+          value={amount}
+          required
+          onChange={(event) => setAmount(event.target.value)}
+        />
+      </div>
+
+      <div className={styles.row}>
+        <TextField
+          label="日期"
+          type="date"
+          value={date}
+          required
+          onChange={(event) => setDate(event.target.value)}
+        />
+        {/* 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別），欄位整個不渲染。
+            那時這一列只剩日期，auto-fit 會讓它自己撐滿。 */}
+        {type !== 'TRANSFER' && (
+          <Select
+            label="分類"
+            value={categoryId}
+            required
+            onChange={(event) => setCategoryId(event.target.value)}
+          >
+            <option value="">請選擇</option>
+            {categories.data?.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        )}
+      </div>
+
+      {/* 非連動帳本沒有帳戶欄位。停用而非移除是不夠的——後端連「帶著空值」都會
+          擋下（400 ACCOUNT_NOT_ALLOWED），而且一個停用的欄位會讓人以為
+          「應該要能選，只是現在不行」。 */}
+      {showAccountField ? (
+        <>
+          <Select
+            label={type === 'TRANSFER' ? '轉出帳戶' : '帳戶'}
+            value={selectedAccountId}
+            required
+            onChange={(event) => setAccountId(event.target.value)}
+          >
+            {accounts.data?.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </Select>
+          {type === 'TRANSFER' &&
+            (transferBlocked ? (
+              <p className={styles.notice}>
+                轉帳需要兩個帳戶，目前只有一個。<Link to="/accounts">前往新增帳戶</Link>
+              </p>
+            ) : (
+              <Select
+                label="轉入帳戶"
+                value={selectedToAccountId}
+                required
+                onChange={(event) => setToAccountId(event.target.value)}
+              >
+                {otherAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+            ))}
+        </>
+      ) : accountLocked ? (
+        // 別人的帳戶對我是遮蔽的，改不了也顯示不了（D2）。這裡說出原因，
+        // 而不是放一個永遠停用的下拉——那會讓人以為只是暫時不能選。
+        <p className={styles.notice}>這筆記在其他成員的帳戶，帳戶無法變更。</p>
+      ) : (
+        // 記完帳餘額不會變，那是正常的。不講清楚的話，看起來像是壞了。
+        <p className={styles.notice}>這本帳本不影響你的帳戶餘額，因此不需要選擇帳戶。</p>
+      )}
+
+      <TextField
+        label="備註（選填）"
+        value={note}
+        maxLength={500}
+        onChange={(event) => setNote(event.target.value)}
+      />
+
+      {/* 編輯模式才有「取消」。新增表單常駐在面板裡，沒有東西可以取消。 */}
+      <div className={styles.actions}>
+        <Button type="submit" block disabled={pending || transferBlocked}>
+          {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
+        </Button>
+        {isEdit && onCancel && (
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            取消
+          </Button>
+        )}
+      </div>
+    </>
+  );
+
+  /*
+   * 「借還」分頁換成 DebtEntryForm，而它內部有自己的 <form>——HTML 不允許
+   * form 巢狀（內層會被瀏覽器當成前一個的結尾，送出邏輯整個錯亂）。所以新增
+   * 模式的外層不是 <form>：標題與分段控制共用，底下的內容依分頁換交易 <form>
+   * 或 DebtEntryForm。編輯模式沒有「借還」，維持原本的單一 <form>。
+   */
+  if (isEdit) {
+    return (
+      <form onSubmit={handleSubmit} noValidate>
+        <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
+          <FormError error={error} />
+          {segmented}
+          {transactionFields}
+        </fieldset>
+      </form>
+    );
+  }
+
   return (
     // 外框由放它的地方給（右側面板，或窄螢幕的卡片），表單自己不畫框。
-    <form onSubmit={handleSubmit} noValidate>
-      <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
-        {/* 編輯模式在彈窗裡，標題由彈窗負責，這裡再放一個會重複。 */}
-        {!isEdit && <legend className={styles.legend}>新增一筆交易</legend>}
-
-        <FormError error={error} />
-
-        <div className={styles.types}>
-          {/*
-            滑動的選中方塊（SC-43.2）。它疊在按鈕上方、不吃點擊，寬度是一格、
-            位移是「第幾格 × 100%」——按鈕本身不再各自畫底色，切換時方塊滑過去。
-            寬度與位移依**實際畫出來的按鈕數**算，所以沒有轉帳鈕時也對得準。
-          */}
-          <span className={styles.thumbTrack} aria-hidden="true">
-            <span
-              className={styles.thumb}
-              style={{
-                width: `${100 / typeOptions.length}%`,
-                transform: `translateX(${selectedTypeIndex * 100}%)`,
-              }}
-            />
-          </span>
-          {typeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={styles.type}
-              aria-pressed={type === option.value}
-              onClick={() => handleTypeChange(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 金額自成一列並放大：它是這張表單唯一非填不可的數字，要一眼看到。 */}
-        <div className={styles.amount}>
-          <TextField
-            label="金額"
-            id={amountFieldId}
-            type="number"
-            min={1}
-            step={1}
-            inputMode="numeric"
-            value={amount}
-            required
-            onChange={(event) => setAmount(event.target.value)}
-          />
-        </div>
-
-        <div className={styles.row}>
-          <TextField
-            label="日期"
-            type="date"
-            value={date}
-            required
-            onChange={(event) => setDate(event.target.value)}
-          />
-          {/* 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別），欄位整個不渲染。
-              那時這一列只剩日期，auto-fit 會讓它自己撐滿。 */}
-          {type !== 'TRANSFER' && (
-            <Select
-              label="分類"
-              value={categoryId}
-              required
-              onChange={(event) => setCategoryId(event.target.value)}
-            >
-              <option value="">請選擇</option>
-              {categories.data?.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </div>
-
-        {/* 非連動帳本沒有帳戶欄位。停用而非移除是不夠的——後端連「帶著空值」都會
-            擋下（400 ACCOUNT_NOT_ALLOWED），而且一個停用的欄位會讓人以為
-            「應該要能選，只是現在不行」。 */}
-        {showAccountField ? (
-          <>
-            <Select
-              label={type === 'TRANSFER' ? '轉出帳戶' : '帳戶'}
-              value={selectedAccountId}
-              required
-              onChange={(event) => setAccountId(event.target.value)}
-            >
-              {accounts.data?.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-            {type === 'TRANSFER' &&
-              (transferBlocked ? (
-                <p className={styles.notice}>
-                  轉帳需要兩個帳戶，目前只有一個。<Link to="/accounts">前往新增帳戶</Link>
-                </p>
-              ) : (
-                <Select
-                  label="轉入帳戶"
-                  value={selectedToAccountId}
-                  required
-                  onChange={(event) => setToAccountId(event.target.value)}
-                >
-                  {otherAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </Select>
-              ))}
-          </>
-        ) : accountLocked ? (
-          // 別人的帳戶對我是遮蔽的，改不了也顯示不了（D2）。這裡說出原因，
-          // 而不是放一個永遠停用的下拉——那會讓人以為只是暫時不能選。
-          <p className={styles.notice}>這筆記在其他成員的帳戶，帳戶無法變更。</p>
-        ) : (
-          // 記完帳餘額不會變，那是正常的。不講清楚的話，看起來像是壞了。
-          <p className={styles.notice}>這本帳本不影響你的帳戶餘額，因此不需要選擇帳戶。</p>
-        )}
-
-        <TextField
-          label="備註（選填）"
-          value={note}
-          maxLength={500}
-          onChange={(event) => setNote(event.target.value)}
-        />
-
-        {/* 編輯模式才有「取消」。新增表單常駐在面板裡，沒有東西可以取消。 */}
-        <div className={styles.actions}>
-          <Button type="submit" block disabled={pending || transferBlocked}>
-            {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
-          </Button>
-          {isEdit && onCancel && (
-            <Button type="button" variant="secondary" onClick={onCancel}>
-              取消
-            </Button>
-          )}
-        </div>
-      </fieldset>
-    </form>
+    <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
+      <legend className={styles.legend}>新增一筆交易</legend>
+      {segmented}
+      {isDebtTab ? (
+        <DebtEntryForm ledger={ledger} amountFieldId={amountFieldId} />
+      ) : (
+        <>
+          <FormError error={error} />
+          <form onSubmit={handleSubmit} noValidate>
+            {transactionFields}
+          </form>
+        </>
+      )}
+    </fieldset>
   );
 }

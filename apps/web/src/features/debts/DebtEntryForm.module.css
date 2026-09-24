@@ -1,0 +1,111 @@
+/*
+ * 「借還」分頁表單的樣式。分段控制（.types 一組）與欄位節奏刻意與
+ * TransactionForm.module.css 相同——兩條分段控制在同一個右側欄裡出現，
+ * 長得不一樣會讓人以為是兩種不同的東西。
+ */
+
+/*
+ * 借出／借入／還款的三選一，同一條分段控制：每一顆等寬撐滿，看得出
+ * 「只能選一個」。選中的金色方塊是獨立元素（.thumb），切換時用 transform 滑過去。
+ */
+.types {
+  position: relative;
+  display: flex;
+  margin-bottom: var(--space-md);
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+/* 方塊的滑道：貼齊內距之內的整條區域，疊在按鈕下面而且不吃點擊。 */
+.thumbTrack {
+  position: absolute;
+  inset: 3px;
+  display: flex;
+  pointer-events: none;
+}
+
+/*
+ * 寬度與位移由 DebtEntryForm 用行內樣式給（格數固定是 3，仍走行內是為了與
+ * TransactionForm 的寫法一致——格數邏輯改變時兩邊一起改）。
+ */
+.thumb {
+  height: 100%;
+  border-radius: calc(var(--radius) - 2px);
+  background-color: var(--color-primary);
+  transition: transform var(--motion-panel) var(--motion-ease);
+}
+
+/* 三顆鈕自己不畫底色，只改文字顏色；高度與 Button 一致。 */
+.type {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 2.25rem;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-fade) var(--motion-ease);
+}
+
+.type:hover {
+  color: var(--color-text);
+}
+
+.type[aria-pressed='true'] {
+  color: var(--color-on-primary);
+}
+
+/* 金額是這張表單的主角，字級與字重都比其他欄位大一階。 */
+.amount input {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 勾選框列。整列文字都點得到，次要文字用 muted。 */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* 主要動作撐滿一整列。 */
+.actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.actions > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 補充說明（分頁數上限、非連動帳本、舊債）。中性色——這些是正常行為，不是錯誤。 */
+.notice {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.hint {
+  margin: calc(var(--space-xs) - var(--space-md)) 0 var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

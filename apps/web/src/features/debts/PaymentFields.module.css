@@ -1,0 +1,71 @@
+/*
+ * 還款欄位的樣式。欄位本身（金額、日期、帳戶、備註）由 TextField／Select 自帶
+ * 節奏（每個欄位 margin-bottom: --space-md），這裡只補它們沒有的：勾選框列、
+ * 欄位下的補充說明與結清預覽。
+ */
+
+/* 金額比照交易表單放大：它是這張表單唯一非填不可的數字，要一眼看到。 */
+.amount input {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  /* 等寬數字：邊打邊看的時候位數不會跳動。 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 欄位下的補充說明。往上貼半格（抵掉欄位自己的 margin），看起來像欄位的一部分。 */
+.hint {
+  margin: calc(var(--space-xs) - var(--space-md)) 0 var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 勾選框列。整列文字都點得到（label 包住 input），次要文字用 muted。 */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/*
+ * 「以此結清」勾選框與它的提示、預覽收在同一個區塊，視覺上是一組——勾了會
+ * 發生什麼事（差額預覽、必須結清才能送出）都跟著它走。
+ */
+.settle {
+  margin-bottom: var(--space-md);
+}
+
+/* .settle 裡的勾選框貼著上面的欄位，區塊自己的間距由 .settle 出。 */
+.settle .toggle {
+  margin-bottom: var(--space-xs);
+}
+
+.settle .hint {
+  margin: 0 0 var(--space-xs);
+}
+
+/*
+ * 差額預覽：中性色（--color-transfer），不是警示也不是成功——差額本身是中性
+ * 的事實（對方少還、我多付都只是敘述），等送出後由回應的數字接手。
+ */
+.preview {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-transfer);
+  font-size: var(--text-sm);
+}
+
+/* 勾了「不記入帳本」時帳戶欄的說明。用中性色——這是合法的選擇，不是錯誤。 */
+.notice {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
