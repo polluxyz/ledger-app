@@ -134,6 +134,19 @@ describe('TransactionList', () => {
     expect(screen.getByRole('button', { name: '刪除2026/08/15 的轉帳' })).toBeInTheDocument();
   });
 
+  // 開發者 2026-09-24：點整列就是編輯，鉛筆圖示是重複的入口，拿掉。但鍵盤使用者
+  // 仍要進得了編輯——入口是列的第一格（一顆沒有按鈕外觀的按鈕），按 Enter 就開。
+  it('drops the pencil icon but keeps a keyboard way into the editor', async () => {
+    const { onEdit } = renderList();
+    const user = userEvent.setup();
+
+    expect(screen.queryByTitle('編輯')).not.toBeInTheDocument();
+
+    screen.getByRole('button', { name: '編輯2026/08/16 的餐飲' }).focus();
+    await user.keyboard('{Enter}');
+    expect(onEdit).toHaveBeenCalledWith(transactions[0]);
+  });
+
   it('colours each of the three types on its own', () => {
     renderList();
 
