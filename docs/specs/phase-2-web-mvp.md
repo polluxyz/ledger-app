@@ -238,8 +238,8 @@ apps/
       見 `docs/specs/phase-2g-wrap-up.md`。**階段二到此結束。**
 - [x] **10. 2h｜視覺改版**：黑金主題、三欄工作台、深淺色切換（SC-24～SC-30）。
       見 `docs/specs/phase-2h-web-visual.md`。階段二結束後由開發者追加；已合併（PR #55）。
-- [ ] **11. 2i｜版面第二輪**：側欄動畫、使用者選單、dashboard 首頁與交易分頁、記帳頁的右側欄、中間區置中（SC-31～SC-37）。
-      見 `docs/specs/phase-2i-web-layout-v2.md`。實作完成，PR 等開發者看過畫面再合併。
+- [x] **11. 2i｜版面第二輪**：側欄動畫、使用者選單、dashboard 首頁與交易分頁、記帳頁的右側欄、中間區置中、動畫開關、新增類表單改在右側欄（SC-31～SC-44）。
+      見 `docs/specs/phase-2i-web-layout-v2.md`。已合併（PR #56、PR #58）。
 
 ### 為什麼這樣排
 

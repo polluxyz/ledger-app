@@ -1,6 +1,6 @@
 # Todo：階段二 (2i) — Web 版面第二輪
 
-> 對應：[`phase-2i-plan.md`](phase-2i-plan.md)、[`docs/specs/phase-2i-web-layout-v2.md`](../docs/specs/phase-2i-web-layout-v2.md)。
+> 對應：[`phase-2i-plan.md`](phase-2i-plan.md)、[`docs/specs/phase-2i-web-layout-v2.md`](../../docs/specs/phase-2i-web-layout-v2.md)。
 > 依相依順序排列。每一項完成時打勾，並把實際數字寫進 plan §10。
 
 ---
@@ -79,6 +79,6 @@
   - 檔案：`docs/specs/phase-2-web-mvp.md`（加 SC-31～37、標 SC-24.5／SC-25 的取代關係）、`docs/README.md`（2h 改「已完成」、加 2i）、plan §10。
   - 驗收：`format:check` 綠。
 
-- [ ] **4.2 開 PR**
+- [x] **4.2 開 PR**
   - 內容：push、`gh pr create`、盯 CI。**CI 綠了停下來，等開發者看過畫面再合併。**
   - 驗收：CI 全綠；描述列出 e2e 每一處修改、唯一的斷言修改、沒有新增相依。
