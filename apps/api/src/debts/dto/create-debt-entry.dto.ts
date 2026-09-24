@@ -14,8 +14,8 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { MANUAL_DEBT_ENTRY_KINDS } from '@ledger/shared';
-import type { CreateDebtEntryRequest, ManualDebtEntryKind } from '@ledger/shared';
+import { CREATE_DEBT_ENTRY_KINDS } from '@ledger/shared';
+import type { CreateDebtEntryKind, CreateDebtEntryRequest } from '@ledger/shared';
 import { DebtEntryRecordTargetDto } from './debt-entry-record-target.dto';
 
 /**
@@ -50,9 +50,12 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
   @Type(() => DebtEntryCounterpartyDto)
   counterparty!: DebtEntryCounterpartyDto;
 
-  @ApiProperty({ enum: MANUAL_DEBT_ENTRY_KINDS })
-  @IsIn(MANUAL_DEBT_ENTRY_KINDS)
-  kind!: ManualDebtEntryKind;
+  @ApiProperty({
+    enum: CREATE_DEBT_ENTRY_KINDS,
+    description: 'REPAYMENT is stored as COLLECT or REPAY depending on the current balance.',
+  })
+  @IsIn(CREATE_DEBT_ENTRY_KINDS)
+  kind!: CreateDebtEntryKind;
 
   @ApiProperty({
     description: "Amount in the currency's minor unit; positive integer.",
@@ -91,7 +94,7 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
   categoryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Settle the balance to zero with this repayment. COLLECT and REPAY only.',
+    description: 'Settle the balance to zero with this repayment. REPAYMENT only.',
   })
   @IsOptional()
   @IsBoolean()

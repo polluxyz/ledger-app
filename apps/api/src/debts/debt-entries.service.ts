@@ -13,10 +13,13 @@ import {
   isAdjustment,
   loadOwnedCounterparty,
   loadOwnedEntry,
+  lockCounterparty,
+  resolveRepayment,
   toCounterparty,
   toDebtEntry,
   transactionTypeFor,
 } from './debt-entry-rules';
+import type { RecordedDebtEntryKind } from './debt-entry-rules';
 import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
 
 /**
@@ -42,14 +45,27 @@ export class DebtEntriesService {
 
     return this.prisma.$transaction(async (tx) => {
       const counterparty = await this.resolveCounterparty(tx, userId, input.counterparty);
+      // 先鎖對象再讀餘額：還款的方向、超額檢查、結清差額都依賴「寫入前的餘額」（決策 50）。
+      await lockCounterparty(tx, counterparty.id);
+
+      // 還款的方向由後端依餘額決定（決策 46）；要在建立交易之前定案，交易型別跟著它走。
+      const kind: RecordedDebtEntryKind =
+        input.kind === 'REPAYMENT'
+          ? resolveRepayment(
+              await currentBalance(tx, counterparty.id),
+              input.amount,
+              input.settle === true,
+            )
+          : input.kind;
+
       const date = new Date(input.date);
-      const transactionId = await this.recordTransaction(tx, userId, input, date);
+      const transactionId = await this.recordTransaction(tx, userId, input, kind, date);
 
       const entry = await tx.debtEntry.create({
         data: {
           counterpartyId: counterparty.id,
-          kind: input.kind,
-          delta: deltaFor(input.kind, input.amount),
+          kind,
+          delta: deltaFor(kind, input.amount),
           date,
           note: input.note ?? null,
           transactionId,
@@ -71,6 +87,9 @@ export class DebtEntriesService {
                 date,
                 note: null,
                 transactionId: null,
+                // 同一天的紀錄依建立時間排序（SC-L13），而 createdAt 只到毫秒：兩筆在同一毫秒寫入
+                // 時順序不固定，差額可能排到還款前面。明確晚 1 毫秒，讓它永遠緊接在還款之後。
+                createdAt: new Date(entry.createdAt.getTime() + 1),
               },
             }),
           );
@@ -170,6 +189,7 @@ export class DebtEntriesService {
     tx: Prisma.TransactionClient,
     userId: string,
     input: CreateDebtEntryDto,
+    kind: RecordedDebtEntryKind,
     date: Date,
   ): Promise<string | null> {
     if (input.record === null) {
@@ -177,7 +197,7 @@ export class DebtEntriesService {
     }
     await assertLedgerWritable(tx, userId, input.record.ledgerId);
 
-    if (input.kind === 'PAID_FOR_ME') {
+    if (kind === 'PAID_FOR_ME') {
       return this.transactions.createPaidForMeExpense(tx, {
         ledgerId: input.record.ledgerId,
         creatorId: userId,
@@ -189,7 +209,7 @@ export class DebtEntriesService {
     return this.transactions.createDebtTransaction(tx, {
       ledgerId: input.record.ledgerId,
       creatorId: userId,
-      type: transactionTypeFor(input.kind),
+      type: transactionTypeFor(kind),
       amount: input.amount,
       date,
       accountId: input.record.accountId,
@@ -230,6 +250,6 @@ function assertEntryShape(input: CreateDebtEntryDto): void {
     input.settle !== undefined &&
     !(SETTLEABLE_DEBT_ENTRY_KINDS as readonly string[]).includes(input.kind)
   ) {
-    throw badRequest('settle is only valid for COLLECT and REPAY.');
+    throw badRequest('settle is only valid for REPAYMENT.');
   }
 }

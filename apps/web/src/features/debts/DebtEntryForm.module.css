@@ -4,7 +4,7 @@
   flex-direction: column;
 }
 
-/* 五種往來各佔一格，沿用交易表單的滑動分段按鈕樣式。 */
+/* 三種往來各佔一格，沿用交易表單的滑動分段按鈕樣式。 */
 .types {
   position: relative;
   display: flex;
@@ -53,6 +53,13 @@
 
 .type[aria-pressed='true'] {
   color: var(--color-on-primary);
+}
+
+/* 還款方向緊接種類選項，讓餘額提示與動態帳戶標籤互相對應。 */
+.repaymentHint {
+  margin: calc(-1 * var(--space-sm)) 0 var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 /* 金額是表單的主輸入，提升字級方便送出前再次確認。 */

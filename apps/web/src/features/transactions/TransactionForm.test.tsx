@@ -197,12 +197,16 @@ describe('Transaction type segmented control', () => {
     await user.click(debtTab);
 
     expect(debtTab).toHaveAttribute('aria-pressed', 'true');
-    // 借還分頁有五種往來選項，交易欄位整個換掉。
+    // 借還分頁只有三種往來選項，交易欄位整個換掉。
     expect(await screen.findByRole('button', { name: '借出' }, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '借入' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '對方還我' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '我還對方' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '對方幫我付' })).toBeInTheDocument();
+    const debtKinds = screen.getByRole('group', { name: '往來種類' });
+    expect(
+      within(debtKinds)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['借出', '借入', '還款']);
+    expect(screen.getByRole('button', { name: '還款' })).toBeDisabled();
     expect(screen.getByLabelText('對象')).toBeInTheDocument();
     expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
   });

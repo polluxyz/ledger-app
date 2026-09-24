@@ -27,7 +27,9 @@ export class DebtEntriesController {
     description: 'The counterparty, ledger, account or category is not accessible.',
   })
   @ApiForbiddenResponse({ description: 'The caller is only a VIEWER of the ledger in `record`.' })
-  @ApiConflictResponse({ description: 'LEDGER_ARCHIVED.' })
+  @ApiConflictResponse({
+    description: 'LEDGER_ARCHIVED, NOTHING_TO_REPAY, or REPAYMENT_EXCEEDS_BALANCE.',
+  })
   create(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateDebtEntryDto,

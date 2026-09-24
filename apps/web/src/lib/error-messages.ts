@@ -57,6 +57,8 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   DEBT_ENTRY_NOT_EDITABLE: '結清差額與免除不能修改，要調整請刪除後重記。',
   DEBT_TRANSACTION_READ_ONLY: '這筆交易來自借還，請到借還的往來帳修改。',
   LEDGER_HAS_DEBT_TRANSACTIONS: '這本帳本有借還交易，不能刪除。請改用封存。',
+  NOTHING_TO_REPAY: '目前和對方沒有欠款，不需要還款。',
+  REPAYMENT_EXCEEDS_BALANCE: '還款超過目前的欠款。要兩清請勾「以此結清」，或把多出的部分另記一筆。',
 };
 
 /**
