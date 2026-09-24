@@ -26,6 +26,9 @@ export function TextField({ label, hint, id, ...rest }: TextFieldProps) {
         className={styles.input}
         id={inputId}
         aria-describedby={hint ? hintId : undefined}
+        // 預設關閉瀏覽器的自動填入：它會猜錯欄位，例如把登入用的 email 推薦到金額欄。
+        // 登入、註冊這類真的需要的欄位會明確傳 autoComplete，放在後面的 rest 會覆蓋這個預設。
+        autoComplete="off"
         {...rest}
       />
       {hint && (
