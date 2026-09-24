@@ -49,6 +49,13 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   ACCOUNT_REQUIRED: '這本帳本會連動帳戶餘額，記帳時請選一個帳戶。',
   ACCOUNT_NOT_ALLOWED: '這本帳本不連動帳戶餘額，記帳時不需指定帳戶。',
   TRANSFER_SAME_ACCOUNT: '轉帳的轉出與轉入不能是同一個帳戶，請換其中一個。',
+
+  // ── 借還（3b-1，spec phase-3b1-web.md §4.5）──────────────────────────────
+  DEBT_OVERPAYMENT: '金額超過未清餘額。如果對方多給了，請勾選「以此結清」。',
+  DEBT_NOT_OPEN: '這筆借還已經結清或免除了。要改本金，請先刪除結清的那筆還款。',
+  DEBT_NOT_FORGIVABLE: '只有借出去的錢可以免除。',
+  DEBT_TRANSACTION_READ_ONLY: '借還交易要從借還詳情修改。',
+  LEDGER_HAS_DEBT_TRANSACTIONS: '這本帳本有借還交易，不能刪除。請改用封存。',
 };
 
 /**
