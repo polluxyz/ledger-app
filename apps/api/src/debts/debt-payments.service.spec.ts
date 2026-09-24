@@ -1,3 +1,4 @@
+import { Prisma } from '../generated/prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TransactionsService } from '../transactions/transactions.service';
 import { DebtPaymentsService } from './debt-payments.service';
@@ -11,6 +12,8 @@ import { DebtPaymentsService } from './debt-payments.service';
  * 2. **交易型別由方向決定**：`LENT` → `COLLECT`，`BORROWED` → `REPAY`，呼叫端指定不了。
  * 3. **記到哪裡**的三種情況：指定 `record`、沿用本金交易、本金沒有交易就不產生交易。
  * 4. **失敗就什麼都不寫**：帳本權限檢查丟例外時，`debtPayment.create` 不可以被呼叫過。
+ * 5. **以此結清**（決策 30）：`settles` 跳過超額檢查、`record: null` 明確不產生交易、
+ *    並行寫入撞上部分唯一索引時回 `DEBT_NOT_OPEN`。
  *
  * 策略：Prisma 全程 mock（不連資料庫），`$transaction` 直接把同一個 mock 當 tx 傳進
  * callback，`TransactionsService` 也是 mock——那兩個 helper 有自己的測試檔。
@@ -28,6 +31,7 @@ describe('DebtPaymentsService', () => {
     date: Date;
     note: string | null;
     transactionId: string | null;
+    settles: boolean;
     deletedAt: Date | null;
     createdAt: Date;
   };
@@ -39,6 +43,7 @@ describe('DebtPaymentsService', () => {
       date: new Date(DATE),
       note: null,
       transactionId: 'txn-payment-1',
+      settles: false,
       deletedAt: null,
       createdAt: new Date(DATE),
       ...overrides,
@@ -149,6 +154,7 @@ describe('DebtPaymentsService', () => {
           date: new Date(DATE),
           note: null,
           transactionId: 'txn-new',
+          settles: false,
         },
       });
       // 回應由重讀的那一列算出來，此處的 mock 兩次都回同一列，所以未清餘額仍是 5000。
@@ -264,6 +270,76 @@ describe('DebtPaymentsService', () => {
         },
       );
       expect(prisma.debtPayment.create).not.toHaveBeenCalled();
+    });
+
+    describe('settling with a difference (decision 30)', () => {
+      it('accepts more than what is owed when settles is set', async () => {
+        givenDebt(debtRow({ principal: 93 }));
+
+        await service.create(OWNER, DEBT_ID, { amount: 95, date: DATE, settles: true });
+
+        expect(prisma.debtPayment.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ amount: 95, settles: true }) as unknown,
+          }),
+        );
+        // 帳戶照實際收到的金額變動，差額不另外產生交易。
+        expect(transactions.createDebtTransaction).toHaveBeenCalledTimes(1);
+        expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
+          prisma,
+          expect.objectContaining({ amount: 95, type: 'COLLECT' }),
+        );
+      });
+
+      it('accepts less than what is owed and still marks the payment as settling', async () => {
+        givenDebt(debtRow({ principal: 93 }));
+
+        await service.create(OWNER, DEBT_ID, { amount: 90, date: DATE, settles: true });
+
+        expect(prisma.debtPayment.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ amount: 90, settles: true }) as unknown,
+          }),
+        );
+      });
+
+      it('rejects any further payment once a settling payment exists', async () => {
+        givenDebt(debtRow({ principal: 93, payments: [payment({ amount: 90, settles: true })] }));
+
+        await expect(
+          service.create(OWNER, DEBT_ID, { amount: 1, date: DATE, settles: true }),
+        ).rejects.toMatchObject({ status: 409, errorCode: 'DEBT_NOT_OPEN' });
+        expect(prisma.debtPayment.create).not.toHaveBeenCalled();
+      });
+
+      // 兩個請求同時讀到 OPEN、同時寫入時，由資料庫的部分唯一索引擋下第二筆。
+      it('turns a unique-index race on the settling payment into DEBT_NOT_OPEN', async () => {
+        givenDebt(debtRow({ principal: 93 }));
+        prisma.debtPayment.create.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('unique', {
+            code: 'P2002',
+            clientVersion: 'test',
+          }),
+        );
+
+        await expect(
+          service.create(OWNER, DEBT_ID, { amount: 90, date: DATE, settles: true }),
+        ).rejects.toMatchObject({ status: 409, errorCode: 'DEBT_NOT_OPEN' });
+      });
+    });
+
+    it('creates no transaction when record is explicitly null, even if the principal has one', async () => {
+      givenDebt(debtRow());
+
+      await service.create(OWNER, DEBT_ID, { amount: 500, date: DATE, record: null });
+
+      expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
+      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
+      expect(prisma.debtPayment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ transactionId: null }) as unknown,
+        }),
+      );
     });
 
     // SC-D10：帳本檢查失敗時，連一列還款都不能留下——e2e 會回頭數資料庫。

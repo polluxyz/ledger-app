@@ -418,4 +418,149 @@ describe('Debts (e2e)', () => {
       (newer.body as Debt).id,
     ]);
   });
+  // SC-D23～SC-D30：以此結清（決策 30）與明確不產生交易的還款。
+  describe('settling with a difference', () => {
+    function debtOf(user: Me, debtId: string) {
+      return request(server()).get(`/api/debts/${debtId}`).set(auth(user.token));
+    }
+
+    // SC-D23
+    it('settles a lent debt short of the principal and reports the shortfall', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+      const afterLend = await cashBalance(user);
+
+      const res = await pay(user, debt.id, 90, { settles: true });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({
+        status: 'SETTLED',
+        outstanding: 0,
+        settlementDifference: -3,
+      });
+      expect((res.body as Debt).payments).toEqual([
+        expect.objectContaining({ amount: 90, settles: true }),
+      ]);
+      // 帳戶照實際收到的 90 變動，差額不另外產生交易。
+      expect(await cashBalance(user)).toBe(afterLend + 90);
+      const collects = (await ledgerTransactions(user)).filter((txn) => txn.type === 'COLLECT');
+      expect(collects).toEqual([expect.objectContaining({ amount: 90 })]);
+    });
+
+    // SC-D24
+    it('lets a settling payment exceed what is owed, but not a plain one', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+      const afterLend = await cashBalance(user);
+
+      const plain = await pay(user, debt.id, 95);
+      expect(plain.status).toBe(409);
+      expect(errorCode(plain)).toBe('DEBT_OVERPAYMENT');
+
+      const settling = await pay(user, debt.id, 95, { settles: true });
+      expect(settling.body).toMatchObject({ status: 'SETTLED', settlementDifference: 2 });
+      expect(await cashBalance(user)).toBe(afterLend + 95);
+    });
+
+    // SC-D25
+    it('flips the sign for money borrowed: paying less is in my favour', async () => {
+      const user = await me();
+      const debt = await borrow(user, 93);
+      const afterBorrow = await cashBalance(user);
+
+      const res = await pay(user, debt.id, 90, { settles: true });
+      expect(res.body).toMatchObject({ status: 'SETTLED', settlementDifference: 3 });
+      expect(await cashBalance(user)).toBe(afterBorrow - 90);
+      expect((await ledgerTransactions(user)).map((txn) => txn.type)).toContain('REPAY');
+    });
+
+    // SC-D26
+    it('reopens the debt when the settling payment is deleted, with its transaction', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+      const afterLend = await cashBalance(user);
+      const settled = (await pay(user, debt.id, 90, { settles: true })).body as Debt;
+
+      const removed = await request(server())
+        .delete(`/api/debts/${debt.id}/payments/${settled.payments[0]!.id}`)
+        .set(auth(user.token));
+      expect(removed.status).toBe(204);
+
+      expect((await debtOf(user, debt.id)).body).toMatchObject({
+        status: 'OPEN',
+        outstanding: 93,
+        settlementDifference: null,
+      });
+      expect(await cashBalance(user)).toBe(afterLend);
+    });
+
+    // SC-D27
+    it('refuses a new principal once settled with a difference, but keeps notes editable', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+      await pay(user, debt.id, 90, { settles: true });
+
+      const principal = await request(server())
+        .patch(`/api/debts/${debt.id}`)
+        .set(auth(user.token))
+        .send({ principal: 100 });
+      expect(principal.status).toBe(409);
+      expect(errorCode(principal)).toBe('DEBT_NOT_OPEN');
+      expect((await debtOf(user, debt.id)).body).toMatchObject({ principal: 93 });
+
+      const note = await request(server())
+        .patch(`/api/debts/${debt.id}`)
+        .set(auth(user.token))
+        .send({ note: '少 3 塊算了' });
+      expect(note.status).toBe(200);
+    });
+
+    // SC-D28
+    it('refuses any further payment once settled, and the database backs it up', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+      await pay(user, debt.id, 90, { settles: true });
+
+      for (const extra of [{ settles: true }, {}]) {
+        const res = await pay(user, debt.id, 1, extra);
+        expect(res.status).toBe(409);
+        expect(errorCode(res)).toBe('DEBT_NOT_OPEN');
+      }
+
+      // 繞過 service 直接寫第二筆未刪除的結清還款，部分唯一索引要擋下來。
+      await expect(
+        prisma.debtPayment.create({
+          data: { debtId: debt.id, amount: 1, date: new Date(DAY), settles: true },
+        }),
+      ).rejects.toMatchObject({ code: 'P2002' });
+    });
+
+    // SC-D29
+    it('reports a zero difference for an exact settling payment and drops it from the summary', async () => {
+      const user = await me();
+      const debt = await lend(user, 93);
+
+      const res = await pay(user, debt.id, 93, { settles: true });
+      expect(res.body).toMatchObject({ status: 'SETTLED', settlementDifference: 0 });
+
+      const summary = await request(server()).get('/api/debts/summary').set(auth(user.token));
+      expect((summary.body as DebtSummary).items).toEqual([]);
+    });
+
+    // SC-D30
+    it('records no transaction when record is null, even though the principal has one', async () => {
+      const user = await me();
+      const debt = await lend(user, 5000);
+      const afterLend = await cashBalance(user);
+
+      const res = await pay(user, debt.id, 2000, { record: null });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ outstanding: 3000 });
+      expect((res.body as Debt).payments[0]).toMatchObject({ transactionId: null });
+      expect(await cashBalance(user)).toBe(afterLend);
+
+      // 省略 record 則照舊沿用本金交易。
+      await pay(user, debt.id, 1000);
+      expect(await cashBalance(user)).toBe(afterLend + 1000);
+    });
+  });
 });

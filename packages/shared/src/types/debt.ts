@@ -45,6 +45,8 @@ export interface DebtPayment {
   note: string | null;
   /** 對應的 `COLLECT` / `REPAY` 交易；沒有產生交易時為 `null`。 */
   transactionId: string | null;
+  /** 「以此結清」的還款（決策 30）：記下它之後債務就是 `SETTLED`，金額可以不等於當時的未清餘額。 */
+  settles: boolean;
   /** ISO 8601。 */
   createdAt: string;
 }
@@ -60,9 +62,18 @@ export interface Debt {
   /** 借出或借入的日期，ISO 8601。 */
   date: string;
   note: string | null;
-  /** 本金減去所有還款。已免除時照樣回傳這個數字，是否還要收由 `status` 判斷。 */
+  /**
+   * 本金減去所有還款。已免除時照樣回傳這個數字，是否還要收由 `status` 判斷。
+   * 以結清還款結清時一律為 0，差額看 `settlementDifference`。
+   */
   outstanding: number;
   status: DebtStatus;
+  /**
+   * 以結清還款結清時，實收付與本金的差額（決策 30）；其餘情況為 `null`。
+   *
+   * 正負號**從擁有者的角度**看：正數＝對我有利（借出時多收、借入時少付），負數＝對我不利。
+   */
+  settlementDifference: number | null;
   /** 本金那筆 `LEND` / `BORROW` 交易；舊債沒有交易時為 `null`。 */
   transactionId: string | null;
   /** 依日期由舊到新。 */
@@ -103,16 +114,22 @@ export interface UpdateDebtRequest {
 
 /** `POST /debts/{id}/payments` 的 body。 */
 export interface CreateDebtPaymentRequest {
-  /** 正整數，不得超過當下的未清餘額。 */
+  /** 正整數。沒勾 `settles` 時不得超過當下的未清餘額。 */
   amount: number;
   /** ISO 8601。 */
   date: string;
   note?: string;
   /**
-   * 省略時沿用本金那筆交易的帳本與帳戶；本金沒有交易時就不產生交易。
+   * 這筆還款記到哪裡：
+   *
+   * - 省略：沿用本金那筆交易的帳本與帳戶；本金沒有交易時就不產生交易。
+   * - `null`：明確不產生交易（例如錢沒有經過任何帳戶）。
+   *
    * 交易型別不能指定：`LENT` 一律 `COLLECT`，`BORROWED` 一律 `REPAY`。
    */
-  record?: DebtRecordTarget;
+  record?: DebtRecordTarget | null;
+  /** 以此結清（決策 30）。`true` 時金額可以少於或多於未清餘額，這筆之後債務就結清。 */
+  settles?: boolean;
 }
 
 /** `GET /debts` 的查詢參數。 */

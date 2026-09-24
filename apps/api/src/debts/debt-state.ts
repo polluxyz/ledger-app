@@ -26,25 +26,48 @@ export type DebtRow = Prisma.DebtGetPayload<{ include: typeof DEBT_INCLUDE }>;
 /** 能讀寫債務的 client：一般的 PrismaService，或 `$transaction` 裡的 tx。 */
 type DebtClient = Pick<Prisma.TransactionClient, 'debt'>;
 
+type PaymentLike = { amount: number; deletedAt: Date | null; settles: boolean };
+
 /**
- * 由本金、還款與是否免除算出未清餘額與狀態（spec §3.2）。已軟刪除的還款不計入。
+ * 由本金、還款與是否免除算出未清餘額、狀態與結清差額（spec §3.2、決策 30）。
+ * 已軟刪除的還款不計入。
  *
- * 已免除的債務照樣回傳算出的未清餘額（那是被免除掉的金額），是否還要收由 `status` 判斷。
+ * 三種情況依序判斷：
+ * 1. 已免除 → `FORGIVEN`。照樣回傳算出的未清餘額（那是被免除掉的金額）。免除只能對
+ *    `OPEN` 做，所以不會與結清還款並存。
+ * 2. 有未刪除的結清還款 → `SETTLED`，未清餘額一律 0。實收付與本金的差放在
+ *    `settlementDifference`，正負號從擁有者的角度看（對我有利為正）。
+ * 3. 其餘 → 未清餘額＝本金−已還，> 0 為 `OPEN`，否則 `SETTLED`。
+ *
+ * 差額刻意不存欄位（與決策 5 同理）：刪掉結清還款時，它自然就消失了。
  */
 export function computeDebtState(debt: {
+  direction: DebtDirection;
   principal: number;
   forgivenAt: Date | null;
-  payments: ReadonlyArray<{ amount: number; deletedAt: Date | null }>;
-}): { outstanding: number; status: DebtStatus } {
-  const paid = debt.payments
-    .filter((payment) => payment.deletedAt === null)
-    .reduce((sum, payment) => sum + payment.amount, 0);
+  payments: ReadonlyArray<PaymentLike>;
+}): { outstanding: number; status: DebtStatus; settlementDifference: number | null } {
+  const paid = paidTotal(debt.payments);
   const outstanding = debt.principal - paid;
 
   if (debt.forgivenAt !== null) {
-    return { outstanding, status: 'FORGIVEN' };
+    return { outstanding, status: 'FORGIVEN', settlementDifference: null };
   }
-  return { outstanding, status: outstanding > 0 ? 'OPEN' : 'SETTLED' };
+  if (hasActiveSettlement(debt.payments)) {
+    // 借出：多收對我有利；借入：少付對我有利。兩者差一個負號。
+    const difference = debt.direction === 'LENT' ? paid - debt.principal : debt.principal - paid;
+    return { outstanding: 0, status: 'SETTLED', settlementDifference: difference };
+  }
+  return {
+    outstanding,
+    status: outstanding > 0 ? 'OPEN' : 'SETTLED',
+    settlementDifference: null,
+  };
+}
+
+/** 有沒有未刪除的結清還款。有的話債務已結清，而且本金不能再改（決策 30）。 */
+export function hasActiveSettlement(payments: ReadonlyArray<PaymentLike>): boolean {
+  return payments.some((payment) => payment.settles && payment.deletedAt === null);
 }
 
 /** 已還總額（不含已刪除的還款）。改本金時用來確認新本金不小於它。 */
@@ -69,7 +92,7 @@ export function paymentTransactionType(direction: DebtDirection): DebtTransactio
 
 /** 資料列轉成回應。已刪除的還款不出現在 `payments`。 */
 export function toDebt(row: DebtRow): Debt {
-  const { outstanding, status } = computeDebtState(row);
+  const { outstanding, status, settlementDifference } = computeDebtState(row);
   return {
     id: row.id,
     direction: row.direction,
@@ -79,6 +102,7 @@ export function toDebt(row: DebtRow): Debt {
     note: row.note,
     outstanding,
     status,
+    settlementDifference,
     transactionId: row.transactionId,
     payments: row.payments
       .filter((payment) => payment.deletedAt === null)
@@ -88,6 +112,7 @@ export function toDebt(row: DebtRow): Debt {
         date: payment.date.toISOString(),
         note: payment.note,
         transactionId: payment.transactionId,
+        settles: payment.settles,
         createdAt: payment.createdAt.toISOString(),
       })),
     forgivenAt: row.forgivenAt === null ? null : row.forgivenAt.toISOString(),
