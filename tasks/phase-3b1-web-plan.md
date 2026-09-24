@@ -1,0 +1,126 @@
+# 實作計畫：3b-1 修訂「以此結清」＋ 3b-1 的 Web 畫面
+
+> 依據：`docs/specs/phase-3b-debts.md` 決策 30～32、SC-D23～SC-D29；`docs/specs/phase-3b1-web.md`。
+> 兩個 PR，依序合併：**PR A 後端**（以此結清）→ **PR B Web**。PR B 的還款表單要用到 PR A 的 `settles`。
+> 規格文件（兩份 spec 的修改）隨 PR A 一起進版控。
+
+---
+
+## 1. 元件與相依
+
+```
+PR A（後端，協調者自己做：動到 schema 與 API）
+  A1 shared 契約 ──▶ A2 migration ──▶ A3 狀態計算與規則 ──▶ A4 測試與驗收
+
+PR B（Web，main 已含 PR A 之後開分支）
+  B1 use-debts hooks＋錯誤訊息（協調者）
+     ├─▶ B2 借還檢視（worker）
+     ├─▶ B3 借還分頁的新增表單＋PaymentFields（worker）
+     └─▶ B4 債務詳情與明細的連結（worker，用到 B3 的 PaymentFields）
+  B5 e2e 與最終驗收（協調者）
+```
+
+B2 與 B3 平行派出；B4 等 B3 的 `PaymentFields` 完成。
+
+---
+
+## 2. 實作重點
+
+### 2.1 PR A：狀態計算（`debt-state.ts`）
+
+`computeDebtState` 多回傳 `settlementDifference`：
+
+1. 已免除 → `FORGIVEN`，差額 `null`（免除只能對 `OPEN` 做，不會與結清還款並存）。
+2. 有未刪除的結清還款 → `SETTLED`，`outstanding = 0`，差額依方向：
+   - `LENT`：已還總額 − 本金（多收為正）。
+   - `BORROWED`：本金 − 已還總額（少付為正）。
+3. 其餘照舊：`outstanding = 本金 − 已還`，差額 `null`。
+
+差額是算出來的，不存欄位（決策 5、決策 30）。
+
+### 2.2 PR A：規則
+
+| 動作     | 改動                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| 記還款   | `settles = true` 時跳過超額檢查；狀態仍必須是 `OPEN`                                                           |
+| 刪還款   | 不用改：狀態每次現算，刪掉結清還款自然回到 `OPEN`                                                              |
+| 改債務   | 有未刪除的結清還款且本金有變 → `409 DEBT_NOT_OPEN`，放在同一個 `$transaction` 的最前面；改備註、名字、日期照常 |
+| 並行寫入 | 部分唯一索引擋下第二筆結清還款，Prisma 的 `P2002` 轉成 `409 DEBT_NOT_OPEN`                                     |
+
+### 2.3 PR A：migration 手寫 SQL（套用前請開發者過目）
+
+```sql
+ALTER TABLE "DebtPayment" ADD COLUMN "settles" BOOLEAN NOT NULL DEFAULT false;
+
+-- 一筆債務最多一筆未刪除的結清還款（決策 30）。Prisma 表達不了部分唯一索引。
+CREATE UNIQUE INDEX "DebtPayment_debtId_active_settlement_key"
+  ON "DebtPayment" ("debtId")
+  WHERE "settles" AND "deletedAt" IS NULL;
+```
+
+既有資料全部是 `settles = false`，行為不變。
+
+### 2.4 PR B：送出的 body 怎麼組
+
+- 借出／借入：沒勾舊債 → `record: { ledgerId: 作用中帳本, accountId? }`；勾了 → 不帶 `record`。
+- 還款：沒勾不記入帳本 → **明確帶** `record`；勾了 → `record: null`。**不使用「省略 `record`」**：省略時後端會沿用本金交易的帳本與帳戶，畫面顯示的與實際記的可能不同。
+
+- `settles`：只有使用者勾了才送 `true`。
+
+### 2.5 PR B：右側欄的狀態
+
+`TransactionsPage` 目前的 `editing: Transaction | null` 改成一個聯集：
+
+```ts
+type PanelTarget =
+  | { kind: 'new' }
+  | { kind: 'transaction'; transaction: Transaction }
+  | { kind: 'debt'; debtId: string };
+```
+
+點一般交易 → `transaction`；點借還交易或借還檢視的一列 → `debt`。`TransactionWorkbench` 依 `kind` 渲染新增表單、交易編輯或 `DebtDetail`。
+
+---
+
+## 3. 風險與對策
+
+| #   | 風險                                                                                     | 對策                                                                                                                                                      |
+| --- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | 還款「不記入帳本」：原本的後端沒有「明確不產生交易」的寫法，省略 `record` 會沿用本金交易 | **PR A 一併處理**：`record` 接受 `null`（spec 已寫入，SC-D30）。這是 API 變更，列在 §5 請開發者確認。若不同意，Web 在本金有交易的債務上就不提供這個勾選框 |
+| R2  | `TransactionsPage` 的 `editing` 改成聯集，會動到 2i 的右側欄測試                         | B4 先跑既有的 `TransactionWorkbench.test.tsx`、`transaction-edit.test.tsx`，改動後維持綠燈                                                                |
+| R3  | 未結清債務的下拉要列出全部，`GET /debts` 上限 100 筆                                     | 本步以 `limit=100` 取一頁。超過 100 筆未結清債務的使用者目前不存在；超過時下拉底部註明「只列出最近 100 筆」                                               |
+| R4  | e2e 與其他 worktree 共用 `ledger_test` 與固定 port                                       | 跑 e2e 前檢查 3100、5273 沒被占用                                                                                                                         |
+
+---
+
+## 4. 驗證點
+
+- PR A：SC-D23～SC-D29 的單元測試與 e2e；3b-1 既有的債務測試全部維持綠燈；`prisma migrate status` 無 pending。
+- PR B：`phase-3b1-web.md` SC-W1～SC-W11。
+- 兩個 PR 都跑完整 CI（lint、typecheck、test、build、format:check、兩套 e2e）。
+- PR B 合併後，開發者的 dev 資料庫要跑 `prisma migrate deploy`（PR A 的 migration）。
+
+---
+
+## 5. 需要開發者確認的變更（Ask first）
+
+| 項目      | 內容                                                                        |
+| --------- | --------------------------------------------------------------------------- |
+| 資料模型  | `DebtPayment.settles` 欄位、部分唯一索引（§2.3 的 SQL）                     |
+| API       | 還款 body 加 `settles`；回應加 `settlementDifference`、`payments[].settles` |
+| API（R1） | 還款 body 的 `record` 接受 `null`，表示明確不產生交易                       |
+| 套件、CI  | 無                                                                          |
+
+---
+
+## 6. 分工
+
+- PR A 全部由協調者做（動到 schema 與 API，CLAUDE.md §11 的例外）。
+- PR B 的 B1、B5 由協調者做；B2～B4 派給 worker。worker 模型派工前再確認。
+- worker 不准修改：`packages/shared`、`apps/api`、`use-debts.ts`、既有測試的斷言。
+
+---
+
+## 7. 實作紀錄
+
+（實作時填寫偏離與計畫外的問題。）
