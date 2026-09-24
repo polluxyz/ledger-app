@@ -10,6 +10,10 @@ import App from '../App';
  * 以及整列可點會在右側欄開啟編輯。篩選與分頁各自的行為仍由
  * `features/transactions/transaction-filters.test.tsx` 負責，這裡不重複。
  *
+ * 借還檢視（spec 4.2）這裡只驗頁面層的兩件事：`?view=debts` 進來直接顯示借還檢視、
+ * 點「明細」回到交易列表。淨額卡片、狀態分頁與列表本身的行為在
+ * `features/debts/` 各自的測試檔裡。
+ *
  * 橫條的帳本切換器一律用 `within(<main>)` 限定範圍：側欄那一份由另一位 worker
  * 移除，兩邊都在的那段期間整頁會有兩個「作用中帳本」。橫條在 `<main>` 之內，
  * 所以這個範圍同時涵蓋橫條與內容。
@@ -28,6 +32,22 @@ describe('Transactions page', () => {
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const debt = {
+    id: 'debt-1',
+    direction: 'LENT',
+    counterpartyName: '小明',
+    principal: 5000,
+    date: '2026-09-01T04:00:00.000Z',
+    note: null,
+    outstanding: 5000,
+    status: 'OPEN',
+    settlementDifference: null,
+    transactionId: 'txn-debt',
+    payments: [],
+    forgivenAt: null,
+    createdAt: '2026-09-01T04:00:00.000Z',
+    updatedAt: '2026-09-01T04:00:00.000Z',
+  };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
@@ -65,6 +85,17 @@ describe('Transactions page', () => {
       }
       if (url.includes('/accounts')) {
         return json([account]);
+      }
+      if (url.includes('/debts/summary')) {
+        return json({
+          items: [{ counterpartyName: '小明', counterpartyUserId: null, net: 5000 }],
+        });
+      }
+      if (url.includes('/debts/debt-1')) {
+        return json(debt);
+      }
+      if (url.includes('/debts')) {
+        return json({ items: [debt], page: 1, limit: 20, total: 1 });
       }
       return json([ledger]);
     });
@@ -155,5 +186,106 @@ describe('Transactions page', () => {
     expect(await screen.findByText('找不到任何帳本。', undefined, WAIT)).toBeInTheDocument();
     // 沒有帳本就沒有地方可以記帳，右側欄不該登記，新增表單也不該出現。
     expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
+  });
+
+  it('shows the debts view directly when the URL has ?view=debts', async () => {
+    // 檢視在網址上（SC-W9）：重整後停在同一個檢視，這裡直接帶著參數進來。
+    window.history.pushState({}, '', '/transactions?view=debts');
+    render(<App />);
+
+    expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
+    // 淨額卡片與債務列表都出來了，切換鈕停在「借還」。右側欄的新增表單之後也會
+    // 有「借還」分頁（B3），所以這顆鈕限定在主內容區找。
+    expect(await screen.findByText('欠我 $5,000', undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /借給小明/ }, WAIT)).toBeInTheDocument();
+    expect(page().getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
+
+    // 明細那套（篩選列與交易列表）不該同時出現。
+    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
+    expect(screen.queryByText('午餐')).not.toBeInTheDocument();
+  });
+
+  it('returns to the transaction list when 明細 is clicked', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions?view=debts');
+    render(<App />);
+
+    await screen.findByRole('button', { name: /借給小明/ }, WAIT);
+
+    await user.click(page().getByRole('button', { name: '明細' }));
+
+    // 回到明細：交易列表回來了，借還那套不再出現。
+    const item = await screen.findByRole('listitem', undefined, WAIT);
+    expect(within(item).getByText('午餐')).toBeInTheDocument();
+    expect(screen.queryByText('借還紀錄不分帳本')).not.toBeInTheDocument();
+    // 網址上的參數被清掉——再重整一次還是明細。
+    expect(window.location.search).toBe('');
+  });
+
+  it('opens debt detail in right panel when clicking a debt item in debts view', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions?view=debts');
+    render(<App />);
+
+    const debtButton = await screen.findByRole('button', { name: /借給小明/ }, WAIT);
+    await user.click(debtButton);
+
+    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
+    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
+    expect(within(dialog).getByText('未清餘額')).toBeInTheDocument();
+  });
+
+  it('opens debt detail in right panel when clicking a debt transaction in details view', async () => {
+    const lendTxn = {
+      id: 'txn-lend',
+      type: 'LEND',
+      amount: 5000,
+      date: '2026-09-01T04:00:00.000Z',
+      note: '借出款項',
+      category: null,
+      account: { id: account.id, name: account.name },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      debtId: 'debt-1',
+      createdAt: '2026-09-01T04:00:00.000Z',
+    };
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.includes('/transactions')) {
+        return json({ items: [lendTxn], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) {
+        return json([expenseCategory]);
+      }
+      if (url.includes('/accounts')) {
+        return json([account]);
+      }
+      if (url.includes('/debts/summary')) {
+        return json({ items: [] });
+      }
+      if (url.includes('/debts/debt-1')) {
+        return json(debt);
+      }
+      if (url.includes('/debts')) {
+        return json({ items: [debt], page: 1, limit: 20, total: 1 });
+      }
+      return json([ledger]);
+    });
+
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions');
+    render(<App />);
+
+    const item = await screen.findByRole('listitem', undefined, WAIT);
+    await user.click(within(item).getByText('借出'));
+
+    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
+    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
   });
 });

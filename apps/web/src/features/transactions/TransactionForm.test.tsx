@@ -4,12 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 
 /**
- * 新增交易表單上方的「支出／收入／轉帳」分段控制（spec 2i SC-43.2）。
+ * 新增交易表單上方的「支出／收入／轉帳／借還」分段控制（spec 2i SC-43.2、3b-1 W2）。
  *
  * 第三輪把選中的底色從按鈕身上抽出來，改成一個會滑動的方塊。**滑動本身在 jsdom
  * 看不到**（沒有版面，量不到 transform 的實際位置），所以這一檔驗的是改寫之後
- * 沒有弄丟的東西：三顆鈕的無障礙名稱、`aria-pressed` 跟著選擇變、方塊是裝飾
+ * 沒有弄丟的東西：按鈕的無障礙名稱、`aria-pressed` 跟著選擇變、方塊是裝飾
  * （`aria-hidden`）而且格數與按鈕數一致。
+ *
+ * 3b-1 加了第 4 格「借還」：新增模式固定多一格，方塊的寬度與位移照實際格數
+ * 算（下面兩條釘住這件事）；編輯模式沒有那一格（借還交易不能編輯）。
  *
  * 策略：從真實的 `App` 出發，只把 `fetch` 換成 mock。表單住在右側欄，要先按
  * 「＋ 新增交易」才會出現，而且是 portal 進外殼的，所以一律用 `findBy*`。
@@ -34,7 +37,8 @@ describe('Transaction type segmented control', () => {
     { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 5000 },
   ];
 
-  function routeFetch(ledger: typeof trackingLedger) {
+  function routeFetch(ledger: typeof trackingLedger, options: { items?: unknown[] } = {}) {
+    const items = options.items ?? [];
     fetchMock.mockImplementation((url: string) => {
       const json = (body: unknown) =>
         Promise.resolve(
@@ -43,8 +47,14 @@ describe('Transaction type segmented control', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.includes('/debts/summary')) {
+        return json({ items: [] });
+      }
+      if (url.includes('/debts')) {
+        return json({ items: [], page: 1, limit: 100, total: 0 });
+      }
       if (url.includes('/transactions')) {
-        return json({ items: [], page: 1, limit: 20, total: 0 });
+        return json({ items, page: 1, limit: 20, total: items.length });
       }
       if (url.includes('/categories')) {
         return json([category]);
@@ -121,12 +131,12 @@ describe('Transaction type segmented control', () => {
     render(<App />);
     const bar = await openTypeBar(user);
 
-    // 方塊是裝飾，螢幕閱讀器不該讀到它，也不該被當成第四顆按鈕。
+    // 方塊是裝飾，螢幕閱讀器不該讀到它，也不該被當成第五顆按鈕。
     const mark = bar.querySelector('[aria-hidden="true"] > span');
     expect(mark).not.toBeNull();
-    expect(within(bar).getAllByRole('button')).toHaveLength(3);
-    // 三格：一格是 1/3 寬，停在第一格（支出）。
-    expect(mark).toHaveStyle({ width: `${100 / 3}%`, transform: 'translateX(0%)' });
+    // 四格（支出／收入／轉帳／借還）：一格是 1/4 寬，停在第一格（支出）。
+    expect(within(bar).getAllByRole('button')).toHaveLength(4);
+    expect(mark).toHaveStyle({ width: `${100 / 4}%`, transform: 'translateX(0%)' });
 
     await user.click(within(bar).getByRole('button', { name: '轉帳' }));
 
@@ -135,7 +145,8 @@ describe('Transaction type segmented control', () => {
   });
 
   it('falls back to two slots when the ledger has no transfers', async () => {
-    // 非連動帳本沒有轉帳鈕，方塊的寬度要跟著變成一半，否則會蓋到隔壁。
+    // 非連動帳本沒有轉帳鈕，方塊的寬度要跟著格數變（支出／收入／借還＝三格），
+    // 否則會蓋到隔壁。
     routeFetch(plainLedger);
     const user = userEvent.setup();
 
@@ -144,10 +155,59 @@ describe('Transaction type segmented control', () => {
 
     expect(within(bar).queryByRole('button', { name: '轉帳' })).not.toBeInTheDocument();
     const mark = bar.querySelector('[aria-hidden="true"] > span');
-    expect(mark).toHaveStyle({ width: '50%' });
+    expect(mark).toHaveStyle({ width: `${100 / 3}%` });
 
     await user.click(within(bar).getByRole('button', { name: '收入' }));
 
     expect(mark).toHaveStyle({ transform: 'translateX(100%)' });
+  });
+
+  it('swaps the transaction fields for the debt entry form when 借還 is picked', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+
+    render(<App />);
+    const bar = await openTypeBar(user);
+
+    // 第 4 格存在，預設沒選（spec 3b-1 W2）。
+    const debtTab = within(bar).getByRole('button', { name: '借還' });
+    expect(debtTab).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(debtTab);
+
+    expect(debtTab).toHaveAttribute('aria-pressed', 'true');
+    // 借還分頁有自己的三選一（借出／借入／還款，W3），交易欄位整個換掉。
+    expect(await screen.findByRole('button', { name: '借出' }, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '借入' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '還款' })).toBeInTheDocument();
+    expect(screen.getByLabelText('對方名字')).toBeInTheDocument();
+    expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
+  });
+
+  it('does not offer the 借還 tab in the edit dialog', async () => {
+    // 借還交易不能進編輯表單（后端 409 DEBT_TRANSACTION_READ_ONLY），編輯模式的
+    // 分段控制不出現那一格。
+    const expense = {
+      id: 'txn-1',
+      type: 'EXPENSE',
+      amount: 120,
+      date: '2026-08-12T04:00:00.000Z',
+      note: '午餐',
+      category,
+      account: { id: 'acc-1', name: '現金' },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      createdAt: '2026-08-12T04:00:00.000Z',
+    };
+    routeFetch(trackingLedger, { items: [expense] });
+    window.history.pushState({}, '', '/transactions');
+    const user = userEvent.setup();
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /^編輯/ }, WAIT));
+
+    const dialog = await screen.findByRole('dialog', {}, WAIT);
+    expect(within(dialog).queryByRole('button', { name: '借還' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '支出' })).toBeInTheDocument();
   });
 });

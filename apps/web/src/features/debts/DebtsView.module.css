@@ -1,0 +1,55 @@
+/*
+ * 借還檢視（spec 4.2）：說明文字、淨額卡片、狀態分頁、債務列表由上往下堆疊。
+ * 各區塊自己的樣式在各自的 module.css，這裡只管堆疊與狀態分頁。
+ */
+
+.view {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 「不分帳本」是使用這個檢視前該知道的事，放在最上面、淡一階，不搶內容。 */
+.note {
+  margin: 0 0 var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 狀態分頁：分段控制（segmented control）——同一條裡的等寬按鈕，看得出
+ * 「只能選一個」。樣式語彙與交易表單的型別切換一致，使用者不必重新學。
+ */
+.tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-bottom: var(--space-md);
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+.tab {
+  height: 2rem;
+  padding: 0 var(--space-md);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-fade) var(--motion-ease);
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+/* 選中的分頁站上主要色方塊，字色換成 primary 的對比色。 */
+.tab[aria-pressed='true'] {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
