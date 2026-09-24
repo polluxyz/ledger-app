@@ -108,7 +108,7 @@ export function useUpdateDebt() {
   });
 }
 
-/** 刪除債務：後端連同所有還款與交易一起軟刪除，帳戶餘額回到借出前。 */
+/** 刪除債務：後端連同所有還款與交易一起軟刪除，帳戶餘額回到記這筆借還之前。 */
 export function useDeleteDebt() {
   const queryClient = useQueryClient();
   return useMutation({

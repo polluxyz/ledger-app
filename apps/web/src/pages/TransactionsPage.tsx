@@ -15,7 +15,10 @@ import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { DebtsView } from '../features/debts/DebtsView';
 import { TransactionFilterBar } from '../features/transactions/TransactionFilters';
 import { TransactionList } from '../features/transactions/TransactionList';
-import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
+import {
+  TransactionWorkbench,
+  type PanelTarget,
+} from '../features/transactions/TransactionWorkbench';
 import {
   EMPTY_FILTERS,
   hasAnyFilter,
@@ -90,14 +93,9 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
   const deleteTransaction = useDeleteTransaction(ledger.id);
 
-  // null = 面板顯示新增表單 / 確認彈窗關閉；交易物件 = 正在編輯 / 準備刪除的那一筆。
-  const [editing, setEditing] = useState<Transaction | null>(null);
+  // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
+  const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
   const [removing, setRemoving] = useState<Transaction | null>(null);
-
-  // 借還檢視點選的那筆債務。B4 會把它接進右側欄的債務詳情（plan §2.5 的聯集狀態）；
-  // 這裡先把狀態與資料流建好，讀掉它是為了通過未使用變數的 lint。
-  const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
-  void selectedDebtId;
 
   /** 切換檢視寫回網址；「明細」時清掉參數，回到乾淨的 /transactions。 */
   function switchView(next: TransactionsView) {
@@ -114,13 +112,18 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   }
 
   function startEditing(transaction: Transaction) {
-    setEditing(transaction);
+    setPanelTarget({ kind: 'transaction', transaction });
+    open();
+  }
+
+  function openDebt(debtId: string) {
+    setPanelTarget({ kind: 'debt', debtId });
     open();
   }
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
   function startAdding() {
-    setEditing(null);
+    setPanelTarget({ kind: 'new' });
     requestFocus();
   }
 
@@ -179,7 +182,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
         {view === 'debts' ? (
           // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
-          <DebtsView onSelectDebt={setSelectedDebtId} />
+          <DebtsView onSelectDebt={openDebt} />
         ) : (
           // 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。
           <section className={styles.listCard}>
@@ -196,8 +199,9 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
               isFiltered={hasAnyFilter(filters)}
               onEdit={startEditing}
               onRemove={setRemoving}
+              onOpenDebt={openDebt}
               // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
-              selectedId={editing?.id ?? null}
+              selectedId={panelTarget.kind === 'transaction' ? panelTarget.transaction.id : null}
             />
 
             <Pagination
@@ -210,7 +214,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         )}
       </PageContent>
 
-      <TransactionWorkbench ledger={ledger} editing={editing} onEditDone={() => setEditing(null)} />
+      <TransactionWorkbench
+        ledger={ledger}
+        target={panelTarget}
+        onClose={() => setPanelTarget({ kind: 'new' })}
+      />
 
       {/*
         刪除確認刻意留在版面之外：它是 modal，不屬於任何一欄，也不該被內容的

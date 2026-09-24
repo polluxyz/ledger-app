@@ -86,11 +86,13 @@ describe('Transactions page', () => {
       if (url.includes('/accounts')) {
         return json([account]);
       }
-      // 借還檢視的兩個端點。順序上要先排除 /debts/summary，再比對 /debts。
       if (url.includes('/debts/summary')) {
         return json({
           items: [{ counterpartyName: '小明', counterpartyUserId: null, net: 5000 }],
         });
+      }
+      if (url.includes('/debts/debt-1')) {
+        return json(debt);
       }
       if (url.includes('/debts')) {
         return json({ items: [debt], page: 1, limit: 20, total: 1 });
@@ -218,5 +220,72 @@ describe('Transactions page', () => {
     expect(screen.queryByText('借還紀錄不分帳本')).not.toBeInTheDocument();
     // 網址上的參數被清掉——再重整一次還是明細。
     expect(window.location.search).toBe('');
+  });
+
+  it('opens debt detail in right panel when clicking a debt item in debts view', async () => {
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions?view=debts');
+    render(<App />);
+
+    const debtButton = await screen.findByRole('button', { name: /借給小明/ }, WAIT);
+    await user.click(debtButton);
+
+    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
+    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
+    expect(within(dialog).getByText('未清餘額')).toBeInTheDocument();
+  });
+
+  it('opens debt detail in right panel when clicking a debt transaction in details view', async () => {
+    const lendTxn = {
+      id: 'txn-lend',
+      type: 'LEND',
+      amount: 5000,
+      date: '2026-09-01T04:00:00.000Z',
+      note: '借出款項',
+      category: null,
+      account: { id: account.id, name: account.name },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      debtId: 'debt-1',
+      createdAt: '2026-09-01T04:00:00.000Z',
+    };
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.includes('/transactions')) {
+        return json({ items: [lendTxn], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) {
+        return json([expenseCategory]);
+      }
+      if (url.includes('/accounts')) {
+        return json([account]);
+      }
+      if (url.includes('/debts/summary')) {
+        return json({ items: [] });
+      }
+      if (url.includes('/debts/debt-1')) {
+        return json(debt);
+      }
+      if (url.includes('/debts')) {
+        return json({ items: [debt], page: 1, limit: 20, total: 1 });
+      }
+      return json([ledger]);
+    });
+
+    const user = userEvent.setup();
+    window.history.pushState({}, '', '/transactions');
+    render(<App />);
+
+    const item = await screen.findByRole('listitem', undefined, WAIT);
+    await user.click(within(item).getByText('借出'));
+
+    const dialog = await screen.findByRole('dialog', { name: '借還詳情' }, WAIT);
+    expect(within(dialog).getByText('借給小明')).toBeInTheDocument();
   });
 });

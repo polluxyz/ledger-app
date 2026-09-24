@@ -222,5 +222,91 @@ describe('TransactionList', () => {
         expect(onRemove).not.toHaveBeenCalled();
       },
     );
+
+    it('calls onOpenDebt when clicking a debt row that has debtId and onOpenDebt is provided', async () => {
+      const user = userEvent.setup();
+      const onOpenDebt = vi.fn();
+      render(
+        <TransactionList
+          transactions={[
+            makeTransaction({
+              id: 'txn-debt-1',
+              type: 'LEND',
+              amount: 1000,
+              category: null,
+              debtId: 'debt-1',
+            }),
+          ]}
+          isLoading={false}
+          error={null}
+          onEdit={vi.fn()}
+          onRemove={vi.fn()}
+          onOpenDebt={onOpenDebt}
+        />,
+      );
+
+      const debtRow = screen.getByRole('listitem');
+      expect(debtRow).toHaveClass(cssClass('clickable'));
+
+      await user.click(screen.getByText('借出'));
+      expect(onOpenDebt).toHaveBeenCalledWith('debt-1');
+    });
+
+    it('does not call onOpenDebt and does not have clickable class when debtId is null', async () => {
+      const user = userEvent.setup();
+      const onOpenDebt = vi.fn();
+      render(
+        <TransactionList
+          transactions={[
+            makeTransaction({
+              id: 'txn-debt-null',
+              type: 'LEND',
+              amount: 1000,
+              category: null,
+              debtId: null,
+            }),
+          ]}
+          isLoading={false}
+          error={null}
+          onEdit={vi.fn()}
+          onRemove={vi.fn()}
+          onOpenDebt={onOpenDebt}
+        />,
+      );
+
+      const debtRow = screen.getByRole('listitem');
+      expect(debtRow).not.toHaveClass(cssClass('clickable'));
+
+      await user.click(screen.getByText('借出'));
+      expect(onOpenDebt).not.toHaveBeenCalled();
+    });
+
+    it('is not clickable when onOpenDebt is not provided even if debtId is present', async () => {
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
+      render(
+        <TransactionList
+          transactions={[
+            makeTransaction({
+              id: 'txn-debt-1',
+              type: 'LEND',
+              amount: 1000,
+              category: null,
+              debtId: 'debt-1',
+            }),
+          ]}
+          isLoading={false}
+          error={null}
+          onEdit={onEdit}
+          onRemove={vi.fn()}
+        />,
+      );
+
+      const debtRow = screen.getByRole('listitem');
+      expect(debtRow).not.toHaveClass(cssClass('clickable'));
+
+      await user.click(screen.getByText('借出'));
+      expect(onEdit).not.toHaveBeenCalled();
+    });
   });
 });

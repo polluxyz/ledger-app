@@ -20,6 +20,8 @@ interface TransactionListProps {
   selectedId?: string | null;
   onEdit: (transaction: Transaction) => void;
   onRemove: (transaction: Transaction) => void;
+  /** 點選借還交易時開啟債務詳情（僅在 debtId 有值且有傳本 prop 時可點）。 */
+  onOpenDebt?: (debtId: string) => void;
 }
 
 /**
@@ -104,6 +106,7 @@ export function TransactionList({
   selectedId = null,
   onEdit,
   onRemove,
+  onOpenDebt,
 }: TransactionListProps) {
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
@@ -124,14 +127,18 @@ export function TransactionList({
    * 整列可點就是編輯（D17）。兩顆操作鈕在列之內，點它們會一路冒泡上來，
    * 所以先問這一下是不是打在按鈕上——否則按「刪除」會同時開啟編輯面板。
    *
-   * 借還交易在一般交易端點是唯讀的（後端回 409 `DEBT_TRANSACTION_READ_ONLY`），
-   * 所以那幾列整列都不開編輯。純粹是體驗：擋不擋得住由後端說了算。
+   * 借還交易在一般交易端點是唯讀的（後端回 409 `DEBT_TRANSACTION_READ_ONLY`）。
+   * 但若有傳入 onOpenDebt 且 debtId 有值，整列可點並打開該筆債務的詳情（spec §4.4）；
+   * 沒有 debtId（共享帳本別人的借還交易）或沒傳 onOpenDebt 則不可點。
    */
   function handleRowClick(event: MouseEvent<HTMLLIElement>, transaction: Transaction) {
     if ((event.target as Element).closest('button')) {
       return;
     }
     if (isDebtTransactionType(transaction.type)) {
+      if (onOpenDebt && transaction.debtId !== null) {
+        onOpenDebt(transaction.debtId);
+      }
       return;
     }
     onEdit(transaction);
@@ -151,62 +158,76 @@ export function TransactionList({
         <div key={group.key}>
           <p className={styles.groupHeading}>{group.heading}</p>
           <ul className={styles.rows}>
-            {group.transactions.map((transaction) => (
-              <li
-                key={transaction.id}
-                className={`${styles.row} ${transaction.id === selectedId ? styles.selected : ''}`}
-                onClick={(event) => handleRowClick(event, transaction)}
-              >
-                <span className={styles.main}>
-                  {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
-                  {transaction.category ? (
-                    <span className={styles.category}>{transaction.category.name}</span>
-                  ) : (
-                    <span className={styles.category}>
-                      <Icon name="transfer" />
-                      {TRANSACTION_TYPE_LABELS[transaction.type]}
-                    </span>
-                  )}
-                  {transaction.note && <span className={styles.note}>{transaction.note}</span>}
-                </span>
-                {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
-                <span className={styles.account}>
-                  {transaction.account?.name}
-                  {transaction.toAccount && ` → ${transaction.toAccount.name}`}
-                </span>
-                <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
-                  {formatTransactionAmount(transaction.type, transaction.amount)}
-                </span>
-                {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列
+            {group.transactions.map((transaction) => {
+              const isDebt = isDebtTransactionType(transaction.type);
+              const isClickable = isDebt
+                ? Boolean(onOpenDebt && transaction.debtId !== null)
+                : true;
+              const rowClassNames = [
+                styles.row,
+                isClickable ? styles.clickable : '',
+                transaction.id === selectedId ? styles.selected : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+
+              return (
+                <li
+                  key={transaction.id}
+                  className={rowClassNames}
+                  onClick={(event) => handleRowClick(event, transaction)}
+                >
+                  <span className={styles.main}>
+                    {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
+                    {transaction.category ? (
+                      <span className={styles.category}>{transaction.category.name}</span>
+                    ) : (
+                      <span className={styles.category}>
+                        <Icon name="transfer" />
+                        {TRANSACTION_TYPE_LABELS[transaction.type]}
+                      </span>
+                    )}
+                    {transaction.note && <span className={styles.note}>{transaction.note}</span>}
+                  </span>
+                  {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
+                  <span className={styles.account}>
+                    {transaction.account?.name}
+                    {transaction.toAccount && ` → ${transaction.toAccount.name}`}
+                  </span>
+                  <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
+                    {formatTransactionAmount(transaction.type, transaction.amount)}
+                  </span>
+                  {/* 共享帳本裡任何 editor 都能改任何一筆（後端的決策 8），所以每一列
                     都有入口，不依成員身分判斷。唯一的例外是借還交易：它們只能從
                     債務端點改動，這裡放兩顆必定得到 409 的按鈕只是在騙人。
                     那一格仍然留著（`<span>` 照渲染），欄寬才不會一列一個樣。 */}
-                <span className={styles.actions}>
-                  {!isDebtTransactionType(transaction.type) && (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.action}
-                        title="編輯"
-                        onClick={() => onEdit(transaction)}
-                        aria-label={`編輯${describe(transaction)}`}
-                      >
-                        <Icon name="edit" />
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.action} ${styles.remove}`}
-                        title="刪除"
-                        onClick={() => onRemove(transaction)}
-                        aria-label={`刪除${describe(transaction)}`}
-                      >
-                        <Icon name="trash" />
-                      </button>
-                    </>
-                  )}
-                </span>
-              </li>
-            ))}
+                  <span className={styles.actions}>
+                    {!isDebtTransactionType(transaction.type) && (
+                      <>
+                        <button
+                          type="button"
+                          className={styles.action}
+                          title="編輯"
+                          onClick={() => onEdit(transaction)}
+                          aria-label={`編輯${describe(transaction)}`}
+                        >
+                          <Icon name="edit" />
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.action} ${styles.remove}`}
+                          title="刪除"
+                          onClick={() => onRemove(transaction)}
+                          aria-label={`刪除${describe(transaction)}`}
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

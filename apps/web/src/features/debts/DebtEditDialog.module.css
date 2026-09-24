@@ -1,0 +1,25 @@
+/*
+ * 編輯債務彈窗的樣式。
+ */
+
+.actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.actions > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 有結清還款時說明為什麼本金不能改。 */
+.notice {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

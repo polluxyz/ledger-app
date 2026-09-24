@@ -157,7 +157,11 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
         </div>
       </PageContent>
 
-      <TransactionWorkbench ledger={ledger} editing={editing} onEditDone={() => setEditing(null)} />
+      <TransactionWorkbench
+        ledger={ledger}
+        target={editing ? { kind: 'transaction', transaction: editing } : { kind: 'new' }}
+        onClose={() => setEditing(null)}
+      />
     </>
   );
 }
