@@ -1,12 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode } from '@ledger/shared';
-import type {
-  Counterparty,
-  DebtEntry,
-  DebtEntryKind,
-  DebtTransactionType,
-  ManualDebtEntryKind,
-} from '@ledger/shared';
+import type { Counterparty, DebtEntry, DebtEntryKind, DebtTransactionType } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
 
@@ -24,12 +18,18 @@ import type { Prisma } from '../generated/prisma/client';
 type DebtClient = Pick<Prisma.TransactionClient, 'counterparty' | 'debtEntry'>;
 
 /**
- * 使用者記的 5 種往來，`delta` 的正負號（spec §3.2）。正數＝這筆讓對方多欠我。
+ * 使用者記的往來**存下來**的 5 種（不含調整紀錄）。還款在請求裡是 `REPAYMENT`，
+ * 由 `resolveRepayment` 依餘額換成 `COLLECT` 或 `REPAY` 之後才存（決策 46）。
+ */
+export type RecordedDebtEntryKind = 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY' | 'PAID_FOR_ME';
+
+/**
+ * 這 5 種的 `delta` 正負號（spec §3.2）。正數＝這筆讓對方多欠我。
  *
  * 借出、我還對方：錢從我這邊出去，對方多欠我（或我少欠對方）。
  * 借入、對方還我、對方幫我付：對方的錢到了我這邊（或花在我身上），我多欠對方。
  */
-const DELTA_SIGN: Record<ManualDebtEntryKind, 1 | -1> = {
+const DELTA_SIGN: Record<RecordedDebtEntryKind, 1 | -1> = {
   LEND: 1,
   REPAY: 1,
   BORROW: -1,
@@ -37,8 +37,41 @@ const DELTA_SIGN: Record<ManualDebtEntryKind, 1 | -1> = {
   PAID_FOR_ME: -1,
 };
 
-export function deltaFor(kind: ManualDebtEntryKind, amount: number): number {
+export function deltaFor(kind: RecordedDebtEntryKind, amount: number): number {
   return DELTA_SIGN[kind] * amount;
+}
+
+/**
+ * 還款要存成哪一種（spec §3.2.1，決策 46、47）。`balance` 是寫入前、已鎖住對象後讀到的餘額。
+ *
+ * - 餘額 0：沒有欠款可還 → 409 `NOTHING_TO_REPAY`。
+ * - 對方欠我（> 0）→ `COLLECT`；我欠對方（< 0）→ `REPAY`。
+ * - 沒勾結清又還超過欠款 → 409 `REPAYMENT_EXCEEDS_BALANCE`。多出的錢是「對方多給」還是
+ *   「又借一筆」系統猜不出來，要使用者自己選：勾結清，或另記一筆借入／借出。
+ *   勾了結清就放行：結清後餘額一定歸零，超過的部分會記成結清差額，方向不會反過來。
+ *
+ * 只在**新增**時檢查；修改與刪除既有紀錄不擋（決策 48）。
+ */
+export function resolveRepayment(
+  balance: number,
+  amount: number,
+  settle: boolean,
+): 'COLLECT' | 'REPAY' {
+  if (balance === 0) {
+    throw new AppException(
+      HttpStatus.CONFLICT,
+      ErrorCode.NOTHING_TO_REPAY,
+      'There is no outstanding balance to repay.',
+    );
+  }
+  if (!settle && amount > Math.abs(balance)) {
+    throw new AppException(
+      HttpStatus.CONFLICT,
+      ErrorCode.REPAYMENT_EXCEEDS_BALANCE,
+      'The repayment exceeds the outstanding balance; settle it, or record the excess separately.',
+    );
+  }
+  return balance > 0 ? 'COLLECT' : 'REPAY';
 }
 
 /**
@@ -46,7 +79,7 @@ export function deltaFor(kind: ManualDebtEntryKind, amount: number): number {
  * 交易型別由種類決定，呼叫者指定不了（沿用決策 3 的精神）。
  */
 export function transactionTypeFor(
-  kind: Exclude<ManualDebtEntryKind, 'PAID_FOR_ME'>,
+  kind: Exclude<RecordedDebtEntryKind, 'PAID_FOR_ME'>,
 ): DebtTransactionType {
   return kind;
 }
@@ -138,6 +171,20 @@ export async function loadOwnedEntry(
     throw notFound('Debt entry');
   }
   return row;
+}
+
+/**
+ * 在目前的資料庫交易裡鎖住一個對象的資料列，直到交易結束（決策 50）。
+ *
+ * 「讀餘額 → 檢查 → 寫入」要是沒鎖，兩個同時送出的還款會各自讀到沒扣掉對方那筆的餘額，
+ * 一起通過檢查，餘額就翻轉了；結清差額也會算錯。對象列是這本往來帳天然的鎖點：
+ * 同一個對象的寫入排隊，不同對象互不影響。
+ */
+export async function lockCounterparty(
+  tx: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  counterpartyId: string,
+): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "Counterparty" WHERE id = ${counterpartyId} FOR UPDATE`;
 }
 
 /** 某個對象目前的往來餘額（在同一個資料庫交易裡讀，寫入後的計算才一致）。 */

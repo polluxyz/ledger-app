@@ -64,6 +64,8 @@ describe('DebtEntriesService', () => {
       ledgerMember: {
         findUnique: jest.fn().mockResolvedValue({ role: 'EDITOR', ledger: { archivedAt: null } }),
       },
+      // 鎖對象（`SELECT … FOR UPDATE`）。真正的並發行為由 e2e 對 PostgreSQL 驗（SC-L21）。
+      $queryRaw: jest.fn().mockResolvedValue([]),
       // 回傳型別要明寫成 unknown，否則 `mock` 引用自己會讓 TypeScript 把整個物件推成 any。
       $transaction: jest.fn((callback: (tx: unknown) => unknown): unknown => callback(mock)),
     };
@@ -122,6 +124,7 @@ describe('DebtEntriesService', () => {
       ['PAID_FOR_ME without a category', { kind: 'PAID_FOR_ME', record: { ledgerId: LEDGER } }],
       ['a category on LEND', { categoryId: 'c' }],
       ['settle on LEND', { settle: true }],
+      ['settle on PAID_FOR_ME', { kind: 'PAID_FOR_ME', categoryId: 'c', settle: true }],
     ])('rejects %s', async (_label, overrides) => {
       await expect(
         service.create(USER, input(overrides as Partial<CreateDebtEntryDto>)),
@@ -208,16 +211,75 @@ describe('DebtEntriesService', () => {
     });
   });
 
+  describe('repayment (decisions 46, 47, 50)', () => {
+    it('stores a repayment as COLLECT when the counterparty owes me', async () => {
+      prisma.debtEntry.aggregate
+        .mockResolvedValueOnce({ _sum: { delta: 100 } })
+        .mockResolvedValueOnce({ _sum: { delta: 70 } });
+
+      const result = await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
+
+      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ type: 'COLLECT', amount: 30 }),
+      );
+      expect(createdData()).toMatchObject({ kind: 'COLLECT', delta: -30 });
+      expect(result.counterparty.balance).toBe(70);
+    });
+
+    it('stores a repayment as REPAY when I owe the counterparty', async () => {
+      prisma.debtEntry.aggregate
+        .mockResolvedValueOnce({ _sum: { delta: -50 } })
+        .mockResolvedValueOnce({ _sum: { delta: 0 } });
+
+      await service.create(USER, input({ kind: 'REPAYMENT', amount: 50 }));
+
+      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ type: 'REPAY', amount: 50 }),
+      );
+      expect(createdData()).toMatchObject({ kind: 'REPAY', delta: 50 });
+    });
+
+    it('locks the counterparty before reading the balance', async () => {
+      prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 100 } });
+
+      await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(
+        prisma.debtEntry.aggregate.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it.each([
+      ['nothing is owed', 0, 30, 'NOTHING_TO_REPAY'],
+      ['it exceeds what is owed', 9, 20, 'REPAYMENT_EXCEEDS_BALANCE'],
+    ])(
+      'rejects with 409 and writes nothing when %s',
+      async (_label, balance, amount, errorCode) => {
+        prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: balance } });
+
+        await expect(
+          service.create(USER, input({ kind: 'REPAYMENT', amount })),
+        ).rejects.toMatchObject({ status: 409, errorCode });
+        expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
+        expect(prisma.debtEntry.create).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('settle (decision 38)', () => {
     it('adds a SETTLEMENT that brings the balance back to zero', async () => {
-      // 寫入還款後的餘額 3（對方還欠 3），結清差額 −3：我少收 3。
+      // 欠 93、還 90：寫入後的餘額 3（對方還欠 3），結清差額 −3：我少收 3。
       prisma.debtEntry.aggregate
+        .mockResolvedValueOnce({ _sum: { delta: 93 } })
         .mockResolvedValueOnce({ _sum: { delta: 3 } })
         .mockResolvedValueOnce({ _sum: { delta: 0 } });
 
       const result = await service.create(
         USER,
-        input({ kind: 'COLLECT', amount: 90, settle: true }),
+        input({ kind: 'REPAYMENT', amount: 90, settle: true }),
       );
 
       expect(createdData(1)).toMatchObject({ kind: 'SETTLEMENT', delta: -3, transactionId: null });
@@ -227,12 +289,27 @@ describe('DebtEntriesService', () => {
       expect(transactions.createDebtTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('lets an overpayment through when settling, recording the excess in my favour', async () => {
+      // 欠 93、還 95 並結清：寫入後 −2，差額 +2（對方多給 2），方向沒有反過來。
+      prisma.debtEntry.aggregate
+        .mockResolvedValueOnce({ _sum: { delta: 93 } })
+        .mockResolvedValueOnce({ _sum: { delta: -2 } })
+        .mockResolvedValueOnce({ _sum: { delta: 0 } });
+
+      await service.create(USER, input({ kind: 'REPAYMENT', amount: 95, settle: true }));
+
+      expect(createdData(0)).toMatchObject({ kind: 'COLLECT', delta: -95 });
+      expect(createdData(1)).toMatchObject({ kind: 'SETTLEMENT', delta: 2 });
+    });
+
     it('adds nothing when the repayment already clears the balance', async () => {
-      prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 0 } });
+      prisma.debtEntry.aggregate
+        .mockResolvedValueOnce({ _sum: { delta: 93 } })
+        .mockResolvedValue({ _sum: { delta: 0 } });
 
       const result = await service.create(
         USER,
-        input({ kind: 'COLLECT', amount: 93, settle: true }),
+        input({ kind: 'REPAYMENT', amount: 93, settle: true }),
       );
 
       expect(prisma.debtEntry.create).toHaveBeenCalledTimes(1);
