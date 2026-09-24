@@ -1,24 +1,19 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App from '../../App';
+import type { LedgerSummary } from '@ledger/shared';
+import { DebtEntryForm } from './DebtEntryForm';
 
 /**
- * 「借還」分頁的新增表單（spec 3b-1 §4.1）：借出／借入／還款三種模式送出的
- * **body 形狀**。
- *
- * body 是這一檔的重點（plan §2.4）：借出／借入沒勾舊債要帶 `record`、勾了就
- * 整個不帶；還款則**一律明確給** `record`——省略時後端會沿用本金交易的帳本與
- * 帳戶，畫面上顯示的與實際記進去的可能不同。差一個鍵不會拋錯，只會記錯帳，
- * 所以逐鍵斷言。
- *
- * 策略：從真實的 `App` 出發（借還分頁住在右側欄的新增表單裡），只把 `fetch`
- * 換成 mock，比照 `use-transactions.test.tsx`。
+ * 借還表單驗欄位切換、W16 預覽與送往來 API 的 body；fetch mock 讓每個情境都能
+ * 直接核對送出內容，特別確認 `record` 的 null 與物件形狀不會混淆。
  */
-describe('Debt entry form', () => {
+describe('DebtEntryForm', () => {
   const fetchMock = vi.fn();
+  let queryClient: QueryClient;
 
-  const ledger = {
+  const ledger: LedgerSummary = {
     id: 'ledger-1',
     name: '我的帳本',
     currency: 'TWD',
@@ -26,104 +21,90 @@ describe('Debt entry form', () => {
     tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
-  };
-  const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const accounts = [
-    { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 },
-    { id: 'acc-2', name: 'LINE Pay', initialBalance: 0, balance: 120 },
-  ];
-  /** 未結清：借給小明 5,000，已還 2,000，未清 3,000。 */
-  const openDebt = {
-    id: 'debt-1',
-    direction: 'LENT',
-    counterpartyName: '小明',
-    principal: 5000,
-    date: '2026-09-01T00:00:00.000Z',
-    note: null,
-    outstanding: 3000,
-    status: 'OPEN',
-    settlementDifference: null,
-    transactionId: 'txn-1',
-    payments: [],
-    forgivenAt: null,
     createdAt: '2026-09-01T00:00:00.000Z',
-    updatedAt: '2026-09-01T00:00:00.000Z',
   };
+  const plainLedger: LedgerSummary = { ...ledger, id: 'ledger-plain', tracksBalance: false };
+  const counterparties = [
+    {
+      id: 'cp-ming',
+      name: '小明',
+      balance: 93,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    },
+    {
+      id: 'cp-hua',
+      name: '阿華',
+      balance: -93,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    },
+    {
+      id: 'cp-mei',
+      name: '小美',
+      balance: 0,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    },
+  ];
+  const accounts = [
+    { id: 'acc-cash', name: '現金', initialBalance: 0, balance: 880 },
+    { id: 'acc-bank', name: '銀行', initialBalance: 0, balance: 5000 },
+  ];
+  const categories = [{ id: 'cat-food', name: '餐飲', type: 'EXPENSE' }];
 
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
-    window.history.pushState({}, '', '/');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      const json = (body: unknown, status = 200) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+
+      if (url.includes('/debt-entries') && method === 'POST') {
+        return json({ counterparty: counterparties[0], entries: [] }, 201);
+      }
+      if (url.includes('/counterparties')) {
+        return json({ items: counterparties, page: 1, limit: 100, total: counterparties.length });
+      }
+      if (url.includes('/categories')) {
+        return json(categories);
+      }
+      if (url.includes('/accounts')) {
+        return json(accounts);
+      }
+      return Promise.reject(new Error(`未預期的請求：${url}`));
+    });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  function jsonResponse(status: number, body: unknown): Response {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  function renderForm(selectedLedger = ledger, initialCounterpartyName?: string) {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DebtEntryForm ledger={selectedLedger} initialCounterpartyName={initialCounterpartyName} />
+      </QueryClientProvider>,
+    );
   }
 
-  function routeFetch() {
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      const method = init?.method ?? 'GET';
-      if (url.includes('/debts/summary')) {
-        return Promise.resolve(
-          jsonResponse(200, {
-            items: [{ counterpartyName: '小明', counterpartyUserId: null, net: 5000 }],
-          }),
-        );
-      }
-      if (url.includes('/debts/debt-1/payments') && method === 'POST') {
-        return Promise.resolve(jsonResponse(200, openDebt));
-      }
-      if (url.includes('/debts') && method === 'POST') {
-        return Promise.resolve(jsonResponse(201, openDebt));
-      }
-      if (url.includes('/debts')) {
-        return Promise.resolve(
-          jsonResponse(200, { items: [openDebt], page: 1, limit: 100, total: 1 }),
-        );
-      }
-      if (url.includes('/transactions')) {
-        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
-      }
-      if (url.includes('/categories')) {
-        return Promise.resolve(jsonResponse(200, [category]));
-      }
-      if (url.includes('/accounts')) {
-        return Promise.resolve(jsonResponse(200, accounts));
-      }
-      return Promise.resolve(jsonResponse(200, [ledger]));
-    });
-  }
-
-  const WAIT = { timeout: 5000 };
-  /** 日期由表單預設今天再轉 ISO，比對形狀即可（比照 transaction-edit 逐欄比對的寫法）。 */
-  const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-  /** 打開右側欄的新增表單、切到「借還」分頁，回傳借還分頁的根。 */
-  async function openDebtTab(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByRole('button', { name: '新增交易' }, WAIT));
-    await user.click(await screen.findByRole('button', { name: '借還' }, WAIT));
-    return await screen.findByRole('button', { name: '借出' }, WAIT);
-  }
-
-  /** 找出某個 URL 前綴與方法的請求 body（最後一次）。 */
-  async function sentBody(
-    urlPart: string,
-    method: 'POST' | 'PATCH',
-  ): Promise<Record<string, unknown>> {
+  async function postedBody(): Promise<Record<string, unknown>> {
     let body: Record<string, unknown> = {};
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
         ([url, init]) =>
-          String(url).includes(urlPart) && (init as RequestInit | undefined)?.method === method,
+          String(url).includes('/debt-entries') &&
+          (init as RequestInit | undefined)?.method === 'POST',
       );
       expect(call).toBeDefined();
       const raw = (call?.[1] as RequestInit | undefined)?.body;
@@ -132,90 +113,176 @@ describe('Debt entry form', () => {
     return body;
   }
 
-  it('creates a LENT debt with an explicit record', async () => {
-    routeFetch();
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+  it('shows five kinds with kind-specific fields and leaves the account unselected', async () => {
     const user = userEvent.setup();
+    renderForm();
 
-    render(<App />);
-    await openDebtTab(user);
+    const account = await screen.findByLabelText('從哪個帳戶借出');
+    expect(account).toHaveValue('');
+    expect(account.firstElementChild).toHaveTextContent('請選擇');
+    expect(screen.getByRole('button', { name: '借出' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '以此結清' })).not.toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('對方名字'), '小明');
-    await user.type(screen.getByLabelText('金額'), '5000');
+    await user.click(screen.getByRole('button', { name: '借入' }));
+    expect(screen.getByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '對方還我' }));
+    expect(screen.getByLabelText('收進哪個帳戶')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '以此結清' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '我還對方' }));
+    expect(screen.getByLabelText('從哪個帳戶付出')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '對方幫我付' }));
+    expect(screen.queryByLabelText(/帳戶/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '不記入帳本' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '以此結清' })).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('分類')).toBeInTheDocument();
+  });
+
+  it.each([
+    { kind: '借出', name: '小明', amount: '10', expected: '記完後：小明欠你 $103' },
+    { kind: '借入', name: '小明', amount: '90', expected: '記完後：小明欠你 $3' },
+    { kind: '對方還我', name: '小明', amount: '104', expected: '記完後：你欠小明 $11' },
+    { kind: '對方還我', name: '小明', amount: '93', expected: '記完後：兩清' },
+    {
+      kind: '對方還我',
+      name: '小明',
+      amount: '90',
+      settle: true,
+      expected: '記完後兩清，差額 −3（少收 3 元）',
+    },
+    {
+      kind: '我還對方',
+      name: '阿華',
+      amount: '100',
+      settle: true,
+      expected: '記完後兩清，差額 −7（多付 7 元）',
+    },
+    {
+      kind: '對方還我',
+      name: '小明',
+      amount: '93',
+      settle: true,
+      expected: '記完後兩清',
+    },
+  ])(
+    'previews $kind with the matching current balance',
+    async ({ kind, name, amount, settle, expected }) => {
+      const user = userEvent.setup();
+      renderForm();
+
+      await screen.findByLabelText('金額');
+      await user.click(screen.getByRole('button', { name: kind }));
+      await user.type(screen.getByLabelText('對象'), name);
+      await user.type(screen.getByLabelText('金額'), amount);
+      if (settle) {
+        await user.click(await screen.findByRole('checkbox', { name: '以此結清' }));
+      }
+
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+    },
+  );
+
+  it('posts an existing counterparty id, then keeps the person and kind while clearing amount and note', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('對象'), ' 小明 ');
+    await user.click(screen.getByRole('button', { name: '借入' }));
+    await user.type(screen.getByLabelText('金額'), '111');
+    await user.selectOptions(await screen.findByLabelText('借到的錢進哪個帳戶'), 'acc-bank');
+    await user.type(screen.getByLabelText('備註（選填）'), '臨時周轉');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
-    const body = await sentBody('/debts', 'POST');
-    // 逐欄比對（含「哪些鍵不該出現」），比一次 toEqual 整包更能指出問題在哪。
-    expect(body.direction).toBe('LENT');
-    expect(body.counterpartyName).toBe('小明');
-    expect(body.principal).toBe(5000);
+    const body = await postedBody();
+    expect(body.counterparty).toEqual({ id: 'cp-ming' });
+    expect(body.kind).toBe('BORROW');
+    expect(body.amount).toBe(111);
     expect(String(body.date)).toMatch(ISO_DATE);
-    // 沒勾舊債：記進作用中帳本，帳戶照慣例落在第一個（現金）；備註空就不帶。
-    expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-1' });
+    expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-bank' });
+    expect(body.note).toBe('臨時周轉');
+    await waitFor(() => {
+      expect(screen.getByLabelText('金額')).toHaveValue(null);
+      expect(screen.getByLabelText('備註（選填）')).toHaveValue('');
+      expect(screen.getByLabelText('對象')).toHaveValue(' 小明 ');
+      expect(screen.getByRole('button', { name: '借入' })).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
+  it('trims a new counterparty name before posting it', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('對象'), '  小新  ');
+    await user.type(screen.getByLabelText('金額'), '250');
+    await user.selectOptions(await screen.findByLabelText('從哪個帳戶借出'), 'acc-cash');
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    const body = await postedBody();
+    expect(body.counterparty).toEqual({ name: '小新' });
+    expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-cash' });
     expect('note' in body).toBe(false);
   });
 
-  it('omits record entirely when the old-debt checkbox is checked', async () => {
-    routeFetch();
+  it('posts record null when the user chooses not to record a ledger transaction', async () => {
     const user = userEvent.setup();
+    renderForm();
 
-    render(<App />);
-    await openDebtTab(user);
-
-    await user.type(screen.getByLabelText('對方名字'), '小明');
-    await user.type(screen.getByLabelText('金額'), '5000');
-    await user.click(screen.getByRole('checkbox', { name: '這是舊債，不記入帳本' }));
-    // 勾了舊債，帳戶欄停用並說明餘額不會動。
-    expect(screen.getByLabelText('帳戶')).toBeDisabled();
-    expect(screen.getByText('帳戶餘額不會變動')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('對象'), '小明');
+    await user.type(screen.getByLabelText('金額'), '80');
+    await user.click(screen.getByRole('checkbox', { name: '不記入帳本' }));
+    expect(screen.getByLabelText('從哪個帳戶借出')).toBeDisabled();
     await user.click(screen.getByRole('button', { name: '新增' }));
 
-    const body = await sentBody('/debts', 'POST');
-    // SC-W5：舊債的 body **沒有 record 這個鍵**（省略＝不產生交易，決策 7）。
-    expect(body.direction).toBe('LENT');
-    expect(body.counterpartyName).toBe('小明');
-    expect(body.principal).toBe(5000);
-    expect(String(body.date)).toMatch(ISO_DATE);
-    expect('record' in body).toBe(false);
+    const body = await postedBody();
+    expect(body.record).toBeNull();
   });
 
-  it('prefills the payment amount with the outstanding balance of the picked debt', async () => {
-    routeFetch();
+  it('records a paid-for-me expense with the ledger and expense category but no account', async () => {
     const user = userEvent.setup();
+    renderForm();
 
-    render(<App />);
-    await openDebtTab(user);
-    await user.click(screen.getByRole('button', { name: '還款' }));
-
-    const debtSelect = await screen.findByLabelText('債務', {}, WAIT);
-    // 下拉的每一項寫出方向、對方與未清餘額（spec §4.1），數字取自 API。
-    expect(debtSelect).toHaveTextContent('借給小明 · 剩 $3,000');
-    await user.selectOptions(debtSelect, 'debt-1');
-
-    // 金額預設為那筆債務的未清餘額；帳戶不預選（收款／付款管道常與借出時不同）。
-    // type="number" 的值由 jest-dom 以數字比對。
-    expect(await screen.findByLabelText('金額', {}, WAIT)).toHaveValue(3000);
-    expect(screen.getByLabelText('收款帳戶')).toHaveValue('');
-  });
-
-  it('creates a payment with an explicit record and no settles when paying exactly', async () => {
-    routeFetch();
-    const user = userEvent.setup();
-
-    render(<App />);
-    await openDebtTab(user);
-    await user.click(screen.getByRole('button', { name: '還款' }));
-    await user.selectOptions(await screen.findByLabelText('債務', {}, WAIT), 'debt-1');
-    // 還款的帳戶每次自己選——這裡刻意選第二個，證明不是沿用預設。
-    await user.selectOptions(screen.getByLabelText('收款帳戶'), 'acc-2');
+    await user.click(screen.getByRole('button', { name: '對方幫我付' }));
+    await user.type(screen.getByLabelText('對象'), '小明');
+    await user.type(screen.getByLabelText('金額'), '400');
+    await user.selectOptions(await screen.findByLabelText('分類'), 'cat-food');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
-    const body = await sentBody('/debts/debt-1/payments', 'POST');
-    expect(body.amount).toBe(3000);
-    expect(String(body.date)).toMatch(ISO_DATE);
-    // 還款一律明確帶 record（plan §2.4），不依賴後端「沿用本金交易」的預設。
-    expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-2' });
-    // 金額剛好等於未清餘額：勾選框沒顯示，settles 不該出現在 body；備註空就不帶。
-    expect('settles' in body).toBe(false);
-    expect('note' in body).toBe(false);
+    const body = await postedBody();
+    expect(body.kind).toBe('PAID_FOR_ME');
+    expect(body.record).toEqual({ ledgerId: 'ledger-1' });
+    expect(body.categoryId).toBe('cat-food');
+    expect('accountId' in (body.record as object)).toBe(false);
+  });
+
+  it('does not send an account id for a non-balance-tracking ledger', async () => {
+    const user = userEvent.setup();
+    renderForm(plainLedger);
+
+    await user.type(screen.getByLabelText('對象'), '小明');
+    await user.type(screen.getByLabelText('金額'), '65');
+    expect(screen.queryByLabelText(/帳戶/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    const body = await postedBody();
+    expect(body.record).toEqual({ ledgerId: 'ledger-plain' });
+    expect('accountId' in (body.record as object)).toBe(false);
+  });
+
+  it('sends settle only when the repayment is explicitly marked to settle', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByRole('button', { name: '對方還我' }));
+    await user.type(screen.getByLabelText('對象'), '小明');
+    await user.type(screen.getByLabelText('金額'), '90');
+    await user.selectOptions(await screen.findByLabelText('收進哪個帳戶'), 'acc-cash');
+    await user.click(screen.getByRole('checkbox', { name: '以此結清' }));
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    const body = await postedBody();
+    expect(body.settle).toBe(true);
+    expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-cash' });
   });
 });

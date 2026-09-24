@@ -1,13 +1,10 @@
-/*
- * 「借還」分頁表單的樣式。分段控制（.types 一組）與欄位節奏刻意與
- * TransactionForm.module.css 相同——兩條分段控制在同一個右側欄裡出現，
- * 長得不一樣會讓人以為是兩種不同的東西。
- */
+/* 「借還」表單與交易表單共用相同欄位間距，切換分頁時視覺節奏保持一致。 */
+.form {
+  display: flex;
+  flex-direction: column;
+}
 
-/*
- * 借出／借入／還款的三選一，同一條分段控制：每一顆等寬撐滿，看得出
- * 「只能選一個」。選中的金色方塊是獨立元素（.thumb），切換時用 transform 滑過去。
- */
+/* 五種往來各佔一格，沿用交易表單的滑動分段按鈕樣式。 */
 .types {
   position: relative;
   display: flex;
@@ -18,7 +15,6 @@
   background-color: var(--color-fill);
 }
 
-/* 方塊的滑道：貼齊內距之內的整條區域，疊在按鈕下面而且不吃點擊。 */
 .thumbTrack {
   position: absolute;
   inset: 3px;
@@ -26,10 +22,6 @@
   pointer-events: none;
 }
 
-/*
- * 寬度與位移由 DebtEntryForm 用行內樣式給（格數固定是 3，仍走行內是為了與
- * TransactionForm 的寫法一致——格數邏輯改變時兩邊一起改）。
- */
 .thumb {
   height: 100%;
   border-radius: calc(var(--radius) - 2px);
@@ -37,19 +29,18 @@
   transition: transform var(--motion-panel) var(--motion-ease);
 }
 
-/* 三顆鈕自己不畫底色，只改文字顏色；高度與 Button 一致。 */
 .type {
   position: relative;
   flex: 1;
   min-width: 0;
   height: 2.25rem;
-  padding: 0 var(--space-sm);
+  padding: 0 var(--space-xs);
   border: none;
   border-radius: calc(var(--radius) - 2px);
   background: none;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -64,14 +55,14 @@
   color: var(--color-on-primary);
 }
 
-/* 金額是這張表單的主角，字級與字重都比其他欄位大一階。 */
+/* 金額是表單的主輸入，提升字級方便送出前再次確認。 */
 .amount input {
   font-size: var(--text-lg);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-/* 勾選框列。整列文字都點得到，次要文字用 muted。 */
+/* 勾選列的文字也可點擊；兩個開關都是選填的記帳方式。 */
 .toggle {
   display: flex;
   align-items: center;
@@ -82,7 +73,16 @@
   cursor: pointer;
 }
 
-/* 主要動作撐滿一整列。 */
+/* 試算只在送出前出現，採一般提示色避免看起來像後端確認結果。 */
+.preview {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .actions {
   display: flex;
   align-items: stretch;
@@ -92,20 +92,4 @@
 .actions > button:first-child {
   flex: 1;
   min-width: 0;
-}
-
-/* 補充說明（分頁數上限、非連動帳本、舊債）。中性色——這些是正常行為，不是錯誤。 */
-.notice {
-  margin: 0 0 var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius);
-  background-color: var(--color-fill);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.hint {
-  margin: calc(var(--space-xs) - var(--space-md)) 0 var(--space-md);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
 }

@@ -1,7 +1,11 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LedgerSummary } from '@ledger/shared';
 import App from '../../App';
+import { TransactionForm } from './TransactionForm';
 
 /**
  * 新增交易表單上方的「支出／收入／轉帳／借還」分段控制（spec 2i SC-43.2、3b-1 W2）。
@@ -21,7 +25,7 @@ describe('Transaction type segmented control', () => {
   const fetchMock = vi.fn();
 
   /** 連動帳本才畫得出轉帳鈕（見 TransactionForm 的 `canTransfer`）。 */
-  const trackingLedger = {
+  const trackingLedger: LedgerSummary = {
     id: 'ledger-1',
     name: '我的帳本',
     currency: 'TWD',
@@ -29,6 +33,7 @@ describe('Transaction type segmented control', () => {
     tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
+    createdAt: '2026-09-01T00:00:00.000Z',
   };
   const plainLedger = { ...trackingLedger, id: 'ledger-2', tracksBalance: false };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
@@ -52,6 +57,22 @@ describe('Transaction type segmented control', () => {
       }
       if (url.includes('/debts')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });
+      }
+      if (url.includes('/counterparties')) {
+        return json({
+          items: [
+            {
+              id: 'cp-1',
+              name: '小明',
+              balance: 15,
+              createdAt: '2026-09-01T00:00:00.000Z',
+              updatedAt: '2026-09-01T00:00:00.000Z',
+            },
+          ],
+          page: 1,
+          limit: 100,
+          total: 1,
+        });
       }
       if (url.includes('/transactions')) {
         return json({ items, page: 1, limit: 20, total: items.length });
@@ -176,12 +197,30 @@ describe('Transaction type segmented control', () => {
     await user.click(debtTab);
 
     expect(debtTab).toHaveAttribute('aria-pressed', 'true');
-    // 借還分頁有自己的三選一（借出／借入／還款，W3），交易欄位整個換掉。
+    // 借還分頁有五種往來選項，交易欄位整個換掉。
     expect(await screen.findByRole('button', { name: '借出' }, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '借入' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '還款' })).toBeInTheDocument();
-    expect(screen.getByLabelText('對方名字')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '對方還我' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '我還對方' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '對方幫我付' })).toBeInTheDocument();
+    expect(screen.getByLabelText('對象')).toBeInTheDocument();
     expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
+  });
+
+  it('opens on 借還 and pre-fills the counterparty when an initial name is provided', () => {
+    routeFetch(trackingLedger);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} initialDebtCounterparty="小明" />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('對象')).toHaveValue('小明');
   });
 
   it('does not offer the 借還 tab in the edit dialog', async () => {

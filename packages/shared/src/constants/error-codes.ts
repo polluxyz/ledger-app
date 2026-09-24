@@ -68,15 +68,17 @@ export const ErrorCode = {
    * 四種情況刻意不區分——補救方法都一樣（請對方重新產生）。
    */
   INVITE_LINK_INVALID: 'INVITE_LINK_INVALID',
-  /** 還款超過未清餘額，或把本金改得比已還總額還小。 */
-  DEBT_OVERPAYMENT: 'DEBT_OVERPAYMENT',
-  /** 債務已結清或已免除，不能再記還款或免除。 */
-  DEBT_NOT_OPEN: 'DEBT_NOT_OPEN',
-  /** 只有「我借出」的債務能免除——免除是債權人放棄收回。 */
-  DEBT_NOT_FORGIVABLE: 'DEBT_NOT_FORGIVABLE',
-  /** 借還交易只能從債務端點修改或刪除。 */
+  /** 同一位使用者已有同名的往來對象（名字去掉前後空白後比對）。 */
+  COUNTERPARTY_NAME_TAKEN: 'COUNTERPARTY_NAME_TAKEN',
+  /** 往來對象還有未刪除的往來紀錄，不能刪除。 */
+  COUNTERPARTY_HAS_ENTRIES: 'COUNTERPARTY_HAS_ENTRIES',
+  /** 對方目前沒有欠我（往來餘額 ≤ 0），沒有東西可以免除。 */
+  NOTHING_TO_FORGIVE: 'NOTHING_TO_FORGIVE',
+  /** 結清差額與免除是系統算出的調整紀錄，不能改金額；要調整就刪除後重記。 */
+  DEBT_ENTRY_NOT_EDITABLE: 'DEBT_ENTRY_NOT_EDITABLE',
+  /** 由往來紀錄產生的交易（借還交易、代付支出）只能從往來帳端點修改或刪除。 */
   DEBT_TRANSACTION_READ_ONLY: 'DEBT_TRANSACTION_READ_ONLY',
-  /** 帳本內有借還交易，不能真刪（請改用封存）。 */
+  /** 帳本內有往來紀錄產生的交易，不能真刪（請改用封存）。 */
   LEDGER_HAS_DEBT_TRANSACTIONS: 'LEDGER_HAS_DEBT_TRANSACTIONS',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',

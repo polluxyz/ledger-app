@@ -13,6 +13,7 @@ describe('TransactionsService', () => {
     ledger: { findUnique: jest.Mock };
     category: { findUnique: jest.Mock };
     account: { findUnique: jest.Mock };
+    debtEntry: { findUnique: jest.Mock };
     transaction: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -63,6 +64,7 @@ describe('TransactionsService', () => {
       ledger: { findUnique: jest.fn() },
       category: { findUnique: jest.fn() },
       account: { findUnique: jest.fn() },
+      debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
       transaction: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -87,7 +89,7 @@ describe('TransactionsService', () => {
       account: { id: accountId, name: '現金' },
       toAccount: null,
       creator: { id: creatorId, name: 'Alice' },
-      debtId: null,
+      debt: null,
       createdAt: joined.createdAt.toISOString(),
     });
   });
@@ -451,41 +453,100 @@ describe('TransactionsService', () => {
       });
       expect(prisma.transaction.update).not.toHaveBeenCalled();
     });
+
+    // 往來帳版 SC-L9：「對方幫我付」產生的是一般 EXPENSE，只看型別擋不到，要看有沒有往來紀錄指向它。
+    it('refuses to touch an EXPENSE that a debt entry points at (paid for me)', async () => {
+      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId, type: 'EXPENSE' });
+      prisma.debtEntry.findUnique.mockResolvedValue({ id: 'entry-1' });
+
+      await expect(
+        service.update(ledgerId, 'txn-1', creatorId, { amount: 1 }),
+      ).rejects.toMatchObject({ errorCode: 'DEBT_TRANSACTION_READ_ONLY' });
+      await expect(service.remove(ledgerId, 'txn-1')).rejects.toMatchObject({
+        errorCode: 'DEBT_TRANSACTION_READ_ONLY',
+      });
+      expect(prisma.debtEntry.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { transactionId: 'txn-1' } }),
+      );
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
   });
 
-  // SC-D12 的單元層：debtId 只給債務擁有者；帳本其他成員看到的是 null。
-  describe('debtId visibility', () => {
-    const principalRow = {
+  // SC-L12、SC-L15 的單元層：debt 只給往來紀錄的擁有者；帳本其他成員看到的是 null。
+  describe('debt visibility', () => {
+    const lendRow = {
       ...joined,
       type: 'LEND' as const,
       category: null,
-      debtPrincipal: { id: 'debt-1', ownerId: creatorId },
-      debtPayment: null,
+      debtEntry: { id: 'entry-1', counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId } },
     };
-    const paymentRow = {
+    const paidForMeRow = {
       ...joined,
-      type: 'COLLECT' as const,
-      category: null,
-      debtPrincipal: null,
-      debtPayment: { debt: { id: 'debt-1', ownerId: creatorId } },
+      account: null,
+      debtEntry: { id: 'entry-2', counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId } },
     };
 
     it.each([
-      ['principal', principalRow],
-      ['payment', paymentRow],
-    ])('shows the debt id of a %s transaction to the debt owner', async (_label, row) => {
+      ['LEND', lendRow, 'entry-1'],
+      ['paid-for-me expense', paidForMeRow, 'entry-2'],
+    ])('shows the counterparty of a %s transaction to its owner', async (_label, row, entryId) => {
       prisma.transaction.findFirst.mockResolvedValue(row);
       const result = await service.getById(ledgerId, 'txn-1', creatorId);
-      expect(result.debtId).toBe('debt-1');
+      expect(result.debt).toEqual({ entryId, counterpartyId: 'cp-1', counterpartyName: '小明' });
     });
 
     it.each([
-      ['principal', principalRow],
-      ['payment', paymentRow],
-    ])('hides the debt id of a %s transaction from other ledger members', async (_label, row) => {
+      ['LEND', lendRow],
+      ['paid-for-me expense', paidForMeRow],
+    ])('hides the counterparty of a %s transaction from other members', async (_label, row) => {
       prisma.transaction.findFirst.mockResolvedValue(row);
       const result = await service.getById(ledgerId, 'txn-1', otherUserId);
-      expect(result.debtId).toBeNull();
+      expect(result.debt).toBeNull();
+    });
+  });
+
+  // 往來帳版決策 36：唯一允許連動帳本的支出不填帳戶的入口；分類照一般規則檢查。
+  describe('createPaidForMeExpense', () => {
+    it('writes an EXPENSE with the category and no account', async () => {
+      prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', ledgerId, type: 'EXPENSE' });
+      const client = { transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-7' }) } };
+
+      const id = await service.createPaidForMeExpense(client as never, {
+        ledgerId,
+        creatorId,
+        amount: 400,
+        date: new Date('2026-09-24T00:00:00.000Z'),
+        categoryId: 'cat-1',
+      });
+
+      expect(id).toBe('txn-7');
+      expect(client.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'EXPENSE',
+            amount: 400,
+            accountId: null,
+            categoryId: 'cat-1',
+            note: null,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('rejects an income category', async () => {
+      prisma.category.findUnique.mockResolvedValue({ id: 'cat-2', ledgerId, type: 'INCOME' });
+      const client = { transaction: { create: jest.fn() } };
+
+      await expect(
+        service.createPaidForMeExpense(client as never, {
+          ledgerId,
+          creatorId,
+          amount: 400,
+          date: new Date(),
+          categoryId: 'cat-2',
+        }),
+      ).rejects.toMatchObject({ errorCode: 'CATEGORY_TYPE_MISMATCH' });
+      expect(client.transaction.create).not.toHaveBeenCalled();
     });
   });
 

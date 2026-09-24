@@ -99,7 +99,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   /** 切換檢視寫回網址；「明細」時清掉參數，回到乾淨的 /transactions。 */
   function switchView(next: TransactionsView) {
-    setSearchParams(next === 'debts' ? { view: 'debts' } : {});
+    setSearchParams(next === 'debts' ? { view: 'debts' } : {}, { state: { keepRightPanel: true } });
   }
 
   /**
@@ -116,9 +116,15 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     open();
   }
 
-  function openDebt(debtId: string) {
-    setPanelTarget({ kind: 'debt', debtId });
+  function openCounterparty(counterpartyId: string) {
+    setPanelTarget({ kind: 'counterparty', counterpartyId });
     open();
+  }
+
+  /** 往來帳的「記一筆」回到借還表單，預帶對象並把面板焦點移入表單。 */
+  function recordEntry(name: string) {
+    setPanelTarget({ kind: 'new', debtCounterparty: name });
+    requestFocus();
   }
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
@@ -182,7 +188,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
         {view === 'debts' ? (
           // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
-          <DebtsView onSelectDebt={openDebt} />
+          <DebtsView onSelectCounterparty={openCounterparty} />
         ) : (
           // 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。
           <section className={styles.listCard}>
@@ -199,7 +205,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
               isFiltered={hasAnyFilter(filters)}
               onEdit={startEditing}
               onRemove={setRemoving}
-              onOpenDebt={openDebt}
+              onOpenCounterparty={openCounterparty}
               // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
               selectedId={panelTarget.kind === 'transaction' ? panelTarget.transaction.id : null}
             />
@@ -218,6 +224,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         ledger={ledger}
         target={panelTarget}
         onClose={() => setPanelTarget({ kind: 'new' })}
+        onRecordEntry={recordEntry}
+        onCounterpartyDeleted={() => setPanelTarget({ kind: 'new' })}
       />
 
       {/*

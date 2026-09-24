@@ -25,6 +25,15 @@ function Controls() {
       <button onClick={panel.close}>收起</button>
       <button onClick={panel.requestFocus}>要求焦點</button>
       <button onClick={() => void navigate('/elsewhere')}>換網址</button>
+      <button onClick={() => void navigate('/preserve', { state: { keepRightPanel: true } })}>
+        保留側欄換網址
+      </button>
+      <button
+        onClick={() => void navigate('/second-preserve', { state: { keepRightPanel: true } })}
+      >
+        再帶旗標換網址
+      </button>
+      <button onClick={() => void navigate(-1)}>瀏覽器上一頁</button>
       <button onClick={() => void navigate('/')}>回原網址</button>
       <output aria-label="焦點請求">{panel.focusRequest}</output>
     </>
@@ -128,6 +137,44 @@ describe('RightPanel', () => {
     await user.click(screen.getByRole('button', { name: '打開' }));
 
     await user.click(screen.getByRole('button', { name: '換網址' }));
+
+    expect(column()).not.toHaveAttribute('data-open');
+  });
+
+  it('keeps the panel open when navigation carries the keepRightPanel flag', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+
+    await user.click(screen.getByRole('button', { name: '保留側欄換網址' }));
+
+    expect(column()).toHaveAttribute('data-open');
+  });
+
+  it('closes on browser back even when the destination history entry has the flag', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+    await user.click(screen.getByRole('button', { name: '保留側欄換網址' }));
+    expect(column()).toHaveAttribute('data-open');
+    await user.click(screen.getByRole('button', { name: '再帶旗標換網址' }));
+    expect(column()).toHaveAttribute('data-open');
+
+    await user.click(screen.getByRole('button', { name: '瀏覽器上一頁' }));
+
+    expect(column()).not.toHaveAttribute('data-open');
+  });
+
+  it('does not reopen an older history entry after an ordinary navigation', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByLabelText('金額');
+    await user.click(screen.getByRole('button', { name: '打開' }));
+    await user.click(screen.getByRole('button', { name: '換網址' }));
+
+    await user.click(screen.getByRole('button', { name: '瀏覽器上一頁' }));
 
     expect(column()).not.toHaveAttribute('data-open');
   });

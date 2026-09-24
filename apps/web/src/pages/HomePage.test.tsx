@@ -42,6 +42,7 @@ describe('Home dashboard', () => {
     account: { id: account.id, name: account.name },
     toAccount: null,
     creator: { id: 'u1', name: 'Alice' },
+    debt: null,
     createdAt: '2026-08-12T04:00:00.000Z',
   }));
 
@@ -208,9 +209,23 @@ describe('Home dashboard', () => {
       amount: 1000,
       category: null,
       note: '借小明',
-      debtId: 'debt-1',
+      debt: {
+        entryId: 'entry-1',
+        counterpartyId: 'counterparty-1',
+        counterpartyName: '小明',
+      },
     };
     const expense = { ...transactions[1], id: 'txn-expense', note: '午餐' };
+    const paidExpense = {
+      ...transactions[2],
+      id: 'txn-paid',
+      note: '代付晚餐',
+      debt: {
+        entryId: 'entry-paid',
+        counterpartyId: 'counterparty-1',
+        counterpartyName: '小明',
+      },
+    };
     fetchMock.mockImplementation((url: string) => {
       const json = (body: unknown) =>
         Promise.resolve(
@@ -220,7 +235,7 @@ describe('Home dashboard', () => {
           }),
         );
       if (url.includes('/transactions')) {
-        return json({ items: [lend, expense], page: 1, limit: 5, total: 2 });
+        return json({ items: [lend, expense, paidExpense], page: 1, limit: 5, total: 3 });
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
@@ -242,6 +257,11 @@ describe('Home dashboard', () => {
     expect(card.queryByRole('button', { name: /借小明/ })).not.toBeInTheDocument();
 
     await user.click(card.getByText('借小明'));
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+
+    // 首頁沒有打開對象往來帳的入口，代付支出也以靜態列呈現。
+    expect(card.queryByRole('button', { name: /代付晚餐/ })).not.toBeInTheDocument();
+    await user.click(card.getByText('代付晚餐'));
     expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
 
     await user.click(card.getByRole('button', { name: /午餐/ }));

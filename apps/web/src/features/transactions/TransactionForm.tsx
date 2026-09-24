@@ -39,6 +39,8 @@ interface TransactionFormProps {
    * 去 `document.getElementById` 找它。不傳就沿用 `useId` 產生的值。
    */
   amountFieldId?: string;
+  /** 新增表單從某個對象的往來帳開啟時，預先切到借還並帶入對象名字。 */
+  initialDebtCounterparty?: string;
 }
 
 /**
@@ -79,6 +81,7 @@ export function TransactionForm({
   onSaved,
   onCancel,
   amountFieldId,
+  initialDebtCounterparty,
 }: TransactionFormProps) {
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined;
@@ -92,7 +95,11 @@ export function TransactionForm({
    * 進來時會一路送出一個後端必拒的 body；退回「支出」至少是個講得通的狀態。
    */
   const [tab, setTab] = useState<EntryTab>(
-    transaction && !isDebtTransactionType(transaction.type) ? transaction.type : 'EXPENSE',
+    transaction && !isDebtTransactionType(transaction.type)
+      ? transaction.type
+      : !isEdit && initialDebtCounterparty
+        ? 'DEBT'
+        : 'EXPENSE',
   );
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '');
   const [date, setDate] = useState(() =>
@@ -424,7 +431,11 @@ export function TransactionForm({
       <legend className={styles.legend}>新增一筆交易</legend>
       {segmented}
       {isDebtTab ? (
-        <DebtEntryForm ledger={ledger} amountFieldId={amountFieldId} />
+        <DebtEntryForm
+          ledger={ledger}
+          amountFieldId={amountFieldId}
+          initialCounterpartyName={initialDebtCounterparty}
+        />
       ) : (
         <>
           <FormError error={error} />

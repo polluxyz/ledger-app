@@ -95,8 +95,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

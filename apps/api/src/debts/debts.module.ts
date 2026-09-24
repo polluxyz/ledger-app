@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 import { TransactionsModule } from '../transactions/transactions.module';
-import { DebtPaymentsController } from './debt-payments.controller';
-import { DebtPaymentsService } from './debt-payments.service';
-import { DebtsController } from './debts.controller';
-import { DebtsService } from './debts.service';
+import { CounterpartiesController } from './counterparties.controller';
+import { CounterpartiesService } from './counterparties.service';
+import { DebtEntriesController } from './debt-entries.controller';
+import { DebtEntriesService } from './debt-entries.service';
 
 /**
- * 借還帳（階段三 3b-1：單邊借還）。
+ * 借還帳（階段三 3b-1，往來帳版）：往來對象與往來紀錄。
  *
- * 借還交易的寫入規則（帳戶規則、唯讀）只在 `TransactionsService` 一份，這裡匯入它來用，
+ * 交易的寫入規則（帳戶規則、分類規則、唯讀）只在 `TransactionsService` 一份，這裡匯入它來用，
  * 不自己寫交易。
  */
 @Module({
   imports: [TransactionsModule],
-  controllers: [DebtsController, DebtPaymentsController],
-  providers: [DebtsService, DebtPaymentsService],
+  controllers: [CounterpartiesController, DebtEntriesController],
+  providers: [CounterpartiesService, DebtEntriesService],
 })
 export class DebtsModule {}

@@ -4,7 +4,7 @@ import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
-import { DebtDetail } from '../debts/DebtDetail';
+import { CounterpartyDetail } from '../debts/CounterpartyDetail';
 import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
 import styles from './TransactionWorkbench.module.css';
@@ -14,12 +14,12 @@ import styles from './TransactionWorkbench.module.css';
  *
  * - `new`：新增表單（預設）。
  * - `transaction`：編輯一筆一般交易。
- * - `debt`：檢視一筆債務的詳情（包含還款紀錄與動作）。
+ * - `counterparty`：檢視對象的往來帳與紀錄。
  */
 export type PanelTarget =
-  | { kind: 'new' }
+  | { kind: 'new'; debtCounterparty?: string }
   | { kind: 'transaction'; transaction: Transaction }
-  | { kind: 'debt'; debtId: string };
+  | { kind: 'counterparty'; counterpartyId: string };
 
 export interface TransactionWorkbenchProps {
   ledger: LedgerSummary;
@@ -29,6 +29,10 @@ export interface TransactionWorkbenchProps {
   editing?: Transaction | null;
   /** 關閉面板（儲存成功、取消、關閉、Esc）時呼叫。 */
   onClose?: () => void;
+  /** 從往來帳按「記一筆」時，要求新增表單開啟借還並預帶對象。 */
+  onRecordEntry?: (name: string) => void;
+  /** 對象刪除成功時，讓頁面切回新增表單。 */
+  onCounterpartyDeleted?: () => void;
   /** @deprecated 相容舊的 onEditDone prop */
   onEditDone?: () => void;
 }
@@ -54,6 +58,8 @@ export function TransactionWorkbench({
   target,
   editing,
   onClose,
+  onRecordEntry,
+  onCounterpartyDeleted,
   onEditDone,
 }: TransactionWorkbenchProps) {
   const { close, focusRequest } = useRightPanel();
@@ -93,7 +99,11 @@ export function TransactionWorkbench({
           >
             <Icon name="chevronRight" size={18} />
           </button>
-          <TransactionForm ledger={ledger} amountFieldId={amountFieldId} />
+          <TransactionForm
+            ledger={ledger}
+            amountFieldId={amountFieldId}
+            initialDebtCounterparty={activeTarget.debtCounterparty}
+          />
         </div>
       )}
       {activeTarget.kind === 'transaction' && (
@@ -104,9 +114,14 @@ export function TransactionWorkbench({
           onClose={handleClose}
         />
       )}
-      {activeTarget.kind === 'debt' && (
-        <Dialog open={true} title="借還詳情" variant="panel" onClose={handleClose}>
-          <DebtDetail debtId={activeTarget.debtId} ledger={ledger} onClosed={handleClose} />
+      {activeTarget.kind === 'counterparty' && (
+        <Dialog open={true} title="借還往來" variant="panel" onClose={handleClose}>
+          <CounterpartyDetail
+            key={activeTarget.counterpartyId}
+            counterpartyId={activeTarget.counterpartyId}
+            onRecordEntry={onRecordEntry ?? (() => {})}
+            onDeleted={onCounterpartyDeleted ?? handleClose}
+          />
         </Dialog>
       )}
     </RightPanelContent>

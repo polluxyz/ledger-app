@@ -21,6 +21,7 @@ describe('LedgersService (members)', () => {
       count: jest.Mock;
     };
     transaction: { count: jest.Mock };
+    debtEntry: { count: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -54,6 +55,7 @@ describe('LedgersService (members)', () => {
         count: jest.fn(),
       },
       transaction: { count: jest.fn().mockResolvedValue(0) },
+      debtEntry: { count: jest.fn().mockResolvedValue(0) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     service = new LedgersService(prisma as unknown as PrismaService);
@@ -161,19 +163,20 @@ describe('LedgersService (members)', () => {
       expect(prisma.ledger.delete).toHaveBeenCalledWith({ where: { id: ledgerId } });
     });
 
-    // SC-D9（3b 決策 21）：即使全是自己記的，只要有借還交易就不能真刪——cascade 會刪掉
-    // 債務引用的交易。第一次計數（別人的交易）回 0，第二次（借還交易）回 1。
+    // SC-L10（3b 決策 21）：即使全是自己記的，只要有往來紀錄產生的交易（借還交易或代付支出）
+    // 就不能真刪——cascade 會刪掉往來紀錄引用的交易。
     it('409s when the ledger holds debt transactions, even the caller’s own', async () => {
-      prisma.transaction.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+      prisma.debtEntry.count.mockResolvedValue(1);
 
       await expect(service.remove(ledgerId, 'user-1', ledgerRow.name)).rejects.toMatchObject({
         status: 409,
         errorCode: 'LEDGER_HAS_DEBT_TRANSACTIONS',
       });
       expect(prisma.ledger.delete).not.toHaveBeenCalled();
-      // 同樣不過濾 deletedAt：軟刪除的借還交易仍被債務紀錄引用。
-      expect(prisma.transaction.count).toHaveBeenLastCalledWith({
-        where: { ledgerId, type: { in: ['LEND', 'BORROW', 'COLLECT', 'REPAY'] } },
+      // 同樣不過濾 deletedAt：軟刪除的紀錄與交易仍然互相引用。依往來紀錄計數，
+      // 代付支出（一般 EXPENSE）才算得進去。
+      expect(prisma.debtEntry.count).toHaveBeenCalledWith({
+        where: { transaction: { ledgerId } },
       });
     });
   });

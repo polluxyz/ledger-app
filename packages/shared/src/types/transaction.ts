@@ -82,12 +82,20 @@ export interface Transaction {
   /** 由誰記下（僅供顯示／稽核；共享帳本下任何 editor 都可編輯任何一筆）。 */
   creator: TransactionRef;
   /**
-   * 借還交易所屬的債務 id。**只有債務擁有者看得到**：共享帳本的其他成員看得到這筆
-   * 交易，但看不到背後的債務，對他們一律是 `null`。一般交易也是 `null`。
+   * 這筆交易是哪一筆往來紀錄產生的（借還交易與「對方幫我付」的支出）。
+   * **只有往來紀錄的擁有者看得到**：共享帳本的其他成員看得到這筆交易，但看不到背後
+   * 的往來，對他們一律是 `null`。一般交易也是 `null`（spec 3b 決策 43）。
    */
-  debtId: string | null;
+  debt: TransactionDebtRef | null;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
+}
+
+/** 交易背後的往來紀錄與對象。只回給往來紀錄的擁有者。 */
+export interface TransactionDebtRef {
+  entryId: string;
+  counterpartyId: string;
+  counterpartyName: string;
 }
 
 /**
