@@ -7,8 +7,8 @@
 ## 1. 角色分工
 
 - **預設 agent 是 Claude Code**，它是 coordinator（協調者），負責拆工、派工、驗收、開 PR。**它的主要工作是規劃與驗收，不是實作。**
-- **實作預設派給 worker**，優先用 Pi（跑 GLM 模型）。額度用盡就往下換層：Antigravity → Claude Code（見 §4）。
-- **不要用 Claude Code 內建的 Agent tool 派工。** 它只開得了 Claude subagent，指定不了 Pi，也指定不了 GLM。要平行工作就走 `orca orchestration`。
+- **實作預設派給 worker**，優先用 Codex（`gpt-6-luna`，推理強度 max）。額度用盡就往下換層：Pi（GLM）→ Antigravity（Gemini）→ Claude Code（見 §4）。
+- **不要用 Claude Code 內建的 Agent tool 派工。** 它只開得了 Claude subagent，指定不了 Codex、Pi，也指定不了 GLM。要平行工作就走 `orca orchestration`。
 
 協調者該做與不該做：
 
@@ -102,13 +102,31 @@ Pi 的模型有兩條路：
 
 | 層  | agent                | 模型                                          | 什麼時候       |
 | --- | -------------------- | --------------------------------------------- | -------------- |
-| 1   | Pi                   | `zai/glm-5.3`（簡單任務 `zai/glm-5.3-flash`） | 預設           |
-| 2   | Antigravity（`agy`） | `gemini-3.8-flash-high`（不分任務難度）       | GLM 額度用完   |
-| 3   | Claude Code          | `opus`                                        | 前兩層都不能用 |
+| 1   | Codex                | `gpt-6-luna`，推理強度 `max`（不分任務難度）  | 預設           |
+| 2   | Pi                   | `zai/glm-5.3`（簡單任務 `zai/glm-5.3-flash`） | Codex 額度用完 |
+| 3   | Antigravity（`agy`） | `gemini-3.8-flash-high`（不分任務難度）       | GLM 額度也用完 |
+| 4   | Claude Code          | `opus`                                        | 前三層都不能用 |
+
+順序由開發者 2026-09-24 定案（Codex → GLM → Gemini）。
 
 換層時用 `--retry-of <dispatch_id>` 搭配 `--task <task_id>` 重派同一個 Task。`--retry-of` 不繼承 placement，要重新指定 worktree 與 agent。
 
-### 第 2 層：Antigravity
+### 第 1 層：Codex
+
+一律用兩段式，因為要帶 `--dangerously-bypass-approvals-and-sandbox`（開發者 2026-09-24 定案；`worker-start --agent codex --model` 帶不了這個旗標）：
+
+```bash
+orca terminal create --worktree <selector> --command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max" --json
+orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
+```
+
+- 模型 id 與推理強度以本機 `~/.codex/models_cache.json` 為準（2026-09-24 查過：Codex CLI 0.155.1，`gpt-6-luna` 支援 low / medium / high / xhigh / max）。換模型前先查這個檔，**不要憑記憶填**。
+- `-c model_reasoning_effort=max`：`-c` 的值先當 TOML 解析，失敗就當字串，所以 `max` 不必加引號。
+- 旗標會跳過所有許可確認與沙箱，和 Antigravity 的 `--dangerously-skip-permissions` 同一類，代價與對策也相同：Task spec 寫清楚邊界，驗收看完整的 `git status` 與 `git diff`。
+- ⚠️ **Codex 讀的指引檔是 `AGENTS.md`，不是 `CLAUDE.md`**。這個 repo 刻意沒有 `AGENTS.md`（會蓋掉 Pi 讀的 `CLAUDE.md`，見 §5），所以派給 Codex 的 Task spec 開頭一定要寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。
+- ⚠️ **尚未實際派過工**。第一次派工時把踩到的坑補在這裡。
+
+### 第 3 層：Antigravity
 
 跟 Pi 一樣要兩段式（Orca 的 `--model` 只認 Claude / Codex / Cursor）：
 
@@ -118,7 +136,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 ```
 
 - **一律加 `--dangerously-skip-permissions`**（開發者 2026-09-24 定案）。不加的話，agy 每個指令、每次改檔、每次建檔都要人回答，worker 會停著等（見下面的實測）。代價是 worker 在 worktree 裡的所有動作都不再詢問，所以兩件事不能省：Task spec 的 Constraints 與 Ownership 要把不准碰的檔案與指令寫清楚；驗收時協調者要看過完整的 `git status` 與 `git diff`，範圍外的改動一律退回。
-- **這一層不分任務難度，一律 `gemini-3.8-flash-high`。** 第 1 層才有便宜 / 一般的分流。
+- **這一層不分任務難度，一律 `gemini-3.8-flash-high`。** 第 2 層（Pi）才有便宜 / 一般的分流。
 - **努力程度寫在模型 id 裡**（`-high` / `-medium` / `-low`），不要再另外傳 `--effort`。
 - §3「一律不用 flash」指的是 `zai/glm-5.3-flash` 這個成本層級，**跟 Gemini 模型名稱裡的 flash 無關**。Gemini 3.8 Flash 比清單上的 3.1 Pro 新一代，不是弱化版。
 - `agy models` 列出當下可用的模型，換模型前先跑一次，**不要憑記憶填**。它除了 Gemini 也有 `claude-sonnet-4-6`、`gpt-oss-120b-medium`。
@@ -131,7 +149,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - `worker-start --terminal <agy 的 handle>` 第一次呼叫有時回 `agent_unconfigured`，同一個指令再呼叫一次就成功。原因未查明。
 - ⚠️ agy worker 回報的「全部通過」不可盡信：B4 回報全綠，實際有 1 個型別錯誤與 1 條逾時的測試。驗收時一定自己跑 `pnpm typecheck` 與 `pnpm test`。
 
-### 第 3 層：Claude Code
+### 第 4 層：Claude Code
 
 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定 `--agent claude --model opus`。
 
