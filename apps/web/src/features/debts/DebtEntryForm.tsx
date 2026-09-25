@@ -1,5 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import type { CreateDebtEntryKind, CreateDebtEntryRequest, LedgerSummary } from '@ledger/shared';
+import type {
+  Counterparty,
+  CreateDebtEntryKind,
+  CreateDebtEntryRequest,
+  LedgerSummary,
+} from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
@@ -41,6 +46,7 @@ export function DebtEntryForm({
 }: DebtEntryFormProps) {
   const [kind, setKind] = useState<DebtEntryFormKind>('LEND');
   const [counterpartyName, setCounterpartyName] = useState(initialCounterpartyName);
+  const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => toDateInputValue());
   const [accountId, setAccountId] = useState('');
@@ -54,7 +60,7 @@ export function DebtEntryForm({
   const createEntry = useCreateDebtEntry();
 
   const normalizedName = counterpartyName.trim();
-  const counterparty = findCounterparty(counterpartyName, counterparties);
+  const counterparty = selectedCounterparty ?? findCounterparty(counterpartyName, counterparties);
   const repaymentAvailable = Boolean(counterparty && counterparty.balance !== 0);
   const canSettle = kind === 'REPAYMENT';
   const showAccountField = ledger.tracksBalance;
@@ -138,6 +144,7 @@ export function DebtEntryForm({
 
   function handleCounterpartyChange(nextName: string) {
     setCounterpartyName(nextName);
+    setSelectedCounterparty(null);
     const nextCounterparty = findCounterparty(nextName, counterparties);
     if (kind === 'REPAYMENT' && (nextName.trim() === '' || nextCounterparty?.balance === 0)) {
       setKind('LEND');
@@ -194,7 +201,7 @@ export function DebtEntryForm({
         <CounterpartyPicker
           value={counterpartyName}
           onChange={handleCounterpartyChange}
-          counterparties={counterparties}
+          onSelect={setSelectedCounterparty}
         />
       </div>
 
@@ -299,6 +306,10 @@ export function DebtEntryForm({
         <p className={styles.preview} role="status">
           {preview}
         </p>
+      )}
+
+      {counterparty?.link && (
+        <p className={styles.linkHint}>送出後會請 {counterparty.link.userName} 確認</p>
       )}
 
       <div className={styles.actions}>

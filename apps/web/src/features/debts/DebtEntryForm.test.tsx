@@ -29,6 +29,7 @@ describe('DebtEntryForm', () => {
       id: 'cp-ming',
       name: '小明',
       balance: 9,
+      link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
@@ -36,6 +37,7 @@ describe('DebtEntryForm', () => {
       id: 'cp-hua',
       name: '小華',
       balance: -400,
+      link: null,
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
@@ -43,6 +45,7 @@ describe('DebtEntryForm', () => {
       id: 'cp-mei',
       name: '小美',
       balance: 0,
+      link: null,
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
@@ -201,6 +204,19 @@ describe('DebtEntryForm', () => {
     expect(screen.getByRole('button', { name: '還款' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('asks the linked user to confirm below the preview', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    const input = screen.getByRole('combobox', { name: '對象' });
+    await user.type(input, '小明');
+    await user.click(await screen.findByRole('option', { name: /小明.*連動/ }));
+    await user.type(screen.getByLabelText('金額'), '4');
+
+    expect(screen.getByText('記完後：小明欠你 $13')).toBeInTheDocument();
+    expect(screen.getByText('送出後會請 王小明 確認')).toBeInTheDocument();
+  });
+
   it('does not show a repayment direction while lend is selected', async () => {
     renderForm(ledger, '小明');
     await screen.findByText('目前小明欠你 $9');
@@ -349,6 +365,7 @@ describe('DebtEntryForm', () => {
     renderForm();
 
     await user.type(screen.getByLabelText('對象'), '  小新  ');
+    await user.click(await screen.findByRole('option', { name: '＋ 新增「小新」' }));
     await user.type(screen.getByLabelText('金額'), '250');
     await user.selectOptions(await screen.findByLabelText('從哪個帳戶借出'), 'acc-cash');
     await user.click(screen.getByRole('button', { name: '新增' }));

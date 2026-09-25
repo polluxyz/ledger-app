@@ -17,11 +17,51 @@
   margin: 0;
 }
 
+.headingIdentity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.linkBadge {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
 .balance {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.linkedStatus {
+  margin: calc(var(--space-md) * -1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.inviteNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius);
+  background-color: var(--color-primary-soft);
+}
+
+.cancelInviteButton {
+  height: 1.75rem;
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
 }
 
 .actions,
@@ -92,6 +132,29 @@
   white-space: nowrap;
 }
 
+.syncLabel {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.pending {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+
+.synced {
+  border-color: var(--color-income);
+  color: var(--color-income);
+}
+
+.declined {
+  border-color: var(--color-expense);
+  color: var(--color-expense);
+}
+
 .note {
   margin: 0;
   overflow-wrap: anywhere;
@@ -112,6 +175,23 @@
 
 .dialogActions {
   justify-content: flex-end;
+}
+
+.confirmContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: min(24rem, 80vw);
+}
+
+.confirmContent p {
+  margin: 0;
+}
+
+.warning {
+  padding: var(--space-sm);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
 }
 
 .empty,

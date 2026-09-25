@@ -1,0 +1,12 @@
+/* 小視窗只收一個名字；動作靠右排列，錯誤訊息由共用 FormError 放在欄位前。 */
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
