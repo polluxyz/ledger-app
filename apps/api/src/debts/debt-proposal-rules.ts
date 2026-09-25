@@ -100,12 +100,15 @@ type ProposalRow = Prisma.DebtProposalGetPayload<{
   include: {
     fromUser: { select: { id: true; name: true } };
     toUser: { select: { id: true; name: true } };
+    targetEntry: { select: { delta: true; date: true; deletedAt: true } };
   };
 }>;
 
 export const PROPOSAL_INCLUDE = {
   fromUser: { select: { id: true, name: true } },
   toUser: { select: { id: true, name: true } },
+  // F26：收到的 AMEND 要帶「我那筆被改之前」的值。targetEntry 是接受者自己的紀錄。
+  targetEntry: { select: { delta: true, date: true, deletedAt: true } },
 } as const;
 
 /**
@@ -114,6 +117,9 @@ export const PROPOSAL_INCLUDE = {
  * 收到的提議：種類換成我的角度，只給發起者的 id 與顯示名稱。回應裡刻意沒有發起者的
  * 那筆紀錄 id、備註、帳本、帳戶與他那邊的對象——這些都是他自己的帳。
  * `counterpartyId` 是**呼叫者自己**那邊連動的對象，由呼叫端傳入。
+ *
+ * `previous`（F26）只給收到的 `AMEND`：值取自 `targetEntry`——那是**接受者自己**那筆，
+ * 所以不會洩漏發起者的帳。發起者看自己送出的提議時一律 null：targetEntry 是對方的紀錄。
  */
 export function toDebtProposal(
   row: ProposalRow,
@@ -134,9 +140,19 @@ export function toDebtProposal(
     date: row.date.toISOString(),
     settle: row.settle,
     ...(incoming ? {} : { sourceEntryId: row.sourceEntryId }),
+    previous: previousOf(row, incoming),
     createdAt: row.createdAt.toISOString(),
     respondedAt: row.respondedAt === null ? null : row.respondedAt.toISOString(),
   };
+}
+
+/** 收到的 AMEND 且我那筆還在時，回我那筆目前的金額與日期；其餘一律 null。 */
+function previousOf(row: ProposalRow, incoming: boolean): DebtProposal['previous'] {
+  const target = row.targetEntry;
+  if (!incoming || row.type !== 'AMEND' || target === null || target.deletedAt !== null) {
+    return null;
+  }
+  return { amount: Math.abs(target.delta), date: target.date.toISOString() };
 }
 
 /** 對象連動中時，提議要送給誰；沒有連動回 `null`。 */

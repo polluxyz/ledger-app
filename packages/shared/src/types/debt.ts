@@ -223,6 +223,12 @@ export interface DebtProposal {
   settle: boolean;
   /** 只有送出的提議才有：我自己那筆紀錄。 */
   sourceEntryId?: string;
+  /**
+   * 收到的 `AMEND`：**我自己那筆**被改之前的金額與日期（3b-2 web F26），讓畫面寫得出
+   * 「$120 → $150」。只取接受者自己的資料，不揭露發起者的帳。我那筆已被自己刪掉時、
+   * 以及其他所有提議，一律 `null`。
+   */
+  previous: { amount: number; date: string } | null;
   /** ISO 8601。 */
   createdAt: string;
   respondedAt: string | null;
