@@ -55,6 +55,12 @@ model User {
 
   // 借還帳（3b）。債務屬於使用者，不屬於帳本（spec 決策 17）。
   counterparties Counterparty[]
+
+  // 往來帳連動（3b-2）。CounterpartyLink 一對只存一筆，排序規則同 Friendship。
+  counterpartyLinksAsLow  CounterpartyLink[] @relation("CounterpartyLinkLow")
+  counterpartyLinksAsHigh CounterpartyLink[] @relation("CounterpartyLinkHigh")
+  debtProposalsSent       DebtProposal[]     @relation("DebtProposalFrom")
+  debtProposalsReceived   DebtProposal[]     @relation("DebtProposalTo")
 }
 
 enum FriendRequestStatus {
@@ -95,8 +101,13 @@ model FriendRequest {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  requester User @relation("FriendRequestSent", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient User @relation("FriendRequestReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  /// 連動邀請（3b-2 決策 56）：發起者這邊要接上的對象。null＝一般好友邀請。
+  /// Cascade：對象被刪，邀請跟著消失（還沒連動的對象可以刪）。
+  counterpartyId String?
+
+  requester    User          @relation("FriendRequestSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient    User          @relation("FriendRequestReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
 
   @@index([recipientId, status])
   @@index([requesterId, status])
@@ -116,9 +127,13 @@ model FriendInviteLink {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  inviter User  @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
+  /// 連動邀請連結（3b-2 決策 56）：產生者這邊要接上的對象。null＝一般好友連結。
+  counterpartyId String?
+
+  inviter      User          @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
   // SetNull：使用者被刪掉，不該連帶刪掉別人產生過的連結紀錄。
-  usedBy  User? @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
+  usedBy       User?         @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
 
   @@index([inviterId])
 }
@@ -248,6 +263,7 @@ enum DebtEntryKind {
   PAID_FOR_ME // 對方幫我付我那份（delta < 0），產生一筆不經過帳戶的支出
   SETTLEMENT // 以此結清的差額，讓往來餘額歸零；不產生交易
   FORGIVE // 免除對方欠我的剩餘金額（delta < 0）；不產生交易
+  FORGIVEN // 被對方免除（3b-2）：接受對方的免除時寫入，讓我欠的歸零（delta > 0）；不產生交易
 }
 
 /// 記帳者的一個往來對象，只存名字（spec 3b 決策 33）。一個對象一本往來帳。
@@ -262,6 +278,12 @@ model Counterparty {
 
   owner   User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   entries DebtEntry[]
+
+  // 連動（3b-2）：一個對象最多出現在一筆 CounterpartyLink 的其中一側。
+  linkAsLow         CounterpartyLink?  @relation("CounterpartyLinkLowCounterparty")
+  linkAsHigh        CounterpartyLink?  @relation("CounterpartyLinkHighCounterparty")
+  friendRequests    FriendRequest[]
+  friendInviteLinks FriendInviteLink[]
 
   @@unique([ownerId, name])
 }
@@ -290,5 +312,85 @@ model DebtEntry {
   // 另外先擋（LEDGER_HAS_DEBT_TRANSACTIONS，spec 決策 21），這裡是最後防線。
   transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
 
+  /// 對方那邊配對的紀錄（3b-2）。雙向各存一次，在同一個資料庫交易裡寫入與清空。
+  /// SetNull：對方刪帳號時他的紀錄跟著刪，我的紀錄自動變回未配對。
+  pairedEntryId String?    @unique
+  pairedEntry   DebtEntry? @relation("DebtEntryPair", fields: [pairedEntryId], references: [id], onDelete: SetNull)
+  pairedBy      DebtEntry? @relation("DebtEntryPair")
+
+  proposalsAsSource DebtProposal[] @relation("DebtProposalSource")
+  proposalsAsTarget DebtProposal[] @relation("DebtProposalTarget")
+
   @@index([counterpartyId, deletedAt])
+}
+
+enum DebtProposalType {
+  CREATE // 連動後新增一筆
+  AMEND // 改了已配對紀錄的金額或日期
+  DELETE // 刪了已配對的紀錄
+}
+
+enum DebtProposalStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+/// 兩位使用者各一個對象接在一起（3b-2 決策 56、57）。一對使用者只存一筆，
+/// id 較小者放 userLowId，對象也跟著放同一側。
+///
+/// 資料庫另有 CHECK 約束 `CounterpartyLink_ordered`（userLowId < userHighId），只存在於 migration。
+/// 解除連動＝刪掉這一列；雙方的對象與紀錄都保留（決策 71）。
+model CounterpartyLink {
+  id                 String   @id @default(uuid())
+  userLowId          String
+  userHighId         String
+  counterpartyLowId  String   @unique
+  counterpartyHighId String   @unique
+  createdAt          DateTime @default(now())
+
+  userLow          User         @relation("CounterpartyLinkLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh         User         @relation("CounterpartyLinkHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+  counterpartyLow  Counterparty @relation("CounterpartyLinkLowCounterparty", fields: [counterpartyLowId], references: [id], onDelete: Cascade)
+  counterpartyHigh Counterparty @relation("CounterpartyLinkHighCounterparty", fields: [counterpartyHighId], references: [id], onDelete: Cascade)
+
+  @@unique([userLowId, userHighId])
+  @@index([userHighId])
+}
+
+/// 連動後，一方記、改、刪一筆紀錄時送給對方確認的變更（3b-2 §3.3）。
+/// 發起者那筆在送出時就已經生效；提議只決定對方那邊要不要跟著寫。
+///
+/// 資料庫另有部分唯一索引 `DebtProposal_one_pending_per_source`：同一筆紀錄同時最多一個
+/// PENDING 提議（決策 68），只存在於 migration。
+model DebtProposal {
+  id            String             @id @default(uuid())
+  fromUserId    String
+  toUserId      String
+  type          DebtProposalType
+  /// 發起者那筆。DELETE 時是已軟刪除的那筆。
+  sourceEntryId String
+  /// AMEND、DELETE：送出當下與它配對的、接受者那筆。CREATE 為 null。
+  targetEntryId String?
+  /// 發起者那筆的種類（發起者的角度）。回應給接受者時才換角度。
+  entryKind     DebtEntryKind
+  /// 正整數。CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值。
+  amount        Int
+  date          DateTime
+  /// 還款帶了以此結清：接受者那邊依自己的餘額補結清差額。
+  settle        Boolean            @default(false)
+  status        DebtProposalStatus @default(PENDING)
+  respondedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  fromUser    User       @relation("DebtProposalFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User       @relation("DebtProposalTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  sourceEntry DebtEntry  @relation("DebtProposalSource", fields: [sourceEntryId], references: [id], onDelete: Cascade)
+  targetEntry DebtEntry? @relation("DebtProposalTarget", fields: [targetEntryId], references: [id], onDelete: SetNull)
+
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+  @@index([sourceEntryId, status])
 }
