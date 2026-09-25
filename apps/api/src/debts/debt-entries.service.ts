@@ -6,6 +6,8 @@ import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { assertLedgerWritable } from './debt-ledger-access';
+import { proposeAmend, proposeCreate, proposeDelete, syncStatuses } from './debt-proposal-rules';
+import { recordDebtTransaction, writeSettlement } from './debt-recording';
 import {
   badRequest,
   currentBalance,
@@ -17,8 +19,8 @@ import {
   resolveRepayment,
   toCounterparty,
   toDebtEntry,
-  transactionTypeFor,
 } from './debt-entry-rules';
+import { linkInfoFor } from './counterparty-links';
 import type { RecordedDebtEntryKind } from './debt-entry-rules';
 import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
 
@@ -31,6 +33,9 @@ import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
  *   進去，讓「檢查失敗」與「什麼都沒寫」是同一件事——連新建的對象也不會留下（SC-L11）。
  * - **`delta` 的正負號只由種類決定**（`deltaFor`），呼叫者只給正的金額。資料庫另有 CHECK。
  * - **讀一律走 `loadOwnedCounterparty` / `loadOwnedEntry`**，不是自己的一律 404。
+ *
+ * 連動（spec 3b-2）只在這裡加一個動作：寫入之後呼叫 `propose*`，在同一個資料庫交易裡
+ * 送提議給對方。對象沒有連動時那些函式什麼都不做。
  */
 @Injectable()
 export class DebtEntriesService {
@@ -74,31 +79,30 @@ export class DebtEntriesService {
       const entries = [entry];
 
       if (input.settle === true) {
-        // 結清＝讓往來餘額歸零。差額 delta = −(寫入這筆之後的餘額)：正數表示對我有利
-        // （對方多給、或我少付），負數表示對我不利（spec §3.3）。剛好還清就不必補。
-        const remaining = await currentBalance(tx, counterparty.id);
-        if (remaining !== 0) {
-          entries.push(
-            await tx.debtEntry.create({
-              data: {
-                counterpartyId: counterparty.id,
-                kind: 'SETTLEMENT',
-                delta: -remaining,
-                date,
-                note: null,
-                transactionId: null,
-                // 同一天的紀錄依建立時間排序（SC-L13），而 createdAt 只到毫秒：兩筆在同一毫秒寫入
-                // 時順序不固定，差額可能排到還款前面。明確晚 1 毫秒，讓它永遠緊接在還款之後。
-                createdAt: new Date(entry.createdAt.getTime() + 1),
-              },
-            }),
-          );
+        const settlement = await writeSettlement(tx, counterparty.id, entry);
+        if (settlement !== null) {
+          entries.push(settlement);
         }
       }
 
+      await proposeCreate(tx, {
+        fromUserId: userId,
+        entry,
+        amount: input.amount,
+        settle: input.settle === true,
+      });
+
+      const [links, sync] = await Promise.all([
+        linkInfoFor(tx, [counterparty.id]),
+        syncStatuses(tx, entries),
+      ]);
       return {
-        counterparty: toCounterparty(counterparty, await currentBalance(tx, counterparty.id)),
-        entries: entries.map((row) => toDebtEntry(row)),
+        counterparty: toCounterparty(
+          counterparty,
+          await currentBalance(tx, counterparty.id),
+          links.get(counterparty.id) ?? null,
+        ),
+        entries: entries.map((row) => toDebtEntry(row, { sync: sync.get(row.id) })),
       };
     });
   }
@@ -106,10 +110,14 @@ export class DebtEntriesService {
   /**
    * 改金額、日期、備註（決策 41）。對應的交易一起改，否則帳戶餘額與往來餘額會對不起來。
    * 調整紀錄是系統算出來的，不能改（決策 40）；要調整就刪掉重記。
+   *
+   * 已配對或還在等對方確認的紀錄，改金額或日期會送變更給對方（決策 67）；只改備註不送，
+   * 備註各記各的。先鎖對象：與對方同時接受提議時，兩邊對配對狀態的讀寫要排隊。
    */
   update(userId: string, entryId: string, input: UpdateDebtEntryRequest): Promise<DebtEntry> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedEntry(tx, userId, entryId);
+      await lockCounterparty(tx, existing.counterpartyId);
       if (isAdjustment(existing.kind)) {
         throw new AppException(
           HttpStatus.CONFLICT,
@@ -139,14 +147,25 @@ export class DebtEntriesService {
         });
       }
 
-      return toDebtEntry(updated);
+      const amountChanged = delta !== undefined && delta !== existing.delta;
+      const dateChanged = date !== undefined && date.getTime() !== existing.date.getTime();
+      if (amountChanged || dateChanged) {
+        await proposeAmend(tx, { fromUserId: userId, entry: updated, now: new Date() });
+      }
+
+      const sync = await syncStatuses(tx, [updated]);
+      return toDebtEntry(updated, { sync: sync.get(updated.id) });
     });
   }
 
-  /** 軟刪除一筆往來紀錄，連同它的交易（決策 42）。用同一個時間戳，稽核時看得出是同一次刪除。 */
+  /**
+   * 軟刪除一筆往來紀錄，連同它的交易（決策 42）。用同一個時間戳，稽核時看得出是同一次刪除。
+   * 已配對的紀錄同時送刪除給對方；還在等對方確認的新增直接作廢（決策 67）。
+   */
   remove(userId: string, entryId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedEntry(tx, userId, entryId);
+      await lockCounterparty(tx, existing.counterpartyId);
       const deletedAt = new Date();
       await tx.debtEntry.update({ where: { id: existing.id }, data: { deletedAt } });
       await this.transactions.softDeleteDebtTransactions(
@@ -154,6 +173,7 @@ export class DebtEntriesService {
         existing.transactionId === null ? [] : [existing.transactionId],
         deletedAt,
       );
+      await proposeDelete(tx, { fromUserId: userId, entry: existing, now: deletedAt });
     });
   }
 
@@ -192,27 +212,26 @@ export class DebtEntriesService {
     kind: RecordedDebtEntryKind,
     date: Date,
   ): Promise<string | null> {
+    if (kind !== 'PAID_FOR_ME') {
+      return recordDebtTransaction(tx, this.transactions, {
+        userId,
+        record: input.record,
+        kind,
+        amount: input.amount,
+        date,
+      });
+    }
+    // 代付的 record 不可能是 null（assertEntryShape 已擋），這裡只是讓型別收斂。
     if (input.record === null) {
       return null;
     }
     await assertLedgerWritable(tx, userId, input.record.ledgerId);
-
-    if (kind === 'PAID_FOR_ME') {
-      return this.transactions.createPaidForMeExpense(tx, {
-        ledgerId: input.record.ledgerId,
-        creatorId: userId,
-        amount: input.amount,
-        date,
-        categoryId: input.categoryId!,
-      });
-    }
-    return this.transactions.createDebtTransaction(tx, {
+    return this.transactions.createPaidForMeExpense(tx, {
       ledgerId: input.record.ledgerId,
       creatorId: userId,
-      type: transactionTypeFor(kind),
       amount: input.amount,
       date,
-      accountId: input.record.accountId,
+      categoryId: input.categoryId!,
     });
   }
 }

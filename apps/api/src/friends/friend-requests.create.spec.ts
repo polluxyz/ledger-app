@@ -33,6 +33,7 @@ describe('FriendRequestsService.create', () => {
       id: REQUEST_ID,
       requesterId: OTHER,
       recipientId: ME,
+      counterpartyId: null,
       status: 'PENDING' as const,
       respondedAt: null,
       createdAt: CREATED_AT,
@@ -109,6 +110,26 @@ describe('FriendRequestsService.create', () => {
     await expectRejected(service.create(ME, EMAIL), 409, 'ALREADY_FRIENDS');
     expect(prisma.friendRequest.findFirst).not.toHaveBeenCalled();
     expectNoWrites();
+  });
+
+  // 3b-2：連動邀請的接受要選「接到哪個對象」，系統不能替收件者按接受。所以決策 8 的反向查詢
+  // 只看一般好友邀請；對方送來的若是連動邀請，照常建立一筆新的一般邀請。
+  it('only looks for a plain reverse invite, never a pending link invite', async () => {
+    prisma.friendRequest.create.mockResolvedValue({
+      ...reverseRow(),
+      requesterId: ME,
+      recipientId: OTHER,
+    });
+    await service.create(ME, EMAIL);
+    const [firstCall] = prisma.friendRequest.findFirst.mock.calls as unknown as Array<
+      [{ where: Record<string, unknown> }]
+    >;
+    expect(firstCall![0].where).toMatchObject({
+      requesterId: OTHER,
+      recipientId: ME,
+      status: 'PENDING',
+      counterpartyId: null,
+    });
   });
 
   // 分支 4（決策 8）：雙方都表達了意願，直接成立好友關係。

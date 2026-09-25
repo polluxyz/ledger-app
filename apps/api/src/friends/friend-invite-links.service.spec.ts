@@ -30,6 +30,7 @@ describe('FriendInviteLinksService', () => {
     usedAt: Date | null;
     revokedAt: Date | null;
     usedById: string | null;
+    counterpartyId: string | null;
     inviter: { id: string; name: string };
   };
 
@@ -43,6 +44,8 @@ describe('FriendInviteLinksService', () => {
       usedAt: null,
       revokedAt: null,
       usedById: null,
+      // 一般好友連結；連動連結（3b-2）由 e2e 驗。
+      counterpartyId: null,
       inviter,
       ...overrides,
     };
@@ -137,6 +140,7 @@ describe('FriendInviteLinksService', () => {
       await expect(service.preview('token')).resolves.toEqual({
         inviterName: 'Alice',
         expiresAt: TEN_MINUTES_LATER.toISOString(),
+        forLink: false,
       });
       expect(prisma.friendInviteLink.updateMany).not.toHaveBeenCalled();
     });
@@ -182,7 +186,12 @@ describe('FriendInviteLinksService', () => {
 
       const friend = await service.accept(ACCEPTER, 'token');
 
-      expect(friend).toEqual({ userId: INVITER, name: 'Alice', since: SINCE.toISOString() });
+      expect(friend).toEqual({
+        userId: INVITER,
+        name: 'Alice',
+        since: SINCE.toISOString(),
+        counterpartyId: null,
+      });
       expect(prisma.friendInviteLink.updateMany).toHaveBeenCalledWith({
         where: { id: LINK_ID, usedAt: null, revokedAt: null, expiresAt: { gt: NOW } },
         data: { usedAt: NOW, usedById: ACCEPTER },

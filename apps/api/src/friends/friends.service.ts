@@ -3,7 +3,8 @@ import { ErrorCode } from '@ledger/shared';
 import type { Friend, Paginated } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
-import { orderPair, toFriend } from './friendship';
+import { unlinkUsers } from '../debts/counterparty-links';
+import { toFriend } from './friendship';
 
 /**
  * 好友清單與解除好友。規格見 `docs/specs/phase-3a-friends.md` §2 決策 10、12、§5。
@@ -67,8 +68,8 @@ export class FriendsService {
    * 既有的好友邀請保持原狀當作歷史紀錄——只有 `PENDING` 的邀請會擋住重新邀請，
    * 而能成為好友的那一筆早就不是 `PENDING` 了，所以之後重新邀請不受影響。
    *
-   * 階段 3b 會在這裡延伸：解除好友時，連動中的債務自動轉成雙方各自的單邊記錄
-   * （見《專案決策脈絡.md》「階段三定案」）。3a 還沒有債務，本步不實作。
+   * 連動中的話一併解除連動（3b-2 決策 70）：雙方的往來紀錄保留、變回單邊記錄，待確認的
+   * 提議作廢。與 `DELETE /counterparties/{id}/link` 走同一個函式 `unlinkUsers`。
    */
   async remove(userId: string, friendUserId: string): Promise<void> {
     // 先擋自己。`orderPair` 對兩個相同的 id 會直接丟出，不能讓它走到那裡。
@@ -76,12 +77,14 @@ export class FriendsService {
       throw this.friendNotFound();
     }
 
-    const { count } = await this.prisma.friendship.deleteMany({
-      where: orderPair(userId, friendUserId),
+    // 不是好友時在交易裡丟出，讓 unlinkUsers 的其他改動（例如作廢待確認的連動邀請）一起回滾：
+    // 一個回 404 的請求不該改動任何東西。
+    await this.prisma.$transaction(async (tx) => {
+      const { wereFriends } = await unlinkUsers(tx, userId, friendUserId, new Date());
+      if (!wereFriends) {
+        throw this.friendNotFound();
+      }
     });
-    if (count === 0) {
-      throw this.friendNotFound();
-    }
   }
 
   /** 本來就不是好友。訊息不區分「沒這個人」與「不是好友」，不洩漏對方存不存在。 */

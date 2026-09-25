@@ -150,11 +150,9 @@ export function CounterpartyDetail({
           <>
             <ul className={styles.entryList}>
               {entries.data?.items.map((entry) => {
-                const canEdit = entry.kind !== 'SETTLEMENT' && entry.kind !== 'FORGIVE';
-                const isUnrecorded =
-                  entry.transactionId === null &&
-                  entry.kind !== 'SETTLEMENT' &&
-                  entry.kind !== 'FORGIVE';
+                const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
+                const canEdit = !isAdjustment;
+                const isUnrecorded = entry.transactionId === null && !isAdjustment;
                 return (
                   <li key={entry.id} className={styles.entry}>
                     <div className={styles.entryInfo}>
@@ -275,6 +273,9 @@ export function CounterpartyDetail({
   );
 }
 
+/** 系統算出的調整紀錄：不產生交易、不能改金額（API 會回 409 `DEBT_ENTRY_NOT_EDITABLE`）。 */
+const ADJUSTMENT_KINDS: ReadonlySet<DebtEntryKind> = new Set(['SETTLEMENT', 'FORGIVE', 'FORGIVEN']);
+
 const ENTRY_KIND_LABELS: Record<DebtEntryKind, string> = {
   LEND: '借出',
   BORROW: '借入',
@@ -283,6 +284,8 @@ const ENTRY_KIND_LABELS: Record<DebtEntryKind, string> = {
   PAID_FOR_ME: '幫我付',
   SETTLEMENT: '結清差額',
   FORGIVE: '免除',
+  // 3b-2：接受對方的免除時寫入。畫面在 3b-2 的畫面步驟才會出現這種紀錄。
+  FORGIVEN: '被免除',
 };
 
 /** 往來餘額語句只讀 API 的數字，正負號代表誰欠誰。 */

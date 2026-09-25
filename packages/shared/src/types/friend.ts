@@ -44,6 +44,11 @@ export interface FriendRequest {
     name: string | null;
     email: string | null;
   };
+  /**
+   * 是否為連動邀請（3b-2 決策 56）。連動邀請接受時必須選自己這邊的對象，
+   * 接受後同時成為好友並完成連動。
+   */
+  forLink: boolean;
   /** ISO 8601。 */
   createdAt: string;
   /** 接受、拒絕或取消的時間；仍為 `PENDING` 時是 `null`。ISO 8601。 */
@@ -83,6 +88,29 @@ export interface FriendInviteTokenRequest {
 /** `POST /friend-invite-links/preview` 的回應：讓持有者確認是誰邀請自己。 */
 export interface FriendInviteLinkPreview {
   inviterName: string;
+  /** 是否為連動邀請連結；是的話接受時必須帶 `counterparty`。 */
+  forLink: boolean;
   /** ISO 8601。 */
   expiresAt: string;
+}
+
+/**
+ * `POST /friend-requests/{id}/accept` 的 body。連動邀請**必填** `counterparty`；
+ * 一般好友邀請不可帶（3b-2 §5.2）。
+ */
+export interface AcceptFriendRequestRequest {
+  counterparty?: { id: string } | { name: string };
+}
+
+/** `POST /friend-invite-links/accept` 的 body。`counterparty` 的規則同上。 */
+export interface AcceptFriendInviteLinkRequest extends FriendInviteTokenRequest {
+  counterparty?: { id: string } | { name: string };
+}
+
+/**
+ * `POST /friend-invite-links/accept` 的回應：新好友，連動邀請時另帶接受者這邊接上的對象，
+ * 讓畫面接受後能直接打開那本往來帳。
+ */
+export interface FriendInviteLinkAccepted extends Friend {
+  counterpartyId: string | null;
 }

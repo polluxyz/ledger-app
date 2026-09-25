@@ -9,12 +9,13 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type {
-  Friend,
+  FriendInviteLinkAccepted,
   FriendInviteLinkCreated,
   FriendInviteLinkPreview,
   JwtPayload,
 } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AcceptFriendInviteLinkDto } from './dto/accept-friend-invite-link.dto';
 import { FriendInviteTokenDto } from './dto/friend-invite-token.dto';
 import { FriendInviteLinksService } from './friend-invite-links.service';
 import { FRIEND_THROTTLE } from './friends-throttle';
@@ -49,10 +50,13 @@ export class FriendInviteLinksController {
   @ApiNotFoundResponse({ description: 'INVITE_LINK_INVALID.' })
   @ApiConflictResponse({
     description:
-      'ALREADY_FRIENDS. The link is not consumed and can still be given to someone else.',
+      'ALREADY_FRIENDS (plain links), or ALREADY_LINKED / COUNTERPARTY_LINKED / COUNTERPARTY_NAME_TAKEN (link invites). The link is not consumed.',
   })
   @ApiTooManyRequestsResponse({ description: 'More than 10 requests per minute from one IP.' })
-  accept(@CurrentUser() user: JwtPayload, @Body() dto: FriendInviteTokenDto): Promise<Friend> {
-    return this.links.accept(user.sub, dto.token);
+  accept(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AcceptFriendInviteLinkDto,
+  ): Promise<FriendInviteLinkAccepted> {
+    return this.links.accept(user.sub, dto.token, dto.counterparty);
   }
 }

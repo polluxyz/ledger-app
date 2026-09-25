@@ -38,6 +38,7 @@ describe('DebtEntriesService', () => {
       date: new Date(DATE),
       note: null,
       transactionId: 'txn-1',
+      pairedEntryId: null,
       deletedAt: null,
       createdAt: new Date(DATE),
       updatedAt: new Date(DATE),
@@ -60,6 +61,18 @@ describe('DebtEntriesService', () => {
           Promise.resolve(entryRow(args.data)),
         ),
         aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      // 連動（3b-2）：預設沒有連動，所以不送任何提議。送提議的規則在
+      // debt-proposal-rules.spec.ts 與 e2e 驗。
+      counterpartyLink: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      debtProposal: {
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn(),
       },
       ledgerMember: {
         findUnique: jest.fn().mockResolvedValue({ role: 'EDITOR', ledger: { archivedAt: null } }),

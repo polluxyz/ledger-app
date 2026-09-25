@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import type { ListCounterpartiesQuery } from '@ledger/shared';
 
 /**
@@ -22,4 +22,13 @@ export class ListCounterpartiesQueryDto implements ListCounterpartiesQuery {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description: 'GET /counterparties only: names containing this text (case-insensitive).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
 }

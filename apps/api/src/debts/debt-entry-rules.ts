@@ -1,6 +1,13 @@
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode } from '@ledger/shared';
-import type { Counterparty, DebtEntry, DebtEntryKind, DebtTransactionType } from '@ledger/shared';
+import type {
+  Counterparty,
+  CounterpartyLinkInfo,
+  DebtEntry,
+  DebtEntryKind,
+  DebtEntrySyncStatus,
+  DebtTransactionType,
+} from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
 
@@ -84,9 +91,9 @@ export function transactionTypeFor(
   return kind;
 }
 
-/** 調整紀錄（結清差額、免除）：系統算出來的，不產生交易，不能改金額（決策 40）。 */
+/** 調整紀錄（結清差額、免除、被免除）：系統算出來的，不產生交易，不能改金額（決策 40）。 */
 export function isAdjustment(kind: DebtEntryKind): boolean {
-  return kind === 'SETTLEMENT' || kind === 'FORGIVE';
+  return kind === 'SETTLEMENT' || kind === 'FORGIVE' || kind === 'FORGIVEN';
 }
 
 type EntryLike = { delta: number; deletedAt: Date | null };
@@ -118,17 +125,30 @@ export function runningBalances<T extends OrderedEntry>(entries: ReadonlyArray<T
 type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
 type DebtEntryRow = Prisma.DebtEntryGetPayload<object>;
 
-export function toCounterparty(row: CounterpartyRow, balance: number): Counterparty {
+export function toCounterparty(
+  row: CounterpartyRow,
+  balance: number,
+  link: CounterpartyLinkInfo | null,
+): Counterparty {
   return {
     id: row.id,
     name: row.name,
     balance,
+    link,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-export function toDebtEntry(row: DebtEntryRow, balanceAfter?: number): DebtEntry {
+/**
+ * `sync` 由呼叫端用 `syncStatuses` 查出來傳入（要看提議）；沒傳時只依配對推，給不牽涉提議的
+ * 情境（例如剛寫入、還沒送任何提議的紀錄）。
+ */
+export function toDebtEntry(
+  row: DebtEntryRow,
+  extra: { balanceAfter?: number; sync?: DebtEntrySyncStatus } = {},
+): DebtEntry {
+  const { balanceAfter, sync } = extra;
   return {
     id: row.id,
     counterpartyId: row.counterpartyId,
@@ -138,6 +158,8 @@ export function toDebtEntry(row: DebtEntryRow, balanceAfter?: number): DebtEntry
     note: row.note,
     transactionId: row.transactionId,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
+    sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
+    paired: row.pairedEntryId !== null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

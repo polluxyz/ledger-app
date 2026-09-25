@@ -17,6 +17,8 @@ describe('DebtEntryEditDialog', () => {
     note: '原備註',
     transactionId: 'txn-1',
     balanceAfter: 120,
+    sync: 'NONE',
+    paired: false,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
   };

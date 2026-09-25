@@ -11,6 +11,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { FriendRequest, JwtPayload, Paginated } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AcceptFriendRequestDto } from './dto/accept-friend-request.dto';
 import { CreateFriendRequestDto } from './dto/create-friend-request.dto';
 import { ListFriendRequestsQueryDto } from './dto/list-friend-requests-query.dto';
 import { FriendRequestsService } from './friend-requests.service';
@@ -54,9 +55,19 @@ export class FriendRequestsController {
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: 'Only the recipient can accept.' })
   @ApiNotFoundResponse({ description: 'No such request, or the caller is not a party to it.' })
-  @ApiConflictResponse({ description: 'FRIEND_REQUEST_NOT_PENDING.' })
-  accept(@CurrentUser() user: JwtPayload, @Param('id') id: string): Promise<FriendRequest> {
-    return this.requests.accept(user.sub, id);
+  @ApiBadRequestResponse({
+    description: 'A link invite needs counterparty; a plain friend request must not have one.',
+  })
+  @ApiConflictResponse({
+    description:
+      'FRIEND_REQUEST_NOT_PENDING; for link invites also ALREADY_LINKED, COUNTERPARTY_LINKED, COUNTERPARTY_NAME_TAKEN.',
+  })
+  accept(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AcceptFriendRequestDto,
+  ): Promise<FriendRequest> {
+    return this.requests.accept(user.sub, id, dto.counterparty);
   }
 
   @Post(':id/decline')

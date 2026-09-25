@@ -1,6 +1,6 @@
 # Spec：階段三 (3b-2) — 往來帳連動
 
-> 狀態：**已核可，待實作**（2026-09-25）
+> 狀態：**已核可；後端已實作，畫面待寫 `phase-3b2-web.md`**（2026-09-25）
 > 依據：`phase-3b-debts.md` §11 的方向；2026-09-25 開發者確認的假設清單（見 §2 決策 51～70 的「來源」）。
 > 前置：3a 好友系統（#54）、3b-1 往來帳版與修訂 1（#67、#69）已合併。
 > 執行順序：**本 spec** → 後端（一個 PR）→ 畫面（先寫 `phase-3b2-web.md`，再一個 PR）。
@@ -194,10 +194,10 @@ model DebtProposal {
   sourceEntryId String
   /// AMEND、DELETE：接受者那筆（送出時的配對對象）。CREATE 為 null。
   targetEntryId String?
-  /// CREATE：發起者存的種類（LEND/BORROW/COLLECT/REPAY/FORGIVE）。
-  entryKind     DebtEntryKind?
-  amount        Int?               // CREATE、AMEND；正整數
-  date          DateTime?          // CREATE、AMEND
+  /// 發起者那筆的種類（發起者的角度）。
+  entryKind     DebtEntryKind
+  amount        Int                // 正整數；DELETE 存刪除當下的值
+  date          DateTime
   settle        Boolean            @default(false)
   status        DebtProposalStatus @default(PENDING)
   respondedAt   DateTime?
@@ -271,18 +271,22 @@ link: { userId: string; userName: string; theirBalance: number } | null;
 | `POST /debt-proposals/{id}/decline` | 拒絕                                                                                                |
 
 ```ts
-// DebtProposal（收件者看到的樣子）
+// DebtProposal（一律從呼叫者的角度）
 {
   id, type, status,
-  fromUser: { id, name },
-  counterpartyId: string,      // 我這邊連動的對象
-  entryKind: DebtEntryKind | null,     // 換成接受者角度（§3.2）；AMEND/DELETE 為對方那筆的種類換角度
-  amount: number | null, date: string | null, settle: boolean,
-  createdAt,
+  direction: 'incoming' | 'outgoing',
+  otherUser: { id, name },           // 收到的是發起者，送出的是接受者
+  counterpartyId: string | null,     // 我這邊連動的對象；解除後為 null
+  entryKind: DebtEntryKind,          // 收到的換成我的角度（§3.2）
+  amount: number,                    // CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值
+  date: string, settle: boolean,
+  createdAt, respondedAt,
 }
 ```
 
 發起者看自己送出的提議時，`entryKind` 是自己的角度、多 `sourceEntryId`。
+
+> 實作時的調整（2026-09-25）：加上 `direction`；`fromUser` 改成 `otherUser`，讓同一個型別能表示收到與送出兩種；`DELETE` 也帶金額與日期，讓接受者看得出是哪一筆，所以 `entryKind`、`amount`、`date` 一律有值。見 `tasks/phase-3b2-linking-plan.md` §6。
 
 ### 5.4 既有往來紀錄端點的行為改變
 

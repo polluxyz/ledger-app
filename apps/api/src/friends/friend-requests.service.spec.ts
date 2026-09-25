@@ -37,6 +37,7 @@ describe('FriendRequestsService authorization matrix (SC-F6)', () => {
       id: REQUEST_ID,
       requesterId: REQUESTER,
       recipientId: RECIPIENT,
+      counterpartyId: null,
       status,
       respondedAt: status === 'PENDING' ? null : NOW,
       createdAt: new Date('2026-09-20T00:00:00.000Z'),
