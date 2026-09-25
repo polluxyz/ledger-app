@@ -7,9 +7,13 @@ import {
 } from '@tanstack/react-query';
 import type {
   Counterparty,
+  CreateCounterpartyRequest,
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
+  CreateLinkInviteRequest,
   DebtEntry,
+  FriendInviteLinkCreated,
+  FriendRequest,
   ListCounterpartiesQuery,
   Paginated,
   UpdateDebtEntryRequest,
@@ -163,5 +167,70 @@ export function useForgiveCounterparty() {
         method: 'POST',
       }),
     onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 3b-2：不記帳先加人、邀請連動、解除連動（spec `phase-3b2-web.md` W26、W28、W27）
+// ---------------------------------------------------------------------------
+
+/** 送出與收到的連動邀請、提議的快取前綴。定義在 `use-linking.ts`，這裡只為了失效。 */
+const FRIEND_REQUESTS_KEY = ['friend-requests'] as const;
+const DEBT_PROPOSALS_KEY = ['debt-proposals'] as const;
+
+/** 不記帳先新增一個人（決策 55）。撞名回 409 `COUNTERPARTY_NAME_TAKEN`。 */
+export function useCreateCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCounterpartyRequest) =>
+      apiRequest<Counterparty>('/counterparties', { method: 'POST', body: input }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY }),
+  });
+}
+
+/**
+ * 用 email 邀請這個人連動。回應是送出的邀請，`counterpartyId` 就是這個對象（F25），
+ * 往來帳靠它顯示「已邀請，等對方接受」。
+ */
+export function useSendLinkInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ counterpartyId, email }: { counterpartyId: string } & CreateLinkInviteRequest) =>
+      apiRequest<FriendRequest>(`/counterparties/${counterpartyId}/link-invites`, {
+        method: 'POST',
+        body: { email },
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY }),
+  });
+}
+
+/**
+ * 產生連動邀請連結。`token` 的原文只在這個回應出現一次：畫面組成
+ * `${origin}/invite#${token}` 給使用者複製，**不要存進任何 storage、不要記 log**。
+ * 重新產生會讓同一人之前的連結失效（後端負責）。
+ */
+export function useCreateLinkInviteUrl() {
+  return useMutation({
+    mutationFn: (counterpartyId: string) =>
+      apiRequest<FriendInviteLinkCreated>(`/counterparties/${counterpartyId}/invite-links`, {
+        method: 'POST',
+      }),
+  });
+}
+
+/**
+ * 解除連動（決策 70、71）。對象、名字與紀錄都保留；待確認的提議與邀請由後端一併取消，
+ * 所以除了往來相關的快取，待確認也要失效。
+ */
+export function useUnlinkCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (counterpartyId: string) =>
+      apiRequest<void>(`/counterparties/${counterpartyId}/link`, { method: 'DELETE' }),
+    onSuccess: () => {
+      invalidateAfterWrite(queryClient);
+      void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: DEBT_PROPOSALS_KEY });
+    },
   });
 }

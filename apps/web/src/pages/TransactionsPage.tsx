@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
@@ -13,6 +13,7 @@ import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { DebtsView } from '../features/debts/DebtsView';
+import { readOpenCounterpartyState } from '../features/linking/navigation';
 import { TransactionFilterBar } from '../features/transactions/TransactionFilters';
 import { TransactionList } from '../features/transactions/TransactionList';
 import {
@@ -120,6 +121,32 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     setPanelTarget({ kind: 'counterparty', counterpartyId });
     open();
   }
+
+  /*
+    從總覽或邀請頁過來、要直接打開某人的往來帳（phase-3b2-web W41，見
+    features/linking/navigation.ts）。打開後把 state 換掉，重新整理或回上一頁就不會再開一次。
+
+    換掉 state 是一次 replace 導覽，會換 location key；帶 keepRightPanel 讓右側欄把開啟記號
+    搬過去（RightPanelProvider 的 W15 機制），否則剛打開就被收起。用 passive effect：它在
+    RightPanelProvider 的 layout effect 之後才跑，不會被「換頁就收起」蓋掉。
+
+    面板內容在 render 期間就換（React 的「依 props 調整 state」寫法，以 location key 防止
+    重複），effect 只負責打開右側欄與換掉 state 這兩件外部的事。
+  */
+  const location = useLocation();
+  const openCounterpartyId = readOpenCounterpartyState(location.state);
+  const [handledLocationKey, setHandledLocationKey] = useState<string | null>(null);
+  if (openCounterpartyId !== null && handledLocationKey !== location.key) {
+    setHandledLocationKey(location.key);
+    setPanelTarget({ kind: 'counterparty', counterpartyId: openCounterpartyId });
+  }
+  useEffect(() => {
+    if (openCounterpartyId === null) {
+      return;
+    }
+    open();
+    setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
+  }, [open, openCounterpartyId, setSearchParams]);
 
   /** 往來帳的「記一筆」回到借還表單，預帶對象並把面板焦點移入表單。 */
   function recordEntry(name: string) {

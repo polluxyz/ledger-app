@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@ledger/shared';
 import { ApiError } from '../lib/api-client';
 import { toUserMessage } from '../lib/error-messages';
 import styles from './FormError.module.css';
@@ -13,13 +14,21 @@ import styles from './FormError.module.css';
  * class-validator 產生的，要在地化得改後端，不在對照表的管轄內。
  *
  * `role="alert"` 讓螢幕閱讀器在錯誤出現時主動朗讀。
+ *
+ * `messages` 讓某個畫面把特定代碼換一種說法（例如邀請連動視窗的 `USER_NOT_FOUND`）。
  */
-export function FormError({ error }: { error: unknown }) {
+export function FormError({
+  error,
+  messages,
+}: {
+  error: unknown;
+  messages?: Partial<Record<ErrorCode, string>>;
+}) {
   if (!error) {
     return null;
   }
 
-  const message = toUserMessage(error);
+  const message = toUserMessage(error, messages);
   const details = error instanceof ApiError ? error.details : undefined;
 
   return (

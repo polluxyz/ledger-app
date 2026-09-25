@@ -5,11 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useCounterparties,
   useCounterpartyEntries,
+  useCreateCounterparty,
   useCreateDebtEntry,
+  useCreateLinkInviteUrl,
   useDeleteCounterparty,
   useDeleteDebtEntry,
   useForgiveCounterparty,
   useRenameCounterparty,
+  useSendLinkInvite,
+  useUnlinkCounterparty,
   useUpdateDebtEntry,
 } from './use-debts';
 
@@ -164,4 +168,58 @@ describe('Debt hooks', () => {
       expectEverythingInvalidated();
     },
   );
+
+  // 3b-2：這幾個只動到部分快取，所以各自釘住該失效的前綴，不套用上面那條「全部失效」。
+  function invalidatedKeys(): unknown[] {
+    const calls = invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>;
+    return calls.map(([filters]) => filters.queryKey);
+  }
+
+  it('filters counterparties by name with q', async () => {
+    renderHook(() => useCounterparties({ q: '小 明', limit: 50 }), { wrapper });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(lastRequest().url).toMatch(/\/counterparties\?q=%E5%B0%8F\+%E6%98%8E&limit=50$/);
+  });
+
+  it('creates a counterparty without an entry and refreshes the list', async () => {
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useCreateCounterparty(), { wrapper });
+    await act(() => result.current.mutateAsync({ name: '媽媽' }));
+    expect(lastRequest()).toMatchObject({
+      method: 'POST',
+      body: { name: '媽媽' },
+    });
+    expect(lastRequest().url).toMatch(/\/counterparties$/);
+    expect(invalidatedKeys()).toEqual([['counterparties']]);
+  });
+
+  it('sends a link invite by email and refreshes the sent invites', async () => {
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useSendLinkInvite(), { wrapper });
+    await act(() => result.current.mutateAsync({ counterpartyId: 'cp-1', email: 'b@example.com' }));
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/link-invites$/);
+    expect(lastRequest().body).toEqual({ email: 'b@example.com' });
+    expect(invalidatedKeys()).toEqual([['friend-requests']]);
+  });
+
+  it('creates an invite link without touching any cache', async () => {
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useCreateLinkInviteUrl(), { wrapper });
+    await act(() => result.current.mutateAsync('cp-1'));
+    expect(lastRequest()).toMatchObject({ method: 'POST' });
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/invite-links$/);
+    expect(invalidatedKeys()).toEqual([]);
+  });
+
+  it('unlinks and refreshes debts, transactions, accounts and everything pending', async () => {
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useUnlinkCounterparty(), { wrapper });
+    await act(() => result.current.mutateAsync('cp-1'));
+    expect(lastRequest()).toMatchObject({ method: 'DELETE' });
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/link$/);
+    expectEverythingInvalidated();
+    expect(invalidatedKeys()).toEqual(
+      expect.arrayContaining([['friend-requests'], ['debt-proposals']]) as unknown,
+    );
+  });
 });
