@@ -1,6 +1,6 @@
 # 任務清單：3b-2 連動的畫面
 
-> 依據：`tasks/phase-3b2-web-plan.md`。worker 依 `CLAUDE.md` §11：Codex（`gpt-6-luna` max）優先。
+> 依據：`tasks/archive/phase-3b2-web-plan.md`。worker 依 `CLAUDE.md` §11：Codex（`gpt-6-luna` max）優先。
 
 | #   | 任務                                                                 | 負責   | 相依 | PR   |
 | --- | -------------------------------------------------------------------- | ------ | ---- | ---- |

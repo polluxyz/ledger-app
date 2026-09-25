@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
@@ -220,6 +220,27 @@ describe('Transactions page', () => {
     expect(screen.queryByText('借還紀錄不分帳本')).not.toBeInTheDocument();
     // 網址上的參數被清掉——再重整一次還是明細。
     expect(window.location.search).toBe('');
+  });
+
+  it('opens the counterparty ledger requested by another page, only once', async () => {
+    // 總覽或邀請頁用 location.state 指定要打開誰（phase-3b2-web W41）。BrowserRouter 把
+    // state 放在 history.state.usr，這裡直接模擬「從別頁導過來」的那一筆 history。
+    window.history.pushState(
+      { usr: { openCounterpartyId: 'counterparty-1' }, key: 'from-home', idx: 0 },
+      '',
+      '/transactions?view=debts',
+    );
+    render(<App />);
+
+    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
+    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
+    // 指示用過就換掉：重新整理不會再打開一次，網址維持在借還檢視。
+    await waitFor(() => {
+      const state = window.history.state as { usr?: Record<string, unknown> };
+      expect(state.usr).toEqual({ keepRightPanel: true });
+    });
+    expect(window.location.search).toBe('?view=debts');
+    expect(screen.getByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
   });
 
   it('opens debt detail in right panel when clicking a debt item in debts view', async () => {

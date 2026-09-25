@@ -30,6 +30,8 @@ describe('Home dashboard', () => {
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  let incomingLinkInvites: unknown[] = [];
+  let incomingProposals: unknown[] = [];
 
   /** 七筆交易：後端若多給了，卡片仍然只顯示 5 筆。 */
   const transactions = Array.from({ length: 7 }, (_, index) => ({
@@ -51,6 +53,8 @@ describe('Home dashboard', () => {
     window.history.pushState({}, '', '/');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
+    incomingLinkInvites = [];
+    incomingProposals = [];
 
     fetchMock.mockImplementation((url: string) => {
       const json = (body: unknown) =>
@@ -62,6 +66,22 @@ describe('Home dashboard', () => {
         );
       if (url.includes('/transactions')) {
         return json({ items: transactions, page: 1, limit: 5, total: 7 });
+      }
+      if (url.includes('/friend-requests?')) {
+        return json({
+          items: incomingLinkInvites,
+          page: 1,
+          limit: 20,
+          total: incomingLinkInvites.length,
+        });
+      }
+      if (url.includes('/debt-proposals?')) {
+        return json({
+          items: incomingProposals,
+          page: 1,
+          limit: 20,
+          total: incomingProposals.length,
+        });
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
@@ -129,6 +149,42 @@ describe('Home dashboard', () => {
     for (const label of ['本月支出', '本月收入', '結餘']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it('places the pending card before the stat cards when items are waiting', async () => {
+    signIn();
+    incomingLinkInvites = [
+      {
+        id: 'invite-1',
+        direction: 'incoming',
+        status: 'PENDING',
+        counterpart: { userId: 'user-2', name: '王小明', email: null },
+        forLink: true,
+        counterpartyId: null,
+        createdAt: '2026-09-25T00:00:00.000Z',
+        respondedAt: null,
+      },
+    ];
+
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+    const firstStat = (await screen.findAllByText('即將推出', undefined, WAIT))[0]!;
+    expect(card.compareDocumentPosition(firstStat) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it('does not place an empty pending card on the home page', async () => {
+    signIn();
+
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    await screen.findAllByText('即將推出', undefined, WAIT);
+    await waitFor(
+      () => expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument(),
+      WAIT,
+    );
   });
 
   it('shows only the five most recent transactions', async () => {

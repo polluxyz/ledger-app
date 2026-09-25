@@ -35,7 +35,10 @@ export function CounterpartyList({ onSelectCounterparty }: CounterpartyListProps
               className={styles.row}
               onClick={() => onSelectCounterparty(counterparty.id)}
             >
-              <span className={styles.name}>{counterparty.name}</span>
+              <span className={styles.nameGroup}>
+                <span className={styles.name}>{counterparty.name}</span>
+                {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
+              </span>
               <span className={styles.balance}>
                 {formatCounterpartyBalance(counterparty.balance)}
               </span>

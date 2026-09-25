@@ -59,6 +59,26 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   LEDGER_HAS_DEBT_TRANSACTIONS: '這本帳本有借還交易，不能刪除。請改用封存。',
   NOTHING_TO_REPAY: '目前和對方沒有欠款，不需要還款。',
   REPAYMENT_EXCEEDS_BALANCE: '還款超過目前的欠款。要兩清請勾「以此結清」，或把多出的部分另記一筆。',
+
+  // ── 連動（3b-2，spec phase-3b2-web.md §4.7）──────────────────────────────
+  // 後端沿用 3a 的好友錯誤碼，但畫面不出現「好友」（W22），所以這幾個一律改寫。
+  CANNOT_FRIEND_SELF: '不能邀請自己。',
+  ALREADY_FRIENDS: '你們已經建立過關係了。重新整理後再試一次。',
+  FRIEND_REQUEST_PENDING: '已經送出邀請了，等對方接受。',
+  FRIEND_REQUEST_NOT_PENDING: '這個邀請已經處理過了。',
+  INVITE_LINK_INVALID: '這個連結無效或已過期，請對方重新產生。',
+  ALREADY_LINKED: '你們已經連動了，或這個人已經連到別的帳號。',
+  COUNTERPARTY_LINKED: '這個人已經連動中。要刪除或改接別人，請先解除連動。',
+  LINK_INVITE_FROM_THEM: '對方已經邀請你連動了，到總覽接受就好。',
+  PROPOSAL_NOT_PENDING: '這筆已經處理過了，畫面會重新整理。',
+};
+
+/**
+ * 邀請連動視窗專用的覆寫（spec §4.7）。同一個代碼在帳本成員那邊有自己的說法
+ * （「再加入」），在這裡要改成連動的語境。用法：`toUserMessage(error, LINK_INVITE_MESSAGES)`。
+ */
+export const LINK_INVITE_MESSAGES: Partial<Record<ErrorCode, string>> = {
+  USER_NOT_FOUND: '找不到使用這個 email 的帳號。請對方先註冊。',
 };
 
 /**
@@ -69,11 +89,16 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
  *      那兩種比英文更糟：使用者連「發生什麼事」都不知道。
  *   3. 不是 `ApiError`（網路層直接失敗）→ 回連線失敗的固定句子。
  */
-export function toUserMessage(error: unknown): string {
+export function toUserMessage(
+  error: unknown,
+  overrides: Partial<Record<ErrorCode, string>> = {},
+): string {
   if (error instanceof ApiError) {
     // `errorCode` 的型別是 string（後端給什麼就是什麼），不保證落在 ErrorCode
     // 聯集內；查不到就是 undefined，由 ?? 退回後端原文（規則 2）。
-    const localized = ERROR_MESSAGES[error.errorCode as ErrorCode];
+    // `overrides` 讓特定畫面換一種說法（例如邀請連動視窗的 USER_NOT_FOUND）。
+    const code = error.errorCode as ErrorCode;
+    const localized = overrides[code] ?? ERROR_MESSAGES[code];
     return localized ?? error.message;
   }
   return NETWORK_FAILURE_MESSAGE;

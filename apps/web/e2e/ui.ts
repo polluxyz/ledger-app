@@ -77,6 +77,22 @@ export async function openNewTransaction(page: Page): Promise<void> {
 }
 
 /**
+ * 在選人的下拉選單（3b-2 W24）輸入名字，再按 Esc 收起清單。
+ *
+ * 用 combobox 角色找輸入框：`getByLabel` 是部分比對，會同時對到清單本身
+ * （它的名稱是「{label}選項」）。收起清單是因為它會蓋住下方的種類按鈕。
+ */
+export async function typeCounterparty(
+  scope: Locator,
+  name: string,
+  label = '對象',
+): Promise<void> {
+  const input = scope.getByRole('combobox', { name: label, exact: true });
+  await input.fill(name);
+  await input.press('Escape');
+}
+
+/**
  * 打開側欄底部的使用者選單（spec 2i SC-32）。「登出」「個人資料」都收在裡面。
  * 取不到使用者名稱時按鈕叫「帳號選單」，所以兩種名稱都接受。
  */

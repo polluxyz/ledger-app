@@ -90,6 +90,13 @@
   font-size: var(--text-sm);
 }
 
+/* 連動的送出提醒緊接試算，讓使用者在同一處看見對方需要確認。 */
+.linkHint {
+  margin: calc(-1 * var(--space-sm)) 0 var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .actions {
   display: flex;
   align-items: stretch;

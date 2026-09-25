@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AccountsPage from '../pages/AccountsPage';
 import CategoriesPage from '../pages/CategoriesPage';
 import HomePage from '../pages/HomePage';
+import InvitePage from '../pages/InvitePage';
 import LedgerDetailPage from '../pages/LedgerDetailPage';
 import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
@@ -25,6 +26,9 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+
+      {/* 登入轉址只保留路徑與查詢字串，會丟掉邀請 token 所在的 hash。 */}
+      <Route path="/invite" element={<InvitePage />} />
 
       <Route element={<GuestOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />

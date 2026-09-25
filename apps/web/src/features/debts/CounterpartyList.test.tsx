@@ -20,11 +20,16 @@ describe('CounterpartyList', () => {
       const items =
         page === 1
           ? [
-              { id: 'cp-1', name: '小明', balance: 9 },
-              { id: 'cp-2', name: '阿華', balance: -11 },
-              { id: 'cp-3', name: '老王', balance: 0 },
+              {
+                id: 'cp-1',
+                name: '小明',
+                balance: 9,
+                link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
+              },
+              { id: 'cp-2', name: '阿華', balance: -11, link: null },
+              { id: 'cp-3', name: '老王', balance: 0, link: null },
             ]
-          : [{ id: 'cp-4', name: '小美', balance: 20 }];
+          : [{ id: 'cp-4', name: '小美', balance: 20, link: null }];
       return Promise.resolve(
         new Response(JSON.stringify({ items, page, limit: 20, total: 42 }), {
           status: 200,
@@ -45,12 +50,13 @@ describe('CounterpartyList', () => {
     return onSelectCounterparty;
   }
 
-  it('uses API balance values for the three short balance labels', async () => {
+  it('uses API balances and marks linked people in the list', async () => {
     renderList();
 
     expect(await screen.findByText('欠我 $9')).toBeInTheDocument();
     expect(screen.getByText('我欠 $11')).toBeInTheDocument();
     expect(screen.getByText('兩清')).toBeInTheDocument();
+    expect(screen.getByText('連動')).toBeInTheDocument();
     expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/counterparties\?page=1&limit=20$/);
   });
 

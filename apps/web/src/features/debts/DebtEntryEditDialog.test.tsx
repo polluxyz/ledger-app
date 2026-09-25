@@ -44,15 +44,15 @@ describe('DebtEntryEditDialog', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderDialog() {
+  function renderDialog(testEntry: DebtEntry = entry, linkedUserName?: string) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onClose = vi.fn();
-    render(
+    const rendered = render(
       <QueryClientProvider client={queryClient}>
-        <DebtEntryEditDialog entry={entry} onClose={onClose} />
+        <DebtEntryEditDialog entry={testEntry} linkedUserName={linkedUserName} onClose={onClose} />
       </QueryClientProvider>,
     );
-    return onClose;
+    return { onClose, ...rendered };
   }
 
   it('sends only the changed amount', async () => {
@@ -85,5 +85,19 @@ describe('DebtEntryEditDialog', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(parseRequestBody(options)).toEqual({ note: null });
+  });
+
+  it('shows the neutral sync explanation only for a paired entry', async () => {
+    const pairedEntry = { ...entry, paired: true };
+    const pairedRender = renderDialog(pairedEntry, '王小明');
+    const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
+    expect(dialog).toHaveTextContent(
+      '這筆已和王小明同步。存檔後會把新的金額與日期送給他確認；他不接受的話，他那邊維持原樣。備註不會同步。',
+    );
+
+    pairedRender.unmount();
+    renderDialog(entry, '王小明');
+    const unpairedDialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
+    expect(unpairedDialog).not.toHaveTextContent('這筆已和王小明同步');
   });
 });

@@ -34,10 +34,28 @@
   outline-offset: -2px;
 }
 
+.nameGroup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-sm);
+}
+
 .name {
+  min-width: 0;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linkBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-xs);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
