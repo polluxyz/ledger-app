@@ -1,7 +1,13 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { listAccounts } from './api';
 import { expect, test } from './fixtures';
-import { newTransactionForm, openNewTransaction, openTransactions, transactionRow } from './ui';
+import {
+  newTransactionForm,
+  openNewTransaction,
+  openTransactions,
+  transactionRow,
+  typeCounterparty,
+} from './ui';
 
 /**
  * 3b-1 借還畫面（往來帳版）的端對端流程（`docs/specs/phase-3b1-web.md` §5）。
@@ -35,7 +41,7 @@ async function fill(
   amount: number,
   options: { account?: string; settle?: boolean } = {},
 ) {
-  await form.getByLabel('對象').fill(name);
+  await typeCounterparty(form, name);
   await form.getByRole('group', { name: '往來種類' }).getByRole('button', { name: kind }).click();
   await form.getByLabel('金額').fill(String(amount));
   if (options.account !== undefined) {
@@ -75,7 +81,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
   await expect(transactionRow(page, '借出 · 小明')).toBeVisible();
 
   // SC-W21：同一個人借入 111，送出前先看到目前餘額與記完後的餘額。對象與種類在成功後保留。
-  await form.getByLabel('對象').fill('小明');
+  await typeCounterparty(form, '小明');
   await expect(form.getByText('目前小明欠你 $120')).toBeVisible();
   await fill(form, '小明', '借入', 111, { account: '現金' });
   await expect(form.getByText('記完後：小明欠你 $9')).toBeVisible();
@@ -91,7 +97,9 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
 
   // SC-W27：表單開著時切換檢視，右側欄不收起、對象欄的值還在。
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
-  await expect(newTransactionForm(page).getByLabel('對象')).toHaveValue('小明');
+  await expect(
+    newTransactionForm(page).getByRole('combobox', { name: '對象', exact: true }),
+  ).toHaveValue('小明');
   // 右側欄關著時內容仍在 DOM 裡、只是 inert，所以要直接驗 inert，不能只看欄位還在。
   expect(
     await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
@@ -148,7 +156,7 @@ test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款�
   await expect(kinds.getByRole('button')).toHaveText(['借出', '借入', '還款']);
 
   // SC-W33：新對象沒有欠款，還款停用。
-  await form.getByLabel('對象').fill('小華');
+  await typeCounterparty(form, '小華');
   await expect(kinds.getByRole('button', { name: '還款' })).toBeDisabled();
   await expect(form.getByText('目前沒有欠款')).toBeVisible();
 

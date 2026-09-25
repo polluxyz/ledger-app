@@ -5,18 +5,18 @@
 
 ---
 
-## 最新交接（2026-09-25，3b-2 後端）
+## 最新交接（2026-09-25，3b-2 畫面）
 
 ### 現況
 
-- 3b-2 連動 spec 已核可並合併（#72）：`docs/specs/phase-3b2-linking.md`（決策 51～72、SC-K1～K18）。
-- 3b-2 **後端已合併（#73）**：連動邀請（email、連結）、接受、解除、提議（新增、改、刪、免除）、`link.theirBalance`、`sync`、`paired`、`POST /counterparties`、`?q=`。實作紀錄：`tasks/phase-3b2-linking-plan.md` §6。
-- Web 只做了讓型別通過的最小調整，沒有新畫面。
+- 3b-2 **全部完成**：後端 #73、畫面 spec #75（`docs/specs/phase-3b2-web.md`，W22～W43）、API 補充 F25、F26 #76、畫面 PR（見 git log）。實作紀錄：`tasks/archive/phase-3b2-web-plan.md` §6。
+- 畫面：選人的下拉選單（只顯示名字與「連動」）、借還檢視「＋ 新增」、往來帳的邀請連動／取消邀請／解除連動／同步標籤／已同步紀錄的說明、總覽的「待確認」卡片（一次展開一筆）、邀請頁 `/invite#<token>`。
+- 開發者決定**不顯示對方帳上的餘額**（W27）；API 的 `theirBalance` 保留。
 
 ### 下一步
 
-1. 寫 `docs/specs/phase-3b2-web.md`（畫面 spec）並產樣稿，送開發者審。方向見 3b-2 spec §7：下拉選單（一份清單、標「連動」）、往來帳的邀請／解除／對方餘額／同步狀態、總覽的「待確認」卡片、`/invite#<token>` 接受頁。
-2. 畫面核可後派 worker 實作（Codex 優先）。畫面做到一半發現後端規則要改（例如總覽要一個合併的「待確認」端點），先停下來改 spec 並問開發者。
+1. 開發者操作 3b-2 畫面後給回饋，照 `CLAUDE.md` §5 先改 spec 再動工。
+2. 可能的回饋點：待確認卡片不會自己刷新（要切回分頁或重新整理，plan §6 第 8 點）。
 3. 更後面：代墊／多人分帳（「對方幫我付」併進去），需要改資料模型。
 
 ### 開發者的偏好與約束（不在 spec 裡的）
@@ -32,7 +32,8 @@
 
 ### 已知問題與踩過的坑
 
-- **dev 資料庫還沒套 3b-2 的 migration**（`20260925120000_link_counterparties`）。合併後跑 `prisma migrate deploy`、`pnpm build`、重開 API 與 Vite。
+- **dev 資料庫要套 3b-2 的 migration**（`20260925120000_link_counterparties`）：在 `apps/api` 跑 `pnpm exec prisma migrate deploy`、`pnpm build`，重開 API（`node dist/main`）與 Vite。
+- Codex 有新版時會停在更新提示，`worker-start` 回 `agent-update-prompt`：選 3「Skip until next version」後關掉終端機重開。
 - `prisma migrate dev` 在 agent 的非互動環境不能跑：用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL（plan §6 第 2 點）。
 - dev 資料有一筆舊規則留下的「我還對方 +$1」（對方欠我時記的），不會自動修正，開發者可自行刪除。
 - **不要用 PowerShell 的 `Get-Content`／`Set-Content` 改含中文的檔案**：預設編碼會把 UTF-8 中文變亂碼（本 session 踩過，已從 git 還原）。改檔用 Edit 工具或 Bash。

@@ -289,7 +289,7 @@ link: { userId: string; userName: string; theirBalance: number } | null;
 
 > 畫面 spec 追加（2026-09-25，`phase-3b2-web.md` §5）：F25 `FriendRequest.counterpartyId`、F26 `DebtProposal.previous`。兩者都只加欄位。
 
-> 實作時的調整（2026-09-25）：加上 `direction`；`fromUser` 改成 `otherUser`，讓同一個型別能表示收到與送出兩種；`DELETE` 也帶金額與日期，讓接受者看得出是哪一筆，所以 `entryKind`、`amount`、`date` 一律有值。見 `tasks/phase-3b2-linking-plan.md` §6。
+> 實作時的調整（2026-09-25）：加上 `direction`；`fromUser` 改成 `otherUser`，讓同一個型別能表示收到與送出兩種；`DELETE` 也帶金額與日期，讓接受者看得出是哪一筆，所以 `entryKind`、`amount`、`date` 一律有值。見 `tasks/archive/phase-3b2-linking-plan.md` §6。
 
 ### 5.4 既有往來紀錄端點的行為改變
 

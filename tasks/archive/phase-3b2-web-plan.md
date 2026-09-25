@@ -106,4 +106,13 @@ B1 先提交，worker 依這些介面實作，不自己改：
 
 ## 6. 實作紀錄
 
-（實作時補上計畫外的問題與處理方式。）
+2026-09-25，PR 1 #76（F25、F26）、PR 2（畫面）。worker：B2～B5 全部 Codex（`gpt-6-luna` max）。
+
+1. **hooks 位置**：`useOutgoingLinkInvite`、`useCancelLinkInvite` 放在 `features/linking/use-linking.ts`，不是 plan §2.3 寫的 `use-debts.ts`：它們打的是 `/friend-requests`，和其他連動邀請 hooks 放一起。`use-debts.ts` 另外留了兩個前綴常數只為了失效（避免兩檔互相 import）。
+2. **錯誤訊息覆寫**：`toUserMessage` 與 `FormError` 多一個選填的 `messages` 參數，讓邀請連動視窗把 `USER_NOT_FOUND` 換成連動的語境（spec §4.7）。
+3. **打開往來帳的導覽**：交易頁讀 `location.state.openCounterpartyId`，面板內容在 render 期間切換（lint 規則 `react-hooks/set-state-in-effect` 不允許在 effect 裡 setState），effect 只負責打開右側欄與用 replace 導覽清掉 state（帶 `keepRightPanel`）。
+4. **下拉選單的 debounce**（驗收時修）：查詢結果還沒追上輸入時，不顯示「＋ 新增」與「新對象，送出時建立」，否則打既有的名字會閃一下。
+5. **「到總覽接受」**（驗收時修）：B3 原本用 `<a href>`，會整頁重載，改成 router 的 `Link`。
+6. **格式不對的 token**（e2e 發現）：後端對格式不對的 token 回 400 `VALIDATION_FAILED`，邀請頁原本把驗證訊息（含正規表示式）秀給使用者。改成和 `INVITE_LINK_INVALID` 一樣顯示「連結無效或已過期」，spec §4.6 同步補上。
+7. **派工時踩到的坑**：Codex 有新版時會停在更新提示（`agent-update-prompt`），`worker-start` 失敗；選「Skip until next version」後關掉終端機重開即可（與 `docs/orca-multi-agent.md` §4 的記錄一致）。重派後兩個終端機都停在「只貼上沒送出」，補送 Enter。
+8. **待確認卡片不會自己刷新**：停在總覽時，對方新送的提議要等切回分頁（React Query 的 refetchOnWindowFocus）或重新整理才出現。spec 沒有要求即時更新，e2e 用重新整理；操作後若覺得需要，再討論輪詢或推播。

@@ -1,6 +1,6 @@
 # 任務清單：3b-2 往來帳連動（後端）
 
-> 依據：`tasks/phase-3b2-linking-plan.md`、`docs/specs/phase-3b2-linking.md`。依順序做；全部由協調者自己做。
+> 依據：`tasks/archive/phase-3b2-linking-plan.md`、`docs/specs/phase-3b2-linking.md`。依順序做；全部由協調者自己做。
 
 - [x] **S1 shared 契約**
   - 內容：`Counterparty.link`、`DebtEntry.sync`／`paired`、`FORGIVEN`、`DebtProposal` 型別與請求、`FriendRequest.forLink`、預覽的 `forLink`、接受請求的 `counterparty`、4 個錯誤碼。

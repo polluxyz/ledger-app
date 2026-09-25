@@ -247,6 +247,21 @@ describe('InvitePage', () => {
     expect(screen.getByRole('link', { name: '回到總覽' })).toHaveAttribute('href', '/');
   });
 
+  it('token 格式不對（400）也當成無效連結，不顯示驗證訊息原文', async () => {
+    previewStatus = 400;
+    previewBody = {
+      statusCode: 400,
+      errorCode: 'VALIDATION_FAILED',
+      message: 'Validation failed',
+      details: ['token must match /^[A-Za-z0-9_-]{43}$/ regular expression'],
+    };
+    renderInvite({ authenticated: true });
+
+    expect(await screen.findByRole('heading', { name: '連結無法使用' })).toBeInTheDocument();
+    expect(screen.getByText('這個連結無效或已過期，請對方重新產生。')).toBeInTheDocument();
+    expect(screen.queryByText(/regular expression/)).not.toBeInTheDocument();
+  });
+
   it('其他預覽錯誤保留表單錯誤與回總覽連結', async () => {
     previewStatus = 500;
     previewBody = {

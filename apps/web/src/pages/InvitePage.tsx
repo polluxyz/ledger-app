@@ -72,7 +72,13 @@ export default function InvitePage() {
   } else if (preview.isLoading) {
     content = <p className={styles.status}>載入中…</p>;
   } else if (preview.isError) {
-    if (preview.error instanceof ApiError && preview.error.errorCode === 'INVITE_LINK_INVALID') {
+    // 格式不對的 token（被截斷、手動改過）後端回 400；對使用者來說和過期一樣，補救方法也一樣，
+    // 所以同樣顯示「無效或已過期」，不把驗證訊息原文秀出來。
+    if (
+      preview.error instanceof ApiError &&
+      (preview.error.errorCode === 'INVITE_LINK_INVALID' ||
+        preview.error.errorCode === 'VALIDATION_FAILED')
+    ) {
       content = (
         <>
           <h1 className={styles.heading}>連結無法使用</h1>

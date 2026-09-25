@@ -5,12 +5,17 @@ import type {
   AuthTokenResponse,
   AuthUser,
   Category,
+  Counterparty,
   CreateAccountRequest,
+  CreateDebtEntryRequest,
+  CreateDebtEntryResponse,
   CreateLedgerRequest,
   CreateTransactionRequest,
+  FriendRequest,
   LedgerMemberInfo,
   LedgerRole,
   LedgerSummary,
+  Paginated,
   Transaction,
 } from '@ledger/shared';
 import { API_BASE_URL } from './env';
@@ -199,4 +204,75 @@ export async function createAccount(
     data: body,
   });
   return readJson<Account>(response, `建立帳戶「${body.name}」`);
+}
+
+// ---------------------------------------------------------------------------
+// 3b-2 連動：前置條件用（被測的流程走畫面）
+// ---------------------------------------------------------------------------
+
+/** 不記帳先新增一個人。 */
+export async function createCounterparty(
+  request: APIRequestContext,
+  token: string,
+  name: string,
+): Promise<Counterparty> {
+  const response = await request.post(`${API_BASE_URL}/counterparties`, {
+    headers: authHeaders(token),
+    data: { name },
+  });
+  return readJson<Counterparty>(response, `新增對象「${name}」`);
+}
+
+/** 記一筆往來。`record` 一定要明確給（物件或 `null`）。 */
+export async function createDebtEntry(
+  request: APIRequestContext,
+  token: string,
+  body: CreateDebtEntryRequest,
+): Promise<CreateDebtEntryResponse> {
+  const response = await request.post(`${API_BASE_URL}/debt-entries`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<CreateDebtEntryResponse>(response, '記一筆往來');
+}
+
+/**
+ * 讓 inviter 的某個對象與 invitee 連動：用 email 邀請，對方以新名字接受。
+ * 回傳 invitee 那邊接上的對象。
+ */
+export async function linkByEmail(
+  request: APIRequestContext,
+  inviter: TestUser,
+  counterpartyId: string,
+  invitee: TestUser,
+  inviteeSideName: string,
+): Promise<Counterparty> {
+  const invite = await readJson<FriendRequest>(
+    await request.post(`${API_BASE_URL}/counterparties/${counterpartyId}/link-invites`, {
+      headers: authHeaders(inviter.token),
+      data: { email: invitee.email },
+    }),
+    '送出連動邀請',
+  );
+  const incoming = await readJson<Paginated<FriendRequest>>(
+    await request.get(`${API_BASE_URL}/friend-requests?direction=incoming&status=PENDING`, {
+      headers: authHeaders(invitee.token),
+    }),
+    '列出收到的邀請',
+  );
+  const received = incoming.items.find((item) => item.forLink) ?? invite;
+  await readJson<FriendRequest>(
+    await request.post(`${API_BASE_URL}/friend-requests/${received.id}/accept`, {
+      headers: authHeaders(invitee.token),
+      data: { counterparty: { name: inviteeSideName } },
+    }),
+    '接受連動邀請',
+  );
+  const list = await readJson<Paginated<Counterparty>>(
+    await request.get(`${API_BASE_URL}/counterparties?q=${encodeURIComponent(inviteeSideName)}`, {
+      headers: authHeaders(invitee.token),
+    }),
+    '找接上的對象',
+  );
+  return list.items.find((item) => item.name === inviteeSideName)!;
 }
