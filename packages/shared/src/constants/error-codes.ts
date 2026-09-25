@@ -84,6 +84,14 @@ export const ErrorCode = {
   DEBT_TRANSACTION_READ_ONLY: 'DEBT_TRANSACTION_READ_ONLY',
   /** 帳本內有往來紀錄產生的交易，不能真刪（請改用封存）。 */
   LEDGER_HAS_DEBT_TRANSACTIONS: 'LEDGER_HAS_DEBT_TRANSACTIONS',
+  /** 這兩位使用者已經連動，或這個對象已經連到別人（3b-2 決策 57）。 */
+  ALREADY_LINKED: 'ALREADY_LINKED',
+  /** 這個對象正在連動中：不能刪除，也不能再接到另一個人（決策 57、72）。 */
+  COUNTERPARTY_LINKED: 'COUNTERPARTY_LINKED',
+  /** 對方已經對你發出連動邀請，請直接接受（決策 61）。 */
+  LINK_INVITE_FROM_THEM: 'LINK_INVITE_FROM_THEM',
+  /** 這個提議已經被接受、拒絕或作廢。 */
+  PROPOSAL_NOT_PENDING: 'PROPOSAL_NOT_PENDING',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
