@@ -10,13 +10,13 @@
 ### 現況
 
 - 3b-2 連動 spec 已核可並合併（#72）：`docs/specs/phase-3b2-linking.md`（決策 51～72、SC-K1～K18）。
-- 3b-2 **後端**在 `feature/phase-3b2-linking-api`（PR 見 git log）：連動邀請（email、連結）、接受、解除、提議（新增、改、刪、免除）、`link.theirBalance`、`sync`、`paired`、`POST /counterparties`、`?q=`。實作紀錄：`tasks/phase-3b2-linking-plan.md` §6。
+- 3b-2 **後端已合併（#73）**：連動邀請（email、連結）、接受、解除、提議（新增、改、刪、免除）、`link.theirBalance`、`sync`、`paired`、`POST /counterparties`、`?q=`。實作紀錄：`tasks/phase-3b2-linking-plan.md` §6。
 - Web 只做了讓型別通過的最小調整，沒有新畫面。
 
 ### 下一步
 
 1. 寫 `docs/specs/phase-3b2-web.md`（畫面 spec）並產樣稿，送開發者審。方向見 3b-2 spec §7：下拉選單（一份清單、標「連動」）、往來帳的邀請／解除／對方餘額／同步狀態、總覽的「待確認」卡片、`/invite#<token>` 接受頁。
-2. 畫面核可後派 worker 實作（Codex 優先）。
+2. 畫面核可後派 worker 實作（Codex 優先）。畫面做到一半發現後端規則要改（例如總覽要一個合併的「待確認」端點），先停下來改 spec 並問開發者。
 3. 更後面：代墊／多人分帳（「對方幫我付」併進去），需要改資料模型。
 
 ### 開發者的偏好與約束（不在 spec 裡的）
