@@ -77,6 +77,18 @@ export async function openNewTransaction(page: Page): Promise<void> {
 }
 
 /**
+ * 彈窗的內容不可以比彈窗寬（不能出現橫向捲軸）。
+ *
+ * jsdom 不做排版，元件測試抓不到這種問題，只能在真的瀏覽器裡量。
+ */
+export async function expectNoHorizontalOverflow(dialog: Locator): Promise<void> {
+  const overflow = await dialog.evaluate((element) => element.scrollWidth - element.clientWidth);
+  if (overflow > 0) {
+    throw new Error(`彈窗內容比彈窗寬 ${overflow}px，會出現橫向捲軸`);
+  }
+}
+
+/**
  * 在選人的下拉選單（3b-2 W24）輸入名字，再按 Esc 收起清單。
  *
  * 用 combobox 角色找輸入框：`getByLabel` 是部分比對，會同時對到清單本身
