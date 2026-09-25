@@ -30,6 +30,7 @@ describe('FriendRequestsService.list and counterpart mapping', () => {
       id: `request-${from}-${status}`,
       requesterId: mine ? ME : OTHER,
       recipientId: mine ? OTHER : ME,
+      counterpartyId: null,
       status,
       respondedAt: status === 'PENDING' ? null : NOW,
       createdAt: CREATED_AT,

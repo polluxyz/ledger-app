@@ -9,7 +9,10 @@ import { FriendsService } from './friends.service';
 
 /**
  * 好友系統（階段三 3a）。好友關係只是社交層，**不改變任何帳本、帳戶、交易的權限**
- * （SEC-19）。本模組不匯出任何東西給其他模組，也不碰 `LedgerAccessGuard`。
+ * （SEC-19），也不碰 `LedgerAccessGuard`。
+ *
+ * 匯出邀請與邀請連結的 service，給往來帳的「邀請連動」端點用（3b-2 決策 56）：連動邀請就是
+ * 帶著對象的同一種邀請，不另寫一份。相依只有單向（`DebtsModule` → `FriendsModule`）。
  */
 @Module({
   controllers: [FriendRequestsController, FriendInviteLinksController, FriendsController],
@@ -19,5 +22,6 @@ import { FriendsService } from './friends.service';
     FriendsService,
     { provide: CLOCK, useValue: systemClock },
   ],
+  exports: [FriendRequestsService, FriendInviteLinksService],
 })
 export class FriendsModule {}

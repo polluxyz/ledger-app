@@ -219,6 +219,8 @@ describe('Friends (e2e)', () => {
         userId: alice.userId,
         name: 'Alice',
         since: expect.any(String) as unknown,
+        // 一般好友連結沒有接上任何對象；連動連結才會帶（3b-2 §5.2）。
+        counterpartyId: null,
       });
       expect((await friendsOf(alice.token)).map((f) => f.userId)).toEqual([bob.userId]);
 

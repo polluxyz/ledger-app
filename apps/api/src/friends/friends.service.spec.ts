@@ -32,6 +32,11 @@ describe('FriendsService', () => {
   let service: FriendsService;
   let prisma: {
     friendship: { findMany: jest.Mock; count: jest.Mock; deleteMany: jest.Mock };
+    counterpartyLink: { findUnique: jest.Mock; delete: jest.Mock };
+    debtEntry: { updateMany: jest.Mock };
+    debtProposal: { updateMany: jest.Mock };
+    friendRequest: { updateMany: jest.Mock };
+    $transaction: jest.Mock;
   };
 
   // 排序用的固定 id：'user-a' < 'user-b' < 'user-c'（UTF-16 順序）。
@@ -46,6 +51,15 @@ describe('FriendsService', () => {
         count: jest.fn().mockResolvedValue(0),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      // 解除好友連帶解除連動（3b-2 決策 70）。這裡預設沒有連動；連動的解除由 e2e 驗（SC-K12）。
+      counterpartyLink: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        delete: jest.fn(),
+      },
+      debtEntry: { updateMany: jest.fn() },
+      debtProposal: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      friendRequest: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: jest.fn((callback: (tx: unknown) => unknown): unknown => callback(prisma)),
     };
     service = new FriendsService(prisma as unknown as PrismaService);
   });
