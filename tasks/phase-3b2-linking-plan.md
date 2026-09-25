@@ -100,4 +100,10 @@ shared 型別加欄位後，Web 的測試假資料與 `Record<DebtEntryKind, …
 
 ## 6. 實作紀錄
 
-（實作中遇到的計畫外問題與處理記在這裡。）
+1. **enum 新值不能在同一個交易裡當常值用**：migration 用 `ALTER TYPE … ADD VALUE 'FORGIVEN'` 之後，同一個檔案的 CHECK 若直接寫 `'FORGIVEN'` 會被 PostgreSQL 擋下。手寫的 CHECK 一律寫成 `"kind"::text IN (…)`。
+2. **`prisma migrate dev` 在非互動環境不能跑**：改用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL，再手寫附加約束。
+3. **提議回應的形狀**：spec §5.3 原本只寫收件者的樣子（`fromUser`）。實作成同一個型別表示兩個方向：加 `direction`，`fromUser` 改 `otherUser`；`DELETE` 也存金額與日期（plan §3.1 已提），所以 `entryKind`、`amount`、`date` 不再是 nullable。已回寫 spec §4、§5.3。
+4. **`DELETE /friends` 回 404 時不能有副作用**：不是好友時，解除函式仍會作廢兩人之間待確認的連動邀請。改成在資料庫交易裡判斷並丟出，讓整筆回滾。有 e2e 覆蓋（SC-K12 第三個案例）。
+5. **接受提議時對方已解除連動**：解除會作廢所有待確認的提議，理論上接受不到；防禦性地當成 `PROPOSAL_NOT_PENDING`，不寫任何東西。
+6. **Web 的最小調整多了一處**：`CounterpartyDetail` 用種類清單判斷「不能改金額」，把 `FORGIVEN` 加進去，否則會顯示一個 API 必定拒絕的編輯按鈕。抽成 `ADJUSTMENT_KINDS`。
+7. **修改、刪除也鎖對象**：原本只有新增鎖。改或刪會讀寫配對與提議，與對方同時接受時要排隊（plan §3.3 的鎖順序）。
