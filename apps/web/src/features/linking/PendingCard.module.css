@@ -1,0 +1,143 @@
+/* 沿用總覽資料卡的留白與底色，讓待確認成為摘要的一部分；框線用 accent 提醒有待處理項目。 */
+.card {
+  min-width: 0;
+  margin-bottom: var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.count {
+  display: inline-flex;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-xs);
+  border-radius: 999px;
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listItem {
+  min-width: 0;
+}
+
+.entry {
+  padding: var(--space-sm);
+  border-radius: var(--radius);
+}
+
+.entry:hover {
+  background-color: var(--color-fill);
+}
+
+.entryTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.message {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.actions,
+.expansionActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.smallButton {
+  height: 1.875rem;
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
+}
+
+.expansion {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+.expansionActions {
+  justify-content: flex-end;
+}
+
+.preview {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--text-sm);
+}
+
+.checkbox input {
+  margin: 0;
+}
+
+.conflictError {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.showAll {
+  height: 1.875rem;
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 40rem) {
+  .entryTop {
+    flex-direction: column;
+  }
+
+  .actions {
+    align-self: flex-end;
+  }
+}

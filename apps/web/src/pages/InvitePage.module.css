@@ -1,0 +1,46 @@
+/* 邀請頁只有一個主要決策；卡片置中，窄螢幕也保留周圍留白。 */
+.center {
+  display: grid;
+  width: 100%;
+  min-height: calc(100vh - 6rem);
+  place-items: center;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.heading {
+  margin: 0 0 var(--space-md);
+  font-size: var(--text-lg);
+}
+
+.description {
+  margin: 0 0 var(--space-md);
+  color: var(--color-text-muted);
+}
+
+.status {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.returnLink {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  color: var(--color-accent);
+}

@@ -15,6 +15,7 @@ import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
 import { useTransactions } from '../features/transactions/use-transactions';
+import { PendingCard } from '../features/linking/PendingCard';
 import { formatDate, formatTransactionAmount, TRANSACTION_TYPE_LABELS } from '../lib/format';
 import styles from './HomePage.module.css';
 
@@ -84,6 +85,7 @@ function LedgerView() {
   return (
     <PageContent>
       <PageHeader title="總覽" />
+      <PendingCard />
       <StatsRow authenticated />
       {ledgerLoading && <p className={styles.note}>載入中…</p>}
       {ledgerError && <FormError error={ledgerError} />}
@@ -142,6 +144,7 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
       <PageContent>
         <PageHeader title="總覽" />
+        <PendingCard />
 
         <StatsRow authenticated />
 
