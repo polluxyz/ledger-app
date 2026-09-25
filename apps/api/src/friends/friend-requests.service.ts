@@ -407,6 +407,8 @@ export class FriendRequestsService {
       status: row.status,
       counterpart,
       forLink: row.counterpartyId !== null,
+      // 對象是發起者自己的資料：只回給發起者，收件者一律 null（F25、§3.5）。
+      counterpartyId: incoming ? null : row.counterpartyId,
       createdAt: row.createdAt.toISOString(),
       respondedAt: row.respondedAt === null ? null : row.respondedAt.toISOString(),
     };

@@ -251,12 +251,12 @@ link: { userId: string; userName: string; theirBalance: number } | null;
 
 ### 5.2 接受連動邀請（既有端點的增修）
 
-| 方法與路徑                          | 改動                                                                                |
-| ----------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET /friend-requests`              | 每筆多 `forLink: boolean`                                                           |
-| `POST /friend-requests/{id}/accept` | 連動邀請時 body **必填** `{ counterparty: { id } \| { name } }`；一般好友邀請不可帶 |
-| `POST /friend-invite-links/preview` | 回應多 `forLink: boolean`                                                           |
-| `POST /friend-invite-links/accept`  | 連動邀請時 body 必填 `counterparty`，同上                                           |
+| 方法與路徑                          | 改動                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /friend-requests`              | 每筆多 `forLink: boolean`；送出的連動邀請另帶 `counterpartyId`（F25，收到的為 null） |
+| `POST /friend-requests/{id}/accept` | 連動邀請時 body **必填** `{ counterparty: { id } \| { name } }`；一般好友邀請不可帶  |
+| `POST /friend-invite-links/preview` | 回應多 `forLink: boolean`                                                            |
+| `POST /friend-invite-links/accept`  | 連動邀請時 body 必填 `counterparty`，同上                                            |
 
 - 已經是好友、還沒連動：連動邀請照常送出，接受時只建立連動。
 - `counterparty: { id }` 指到已連動的對象 → `409 COUNTERPARTY_LINKED`；`{ name }` 撞名 → `409 COUNTERPARTY_NAME_TAKEN`。都不消耗邀請。
@@ -280,11 +280,14 @@ link: { userId: string; userName: string; theirBalance: number } | null;
   entryKind: DebtEntryKind,          // 收到的換成我的角度（§3.2）
   amount: number,                    // CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值
   date: string, settle: boolean,
+  previous: { amount, date } | null, // F26：收到的 AMEND 才有，取自我自己那筆改之前的值
   createdAt, respondedAt,
 }
 ```
 
 發起者看自己送出的提議時，`entryKind` 是自己的角度、多 `sourceEntryId`。
+
+> 畫面 spec 追加（2026-09-25，`phase-3b2-web.md` §5）：F25 `FriendRequest.counterpartyId`、F26 `DebtProposal.previous`。兩者都只加欄位。
 
 > 實作時的調整（2026-09-25）：加上 `direction`；`fromUser` 改成 `otherUser`，讓同一個型別能表示收到與送出兩種；`DELETE` 也帶金額與日期，讓接受者看得出是哪一筆，所以 `entryKind`、`amount`、`date` 一律有值。見 `tasks/phase-3b2-linking-plan.md` §6。
 

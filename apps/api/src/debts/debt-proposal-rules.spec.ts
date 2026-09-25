@@ -65,6 +65,7 @@ describe('debt proposal rules', () => {
       updatedAt: new Date('2026-09-25T00:00:00.000Z'),
       fromUser: { id: 'alice', name: 'Alice' },
       toUser: { id: 'bob', name: 'Bob' },
+      targetEntry: null as { delta: number; date: Date; deletedAt: Date | null } | null,
     };
 
     it('shows the recipient their own perspective and hides the source entry', () => {
@@ -76,6 +77,32 @@ describe('debt proposal rules', () => {
         counterpartyId: 'bob-side',
       });
       expect(view).not.toHaveProperty('sourceEntryId');
+      expect(view.previous).toBeNull();
+    });
+
+    // F26：收到的 AMEND 才帶 previous，值取自接受者自己那筆；其餘一律 null。
+    const amend = {
+      ...row,
+      type: 'AMEND' as const,
+      targetEntryId: 'bob-entry',
+      amount: 150,
+      targetEntry: { delta: -120, date: new Date('2026-09-20T00:00:00.000Z'), deletedAt: null },
+    };
+
+    it('gives the recipient of an AMEND their own entry before the change', () => {
+      expect(toDebtProposal(amend, 'bob', 'bob-side').previous).toEqual({
+        amount: 120,
+        date: '2026-09-20T00:00:00.000Z',
+      });
+    });
+
+    it('gives no previous values once the recipient deleted their own entry', () => {
+      const deleted = { ...amend, targetEntry: { ...amend.targetEntry, deletedAt: new Date() } };
+      expect(toDebtProposal(deleted, 'bob', 'bob-side').previous).toBeNull();
+    });
+
+    it("never shows the proposer the other side's entry", () => {
+      expect(toDebtProposal(amend, 'alice', 'alice-side').previous).toBeNull();
     });
 
     it('shows the proposer their own kind and entry', () => {

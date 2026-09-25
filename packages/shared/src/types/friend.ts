@@ -49,6 +49,12 @@ export interface FriendRequest {
    * 接受後同時成為好友並完成連動。
    */
   forLink: boolean;
+  /**
+   * 連動邀請帶著的對象（3b-2 web F25）。**只有送出的連動邀請帶值**——那是發起者自己的
+   * 對象，讓往來帳能顯示「已邀請，等對方接受」並取消。收到的邀請一律 `null`：發起者那邊
+   * 的對象不給收件者看（`phase-3b2-linking.md` §3.5）。一般好友邀請也是 `null`。
+   */
+  counterpartyId: string | null;
   /** ISO 8601。 */
   createdAt: string;
   /** 接受、拒絕或取消的時間；仍為 `PENDING` 時是 `null`。ISO 8601。 */
@@ -72,7 +78,7 @@ export interface ListFriendRequestsQuery {
  * `POST /friend-invite-links` 的回應。
  *
  * `token` 的原文**只在這裡出現一次**，伺服器只存它的雜湊值。前端組網址時請放在 `#` 之後
- * （例如 `/friends/invite#<token>`），瀏覽器就不會把它送給伺服器或放進 Referer。
+ * （`/invite#<token>`，`phase-3b2-web.md` W41），瀏覽器就不會把它送給伺服器或放進 Referer。
  */
 export interface FriendInviteLinkCreated {
   token: string;

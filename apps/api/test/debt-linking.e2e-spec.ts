@@ -162,9 +162,22 @@ describe('Debt linking (e2e)', () => {
         .send({ email: 'BOB@example.com' });
       expect(invite.status).toBe(201);
       expect((invite.body as FriendRequest).forLink).toBe(true);
+      // F25：發起者看得到邀請帶著自己的哪個對象；收件者看不到（§3.5）。
+      expect((invite.body as FriendRequest).counterpartyId).toBe(before.id);
+      const sent = await request(server())
+        .get('/api/friend-requests?direction=outgoing&status=PENDING')
+        .set(auth(alice.token))
+        .expect(200);
+      expect((sent.body as Paginated<FriendRequest>).items).toEqual([
+        expect.objectContaining({ forLink: true, counterpartyId: before.id }),
+      ]);
 
       const received = await pendingIncomingRequest(app, bob);
-      expect(received).toMatchObject({ forLink: true, counterpart: { name: 'Alice' } });
+      expect(received).toMatchObject({
+        forLink: true,
+        counterpart: { name: 'Alice' },
+        counterpartyId: null,
+      });
       await request(server())
         .post(`/api/friend-requests/${received.id}/accept`)
         .set(auth(bob.token))
@@ -410,6 +423,7 @@ describe('Debt linking (e2e)', () => {
       await post(alice, { counterparty: { id: aliceSide }, kind: 'LEND', amount: 120 });
       await accept(bob, (await incoming(bob)).id, { record: record(bob) });
       const aliceEntry = (await entries(alice, aliceSide))[0]!;
+      const bobBefore = (await entries(bob, bobSide))[0]!;
 
       await request(server())
         .patch(`/api/debt-entries/${aliceEntry.id}`)
@@ -417,7 +431,16 @@ describe('Debt linking (e2e)', () => {
         .send({ amount: 150 })
         .expect(200);
       const amend = await incoming(bob);
-      expect(amend).toMatchObject({ type: 'AMEND', entryKind: 'BORROW', amount: 150 });
+      // F26：previous 是 B 自己那筆改之前的值；發起者那邊不帶。
+      expect(amend).toMatchObject({
+        type: 'AMEND',
+        entryKind: 'BORROW',
+        amount: 150,
+        previous: { amount: 120, date: bobBefore.date },
+      });
+      expect((await proposals(app, alice, 'outgoing', 'PENDING')).map((p) => p.previous)).toEqual([
+        null,
+      ]);
       await accept(bob, amend.id).then((r) => expect(r.status).toBe(200));
 
       const bobEntry = (await entries(bob, bobSide))[0]!;
@@ -450,7 +473,17 @@ describe('Debt linking (e2e)', () => {
         .set(auth(alice.token))
         .send({ note: '只是備註' })
         .expect(200);
-      expect(await proposals(app, bob, 'incoming', 'PENDING')).toHaveLength(1);
+      const stillPending = await proposals(app, bob, 'incoming', 'PENDING');
+      expect(stillPending).toHaveLength(1);
+      expect(stillPending[0]!.previous).toEqual({ amount: 150, date: bobBefore.date });
+
+      // B 先刪掉自己那筆：沒有「改之前」可以給了。
+      await request(server())
+        .delete(`/api/debt-entries/${bobEntry.id}`)
+        .set(auth(bob.token))
+        .expect(204);
+      const afterDelete = await proposals(app, bob, 'incoming', 'PENDING');
+      expect(afterDelete.find((p) => p.type === 'AMEND')?.previous).toBeNull();
     });
 
     it('SC-K11: deleting a synced entry sends a deletion; deleting a pending one withdraws it', async () => {
