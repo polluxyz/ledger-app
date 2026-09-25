@@ -3,8 +3,14 @@
  */
 
 /* ---- modal：蓋在頁面上 ---- */
+/*
+ * 寬度只由外殼決定。內容不要再自己設 min-width：外殼扣掉左右 padding 後只剩約 21rem，
+ * 內容寫死 24rem 就會撐出橫向捲軸（3b-2 的借還彈窗踩過）。長字串（連結、email）在內容裡
+ * 自己處理換行或截斷。
+ */
 .dialog {
   width: min(24rem, calc(100vw - 2 * var(--space-md)));
+  overflow-wrap: anywhere;
   padding: var(--space-lg);
   border: var(--card-border);
   border-radius: var(--radius-lg);

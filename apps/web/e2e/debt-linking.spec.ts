@@ -7,7 +7,12 @@ import {
   TEST_PASSWORD,
 } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
-import { newTransactionForm, openDashboard, openTransactions } from './ui';
+import {
+  expectNoHorizontalOverflow,
+  newTransactionForm,
+  openDashboard,
+  openTransactions,
+} from './ui';
 
 /**
  * 3b-2 往來帳連動的端對端流程（`docs/specs/phase-3b2-web.md` §6）。
@@ -74,6 +79,7 @@ test('連動主線：邀請與取消、接受、同步一筆、拒絕、修改�
   await pageA.getByRole('button', { name: '＋ 新增' }).click();
   const addDialog = pageA.getByRole('dialog', { name: '新增一個人' });
   await addDialog.getByLabel('名字').fill('小明');
+  await expectNoHorizontalOverflow(addDialog);
   await addDialog.getByRole('button', { name: '新增' }).click();
   const panelA = ledgerPanel(pageA);
   await expect(panelA.getByRole('heading', { name: '小明' })).toBeVisible();
@@ -82,6 +88,7 @@ test('連動主線：邀請與取消、接受、同步一筆、拒絕、修改�
   // SC-W37：用 email 邀請 → 看得到「已邀請」→ 取消 → 按鈕回來。
   await panelA.getByRole('button', { name: '邀請連動' }).click();
   let inviteDialog = pageA.getByRole('dialog', { name: '邀請連動：小明' });
+  await expectNoHorizontalOverflow(inviteDialog);
   await inviteDialog.getByLabel('對方註冊用的 email').fill(USER_B_EMAIL);
   await inviteDialog.getByRole('button', { name: '送出' }).click();
   await expect(panelA.getByText(`已邀請 ${USER_B_EMAIL}，等對方接受`)).toBeVisible();
@@ -162,6 +169,7 @@ test('連動主線：邀請與取消、接受、同步一筆、拒絕、修改�
   await entryRow(panelADeclined, '借出', '120').getByRole('button', { name: '修改' }).click();
   const editDialog = pageA.getByRole('dialog', { name: '修改往來紀錄' });
   await expect(editDialog.getByText(/這筆已和乙同步/)).toBeVisible();
+  await expectNoHorizontalOverflow(editDialog);
   await editDialog.getByLabel('金額').fill('150');
   await editDialog.getByRole('button', { name: /存檔|儲存/ }).click();
   // 沒同步的那筆（被拒絕的 100）修改時沒有同步說明。
@@ -187,6 +195,7 @@ test('連動主線：邀請與取消、接受、同步一筆、拒絕、修改�
   await panelAUnlink.getByRole('button', { name: '解除連動' }).click();
   const unlinkDialog = pageA.getByRole('dialog', { name: '解除和乙的連動' });
   await expect(unlinkDialog.getByText('解除後，「小明」和所有往來紀錄都會保留')).toBeVisible();
+  await expectNoHorizontalOverflow(unlinkDialog);
   await unlinkDialog.getByRole('button', { name: '解除連動' }).click();
   await expect(panelAUnlink.getByRole('button', { name: '邀請連動' })).toBeVisible();
   await expect(panelAUnlink.getByText('已和 乙 連動')).toHaveCount(0);
@@ -220,6 +229,8 @@ test('邀請連結：未登入開啟、頁內登入、改選既有的人、接�
   await inviteDialog.getByRole('button', { name: '產生邀請連結' }).click();
   const linkField = inviteDialog.getByRole('textbox', { name: '邀請連結' });
   await expect(linkField).toHaveValue(/\/invite#.+/);
+  // 產生連結後最寬：長網址與「複製」按鈕並排。
+  await expectNoHorizontalOverflow(inviteDialog);
   const url = new URL(await linkField.inputValue());
 
   // SC-W39：B 沒登入就開連結。token 在 # 之後，不送進伺服器。
