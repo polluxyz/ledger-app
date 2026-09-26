@@ -2,11 +2,11 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
- * 從別的頁面（總覽的待確認卡片、邀請頁）打開某個人的往來帳（spec `phase-3b2-web.md` W41）。
+ * 從別的頁面（總覽的待確認卡片、邀請頁）打開某個人的往來帳（spec `phase-3b2-web.md` W41、W48）。
  *
- * 往來帳住在交易頁的右側欄，打開哪個人是交易頁自己的 state，不在網址上。所以這裡導到
- * 借還檢視，並用 `location.state` 帶一個一次性的指示；交易頁讀到後打開往來帳、再把 state
- * 清掉（見 `TransactionsPage` 的 `useOpenCounterpartyFromState`），重新整理不會再打開一次。
+ * 3b-2 修訂 1 起目的地是對象頁（`/counterparties`）：連動與合併都是「管人」的事。打開哪個人
+ * 是頁面自己的 state，不在網址上，所以用 `location.state` 帶一個一次性的指示；頁面讀到後
+ * 打開往來帳、再把 state 清掉，重新整理不會再打開一次。交易頁也讀同一個鍵。
  */
 
 /** `location.state` 裡的鍵名。交易頁與導覽端共用這一個定義。 */
@@ -17,7 +17,7 @@ export function useOpenCounterpartyLedger(): (counterpartyId: string) => void {
   const navigate = useNavigate();
   return useCallback(
     (counterpartyId: string) => {
-      void navigate('/transactions?view=debts', {
+      void navigate('/counterparties', {
         state: { [OPEN_COUNTERPARTY_STATE_KEY]: counterpartyId },
       });
     },

@@ -316,16 +316,20 @@ export class DebtProposalsService {
 
   /** 轉成回應：`counterpartyId` 是呼叫者自己這邊連動的對象（解除後為 null）。 */
   private async present(
-    client: Pick<Prisma.TransactionClient, 'counterpartyLink'>,
+    client: Pick<Prisma.TransactionClient, 'counterpartyLink' | 'counterparty'>,
     row: ProposalRow,
     viewerId: string,
   ): Promise<DebtProposal> {
     const link = await findLinkBetween(client, row.fromUserId, row.toUserId);
-    return toDebtProposal(
-      row,
-      viewerId,
-      link === null ? null : ownSideCounterparty(link, viewerId),
-    );
+    const counterpartyId = link === null ? null : ownSideCounterparty(link, viewerId);
+    const counterparty =
+      counterpartyId === null
+        ? null
+        : await client.counterparty.findUnique({
+            where: { id: counterpartyId },
+            select: { name: true },
+          });
+    return toDebtProposal(row, viewerId, counterpartyId, counterparty?.name ?? undefined);
   }
 }
 

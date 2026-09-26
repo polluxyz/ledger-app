@@ -1,0 +1,11 @@
+/* 合併表單維持一個欄位；候選人清單與合併結果都以 API 為準。 */
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}

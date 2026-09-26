@@ -7,12 +7,12 @@ import {
   useCounterpartyEntries,
   useCreateCounterparty,
   useCreateDebtEntry,
-  useCreateLinkInviteUrl,
+  useDismissMergePrompt,
   useDeleteCounterparty,
   useDeleteDebtEntry,
   useForgiveCounterparty,
   useRenameCounterparty,
-  useSendLinkInvite,
+  useMergeCounterparty,
   useUnlinkCounterparty,
   useUpdateDebtEntry,
 } from './use-debts';
@@ -193,22 +193,32 @@ describe('Debt hooks', () => {
     expect(invalidatedKeys()).toEqual([['counterparties']]);
   });
 
-  it('sends a link invite by email and refreshes the sent invites', async () => {
+  it('clears a nickname by sending name: null as is', async () => {
     invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    const { result } = renderHook(() => useSendLinkInvite(), { wrapper });
-    await act(() => result.current.mutateAsync({ counterpartyId: 'cp-1', email: 'b@example.com' }));
-    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/link-invites$/);
-    expect(lastRequest().body).toEqual({ email: 'b@example.com' });
-    expect(invalidatedKeys()).toEqual([['friend-requests']]);
+    const { result } = renderHook(() => useRenameCounterparty(), { wrapper });
+    await act(() => result.current.mutateAsync({ counterpartyId: 'cp-1', name: null }));
+    expect(lastRequest()).toMatchObject({ method: 'PATCH', body: { name: null } });
+    expectEverythingInvalidated();
   });
 
-  it('creates an invite link without touching any cache', async () => {
+  it('merges an unlinked counterparty into a linked one and refreshes everything', async () => {
     invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    const { result } = renderHook(() => useCreateLinkInviteUrl(), { wrapper });
-    await act(() => result.current.mutateAsync('cp-1'));
-    expect(lastRequest()).toMatchObject({ method: 'POST' });
-    expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/invite-links$/);
-    expect(invalidatedKeys()).toEqual([]);
+    const { result } = renderHook(() => useMergeCounterparty(), { wrapper });
+    await act(() =>
+      result.current.mutateAsync({ counterpartyId: 'cp-linked', sourceId: 'cp-old' }),
+    );
+    expect(lastRequest()).toMatchObject({ method: 'POST', body: { sourceId: 'cp-old' } });
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-linked\/merge$/);
+    expectEverythingInvalidated();
+  });
+
+  it('dismisses the merge prompt and refreshes counterparties', async () => {
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useDismissMergePrompt(), { wrapper });
+    await act(() => result.current.mutateAsync('cp-linked'));
+    expect(lastRequest()).toMatchObject({ method: 'DELETE' });
+    expect(lastRequest().url).toMatch(/\/counterparties\/cp-linked\/merge-prompt$/);
+    expect(invalidatedKeys()).toEqual([['counterparties']]);
   });
 
   it('unlinks and refreshes debts, transactions, accounts and everything pending', async () => {

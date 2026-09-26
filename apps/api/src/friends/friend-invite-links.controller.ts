@@ -9,7 +9,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type {
-  FriendInviteLinkAccepted,
+  LinkAccepted,
   FriendInviteLinkCreated,
   FriendInviteLinkPreview,
   JwtPayload,
@@ -49,14 +49,13 @@ export class FriendInviteLinksController {
   @ApiBadRequestResponse({ description: 'CANNOT_FRIEND_SELF: this is your own link.' })
   @ApiNotFoundResponse({ description: 'INVITE_LINK_INVALID.' })
   @ApiConflictResponse({
-    description:
-      'ALREADY_FRIENDS (plain links), or ALREADY_LINKED / COUNTERPARTY_LINKED / COUNTERPARTY_NAME_TAKEN (link invites). The link is not consumed.',
+    description: 'ALREADY_LINKED. The link is not consumed.',
   })
   @ApiTooManyRequestsResponse({ description: 'More than 10 requests per minute from one IP.' })
   accept(
     @CurrentUser() user: JwtPayload,
     @Body() dto: AcceptFriendInviteLinkDto,
-  ): Promise<FriendInviteLinkAccepted> {
-    return this.links.accept(user.sub, dto.token, dto.counterparty);
+  ): Promise<LinkAccepted> {
+    return this.links.accept(user.sub, dto.token);
   }
 }

@@ -133,6 +133,8 @@ export function toCounterparty(
   return {
     id: row.id,
     name: row.name,
+    displayName: row.name ?? link?.userName ?? '',
+    askMerge: row.askMerge,
     balance,
     link,
     createdAt: row.createdAt.toISOString(),

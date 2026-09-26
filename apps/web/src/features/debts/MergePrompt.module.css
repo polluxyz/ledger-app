@@ -1,0 +1,38 @@
+/* 詢問表單把問題、單選與欄位排成短流程，不用底色提示區增加閱讀負擔。 */
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.question {
+  margin: 0 0 var(--space-md);
+}
+
+.answers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.answer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.mergeChoice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.select {
+  flex: 1;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}

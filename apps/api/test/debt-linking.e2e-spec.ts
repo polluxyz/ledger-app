@@ -4,10 +4,9 @@ import type {
   DebtEntry,
   DebtProposal,
   Friend,
-  FriendInviteLinkAccepted,
+  LinkAccepted,
   FriendInviteLinkCreated,
   FriendInviteLinkPreview,
-  FriendRequest,
   Paginated,
   Transaction,
 } from '@ledger/shared';
@@ -143,141 +142,311 @@ describe('Debt linking (e2e)', () => {
     });
   });
 
-  describe('linking (SC-K2～K4)', () => {
-    it('links by email, makes them friends, and leaves earlier entries alone', async () => {
+  describe('linking (SC-K2～K4, SC-K19)', () => {
+    it('links by email without choosing an old counterparty', async () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
-      // 連動前的紀錄不同步（決策 59）。
-      await post(alice, { counterparty: { name: '小明' }, kind: 'LEND', amount: 50 }).then((r) =>
-        expect(r.status).toBe(201),
-      );
-      const before = (
-        (await request(server()).get('/api/counterparties').set(auth(alice.token)))
-          .body as Paginated<Counterparty>
-      ).items[0]!;
+      const before = await createCounterparty(app, alice, '小明');
+      expect(
+        (await post(alice, { counterparty: { id: before.id }, kind: 'LEND', amount: 50 })).status,
+      ).toBe(201);
 
       const invite = await request(server())
-        .post(`/api/counterparties/${before.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
-        .send({ email: 'BOB@example.com' });
-      expect(invite.status).toBe(201);
-      expect((invite.body as FriendRequest).forLink).toBe(true);
-      // F25：發起者看得到邀請帶著自己的哪個對象；收件者看不到（§3.5）。
-      expect((invite.body as FriendRequest).counterpartyId).toBe(before.id);
-      const sent = await request(server())
-        .get('/api/friend-requests?direction=outgoing&status=PENDING')
-        .set(auth(alice.token))
-        .expect(200);
-      expect((sent.body as Paginated<FriendRequest>).items).toEqual([
-        expect.objectContaining({ forLink: true, counterpartyId: before.id }),
-      ]);
-
+        .send({ email: 'BOB@example.com' })
+        .expect(201);
+      expect(invite.body).not.toHaveProperty('counterpartyId');
+      expect(invite.body).not.toHaveProperty('forLink');
       const received = await pendingIncomingRequest(app, bob);
-      expect(received).toMatchObject({
-        forLink: true,
-        counterpart: { name: 'Alice' },
-        counterpartyId: null,
-      });
-      await request(server())
+      expect(received.counterpart.name).toBe('Alice');
+      const accepted = await request(server())
         .post(`/api/friend-requests/${received.id}/accept`)
         .set(auth(bob.token))
-        .send({ counterparty: { name: '阿A' } })
         .expect(200);
-
-      const aliceView = await getCounterparty(app, alice, before.id);
-      expect(aliceView).toMatchObject({
-        balance: 50,
-        link: { userId: bob.userId, userName: 'Bob', theirBalance: 0 },
+      expect(accepted.body).toMatchObject({
+        askMerge: false,
+        otherUser: { id: alice.userId, name: 'Alice' },
       });
-      const bobList = await request(server())
+      const aliceList = await request(server())
         .get('/api/counterparties')
-        .set(auth(bob.token))
+        .set(auth(alice.token))
         .expect(200);
-      expect((bobList.body as Paginated<Counterparty>).items).toEqual([
-        expect.objectContaining({
-          name: '阿A',
-          balance: 0,
-          link: { userId: alice.userId, userName: 'Alice', theirBalance: -50 },
-        }),
-      ]);
-      const friends = await request(server()).get('/api/friends').set(auth(alice.token));
-      expect((friends.body as Paginated<Friend>).items.map((f) => f.userId)).toEqual([bob.userId]);
-      expect(await proposals(app, bob, 'incoming')).toHaveLength(0);
+      const linked = (aliceList.body as Paginated<Counterparty>).items.find(
+        (item) => item.link?.userId === bob.userId,
+      )!;
+      expect(linked).toMatchObject({ name: null, displayName: 'Bob', askMerge: true, balance: 0 });
+      expect((await getCounterparty(app, alice, before.id)).link).toBeNull();
+      expect((await getCounterparty(app, alice, before.id)).balance).toBe(50);
+      expect(
+        await getCounterparty(app, bob, (accepted.body as LinkAccepted).counterpartyId),
+      ).toMatchObject({ name: null, displayName: 'Alice', askMerge: false });
+      expect(
+        (
+          (await request(server()).get('/api/friends').set(auth(alice.token)))
+            .body as Paginated<Friend>
+        ).items.map((f: Friend) => f.userId),
+      ).toEqual([bob.userId]);
     });
 
-    it('links by invite link; a linked counterparty is refused without consuming the link', async () => {
+    it('links by invite URL, rejects extra acceptance fields, and consumes the token once', async () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
-      const carol = await person(app, 'carol@example.com', 'Carol');
-      // Bob 已經把「小卡」連到 Carol。
-      const { bCounterpartyId: bobsCarol } = await linkPair(app, carol, bob, 'Bob', '小卡');
-      const bobsOld = await createCounterparty(app, bob, '愛麗絲');
-
-      const aliceSideCp = await createCounterparty(app, alice, '小明');
       const created = await request(server())
-        .post(`/api/counterparties/${aliceSideCp.id}/invite-links`)
+        .post('/api/friend-invite-links')
         .set(auth(alice.token))
         .expect(201);
       const { token } = created.body as FriendInviteLinkCreated;
-
       const preview = await request(server())
         .post('/api/friend-invite-links/preview')
         .set(auth(bob.token))
         .send({ token })
         .expect(200);
-      expect(preview.body as FriendInviteLinkPreview).toMatchObject({
-        inviterName: 'Alice',
-        forLink: true,
-      });
-
-      const refused = await request(server())
+      expect(preview.body as FriendInviteLinkPreview).toMatchObject({ inviterName: 'Alice' });
+      expect(preview.body).not.toHaveProperty('forLink');
+      await request(server())
         .post('/api/friend-invite-links/accept')
         .set(auth(bob.token))
-        .send({ token, counterparty: { id: bobsCarol } });
-      expect(refused.status).toBe(409);
-      expect((refused.body as { errorCode: string }).errorCode).toBe('COUNTERPARTY_LINKED');
-
-      const missing = await request(server())
-        .post('/api/friend-invite-links/accept')
-        .set(auth(bob.token))
-        .send({ token });
-      expect(missing.status).toBe(400);
-
+        .send({ token, counterparty: { name: 'Alice' } })
+        .expect(400);
       const accepted = await request(server())
         .post('/api/friend-invite-links/accept')
         .set(auth(bob.token))
-        .send({ token, counterparty: { id: bobsOld.id } });
-      expect(accepted.status).toBe(201);
-      expect((accepted.body as FriendInviteLinkAccepted).counterpartyId).toBe(bobsOld.id);
-      expect((await getCounterparty(app, bob, bobsOld.id)).link?.userId).toBe(alice.userId);
+        .send({ token })
+        .expect(201);
+      expect((accepted.body as LinkAccepted).otherUser).toEqual({
+        id: alice.userId,
+        name: 'Alice',
+      });
+      await request(server())
+        .post('/api/friend-invite-links/accept')
+        .set(auth(bob.token))
+        .send({ token })
+        .expect(404);
     });
 
-    it('rejects a second link and an invite when the other side already invited', async () => {
+    it('rejects already linked pairs and reverse pending invites', async () => {
       await linkAliceAndBob();
-      const another = await createCounterparty(app, alice, '另一個');
       const again = await request(server())
-        .post(`/api/counterparties/${another.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email });
       expect(again.status).toBe(409);
       expect((again.body as { errorCode: string }).errorCode).toBe('ALREADY_LINKED');
-
       const carol = await person(app, 'carol@example.com', 'Carol');
-      const carolSide = await createCounterparty(app, carol, 'Alice');
       await request(server())
-        .post(`/api/counterparties/${carolSide.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(carol.token))
         .send({ email: alice.email })
         .expect(201);
       const reverse = await request(server())
-        .post(`/api/counterparties/${another.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: carol.email });
       expect(reverse.status).toBe(409);
       expect((reverse.body as { errorCode: string }).errorCode).toBe('LINK_INVITE_FROM_THEM');
     });
   });
+  describe('nickname and merge (SC-K20～K25)', () => {
+    it('merges old entries into the linked target without sending a proposal', async () => {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      bob = await person(app, 'bob@example.com', 'Bob');
+      const old = await createCounterparty(app, alice, '舊小明');
+      expect(
+        (await post(alice, { counterparty: { id: old.id }, kind: 'LEND', amount: 50 })).status,
+      ).toBe(201);
+      ({ aCounterpartyId: aliceSide, bCounterpartyId: bobSide } = await linkPair(
+        app,
+        alice,
+        bob,
+        null,
+        null,
+      ));
+      const merged = await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(alice.token))
+        .send({ sourceId: old.id })
+        .expect(200);
+      expect(merged.body).toMatchObject({
+        name: '舊小明',
+        displayName: '舊小明',
+        askMerge: false,
+        balance: 50,
+      });
+      await request(server())
+        .get(`/api/counterparties/${old.id}`)
+        .set(auth(alice.token))
+        .expect(404);
+      expect(await entries(alice, aliceSide)).toHaveLength(1);
+      expect(await proposals(app, bob, 'incoming')).toHaveLength(0);
+    });
 
+    it('resets old declined sync state when the source belonged to an earlier link', async () => {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      const carol = await person(app, 'carol@example.com', 'Carol');
+      const oldLink = await linkPair(app, alice, carol, 'Carol', 'Alice');
+      expect(
+        (
+          await post(alice, {
+            counterparty: { id: oldLink.aCounterpartyId },
+            kind: 'LEND',
+            amount: 25,
+          })
+        ).status,
+      ).toBe(201);
+      const declined = (await proposals(app, carol, 'incoming', 'PENDING'))[0]!;
+      await decline(carol, declined.id);
+      await request(server())
+        .delete(`/api/counterparties/${oldLink.aCounterpartyId}/link`)
+        .set(auth(alice.token))
+        .expect(204);
+      bob = await person(app, 'bob@example.com', 'Bob');
+      ({ aCounterpartyId: aliceSide } = await linkPair(app, alice, bob, null, null));
+      await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(alice.token))
+        .send({ sourceId: oldLink.aCounterpartyId })
+        .expect(200);
+      expect((await entries(alice, aliceSide))[0]!.sync).toBe('NONE');
+      expect(await proposals(app, bob, 'incoming')).toHaveLength(0);
+    });
+
+    it('rejects invalid merge pairs without changing either side', async () => {
+      await linkAliceAndBob();
+      const old = await createCounterparty(app, alice, '舊人');
+      for (const [target, source] of [
+        [old.id, aliceSide],
+        [aliceSide, aliceSide],
+      ]) {
+        const res = await request(server())
+          .post(`/api/counterparties/${target}/merge`)
+          .set(auth(alice.token))
+          .send({ sourceId: source });
+        expect(res.status).toBe(409);
+        expect((res.body as { errorCode: string }).errorCode).toBe('MERGE_NOT_ALLOWED');
+      }
+      const carol = await person(app, 'carol@example.com', 'Carol');
+      const { aCounterpartyId: aliceCarol } = await linkPair(app, alice, carol, null, null);
+      const linkedSource = await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(alice.token))
+        .send({ sourceId: aliceCarol });
+      expect(linkedSource.status).toBe(409);
+      expect((linkedSource.body as { errorCode: string }).errorCode).toBe('MERGE_NOT_ALLOWED');
+      expect((await getCounterparty(app, alice, old.id)).name).toBe('舊人');
+    });
+
+    it('dismisses a merge prompt and filters prompts to the owner', async () => {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      bob = await person(app, 'bob@example.com', 'Bob');
+      await createCounterparty(app, alice, '舊人');
+      ({ aCounterpartyId: aliceSide } = await linkPair(app, alice, bob, null, null));
+      const query = () =>
+        request(server())
+          .get('/api/counterparties')
+          .query({ askMerge: true })
+          .set(auth(alice.token));
+      expect(
+        ((await query().expect(200)).body as Paginated<Counterparty>).items.map((item) => item.id),
+      ).toEqual([aliceSide]);
+      await request(server())
+        .delete(`/api/counterparties/${aliceSide}/merge-prompt`)
+        .set(auth(alice.token))
+        .expect(204);
+      expect(((await query().expect(200)).body as Paginated<Counterparty>).items).toHaveLength(0);
+      expect((await getCounterparty(app, alice, aliceSide)).askMerge).toBe(false);
+    });
+
+    it('uses account names when nickname is null, including search and transaction debt refs', async () => {
+      await linkAliceAndBob();
+      await request(server())
+        .patch(`/api/counterparties/${aliceSide}`)
+        .set(auth(alice.token))
+        .send({ name: null })
+        .expect(200);
+      expect(await getCounterparty(app, alice, aliceSide)).toMatchObject({
+        name: null,
+        displayName: 'Bob',
+      });
+      const found = await request(server())
+        .get('/api/counterparties')
+        .query({ q: 'bOb' })
+        .set(auth(alice.token))
+        .expect(200);
+      expect((found.body as Paginated<Counterparty>).items.map((item) => item.id)).toContain(
+        aliceSide,
+      );
+      const old = await createCounterparty(app, alice, '未連動');
+      const refused = await request(server())
+        .patch(`/api/counterparties/${old.id}`)
+        .set(auth(alice.token))
+        .send({ name: null });
+      expect(refused.status).toBe(400);
+      expect((refused.body as { errorCode: string }).errorCode).toBe('VALIDATION_FAILED');
+      expect(
+        (
+          await post(alice, {
+            counterparty: { id: aliceSide },
+            kind: 'LEND',
+            amount: 10,
+            record: record(alice),
+          })
+        ).status,
+      ).toBe(201);
+      const txns = await request(server())
+        .get(`/api/ledgers/${alice.ledgerId}/transactions`)
+        .set(auth(alice.token))
+        .expect(200);
+      expect((txns.body as Paginated<Transaction>).items[0]!.debt?.counterpartyName).toBe('Bob');
+      expect((await incoming(bob)).otherUser.name).toBe('阿A');
+    });
+
+    it('restores unique names on both sides when unlinking a null nickname', async () => {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      bob = await person(app, 'bob@example.com', 'Bob');
+      await createCounterparty(app, alice, 'Bob');
+      await createCounterparty(app, bob, 'Alice');
+      ({ aCounterpartyId: aliceSide, bCounterpartyId: bobSide } = await linkPair(
+        app,
+        alice,
+        bob,
+        null,
+        null,
+      ));
+      await request(server())
+        .delete(`/api/counterparties/${aliceSide}/link`)
+        .set(auth(alice.token))
+        .expect(204);
+      expect(await getCounterparty(app, alice, aliceSide)).toMatchObject({
+        name: 'Bob 2',
+        displayName: 'Bob 2',
+        link: null,
+      });
+      expect(await getCounterparty(app, bob, bobSide)).toMatchObject({
+        name: 'Alice 2',
+        displayName: 'Alice 2',
+        link: null,
+      });
+    });
+
+    it('restores account names through DELETE /friends too', async () => {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      bob = await person(app, 'bob@example.com', 'Bob');
+      ({ aCounterpartyId: aliceSide, bCounterpartyId: bobSide } = await linkPair(
+        app,
+        alice,
+        bob,
+        null,
+        null,
+      ));
+      await request(server())
+        .delete(`/api/friends/${bob.userId}`)
+        .set(auth(alice.token))
+        .expect(204);
+      expect((await getCounterparty(app, alice, aliceSide)).name).toBe('Bob');
+      expect((await getCounterparty(app, bob, bobSide)).name).toBe('Alice');
+    });
+  });
   describe('proposals (SC-K5～K9)', () => {
     it('SC-K5: a lend reaches the other side as a borrow once accepted', async () => {
       await linkAliceAndBob();
@@ -301,7 +470,7 @@ describe('Debt linking (e2e)', () => {
         entryKind: 'BORROW',
         amount: 120,
         settle: false,
-        otherUser: { name: 'Alice' },
+        otherUser: { name: '阿A' },
       });
 
       const missingRecord = await accept(bob, proposal.id);
@@ -583,9 +752,8 @@ describe('Debt linking (e2e)', () => {
         .delete(`/api/counterparties/${bCounterpartyId}/link`)
         .set(auth(bob.token))
         .expect(204);
-      const again = await createCounterparty(app, alice, '再一次');
       await request(server())
-        .post(`/api/counterparties/${again.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email })
         .expect(201);
@@ -594,7 +762,7 @@ describe('Debt linking (e2e)', () => {
         .delete(`/api/friends/${alice.userId}`)
         .set(auth(bob.token))
         .expect(404);
-      expect((await pendingIncomingRequest(app, bob)).forLink).toBe(true);
+      expect((await pendingIncomingRequest(app, bob)).status).toBe('PENDING');
     });
 
     it('SC-K13: a linked counterparty cannot be deleted', async () => {

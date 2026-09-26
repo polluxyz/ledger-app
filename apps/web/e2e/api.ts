@@ -13,6 +13,7 @@ import type {
   CreateTransactionRequest,
   FriendRequest,
   LedgerMemberInfo,
+  LinkAccepted,
   LedgerRole,
   LedgerSummary,
   Paginated,
@@ -237,18 +238,16 @@ export async function createDebtEntry(
 }
 
 /**
- * 讓 inviter 的某個對象與 invitee 連動：用 email 邀請，對方以新名字接受。
- * 回傳 invitee 那邊接上的對象。
+ * 讓 inviter 與 invitee 連動（3b-2 修訂 1 的流程）：用 email 邀請，對方接受（不帶 body）。
+ * 回傳雙方新建的已連動對象 id。之後要不要合併，由呼叫端決定。
  */
 export async function linkByEmail(
   request: APIRequestContext,
   inviter: TestUser,
-  counterpartyId: string,
   invitee: TestUser,
-  inviteeSideName: string,
-): Promise<Counterparty> {
-  const invite = await readJson<FriendRequest>(
-    await request.post(`${API_BASE_URL}/counterparties/${counterpartyId}/link-invites`, {
+): Promise<{ inviterSideId: string; inviteeSideId: string }> {
+  await readJson<FriendRequest>(
+    await request.post(`${API_BASE_URL}/friend-requests`, {
       headers: authHeaders(inviter.token),
       data: { email: invitee.email },
     }),
@@ -260,19 +259,32 @@ export async function linkByEmail(
     }),
     '列出收到的邀請',
   );
-  const received = incoming.items.find((item) => item.forLink) ?? invite;
-  await readJson<FriendRequest>(
-    await request.post(`${API_BASE_URL}/friend-requests/${received.id}/accept`, {
+  const accepted = await readJson<LinkAccepted>(
+    await request.post(`${API_BASE_URL}/friend-requests/${incoming.items[0]!.id}/accept`, {
       headers: authHeaders(invitee.token),
-      data: { counterparty: { name: inviteeSideName } },
     }),
     '接受連動邀請',
   );
-  const list = await readJson<Paginated<Counterparty>>(
-    await request.get(`${API_BASE_URL}/counterparties?q=${encodeURIComponent(inviteeSideName)}`, {
-      headers: authHeaders(invitee.token),
+  const inviterList = await readJson<Paginated<Counterparty>>(
+    await request.get(`${API_BASE_URL}/counterparties?limit=100`, {
+      headers: authHeaders(inviter.token),
     }),
-    '找接上的對象',
+    '找邀請者這邊的對象',
   );
-  return list.items.find((item) => item.name === inviteeSideName)!;
+  const inviterSide = inviterList.items.find((item) => item.link?.userId === invitee.id)!;
+  return { inviterSideId: inviterSide.id, inviteeSideId: accepted.counterpartyId };
+}
+
+/** 把未連動的 `sourceId` 併進已連動的 `targetId`（決策 76）。 */
+export async function mergeCounterparties(
+  request: APIRequestContext,
+  token: string,
+  targetId: string,
+  sourceId: string,
+): Promise<Counterparty> {
+  const response = await request.post(`${API_BASE_URL}/counterparties/${targetId}/merge`, {
+    headers: authHeaders(token),
+    data: { sourceId },
+  });
+  return readJson<Counterparty>(response, '合併對象');
 }

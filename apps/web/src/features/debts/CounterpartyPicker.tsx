@@ -63,7 +63,7 @@ export function CounterpartyPicker({
     hasCurrentResults && (query.data?.total ?? 0) > (query.data?.items.length ?? 0);
 
   function selectExisting(counterparty: Counterparty) {
-    onChange(counterparty.name);
+    onChange(counterparty.displayName);
     onSelect?.(counterparty);
     setIsOpen(false);
     setActiveIndex(-1);
@@ -117,10 +117,10 @@ export function CounterpartyPicker({
     ? null
     : exactMatch
       ? exactMatch.balance > 0
-        ? `目前${exactMatch.name}欠你 ${formatMoney(exactMatch.balance)}`
+        ? `目前${exactMatch.displayName}欠你 ${formatMoney(exactMatch.balance)}`
         : exactMatch.balance < 0
-          ? `目前你欠${exactMatch.name} ${formatMoney(Math.abs(exactMatch.balance))}`
-          : `目前和${exactMatch.name}兩清`
+          ? `目前你欠${exactMatch.displayName} ${formatMoney(Math.abs(exactMatch.balance))}`
+          : `目前和${exactMatch.displayName}兩清`
       : canAddName
         ? '新對象，送出時建立'
         : null;
@@ -165,7 +165,7 @@ export function CounterpartyPicker({
             onMouseMove={() => setActiveIndex(index)}
             onClick={() => selectExisting(counterparty)}
           >
-            <span>{counterparty.name}</span>
+            <span>{counterparty.displayName}</span>
             {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
           </li>
         ))}
@@ -216,5 +216,5 @@ export function findCounterparty(
   const normalizedName = name.trim();
   return normalizedName === ''
     ? null
-    : (counterparties.find((counterparty) => counterparty.name === normalizedName) ?? null);
+    : (counterparties.find((counterparty) => counterparty.displayName === normalizedName) ?? null);
 }

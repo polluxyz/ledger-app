@@ -1,0 +1,11 @@
+/* 暱稱欄位維持短表單節奏，按鈕集中在視窗右下方。 */
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}

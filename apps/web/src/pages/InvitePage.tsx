@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
 import { PageContent } from '../components/PageContent';
-import { CounterpartyPicker } from '../features/debts/CounterpartyPicker';
+import { MergePromptDialog } from '../features/debts/MergePrompt';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { useAcceptInviteLink, useInvitePreview } from '../features/linking/use-linking';
@@ -18,40 +18,52 @@ import styles from './InvitePage.module.css';
 export default function InvitePage() {
   const [token] = useState(readInviteToken);
   const [authDialog, setAuthDialog] = useState<AuthDialogMode | null>(null);
+  const [mergeDialog, setMergeDialog] = useState<{
+    counterpartyId: string;
+    userName: string;
+  } | null>(null);
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const openCounterpartyLedger = useOpenCounterpartyLedger();
   const preview = useInvitePreview(isAuthenticated ? token : null);
   const acceptInvite = useAcceptInviteLink();
 
-  function finishAccept(counterparty?: { id: string } | { name: string }) {
+  async function finishAccept() {
     if (token === null) {
       return;
     }
 
-    const onSuccess = (accepted: { counterpartyId: string | null }) => {
+    try {
+      const accepted = await acceptInvite.mutateAsync(token);
       // 成功後先清掉網址上的邀請憑證，再導覽，避免目的頁或複製網址時仍帶著它。
       window.history.replaceState(null, '', '/invite');
-      if (accepted.counterpartyId) {
-        openCounterpartyLedger(accepted.counterpartyId);
+      if (accepted.askMerge) {
+        setMergeDialog({
+          counterpartyId: accepted.counterpartyId,
+          userName: accepted.otherUser.name,
+        });
       } else {
-        void navigate('/transactions?view=debts');
+        openCounterpartyLedger(accepted.counterpartyId);
       }
-    };
-
-    if (counterparty === undefined) {
-      acceptInvite.mutate({ token }, { onSuccess });
-    } else {
-      acceptInvite.mutate({ token, counterparty }, { onSuccess });
+    } catch {
+      // Mutation 保留錯誤供表單顯示；事件處理器不再把同一錯誤拋到頁面外。
     }
+  }
+
+  function finishMergePrompt() {
+    if (mergeDialog === null) {
+      return;
+    }
+    const { counterpartyId } = mergeDialog;
+    setMergeDialog(null);
+    openCounterpartyLedger(counterpartyId);
   }
 
   let content: ReactNode;
   if (token === null) {
     content = (
       <>
-        <h1 className={styles.heading}>連結無法使用</h1>
-        <p className={styles.description}>這個邀請連結不完整，請對方重新傳一次。</p>
+        <h1 className={styles.heading}>連結無效或已過期</h1>
         <ReturnLink />
       </>
     );
@@ -59,8 +71,7 @@ export default function InvitePage() {
     // 未登入時先不預覽；登入狀態變更後同一個 token 會啟動預覽，網址 hash 不必改動。
     content = (
       <>
-        <h1 className={styles.heading}>你收到一個連動邀請</h1>
-        <p className={styles.description}>登入後查看邀請。</p>
+        <p className={styles.description}>登入後查看邀請</p>
         <div className={styles.actions}>
           <Button onClick={() => setAuthDialog('login')}>登入</Button>
           <Button variant="secondary" onClick={() => setAuthDialog('register')}>
@@ -81,8 +92,7 @@ export default function InvitePage() {
     ) {
       content = (
         <>
-          <h1 className={styles.heading}>連結無法使用</h1>
-          <p className={styles.description}>這個連結無效或已過期，請對方重新產生。</p>
+          <h1 className={styles.heading}>連結無效或已過期</h1>
           <ReturnLink />
         </>
       );
@@ -98,11 +108,9 @@ export default function InvitePage() {
     content = (
       <InvitePreviewCard
         inviterName={preview.data.inviterName}
-        forLink={preview.data.forLink}
-        expiresAt={preview.data.expiresAt}
         acceptError={acceptInvite.error}
         isAccepting={acceptInvite.isPending}
-        onAccept={finishAccept}
+        onAccept={() => void finishAccept()}
         onDecline={() => void navigate('/')}
       />
     );
@@ -120,76 +128,43 @@ export default function InvitePage() {
             onClose={() => setAuthDialog(null)}
           />
         )}
+        {mergeDialog !== null && (
+          <MergePromptDialog
+            open
+            counterpartyId={mergeDialog.counterpartyId}
+            userName={mergeDialog.userName}
+            onDone={finishMergePrompt}
+            onLater={finishMergePrompt}
+          />
+        )}
       </div>
     </PageContent>
   );
 }
 
-/**
- * 預覽成功才建立這個表單，讓預填名稱成為預設的新對象；只有明確選到清單中的人，
- * 才會改送對方 id。這樣「名字剛好一樣」不會被誤認成使用者已選好既有對象。
- */
 function InvitePreviewCard({
   inviterName,
-  forLink,
-  expiresAt,
   acceptError,
   isAccepting,
   onAccept,
   onDecline,
 }: {
   inviterName: string;
-  forLink: boolean;
-  expiresAt: string;
   acceptError: unknown;
   isAccepting: boolean;
-  onAccept: (counterparty?: { id: string } | { name: string }) => void;
+  onAccept: () => void;
   onDecline: () => void;
 }) {
-  const [counterpartyName, setCounterpartyName] = useState(inviterName);
-  const [counterpartyId, setCounterpartyId] = useState<string | null>(null);
-
-  function accept() {
-    if (!forLink) {
-      onAccept();
-    } else if (counterpartyId) {
-      onAccept({ id: counterpartyId });
-    } else {
-      onAccept({ name: counterpartyName.trim() });
-    }
-  }
-
   return (
     <>
-      <h1 className={styles.heading}>
-        {forLink ? `${inviterName} 邀請你連動往來帳` : `${inviterName} 邀請你`}
-      </h1>
-      {forLink && (
-        <>
-          <p className={styles.description}>
-            接受後，你們之後記的借還會互相同步。之前的紀錄不會同步。連結有效到{' '}
-            {formatLocalTime(expiresAt)}。
-          </p>
-          <CounterpartyPicker
-            excludeLinked
-            label="對方在你的往來帳裡是誰？"
-            value={counterpartyName}
-            onChange={setCounterpartyName}
-            onSelect={(counterparty) => setCounterpartyId(counterparty?.id ?? null)}
-            hint="已經用別的名字記過對方？改選那個人。"
-          />
-        </>
-      )}
+      <h1 className={styles.heading}>{inviterName} 邀請你連動往來帳</h1>
       <FormError error={acceptError} />
       <div className={styles.actions}>
         <Button variant="secondary" disabled={isAccepting} onClick={onDecline}>
           拒絕
         </Button>
-        <Button
-          disabled={isAccepting || (forLink && counterpartyName.trim() === '')}
-          onClick={accept}
-        >
-          {isAccepting ? '處理中…' : forLink ? '接受並連動' : '接受'}
+        <Button disabled={isAccepting} onClick={onAccept}>
+          接受
         </Button>
       </div>
     </>
@@ -202,15 +177,6 @@ function ReturnLink() {
       回到總覽
     </Link>
   );
-}
-
-/** 本地顯示到期時間，固定 24 小時制，避免邀請人與收件人對 AM／PM 有不同理解。 */
-function formatLocalTime(expiresAt: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(new Date(expiresAt));
 }
 
 /** hash 只在元件初次掛載時解碼並放入 state；格式不完整時按無 token 狀態處理。 */

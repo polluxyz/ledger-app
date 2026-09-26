@@ -118,9 +118,8 @@ describe('Debt linking isolation (e2e)', () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
       carol = await person(app, 'carol@example.com', 'Carol');
-      const counterparty = await createCounterparty(app, alice, '小明');
       await request(server())
-        .post(`/api/counterparties/${counterparty.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email })
         .expect(201);
@@ -129,7 +128,6 @@ describe('Debt linking isolation (e2e)', () => {
       await request(server())
         .post(`/api/friend-requests/${invite.id}/accept`)
         .set(auth(carol.token))
-        .send({ counterparty: { name: 'Alice' } })
         .expect(404);
     });
   });
@@ -160,16 +158,16 @@ describe('Debt linking isolation (e2e)', () => {
       expect(serialized).not.toContain(alice.cashId);
       expect(serialized).not.toContain('小明');
       expect(serialized).not.toContain(aliceSide);
-      expect(proposal.otherUser).toEqual({ id: alice.userId, name: 'Alice' });
+      expect(proposal.otherUser).toEqual({ id: alice.userId, name: '阿A' });
       expect(proposal.counterpartyId).toBe(bobSide);
     });
 
-    it('cannot link with a counterparty that is not their own (404)', async () => {
+    it('rejects a counterparty choice when accepting (400)', async () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
       const aliceCounterparty = await createCounterparty(app, alice, '小明');
       await request(server())
-        .post(`/api/counterparties/${aliceCounterparty.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email })
         .expect(201);
@@ -179,7 +177,7 @@ describe('Debt linking isolation (e2e)', () => {
         .post(`/api/friend-requests/${invite.id}/accept`)
         .set(auth(bob.token))
         .send({ counterparty: { id: aliceCounterparty.id } })
-        .expect(404);
+        .expect(400);
       // 失敗時邀請不被消耗，也沒有成為好友。
       expect((await pendingIncomingRequest(app, bob)).id).toBe(invite.id);
     });
@@ -246,6 +244,141 @@ describe('Debt linking isolation (e2e)', () => {
       const link = (bobView.body as Counterparty).link!;
       expect(Object.keys(link).sort()).toEqual(['theirBalance', 'userId', 'userName']);
       expect(link.userId).toBe(alice.userId);
+    });
+  });
+
+  /**
+   * 修訂 1（SC-K26）：合併、清掉待詢問標記、暱稱，都只能碰自己的對象。
+   *
+   * 合併會把一個對象的紀錄搬到另一個對象底下，是這一輪唯一「搬動別人看不到的資料」的寫入，
+   * 所以兩邊（併入的、被併的）都要各自驗證屬於呼叫者；任何一邊不是，一律 404、什麼都不動。
+   * 正向的「自己合併自己的」放在第一條，讓這組測試在功能還沒做之前是紅燈。
+   */
+  describe('merge, merge prompt and nickname (revision 1)', () => {
+    /** Alice 與 Bob 連動、都不設暱稱；Alice 另有一個未連動的「舊小明」，記過一筆借出 50。 */
+    async function setupMerge() {
+      alice = await person(app, 'alice@example.com', 'Alice');
+      bob = await person(app, 'bob@example.com', 'Bob');
+      carol = await person(app, 'carol@example.com', 'Carol');
+      const aliceOld = await createCounterparty(app, alice, '舊小明');
+      await request(server())
+        .post('/api/debt-entries')
+        .set(auth(alice.token))
+        .send({
+          counterparty: { id: aliceOld.id },
+          kind: 'LEND',
+          amount: 50,
+          date: DAY,
+          record: null,
+        })
+        .expect(201);
+      ({ aCounterpartyId: aliceSide, bCounterpartyId: bobSide } = await linkPair(
+        app,
+        alice,
+        bob,
+        null,
+        null,
+      ));
+      const carolOwn = await createCounterparty(app, carol, 'Carol 的人');
+      return { aliceOld: aliceOld.id, carolOwn: carolOwn.id };
+    }
+
+    async function aliceView(id: string): Promise<Counterparty> {
+      const res = await request(server())
+        .get(`/api/counterparties/${id}`)
+        .set(auth(alice.token))
+        .expect(200);
+      return res.body as Counterparty;
+    }
+
+    it('lets the owner merge an unlinked counterparty into a linked one', async () => {
+      const { aliceOld } = await setupMerge();
+      expect((await aliceView(aliceSide)).askMerge).toBe(true);
+
+      await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(alice.token))
+        .send({ sourceId: aliceOld })
+        .expect(200);
+
+      const merged = await aliceView(aliceSide);
+      expect(merged).toMatchObject({
+        name: '舊小明',
+        displayName: '舊小明',
+        balance: 50,
+        askMerge: false,
+      });
+      await request(server())
+        .get(`/api/counterparties/${aliceOld}`)
+        .set(auth(alice.token))
+        .expect(404);
+      // 搬過去的紀錄是連動前記的，不送提議給 Bob（決策 80）。
+      expect(await proposals(app, bob, 'incoming')).toHaveLength(0);
+    });
+
+    it.each([
+      ['a third person', () => carol],
+      ['the linked partner', () => bob],
+    ])('404s when %s tries to merge or clear the prompt, and changes nothing', async (_, who) => {
+      const { aliceOld } = await setupMerge();
+
+      await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(who().token))
+        .send({ sourceId: aliceOld })
+        .expect(404);
+      await request(server())
+        .delete(`/api/counterparties/${aliceSide}/merge-prompt`)
+        .set(auth(who().token))
+        .expect(404);
+      await request(server())
+        .patch(`/api/counterparties/${aliceSide}`)
+        .set(auth(who().token))
+        .send({ name: '亂改' })
+        .expect(404);
+
+      const untouched = await aliceView(aliceSide);
+      expect(untouched).toMatchObject({ name: null, askMerge: true, balance: 0 });
+      expect((await aliceView(aliceOld)).balance).toBe(50);
+    });
+
+    it('404s when the source belongs to someone else, and changes nothing', async () => {
+      const { carolOwn } = await setupMerge();
+
+      await request(server())
+        .post(`/api/counterparties/${aliceSide}/merge`)
+        .set(auth(alice.token))
+        .send({ sourceId: carolOwn })
+        .expect(404);
+
+      expect((await aliceView(aliceSide)).name).toBeNull();
+      const carolList = await request(server())
+        .get('/api/counterparties')
+        .set(auth(carol.token))
+        .expect(200);
+      expect((carolList.body as Paginated<Counterparty>).items.map((item) => item.id)).toEqual([
+        carolOwn,
+      ]);
+    });
+
+    it('lists only one’s own prompts with askMerge=true', async () => {
+      await setupMerge();
+
+      const carolPrompts = await request(server())
+        .get('/api/counterparties')
+        .query({ askMerge: true })
+        .set(auth(carol.token))
+        .expect(200);
+      expect((carolPrompts.body as Paginated<Counterparty>).items).toHaveLength(0);
+
+      const alicePrompts = await request(server())
+        .get('/api/counterparties')
+        .query({ askMerge: true })
+        .set(auth(alice.token))
+        .expect(200);
+      expect((alicePrompts.body as Paginated<Counterparty>).items.map((item) => item.id)).toEqual([
+        aliceSide,
+      ]);
     });
   });
 });

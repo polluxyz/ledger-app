@@ -27,7 +27,9 @@ describe('DebtEntryForm', () => {
   const counterparties = [
     {
       id: 'cp-ming',
-      name: '小明',
+      name: '舊小明',
+      displayName: '小明',
+      askMerge: false,
       balance: 9,
       link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
       createdAt: '2026-09-01T00:00:00.000Z',
@@ -36,6 +38,8 @@ describe('DebtEntryForm', () => {
     {
       id: 'cp-hua',
       name: '小華',
+      displayName: '小華',
+      askMerge: false,
       balance: -400,
       link: null,
       createdAt: '2026-09-01T00:00:00.000Z',
@@ -44,6 +48,8 @@ describe('DebtEntryForm', () => {
     {
       id: 'cp-mei',
       name: '小美',
+      displayName: '小美',
+      askMerge: false,
       balance: 0,
       link: null,
       createdAt: '2026-09-01T00:00:00.000Z',
@@ -204,7 +210,7 @@ describe('DebtEntryForm', () => {
     expect(screen.getByRole('button', { name: '還款' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('asks the linked user to confirm below the preview', async () => {
+  it('omits the linked confirmation reminder below the preview', async () => {
     const user = userEvent.setup();
     renderForm();
 
@@ -214,7 +220,7 @@ describe('DebtEntryForm', () => {
     await user.type(screen.getByLabelText('金額'), '4');
 
     expect(screen.getByText('記完後：小明欠你 $13')).toBeInTheDocument();
-    expect(screen.getByText('送出後會請 王小明 確認')).toBeInTheDocument();
+    expect(screen.queryByText(/送出後會請/)).not.toBeInTheDocument();
   });
 
   it('does not show a repayment direction while lend is selected', async () => {

@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import type {
   AcceptDebtProposalRequest,
   Counterparty,
+  CreateFriendRequestRequest,
   DebtProposal,
-  FriendInviteLinkAccepted,
+  FriendInviteLinkCreated,
   FriendInviteLinkPreview,
   FriendRequest,
-  LinkCounterpartyChoice,
+  LinkAccepted,
   Paginated,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
@@ -21,8 +22,9 @@ import { COUNTERPARTIES_KEY } from '../debts/use-debts';
  *
  * ## 前端不推導
  *
- * 哪些是連動邀請（`forLink`）、邀請屬於哪個對象（`counterpartyId`，F25）、提議換成誰的角度，
- * 全部由後端算好。這裡只做「從清單挑出符合條件的那筆」這種查找（W42）。
+ * 3b-2 修訂 1 起所有邀請都是連動邀請、不綁任何對象（決策 73）。接受後要不要問「之前有沒有
+ * 用別的名字記過他」（`askMerge`）、顯示用的名字（`displayName`）、提議換成誰的角度，全部由
+ * 後端算好，這裡只打 API。
  *
  * ## 接受或拒絕之後要失效的東西
  *
@@ -39,8 +41,8 @@ const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 
 /** 待確認卡片一次取幾筆（spec §4.5）。 */
 const PENDING_LIMIT = 20;
-/** 送出的待確認邀請通常只有幾筆；取一頁足夠找到某個對象的那筆。 */
-const OUTGOING_LIMIT = 100;
+/** 送出的待確認邀請、待詢問的對象通常只有幾筆；一頁就夠。 */
+const LIST_LIMIT = 100;
 
 function invalidateAfterResponse(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
@@ -54,10 +56,7 @@ function invalidateAfterResponse(queryClient: QueryClient): void {
 // 收到的：總覽的待確認卡片（W34～W39）
 // ---------------------------------------------------------------------------
 
-/**
- * 收到、還沒回應的**連動**邀請。3a 的一般邀請畫面上已經沒有入口，這裡濾掉（W35）。
- * 回傳的是篩過的陣列，不是分頁物件：卡片只需要清單本身。
- */
+/** 收到、還沒回應的連動邀請。回傳陣列：卡片只需要清單本身。 */
 export function useIncomingLinkInvites() {
   return useQuery({
     queryKey: [...FRIEND_REQUESTS_KEY, 'incoming', 'PENDING'],
@@ -65,7 +64,20 @@ export function useIncomingLinkInvites() {
       apiRequest<Paginated<FriendRequest>>(
         `/friend-requests?direction=incoming&status=PENDING&limit=${PENDING_LIMIT}`,
       ),
-    select: (page) => page.items.filter((request) => request.forLink),
+    select: (page) => page.items,
+  });
+}
+
+/**
+ * 待詢問的對象（決策 75）：連動成立時自動建立、還沒回答「之前有沒有用別的名字記過他」。
+ * 放在對象的快取前綴底下，合併、改名、清標記之後跟著失效。
+ */
+export function useMergePrompts() {
+  return useQuery({
+    queryKey: [...COUNTERPARTIES_KEY, 'merge-prompts'],
+    queryFn: () =>
+      apiRequest<Paginated<Counterparty>>(`/counterparties?askMerge=true&limit=${LIST_LIMIT}`),
+    select: (page) => page.items,
   });
 }
 
@@ -81,35 +93,14 @@ export function useIncomingProposals() {
 }
 
 /**
- * 接受連動邀請，選自己這邊的人（W39）：既有未連動的 `{ id }`，或新名字 `{ name }`。
- *
- * 回傳接上的**對象 id**，讓畫面接著打開那本往來帳。後端的回應是那筆邀請，而收到的邀請
- * 不帶對象 id（F25 只給發起者），所以新名字的情況要再查一次：用 `?q=` 找完全同名的那位
- * （同一位使用者底下名字不重複）。
+ * 接受連動邀請。**不帶 body**（決策 74）：後端替雙方各建一個已連動的對象。
+ * 回應的 `askMerge` 為 true 時，畫面接著跳「之前有用別的名字記過他嗎？」（W50）。
  */
 export function useAcceptLinkInvite() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      requestId,
-      counterparty,
-    }: {
-      requestId: string;
-      counterparty: LinkCounterpartyChoice;
-    }): Promise<{ counterpartyId: string | null }> => {
-      await apiRequest<FriendRequest>(`/friend-requests/${requestId}/accept`, {
-        method: 'POST',
-        body: { counterparty },
-      });
-      if ('id' in counterparty) {
-        return { counterpartyId: counterparty.id };
-      }
-      const name = counterparty.name.trim();
-      const found = await apiRequest<Paginated<Counterparty>>(
-        `/counterparties?q=${encodeURIComponent(name)}&limit=${OUTGOING_LIMIT}`,
-      );
-      return { counterpartyId: found.items.find((item) => item.name === name)?.id ?? null };
-    },
+    mutationFn: (requestId: string) =>
+      apiRequest<LinkAccepted>(`/friend-requests/${requestId}/accept`, { method: 'POST' }),
     onSuccess: () => invalidateAfterResponse(queryClient),
   });
 }
@@ -162,24 +153,39 @@ export function useDeclineProposal() {
 }
 
 // ---------------------------------------------------------------------------
-// 送出的：往來帳的「已邀請，等對方接受」（W29、F25）
+// 送出的：對象頁的「邀請連動」與「邀請中」（W46、W50）
 // ---------------------------------------------------------------------------
 
+/** 用 email 邀請對方連動。不綁任何對象（決策 73）。 */
+export function useSendLinkInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateFriendRequestRequest) =>
+      apiRequest<FriendRequest>('/friend-requests', { method: 'POST', body: input }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY }),
+  });
+}
+
 /**
- * 這個對象送出、還沒回應的連動邀請；沒有時是 `null`。
- * 從我送出的待確認邀請裡挑 `counterpartyId` 相符的那筆（查找，不是推導）。
+ * 產生邀請連結。`token` 的原文只在這個回應出現一次：畫面組成 `${origin}/invite#${token}`
+ * 給使用者複製，**不要存進任何 storage、不要記 log**。重新產生會讓之前的連結失效（後端負責）。
  */
-export function useOutgoingLinkInvite(counterpartyId: string | null) {
+export function useCreateInviteLink() {
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<FriendInviteLinkCreated>('/friend-invite-links', { method: 'POST' }),
+  });
+}
+
+/** 我送出、還沒被回應的邀請（對象頁的「邀請中」）。 */
+export function useOutgoingInvites() {
   return useQuery({
     queryKey: [...FRIEND_REQUESTS_KEY, 'outgoing', 'PENDING'],
     queryFn: () =>
       apiRequest<Paginated<FriendRequest>>(
-        `/friend-requests?direction=outgoing&status=PENDING&limit=${OUTGOING_LIMIT}`,
+        `/friend-requests?direction=outgoing&status=PENDING&limit=${LIST_LIMIT}`,
       ),
-    enabled: counterpartyId !== null,
-    select: (page) =>
-      page.items.find((request) => request.forLink && request.counterpartyId === counterpartyId) ??
-      null,
+    select: (page) => page.items,
   });
 }
 
@@ -216,24 +222,12 @@ export function useInvitePreview(token: string | null) {
   });
 }
 
-/**
- * 用邀請連結接受。連動邀請要帶 `counterparty`；3a 留下的一般邀請連結不可帶（§4.6）。
- * 回應帶接受者這邊接上的 `counterpartyId`，畫面用它打開往來帳。
- */
+/** 用邀請連結接受。body 只有 `{ token }`（決策 74），回應同 `useAcceptLinkInvite`。 */
 export function useAcceptInviteLink() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      token,
-      counterparty,
-    }: {
-      token: string;
-      counterparty?: LinkCounterpartyChoice;
-    }) =>
-      apiRequest<FriendInviteLinkAccepted>('/friend-invite-links/accept', {
-        method: 'POST',
-        body: counterparty === undefined ? { token } : { token, counterparty },
-      }),
+    mutationFn: (token: string) =>
+      apiRequest<LinkAccepted>('/friend-invite-links/accept', { method: 'POST', body: { token } }),
     onSuccess: () => invalidateAfterResponse(queryClient),
   });
 }

@@ -44,24 +44,16 @@ export interface FriendRequest {
     name: string | null;
     email: string | null;
   };
-  /**
-   * 是否為連動邀請（3b-2 決策 56）。連動邀請接受時必須選自己這邊的對象，
-   * 接受後同時成為好友並完成連動。
-   */
-  forLink: boolean;
-  /**
-   * 連動邀請帶著的對象（3b-2 web F25）。**只有送出的連動邀請帶值**——那是發起者自己的
-   * 對象，讓往來帳能顯示「已邀請，等對方接受」並取消。收到的邀請一律 `null`：發起者那邊
-   * 的對象不給收件者看（`phase-3b2-linking.md` §3.5）。一般好友邀請也是 `null`。
-   */
-  counterpartyId: string | null;
   /** ISO 8601。 */
   createdAt: string;
   /** 接受、拒絕或取消的時間；仍為 `PENDING` 時是 `null`。ISO 8601。 */
   respondedAt: string | null;
 }
 
-/** `POST /friend-requests` 的 body。 */
+/**
+ * `POST /friend-requests` 的 body。3b-2 修訂 1 起，**所有邀請都是連動邀請**（決策 73）：
+ * 不綁任何對象，接受後雙方各自建立一個已連動的對象。
+ */
 export interface CreateFriendRequestRequest {
   email: string;
 }
@@ -94,29 +86,19 @@ export interface FriendInviteTokenRequest {
 /** `POST /friend-invite-links/preview` 的回應：讓持有者確認是誰邀請自己。 */
 export interface FriendInviteLinkPreview {
   inviterName: string;
-  /** 是否為連動邀請連結；是的話接受時必須帶 `counterparty`。 */
-  forLink: boolean;
   /** ISO 8601。 */
   expiresAt: string;
 }
 
 /**
- * `POST /friend-requests/{id}/accept` 的 body。連動邀請**必填** `counterparty`；
- * 一般好友邀請不可帶（3b-2 §5.2）。
+ * 兩個接受端點（`POST /friend-requests/{id}/accept` 不帶 body、`POST /friend-invite-links/accept`
+ * 只帶 `{ token }`）共用的回應（3b-2 修訂 1，決策 74、75）。
  */
-export interface AcceptFriendRequestRequest {
-  counterparty?: { id: string } | { name: string };
-}
-
-/** `POST /friend-invite-links/accept` 的 body。`counterparty` 的規則同上。 */
-export interface AcceptFriendInviteLinkRequest extends FriendInviteTokenRequest {
-  counterparty?: { id: string } | { name: string };
-}
-
-/**
- * `POST /friend-invite-links/accept` 的回應：新好友，連動邀請時另帶接受者這邊接上的對象，
- * 讓畫面接受後能直接打開那本往來帳。
- */
-export interface FriendInviteLinkAccepted extends Friend {
-  counterpartyId: string | null;
+export interface LinkAccepted {
+  /** 接受者這邊自動建立的已連動對象。畫面用它跳詢問、打開往來帳。 */
+  counterpartyId: string;
+  /** 是否要問「之前有沒有用別的名字記過他」：接受者當時有未連動的對象才為 `true`。 */
+  askMerge: boolean;
+  /** 邀請者。`name` 是帳號名稱。 */
+  otherUser: { id: string; name: string };
 }

@@ -3,7 +3,7 @@ import { ErrorCode } from '@ledger/shared';
 import type {
   FriendRequest,
   FriendRequestStatus,
-  LinkCounterpartyChoice,
+  LinkAccepted,
   ListFriendRequestsQuery,
   Paginated,
 } from '@ledger/shared';
@@ -12,15 +12,8 @@ import type { Clock } from '../common/clock';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  alreadyLinked,
-  assertLinkChoice,
-  establishLink,
-  findLinkBetween,
-  findLinkOfCounterparty,
-} from '../debts/counterparty-links';
-import { loadOwnedCounterparty } from '../debts/debt-entry-rules';
-import { alreadyFriends, areFriends, cannotFriendSelf, createFriendship } from './friendship';
+import { alreadyLinked, establishLink, findLinkBetween } from '../debts/counterparty-links';
+import { cannotFriendSelf } from './friendship';
 
 /**
  * 以 email 送出的好友邀請：送出、列出、接受、拒絕、取消。規格見
@@ -38,9 +31,8 @@ import { alreadyFriends, areFriends, cannotFriendSelf, createFriendship } from '
  *
  * 好友關係一律經由 `friendship.ts` 的共用函式讀寫，不在這裡直接操作 `Friendship`。
  *
- * **連動邀請**（spec 3b-2 決策 56）是帶著 `counterpartyId` 的同一種邀請：送出、拒絕、取消
- * 與一般邀請相同；接受時多選一個自己的對象，並在同一個資料庫交易裡建立連動
- * （`counterparty-links.ts` 的 `establishLink`）。
+ * 修訂 1 後每筆邀請都是連動邀請，不綁定既有對象；接受時在同一個資料庫交易裡
+ * 建立好友、雙方的新對象與連動（`counterparty-links.ts` 的 `establishLink`）。
  */
 
 // 分頁預設值與每頁筆數上限（客戶端要求超過 MAX_LIMIT 時會被夾住，而非報錯）。
@@ -62,8 +54,6 @@ interface FriendRequestRow {
   id: string;
   requesterId: string;
   recipientId: string;
-  /** 連動邀請：發起者這邊要接上的對象；一般好友邀請為 null。 */
-  counterpartyId: string | null;
   status: FriendRequestStatus;
   respondedAt: Date | null;
   createdAt: Date;
@@ -82,13 +72,8 @@ export class FriendRequestsService {
   ) {}
 
   /**
-   * 以 email 送出邀請。檢查順序就是錯誤的優先順序，不可對調：先確定這個人存在，
-   * 才談得上「是不是我自己」「是不是已經是好友」。
-   *
-   * 決策 8 的捷徑在第 4 步：對方已經邀請過我，雙方都表達了意願，直接成立好友關係，
-   * 回傳的是**對方那筆邀請**（狀態已改成 `ACCEPTED`），不另建一筆。
-   *
-   * 被拒絕後沒有冷卻期（決策 9）：`DECLINED` 的舊邀請不會擋下新的一筆。
+   * 以 email 送出連動邀請。先確認使用者，再檢查自己、已連動、反向邀請和自己的待確認邀請。
+   * 反向邀請須由收件者明確接受；被拒絕後仍可立刻重送。
    */
   async create(userId: string, email: string): Promise<FriendRequest> {
     const target = await this.prisma.user.findUnique({
@@ -105,22 +90,23 @@ export class FriendRequestsService {
     if (target.id === userId) {
       throw cannotFriendSelf();
     }
-    if (await areFriends(this.prisma, userId, target.id)) {
-      throw alreadyFriends();
-    }
+    if ((await findLinkBetween(this.prisma, userId, target.id)) !== null) throw alreadyLinked();
 
-    // 只看一般好友邀請：連動邀請的接受要選「接到哪個對象」，系統不能替使用者按接受。
+    // 所有邀請都要由收件者親自接受，反向待確認邀請不會自動成立連動。
     const reverse = await this.prisma.friendRequest.findFirst({
       where: {
         requesterId: target.id,
         recipientId: userId,
         status: 'PENDING',
-        counterpartyId: null,
       },
-      include: REQUEST_INCLUDE,
+      select: { id: true },
     });
     if (reverse !== null) {
-      return this.acceptRow(reverse, userId);
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.LINK_INVITE_FROM_THEM,
+        'This person has already invited you to link; accept their invite instead.',
+      );
     }
 
     const ownPending = await this.prisma.friendRequest.findFirst({
@@ -140,74 +126,6 @@ export class FriendRequestsService {
     } catch (error) {
       // 部分唯一索引 `FriendRequest_one_pending_per_pair` 擋下同時送達的第二筆。
       // 上面的檢查處理一般情況，這裡處理兩個請求同時通過檢查的競態。
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw this.requestPending();
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * 從自己的一個對象送出連動邀請（3b-2 決策 56、57、61）。
-   *
-   * 與一般邀請的差別：已經是好友**不擋**（好友但還沒連動是正常狀態）；對方已經送了連動邀請
-   * 給我時不自動接受，回 `LINK_INVITE_FROM_THEM` 請使用者去接受那一筆。檢查順序：
-   * 對象是自己的（404）→ 對方存在（404）→ 不是自己（400）→ 這對使用者或這個對象已連動
-   * （`ALREADY_LINKED`）→ 對方的連動邀請（409）→ 自己已有待確認的邀請（409）。
-   */
-  async createLinkInvite(
-    userId: string,
-    counterpartyId: string,
-    email: string,
-  ): Promise<FriendRequest> {
-    const counterparty = await loadOwnedCounterparty(this.prisma, userId, counterpartyId);
-    const target = await this.prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-    if (target === null) {
-      throw new AppException(
-        HttpStatus.NOT_FOUND,
-        ErrorCode.USER_NOT_FOUND,
-        'No registered user has that email.',
-      );
-    }
-    if (target.id === userId) {
-      throw cannotFriendSelf();
-    }
-    if (
-      (await findLinkBetween(this.prisma, userId, target.id)) !== null ||
-      (await findLinkOfCounterparty(this.prisma, counterparty.id)) !== null
-    ) {
-      throw alreadyLinked();
-    }
-
-    const reverse = await this.prisma.friendRequest.findFirst({
-      where: {
-        requesterId: target.id,
-        recipientId: userId,
-        status: 'PENDING',
-        counterpartyId: { not: null },
-      },
-      select: { id: true },
-    });
-    if (reverse !== null) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.LINK_INVITE_FROM_THEM,
-        'This person has already invited you to link; accept their invite instead.',
-      );
-    }
-
-    try {
-      const created = await this.prisma.friendRequest.create({
-        data: { requesterId: userId, recipientId: target.id, counterpartyId: counterparty.id },
-        include: REQUEST_INCLUDE,
-      });
-      return this.toFriendRequest(created, userId);
-    } catch (error) {
-      // 部分唯一索引 `FriendRequest_one_pending_per_pair`：同一對發起者與收件者只能有一筆
-      // 待確認的邀請（不分一般或連動）。
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw this.requestPending();
       }
@@ -248,26 +166,11 @@ export class FriendRequestsService {
   }
 
   /**
-   * 收件者接受邀請：標記 `ACCEPTED`，並在同一個交易裡建立好友關係。連動邀請必須帶
-   * `counterparty`（接到自己哪個對象），一般邀請不可帶（3b-2 §5.2）。
+   * 收件者接受邀請：同一筆交易裡標記已接受、建立好友及連動；任何一步失敗都回滾。
    */
-  async accept(
-    userId: string,
-    requestId: string,
-    choice?: { id?: string; name?: string },
-  ): Promise<FriendRequest> {
+  async accept(userId: string, requestId: string): Promise<LinkAccepted> {
     const row = await this.loadForAction(userId, requestId, 'recipient');
-    if (row.counterpartyId === null) {
-      if (choice !== undefined) {
-        throw new AppException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.VALIDATION_FAILED,
-          'counterparty is only valid when accepting a link invite.',
-        );
-      }
-      return this.acceptRow(row, userId);
-    }
-    return this.acceptRow(row, userId, assertLinkChoice(choice));
+    return this.acceptRow(row);
   }
 
   /** 收件者拒絕邀請。沒有冷卻期，發起者可以立刻重送（決策 9）。 */
@@ -333,11 +236,7 @@ export class FriendRequestsService {
    * `areFriends` 先查一次：雙方可能已經透過邀請連結成為好友，那時仍要把邀請標記成
    * `ACCEPTED`（否則它會永遠掛在清單上），但不能再建一筆好友關係。
    */
-  private async acceptRow(
-    row: FriendRequestRow,
-    viewerId: string,
-    choice?: LinkCounterpartyChoice,
-  ): Promise<FriendRequest> {
+  private async acceptRow(row: FriendRequestRow): Promise<LinkAccepted> {
     const respondedAt = this.now();
 
     return this.prisma.$transaction(async (tx) => {
@@ -349,19 +248,11 @@ export class FriendRequestsService {
         throw this.notPending();
       }
 
-      if (row.counterpartyId !== null && choice !== undefined) {
-        // 連動邀請：好友關係與連動一起建立；任何一步失敗，上面的狀態更新一起回滾。
-        await establishLink(tx, {
-          inviterId: row.requesterId,
-          inviterCounterpartyId: row.counterpartyId,
-          accepterId: row.recipientId,
-          choice,
-        });
-      } else if (!(await areFriends(tx, row.requesterId, row.recipientId))) {
-        await createFriendship(tx, row.requesterId, row.recipientId);
-      }
-
-      return this.toFriendRequest({ ...row, status: 'ACCEPTED', respondedAt }, viewerId);
+      const accepted = await establishLink(tx, {
+        inviterId: row.requesterId,
+        accepterId: row.recipientId,
+      });
+      return { ...accepted, otherUser: row.requester };
     });
   }
 
@@ -406,9 +297,6 @@ export class FriendRequestsService {
       direction: incoming ? 'incoming' : 'outgoing',
       status: row.status,
       counterpart,
-      forLink: row.counterpartyId !== null,
-      // 對象是發起者自己的資料：只回給發起者，收件者一律 null（F25、§3.5）。
-      counterpartyId: incoming ? null : row.counterpartyId,
       createdAt: row.createdAt.toISOString(),
       respondedAt: row.respondedAt === null ? null : row.respondedAt.toISOString(),
     };

@@ -83,6 +83,9 @@ describe('Home dashboard', () => {
           total: incomingProposals.length,
         });
       }
+      if (url.includes('/counterparties?')) {
+        return json({ items: [], page: 1, limit: 100, total: 0 });
+      }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
       }
@@ -159,8 +162,6 @@ describe('Home dashboard', () => {
         direction: 'incoming',
         status: 'PENDING',
         counterpart: { userId: 'user-2', name: '王小明', email: null },
-        forLink: true,
-        counterpartyId: null,
         createdAt: '2026-09-25T00:00:00.000Z',
         respondedAt: null,
       },

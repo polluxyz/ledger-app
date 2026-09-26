@@ -101,13 +101,8 @@ model FriendRequest {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  /// 連動邀請（3b-2 決策 56）：發起者這邊要接上的對象。null＝一般好友邀請。
-  /// Cascade：對象被刪，邀請跟著消失（還沒連動的對象可以刪）。
-  counterpartyId String?
-
-  requester    User          @relation("FriendRequestSent", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient    User          @relation("FriendRequestReceived", fields: [recipientId], references: [id], onDelete: Cascade)
-  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+  requester User @relation("FriendRequestSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("FriendRequestReceived", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@index([recipientId, status])
   @@index([requesterId, status])
@@ -127,11 +122,7 @@ model FriendInviteLink {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  /// 連動邀請連結（3b-2 決策 56）：產生者這邊要接上的對象。null＝一般好友連結。
-  counterpartyId String?
-
   inviter      User          @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
-  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
   // SetNull：使用者被刪掉，不該連帶刪掉別人產生過的連結紀錄。
   usedBy       User?         @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
 
@@ -272,7 +263,8 @@ enum DebtEntryKind {
 model Counterparty {
   id        String   @id @default(uuid())
   ownerId   String
-  name      String
+  name      String?
+  askMerge  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -282,8 +274,6 @@ model Counterparty {
   // 連動（3b-2）：一個對象最多出現在一筆 CounterpartyLink 的其中一側。
   linkAsLow         CounterpartyLink?  @relation("CounterpartyLinkLowCounterparty")
   linkAsHigh        CounterpartyLink?  @relation("CounterpartyLinkHighCounterparty")
-  friendRequests    FriendRequest[]
-  friendInviteLinks FriendInviteLink[]
 
   @@unique([ownerId, name])
 }

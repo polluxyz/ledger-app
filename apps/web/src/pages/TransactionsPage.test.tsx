@@ -35,6 +35,9 @@ describe('Transactions page', () => {
   const counterparty = {
     id: 'counterparty-1',
     name: '小明',
+    displayName: '小明',
+    askMerge: false,
+    link: null,
     balance: 5000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',

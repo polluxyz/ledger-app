@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DebtProposal, FriendRequest } from '@ledger/shared';
+import type { Counterparty, DebtProposal, FriendRequest } from '@ledger/shared';
 import App from '../../App';
 
 /**
@@ -29,19 +29,35 @@ describe('PendingCard', () => {
     balance: 500,
     createdAt: '2026-09-01T00:00:00.000Z',
   };
-  const counterparty = {
+  const counterparty: Counterparty = {
     id: 'counterparty-1',
     name: '小明',
+    displayName: '小明',
+    askMerge: false,
     balance: 100,
     link: null,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
   };
+  const mergePrompt: Counterparty = {
+    ...counterparty,
+    id: 'counterparty-linked',
+    name: null,
+    displayName: '甲',
+    askMerge: true,
+    link: { userId: 'user-2', userName: '甲', theirBalance: 0 },
+  };
 
   let invites: FriendRequest[] = [];
+  let mergePrompts: Counterparty[] = [];
   let proposals: DebtProposal[] = [];
   let proposalTotal = 0;
   let failNextProposalAccept: string | null = null;
+  let acceptedLink = {
+    counterpartyId: 'counterparty-linked',
+    askMerge: false,
+    otherUser: { id: 'user-2', name: '王小明' },
+  };
 
   const response = (body: unknown, status = 200) =>
     Promise.resolve(
@@ -64,9 +80,15 @@ describe('PendingCard', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
     invites = [];
+    mergePrompts = [];
     proposals = [];
     proposalTotal = 0;
     failNextProposalAccept = null;
+    acceptedLink = {
+      counterpartyId: 'counterparty-linked',
+      askMerge: false,
+      otherUser: { id: 'user-2', name: '王小明' },
+    };
 
     fetchMock.mockImplementation(async (input, init) => {
       const url = inputUrl(input);
@@ -74,9 +96,11 @@ describe('PendingCard', () => {
 
       if (method === 'POST' && url.includes('/friend-requests/') && url.endsWith('/accept')) {
         const requestId = url.match(/friend-requests\/([^/]+)\/accept/)?.[1];
-        const accepted = invites.find((request) => request.id === requestId) ?? invite();
         invites = invites.filter((request) => request.id !== requestId);
-        return response({ ...accepted, status: 'ACCEPTED' });
+        if (acceptedLink.askMerge) {
+          mergePrompts = [mergePrompt];
+        }
+        return response(acceptedLink);
       }
       if (method === 'POST' && url.includes('/friend-requests/') && url.endsWith('/decline')) {
         const requestId = url.match(/friend-requests\/([^/]+)\/decline/)?.[1];
@@ -103,6 +127,10 @@ describe('PendingCard', () => {
         proposalTotal = proposals.length;
         return response({ ...declined, status: 'DECLINED' });
       }
+      if (method === 'DELETE' && url.endsWith('/merge-prompt')) {
+        mergePrompts = [];
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
 
       if (url.includes('/friend-requests?')) {
         return response({ items: invites, page: 1, limit: 20, total: invites.length });
@@ -112,6 +140,14 @@ describe('PendingCard', () => {
       }
       if (url.includes('/counterparties?')) {
         const query = new URL(url).searchParams;
+        if (query.get('askMerge') === 'true') {
+          return response({
+            items: mergePrompts,
+            page: 1,
+            limit: 100,
+            total: mergePrompts.length,
+          });
+        }
         const found =
           query.get('limit') === '100'
             ? { ...counterparty, name: query.get('q') ?? counterparty.name }
@@ -153,8 +189,6 @@ describe('PendingCard', () => {
       direction: 'incoming',
       status: 'PENDING',
       counterpart: { userId: 'user-2', name: '王小明', email: null },
-      forLink: true,
-      counterpartyId: null,
       createdAt: '2026-09-25T00:00:00.000Z',
       respondedAt: null,
       ...overrides,
@@ -274,42 +308,100 @@ describe('PendingCard', () => {
     expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
   });
 
-  it('accepts a link invite using the prefilled name and then offers the ledger link', async () => {
+  it('accepts an invite without a picker or request body and closes its row without a prompt', async () => {
     invites = [invite()];
     await renderHome();
     const user = userEvent.setup();
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
-    await user.click(within(card).getByRole('button', { name: '接受並連動' }));
 
     await waitFor(() => {
-      expect(postedBody('/friend-requests/invite-1/accept')).toEqual({
-        counterparty: { name: '王小明' },
-      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/friend-requests/invite-1/accept'),
+        expect.objectContaining({ method: 'POST' }),
+      );
     }, WAIT);
-    expect(await within(card).findByText('已連動。', undefined, WAIT)).toBeInTheDocument();
-    expect(within(card).getByRole('button', { name: '查看往來帳' })).toBeInTheDocument();
+    const acceptCall = fetchMock.mock.calls.find(([url]) =>
+      inputUrl(url).includes('/friend-requests/invite-1/accept'),
+    );
+    expect(acceptCall?.[1]?.body).toBeUndefined();
+    expect(screen.queryByLabelText('對方在你的往來帳裡是誰？')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '查看往來帳' })).not.toBeInTheDocument();
+    expect(screen.queryByText('已連動。')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument();
+    }, WAIT);
   });
 
-  it('accepts a link invite with the selected counterparty id', async () => {
+  it('opens the acceptor merge prompt and leaves a later answer in the pending list', async () => {
     invites = [invite()];
+    acceptedLink = {
+      counterpartyId: 'counterparty-linked',
+      askMerge: true,
+      otherUser: { id: 'user-2', name: '甲' },
+    };
     await renderHome();
     const user = userEvent.setup();
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
-    const picker = within(card).getByLabelText('對方在你的往來帳裡是誰？');
-    await user.click(picker);
-    await user.click(await within(card).findByRole('option', { name: '小明' }, WAIT));
-    await user.click(within(card).getByRole('button', { name: '接受並連動' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '已和 甲 連動' }, WAIT);
+    expect(within(dialog).getByText('之前有用別的名字記過他嗎？')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '稍後' }));
 
     await waitFor(() => {
-      expect(postedBody('/friend-requests/invite-1/accept')).toEqual({
-        counterparty: { id: 'counterparty-1' },
-      });
+      expect(screen.getByRole('region', { name: '待確認' })).toHaveTextContent(
+        '甲 已接受連動。之前有用別的名字記過他嗎？',
+      );
     }, WAIT);
-    expect(await within(card).findByText('已連動。', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByLabelText('共 1 筆待確認')).toHaveTextContent('1');
+  });
+
+  it('shows merge prompt options, keeps the row on later, and removes it after answering', async () => {
+    mergePrompts = [mergePrompt];
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+
+    const row = within(card).getByRole('listitem');
+    expect(row).toHaveTextContent('甲 已接受連動。之前有用別的名字記過他嗎？');
+    expect(within(card).getByLabelText('共 1 筆待確認')).toHaveTextContent('1');
+    await user.click(within(card).getByRole('button', { name: '回答' }));
+    expect(within(card).getByRole('radio', { name: '沒有' })).toBeInTheDocument();
+    expect(within(card).getByRole('radio', { name: '有：' })).toBeInTheDocument();
+    expect(within(card).getByRole('option', { name: '小明' })).toBeInTheDocument();
+
+    await user.click(within(card).getByRole('button', { name: '稍後' }));
+    expect(row).toHaveTextContent('甲 已接受連動。之前有用別的名字記過他嗎？');
+    expect(within(card).queryByRole('radio', { name: '沒有' })).not.toBeInTheDocument();
+
+    await user.click(within(card).getByRole('button', { name: '回答' }));
+    await user.click(within(card).getByRole('button', { name: '確定' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument();
+    }, WAIT);
+  });
+
+  it('uses the same expanded row for merge prompts and proposals', async () => {
+    mergePrompts = [mergePrompt];
+    proposals = [proposal()];
+    proposalTotal = 1;
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+
+    await user.click(within(card).getByRole('button', { name: '回答' }));
+    expect(within(card).getByRole('radio', { name: '沒有' })).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: '接受' }));
+    expect(within(card).getByLabelText('記在哪本帳本')).toBeInTheDocument();
+    expect(within(card).queryByRole('radio', { name: '沒有' })).not.toBeInTheDocument();
+
+    await user.click(within(card).getByRole('button', { name: '回答' }));
+    expect(within(card).getByRole('radio', { name: '沒有' })).toBeInTheDocument();
+    expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
   });
 
   it('requires an account for a balance-tracking ledger and sends the selected target', async () => {
@@ -382,13 +474,7 @@ describe('PendingCard', () => {
     await user.selectOptions(within(card).getByLabelText('從哪個帳戶付出'), 'account-1');
     await user.click(within(card).getByRole('button', { name: '接受' }));
 
-    expect(
-      await within(card).findByText(
-        '這筆還款超過你帳上的欠款。你可以拒絕，再和王小明對一下帳。',
-        undefined,
-        WAIT,
-      ),
-    ).toBeInTheDocument();
+    expect(await within(card).findByText('超過你帳上的欠款', undefined, WAIT)).toBeInTheDocument();
     const declineButton = within(card).getByRole('button', { name: '改成拒絕' });
     await user.click(declineButton);
 
@@ -399,6 +485,23 @@ describe('PendingCard', () => {
       );
     }, WAIT);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the short settled-balance conflict line and offers decline', async () => {
+    proposals = [proposal({ entryKind: 'REPAY', amount: 80 })];
+    proposalTotal = 1;
+    failNextProposalAccept = 'NOTHING_TO_REPAY';
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+
+    await user.click(within(card).getByRole('button', { name: '接受' }));
+    await user.selectOptions(within(card).getByLabelText('從哪個帳戶付出'), 'account-1');
+    await user.click(within(card).getByRole('button', { name: '接受' }));
+
+    expect(await within(card).findByRole('alert', {}, WAIT)).toHaveTextContent('你帳上目前兩清');
+    expect(within(card).queryByText(/記不進去|對一下帳/)).not.toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '改成拒絕' })).toBeInTheDocument();
   });
 
   it('declines directly without asking for confirmation', async () => {

@@ -5,6 +5,7 @@ import type {
   FriendInviteLinkCreated,
   FriendInviteLinkPreview,
   FriendRequest,
+  LinkAccepted,
   Paginated,
 } from '@ledger/shared';
 import request from 'supertest';
@@ -78,7 +79,11 @@ describe('Friends (e2e)', () => {
         .post(`/api/friend-requests/${incoming[0]!.id}/accept`)
         .set(auth(bob.token));
       expect(accepted.status).toBe(200);
-      expect((accepted.body as FriendRequest).status).toBe('ACCEPTED');
+      expect(accepted.body as LinkAccepted).toMatchObject({
+        askMerge: false,
+        otherUser: { id: alice.userId, name: 'Alice' },
+      });
+      expect((await requestsOf(bob.token, 'incoming'))[0]!.status).toBe('ACCEPTED');
 
       expect((await friendsOf(alice.token)).map((f) => f.userId)).toEqual([bob.userId]);
       expect((await friendsOf(bob.token)).map((f) => f.userId)).toEqual([alice.userId]);
@@ -119,20 +124,40 @@ describe('Friends (e2e)', () => {
         .expect(200);
       const already = await invite(alice.token, 'bob@example.com');
       expect(already.status).toBe(409);
-      expect((already.body as { errorCode: string }).errorCode).toBe('ALREADY_FRIENDS');
+      expect((already.body as { errorCode: string }).errorCode).toBe('ALREADY_LINKED');
     });
 
     // SC-F4
-    it('inviting someone who already invited you makes you friends at once', async () => {
+    it('points to the reverse pending invite for explicit acceptance', async () => {
       const { alice, bob } = await users();
       await invite(bob.token, 'alice@example.com').expect(201);
 
       const res = await invite(alice.token, 'bob@example.com');
-      expect(res.status).toBe(201);
-      expect((res.body as FriendRequest).status).toBe('ACCEPTED');
+      expect(res.status).toBe(409);
+      expect((res.body as { errorCode: string }).errorCode).toBe('LINK_INVITE_FROM_THEM');
 
       expect(await prisma.friendRequest.count()).toBe(1);
+      expect(await friendsOf(alice.token)).toHaveLength(0);
+      const [pending] = await requestsOf(alice.token, 'incoming');
+      await request(server())
+        .post(`/api/friend-requests/${pending!.id}/accept`)
+        .set(auth(alice.token))
+        .expect(200);
       expect((await friendsOf(alice.token)).map((f) => f.userId)).toEqual([bob.userId]);
+    });
+
+    it('links people who were already friends before this revision', async () => {
+      const { alice, bob } = await users();
+      const [userLowId, userHighId] = [alice.userId, bob.userId].sort() as [string, string];
+      await prisma.friendship.create({ data: { userLowId, userHighId } });
+      await invite(alice.token, 'bob@example.com').expect(201);
+      const [pending] = await requestsOf(bob.token, 'incoming');
+      await request(server())
+        .post(`/api/friend-requests/${pending!.id}/accept`)
+        .set(auth(bob.token))
+        .expect(200);
+      expect(await prisma.friendship.count()).toBe(1);
+      expect(await prisma.counterpartyLink.count()).toBe(1);
     });
 
     // SC-F5（開發者定案：不設冷卻期）
@@ -215,12 +240,10 @@ describe('Friends (e2e)', () => {
 
       const accepted = await acceptLink(bob.token, link.token);
       expect(accepted.status).toBe(201);
-      expect(accepted.body).toEqual({
-        userId: alice.userId,
-        name: 'Alice',
-        since: expect.any(String) as unknown,
-        // 一般好友連結沒有接上任何對象；連動連結才會帶（3b-2 §5.2）。
-        counterpartyId: null,
+      expect(accepted.body as LinkAccepted).toMatchObject({
+        counterpartyId: expect.any(String) as unknown,
+        askMerge: false,
+        otherUser: { id: alice.userId, name: 'Alice' },
       });
       expect((await friendsOf(alice.token)).map((f) => f.userId)).toEqual([bob.userId]);
 
@@ -262,6 +285,16 @@ describe('Friends (e2e)', () => {
 
       const carol = await registerAndLogin(app, 'carol@example.com', 'Carol');
       expect((await acceptLink(carol.token, link.token)).status).toBe(201);
+    });
+
+    it('an invitation URL links existing friends without adding another friendship', async () => {
+      const { alice, bob } = await users();
+      const [userLowId, userHighId] = [alice.userId, bob.userId].sort() as [string, string];
+      await prisma.friendship.create({ data: { userLowId, userHighId } });
+      const link = await createLink(alice.token);
+      await acceptLink(bob.token, link.token).expect(201);
+      expect(await prisma.friendship.count()).toBe(1);
+      expect(await prisma.counterpartyLink.count()).toBe(1);
     });
 
     it('an unknown token is invalid, and a malformed one is rejected by validation', async () => {

@@ -88,9 +88,9 @@ export function DebtEntryForm({
     if (kind === 'REPAYMENT') {
       repaymentHint =
         counterparty && counterparty.balance > 0
-          ? `${counterparty.name}還你`
+          ? `${counterparty.displayName}還你`
           : counterparty && counterparty.balance < 0
-            ? `你還${counterparty.name}`
+            ? `你還${counterparty.displayName}`
             : '目前沒有欠款';
     } else if (!repaymentAvailable) {
       repaymentHint = '目前沒有欠款';
@@ -130,9 +130,9 @@ export function DebtEntryForm({
     } else if (after === 0) {
       preview = '記完後：兩清';
     } else if (after > 0) {
-      preview = `記完後：${counterparty?.name ?? normalizedName}欠你 ${formatMoney(after)}`;
+      preview = `記完後：${counterparty?.displayName ?? normalizedName}欠你 ${formatMoney(after)}`;
     } else {
-      preview = `記完後：你欠${counterparty?.name ?? normalizedName} ${formatMoney(Math.abs(after))}`;
+      preview = `記完後：你欠${counterparty?.displayName ?? normalizedName} ${formatMoney(Math.abs(after))}`;
     }
   }
 
@@ -306,10 +306,6 @@ export function DebtEntryForm({
         <p className={styles.preview} role="status">
           {preview}
         </p>
-      )}
-
-      {counterparty?.link && (
-        <p className={styles.linkHint}>送出後會請 {counterparty.link.userName} 確認</p>
       )}
 
       <div className={styles.actions}>

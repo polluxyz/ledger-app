@@ -71,6 +71,7 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   COUNTERPARTY_LINKED: '這個人已經連動中。要刪除或改接別人，請先解除連動。',
   LINK_INVITE_FROM_THEM: '對方已經邀請你連動了，到總覽接受就好。',
   PROPOSAL_NOT_PENDING: '這筆已經處理過了，畫面會重新整理。',
+  MERGE_NOT_ALLOWED: '只能把沒連動的人併進已連動的人。',
 };
 
 /**

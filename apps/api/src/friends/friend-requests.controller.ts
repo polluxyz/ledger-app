@@ -9,7 +9,7 @@ import {
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { FriendRequest, JwtPayload, Paginated } from '@ledger/shared';
+import type { FriendRequest, JwtPayload, LinkAccepted, Paginated } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AcceptFriendRequestDto } from './dto/accept-friend-request.dto';
 import { CreateFriendRequestDto } from './dto/create-friend-request.dto';
@@ -34,7 +34,9 @@ export class FriendRequestsController {
   @Throttle(FRIEND_THROTTLE)
   @ApiBadRequestResponse({ description: 'CANNOT_FRIEND_SELF, or the email is malformed.' })
   @ApiNotFoundResponse({ description: 'USER_NOT_FOUND: no registered user has that email.' })
-  @ApiConflictResponse({ description: 'ALREADY_FRIENDS or FRIEND_REQUEST_PENDING.' })
+  @ApiConflictResponse({
+    description: 'ALREADY_LINKED, LINK_INVITE_FROM_THEM, or FRIEND_REQUEST_PENDING.',
+  })
   @ApiTooManyRequestsResponse({ description: 'More than 10 requests per minute from one IP.' })
   create(
     @CurrentUser() user: JwtPayload,
@@ -55,19 +57,16 @@ export class FriendRequestsController {
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: 'Only the recipient can accept.' })
   @ApiNotFoundResponse({ description: 'No such request, or the caller is not a party to it.' })
-  @ApiBadRequestResponse({
-    description: 'A link invite needs counterparty; a plain friend request must not have one.',
-  })
-  @ApiConflictResponse({
-    description:
-      'FRIEND_REQUEST_NOT_PENDING; for link invites also ALREADY_LINKED, COUNTERPARTY_LINKED, COUNTERPARTY_NAME_TAKEN.',
-  })
+  @ApiBadRequestResponse({ description: 'Accept has no body fields.' })
+  @ApiConflictResponse({ description: 'FRIEND_REQUEST_NOT_PENDING or ALREADY_LINKED.' })
   accept(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() dto: AcceptFriendRequestDto,
-  ): Promise<FriendRequest> {
-    return this.requests.accept(user.sub, id, dto.counterparty);
+  ): Promise<LinkAccepted> {
+    // 保留空 DTO 的驗證路徑：多餘欄位要在進入 service 前回 400。
+    void dto;
+    return this.requests.accept(user.sub, id);
   }
 
   @Post(':id/decline')

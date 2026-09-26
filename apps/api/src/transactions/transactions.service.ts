@@ -55,7 +55,16 @@ interface TransactionRow {
   creator: { id: string; name: string };
   // 借還帳（3b 往來帳版）：外鍵在往來紀錄那一側，所以從交易反查。只取回應要用的欄位，
   // 加上判斷「檢視者是不是擁有者」的 ownerId。
-  debtEntry: { id: string; counterparty: { id: string; name: string; ownerId: string } } | null;
+  debtEntry: {
+    id: string;
+    counterparty: {
+      id: string;
+      name: string | null;
+      ownerId: string;
+      linkAsLow?: { userHigh: { name: string } } | null;
+      linkAsHigh?: { userLow: { name: string } } | null;
+    };
+  } | null;
 }
 
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
@@ -66,7 +75,18 @@ const TRANSACTION_INCLUDE = {
   toAccount: { select: { id: true, name: true, userId: true } },
   creator: { select: { id: true, name: true } },
   debtEntry: {
-    select: { id: true, counterparty: { select: { id: true, name: true, ownerId: true } } },
+    select: {
+      id: true,
+      counterparty: {
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          linkAsLow: { select: { userHigh: { select: { name: true } } } },
+          linkAsHigh: { select: { userLow: { select: { name: true } } } },
+        },
+      },
+    },
   },
 } as const;
 
@@ -584,7 +604,11 @@ export class TransactionsService {
     return {
       entryId: entry.id,
       counterpartyId: entry.counterparty.id,
-      counterpartyName: entry.counterparty.name,
+      counterpartyName:
+        entry.counterparty.name ??
+        entry.counterparty.linkAsLow?.userHigh.name ??
+        entry.counterparty.linkAsHigh?.userLow.name ??
+        '',
     };
   }
 

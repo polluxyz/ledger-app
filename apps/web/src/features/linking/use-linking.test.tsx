@@ -7,17 +7,22 @@ import {
   useAcceptLinkInvite,
   useAcceptProposal,
   useCancelLinkInvite,
+  useCreateInviteLink,
   useDeclineLinkInvite,
   useDeclineProposal,
   useIncomingLinkInvites,
   useIncomingProposals,
   useInvitePreview,
-  useOutgoingLinkInvite,
+  useMergePrompts,
+  useOutgoingInvites,
+  useSendLinkInvite,
 } from './use-linking';
 
 /**
- * 連動 hooks 的三件事：**打對端點**（路徑、方法、body），**只做查找不做推導**（`forLink`、
- * `counterpartyId` 的篩選），以及**寫入後的快取失效**。
+ * 連動 hooks 的兩件事：**打對端點**（路徑、方法、body），以及**寫入後的快取失效**。
+ *
+ * 3b-2 修訂 1 起邀請不綁人、接受不帶 body（決策 73、74），這裡特別釘住「接受時沒有送出任何
+ * 選人的欄位」與「產生連結不帶對象」。
  *
  * 策略：fetch 換成 mock，依網址回固定資料；`invalidateQueries` 用 spy 觀察。
  */
@@ -25,9 +30,11 @@ describe('Linking hooks', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
 
-  const linkInvite = { id: 'fr-1', forLink: true, counterpartyId: 'cp-1' };
-  const plainInvite = { id: 'fr-2', forLink: false, counterpartyId: null };
-  const otherLinkInvite = { id: 'fr-3', forLink: true, counterpartyId: 'cp-9' };
+  const accepted = {
+    counterpartyId: 'cp-new',
+    askMerge: true,
+    otherUser: { id: 'u-a', name: '甲' },
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -42,26 +49,13 @@ describe('Linking hooks', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
-      if (url.includes('/friend-requests?')) {
-        return json({
-          items: [plainInvite, linkInvite, otherLinkInvite],
-          page: 1,
-          limit: 20,
-          total: 3,
-        });
+      if (url.includes('/friend-requests?') || url.includes('/counterparties?')) {
+        return json({ items: [{ id: 'row-1' }], page: 1, limit: 20, total: 1 });
       }
-      if (url.includes('/counterparties?')) {
-        return json({
-          items: [
-            { id: 'cp-other', name: '王小明二號' },
-            { id: 'cp-new', name: '王小明' },
-          ],
-          page: 1,
-          limit: 100,
-          total: 2,
-        });
+      if (url.endsWith('/accept')) {
+        return json(accepted);
       }
-      return json({ id: 'x', counterpartyId: 'cp-from-link', items: [] });
+      return json({ id: 'x', token: 't', expiresAt: '2026-09-26T06:32:00.000Z' });
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
@@ -97,13 +91,30 @@ describe('Linking hooks', () => {
     ['accounts'],
   ];
 
-  it('lists only incoming link invites, dropping plain ones', async () => {
-    const { result } = renderHook(() => useIncomingLinkInvites(), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(requests()[0]!.url).toMatch(
-      /\/friend-requests\?direction=incoming&status=PENDING&limit=20$/,
+  it.each([
+    {
+      name: 'incoming link invites',
+      hook: useIncomingLinkInvites,
+      url: /\/friend-requests\?direction=incoming&status=PENDING&limit=20$/,
+    },
+    {
+      name: 'sent invites',
+      hook: useOutgoingInvites,
+      url: /\/friend-requests\?direction=outgoing&status=PENDING&limit=100$/,
+    },
+    {
+      name: 'merge prompts',
+      hook: useMergePrompts,
+      url: /\/counterparties\?askMerge=true&limit=100$/,
+    },
+  ])('lists $name as a plain array', async ({ hook, url }) => {
+    const { result } = renderHook(
+      () => (hook as () => { data: Array<{ id: string }> | undefined })(),
+      { wrapper },
     );
-    expect(result.current.data?.map((request) => request.id)).toEqual(['fr-1', 'fr-3']);
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(requests()[0]!.url).toMatch(url);
+    expect(result.current.data?.map((row) => row.id)).toEqual(['row-1']);
   });
 
   it('lists incoming pending proposals', async () => {
@@ -114,48 +125,37 @@ describe('Linking hooks', () => {
     );
   });
 
-  it('finds the sent link invite of one counterparty, or null', async () => {
-    const found = renderHook(() => useOutgoingLinkInvite('cp-1'), { wrapper });
-    await waitFor(() => expect(found.result.current.data).toBeDefined());
-    expect(requests()[0]!.url).toMatch(/\/friend-requests\?direction=outgoing&status=PENDING/);
-    expect(found.result.current.data?.id).toBe('fr-1');
-
-    const none = renderHook(() => useOutgoingLinkInvite('cp-without-invite'), { wrapper });
-    await waitFor(() => expect(none.result.current.data).toBeNull());
+  it('sends a link invite by email only, without any counterparty', async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useSendLinkInvite(), { wrapper });
+    await act(() => result.current.mutateAsync({ email: 'b@example.com' }));
+    expect(requests()[0]).toMatchObject({ method: 'POST', body: { email: 'b@example.com' } });
+    expect(requests()[0]!.url).toMatch(/\/friend-requests$/);
+    expect(invalidatedKeys(spy)).toEqual([['friend-requests']]);
   });
 
-  it('does not ask for sent invites before a counterparty is chosen', () => {
-    renderHook(() => useOutgoingLinkInvite(null), { wrapper });
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('creates an invite link without a body and without touching any cache', async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useCreateInviteLink(), { wrapper });
+    await act(() => result.current.mutateAsync());
+    expect(requests()[0]).toMatchObject({ method: 'POST', body: undefined });
+    expect(requests()[0]!.url).toMatch(/\/friend-invite-links$/);
+    expect(invalidatedKeys(spy)).toEqual([]);
   });
 
-  it('accepts a link invite onto an existing counterparty and returns its id', async () => {
+  it('accepts a link invite without a body and returns whether to ask about merging', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useAcceptLinkInvite(), { wrapper });
-    const accepted = await act(() =>
-      result.current.mutateAsync({ requestId: 'fr-1', counterparty: { id: 'cp-5' } }),
-    );
-    expect(accepted).toEqual({ counterpartyId: 'cp-5' });
+    const response = await act(() => result.current.mutateAsync('fr-1'));
+    expect(response).toEqual(accepted);
     expect(requests()).toEqual([
       {
         url: expect.stringMatching(/\/friend-requests\/fr-1\/accept$/) as unknown,
         method: 'POST',
-        body: { counterparty: { id: 'cp-5' } },
+        body: undefined,
       },
     ]);
     expect(invalidatedKeys(spy)).toEqual(expect.arrayContaining(EVERYTHING) as unknown);
-  });
-
-  it('accepts a link invite with a new name and looks up the exact name afterwards', async () => {
-    const { result } = renderHook(() => useAcceptLinkInvite(), { wrapper });
-    const accepted = await act(() =>
-      result.current.mutateAsync({ requestId: 'fr-1', counterparty: { name: ' 王小明 ' } }),
-    );
-    // 「王小明二號」也符合 q，但只有完全同名的才是剛接上的那位。
-    expect(accepted).toEqual({ counterpartyId: 'cp-new' });
-    expect(requests()[1]!.url).toMatch(
-      /\/counterparties\?q=%E7%8E%8B%E5%B0%8F%E6%98%8E&limit=100$/,
-    );
   });
 
   it.each([
@@ -222,15 +222,13 @@ describe('Linking hooks', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('accepts an invite link with or without a counterparty choice', async () => {
+  it('accepts an invite link with the token only', async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useAcceptInviteLink(), { wrapper });
-    const accepted = await act(() =>
-      result.current.mutateAsync({ token: 't', counterparty: { name: '王小明' } }),
-    );
-    expect(accepted.counterpartyId).toBe('cp-from-link');
-    expect(requests()[0]!.body).toEqual({ token: 't', counterparty: { name: '王小明' } });
-
-    await act(() => result.current.mutateAsync({ token: 't' }));
-    expect(requests()[1]!.body).toEqual({ token: 't' });
+    const response = await act(() => result.current.mutateAsync('t'));
+    expect(response).toEqual(accepted);
+    expect(requests()[0]).toMatchObject({ method: 'POST', body: { token: 't' } });
+    expect(requests()[0]!.url).toMatch(/\/friend-invite-links\/accept$/);
+    expect(invalidatedKeys(spy)).toEqual(expect.arrayContaining(EVERYTHING) as unknown);
   });
 });

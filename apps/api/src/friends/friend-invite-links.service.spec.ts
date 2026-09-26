@@ -30,7 +30,6 @@ describe('FriendInviteLinksService', () => {
     usedAt: Date | null;
     revokedAt: Date | null;
     usedById: string | null;
-    counterpartyId: string | null;
     inviter: { id: string; name: string };
   };
 
@@ -44,8 +43,6 @@ describe('FriendInviteLinksService', () => {
       usedAt: null,
       revokedAt: null,
       usedById: null,
-      // 一般好友連結；連動連結（3b-2）由 e2e 驗。
-      counterpartyId: null,
       inviter,
       ...overrides,
     };
@@ -61,6 +58,8 @@ describe('FriendInviteLinksService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
     };
+    counterparty: { count: jest.Mock; create: jest.Mock };
+    counterpartyLink: { findUnique: jest.Mock; create: jest.Mock };
     $transaction: jest.Mock;
   };
   let service: FriendInviteLinksService;
@@ -77,6 +76,16 @@ describe('FriendInviteLinksService', () => {
       friendship: {
         findUnique: jest.fn(() => Promise.resolve(null)),
         create: jest.fn(() => Promise.resolve({ createdAt: SINCE })),
+      },
+      counterparty: {
+        count: jest.fn(() => Promise.resolve(0)),
+        create: jest.fn(({ data }: { data: { ownerId: string; askMerge: boolean } }) =>
+          Promise.resolve({ id: `cp-${data.ownerId}`, askMerge: data.askMerge }),
+        ),
+      },
+      counterpartyLink: {
+        findUnique: jest.fn(() => Promise.resolve(null)),
+        create: jest.fn(() => Promise.resolve({ id: 'link-1' })),
       },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
@@ -140,7 +149,6 @@ describe('FriendInviteLinksService', () => {
       await expect(service.preview('token')).resolves.toEqual({
         inviterName: 'Alice',
         expiresAt: TEN_MINUTES_LATER.toISOString(),
-        forLink: false,
       });
       expect(prisma.friendInviteLink.updateMany).not.toHaveBeenCalled();
     });
@@ -181,16 +189,15 @@ describe('FriendInviteLinksService', () => {
   });
 
   describe('accept', () => {
-    it('consumes the link and returns only userId, name and since', async () => {
+    it('consumes the link and returns the new linked counterparty', async () => {
       prisma.friendInviteLink.findUnique.mockResolvedValue(linkRow());
 
       const friend = await service.accept(ACCEPTER, 'token');
 
       expect(friend).toEqual({
-        userId: INVITER,
-        name: 'Alice',
-        since: SINCE.toISOString(),
-        counterpartyId: null,
+        counterpartyId: `cp-${ACCEPTER}`,
+        askMerge: false,
+        otherUser: inviter,
       });
       expect(prisma.friendInviteLink.updateMany).toHaveBeenCalledWith({
         where: { id: LINK_ID, usedAt: null, revokedAt: null, expiresAt: { gt: NOW } },
@@ -237,16 +244,14 @@ describe('FriendInviteLinksService', () => {
       expect(prisma.friendship.create).not.toHaveBeenCalled();
     });
 
-    it('rejects with 409 when they are already friends, leaving the link unconsumed', async () => {
-      // 連結沒被消耗，產生者之後還能把它交給別人（spec §5）。
+    it('links existing friends', async () => {
       prisma.friendInviteLink.findUnique.mockResolvedValue(linkRow());
       prisma.friendship.findUnique.mockResolvedValue({ userLowId: INVITER });
 
-      await expect(service.accept(ACCEPTER, 'token')).rejects.toMatchObject({
-        status: 409,
-        errorCode: 'ALREADY_FRIENDS',
+      await expect(service.accept(ACCEPTER, 'token')).resolves.toMatchObject({
+        counterpartyId: `cp-${ACCEPTER}`,
       });
-      expect(prisma.friendInviteLink.updateMany).not.toHaveBeenCalled();
+      expect(prisma.friendInviteLink.updateMany).toHaveBeenCalled();
       expect(prisma.friendship.create).not.toHaveBeenCalled();
     });
 

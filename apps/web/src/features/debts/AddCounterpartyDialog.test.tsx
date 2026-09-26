@@ -35,6 +35,8 @@ describe('AddCounterpartyDialog', () => {
     const created: Counterparty = {
       id: 'cp-new',
       name: '小華',
+      displayName: '小華',
+      askMerge: false,
       balance: 0,
       link: null,
       createdAt: '2026-09-25T00:00:00.000Z',

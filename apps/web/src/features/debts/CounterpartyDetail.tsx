@@ -7,7 +7,6 @@ import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { TextField } from '../../components/TextField';
 import { formatDate, formatMoney } from '../../lib/format';
-import { useCancelLinkInvite, useOutgoingLinkInvite } from '../linking/use-linking';
 import {
   useCounterparty,
   useCounterpartyEntries,
@@ -18,7 +17,8 @@ import {
   useUnlinkCounterparty,
 } from './use-debts';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
-import { LinkInviteDialog } from './LinkInviteDialog';
+import { MergeDialog } from './MergeDialog';
+import { NicknameDialog } from './NicknameDialog';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
@@ -42,15 +42,14 @@ export function CounterpartyDetail({
   const removeCounterparty = useDeleteCounterparty();
   const forgive = useForgiveCounterparty();
   const removeEntry = useDeleteDebtEntry();
-  const outgoingLinkInvite = useOutgoingLinkInvite(counterpartyId);
-  const cancelLinkInvite = useCancelLinkInvite();
   const unlink = useUnlinkCounterparty();
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameName, setRenameName] = useState('');
+  const [nicknameOpen, setNicknameOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [forgiveOpen, setForgiveOpen] = useState(false);
   const [deleteCounterpartyOpen, setDeleteCounterpartyOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<DebtEntry | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<DebtEntry | null>(null);
@@ -120,49 +119,41 @@ export function CounterpartyDetail({
 
   const person = counterparty.data;
   const recordTotal = entries.data?.total;
-  const pendingInvite = outgoingLinkInvite.data;
-  const linkedUserName = person.link?.userName ?? '對方';
 
   return (
     <div className={styles.detail}>
       <header className={styles.heading}>
         <div className={styles.headingIdentity}>
-          <h3>{person.name}</h3>
-          {person.link && <span className={styles.linkBadge}>連動</span>}
+          <div className={styles.titleRow}>
+            <h3>{person.displayName}</h3>
+            {person.link && <span className={styles.linkBadge}>連動</span>}
+          </div>
+          {person.link && person.name !== null && (
+            <span className={styles.accountName}>{person.link.userName}</span>
+          )}
         </div>
         <Button
           type="button"
           variant="secondary"
           onClick={() => {
-            setRenameName(person.name);
-            setRenameOpen(true);
+            if (person.link) {
+              setNicknameOpen(true);
+            } else {
+              setRenameName(person.name ?? '');
+              setRenameOpen(true);
+            }
           }}
         >
-          改名
+          {person.link ? '設定暱稱' : '改名'}
         </Button>
       </header>
 
-      <p className={styles.balance}>{formatCounterpartyBalance(person.name, person.balance)}</p>
-      {person.link && <p className={styles.linkedStatus}>已和 {person.link.userName} 連動</p>}
-
-      {pendingInvite && (
-        <div className={styles.inviteNotice}>
-          <span>已邀請 {pendingInvite.counterpart.email}，等對方接受</span>
-          <Button
-            type="button"
-            variant="secondary"
-            className={styles.cancelInviteButton}
-            disabled={cancelLinkInvite.isPending}
-            onClick={() => cancelLinkInvite.mutate(pendingInvite.id)}
-          >
-            {cancelLinkInvite.isPending ? '取消中…' : '取消邀請'}
-          </Button>
-        </div>
-      )}
-      {outgoingLinkInvite.error && <FormError error={outgoingLinkInvite.error} />}
+      <p className={styles.balance}>
+        {formatCounterpartyBalance(person.displayName, person.balance)}
+      </p>
 
       <div className={styles.actions}>
-        <Button type="button" onClick={() => onRecordEntry(person.name)}>
+        <Button type="button" onClick={() => onRecordEntry(person.displayName)}>
           記一筆
         </Button>
         {person.balance > 0 && (
@@ -170,21 +161,20 @@ export function CounterpartyDetail({
             免除剩餘
           </Button>
         )}
-        {!person.link && outgoingLinkInvite.isSuccess && pendingInvite === null && (
-          <Button type="button" variant="secondary" onClick={() => setInviteOpen(true)}>
-            邀請連動
-          </Button>
-        )}
-        {person.link && (
-          <Button type="button" variant="secondary" onClick={() => setUnlinkOpen(true)}>
-            解除連動
-          </Button>
-        )}
-        {recordTotal === 0 && !person.link && (
+        {person.link ? (
+          <>
+            <Button type="button" variant="secondary" onClick={() => setMergeOpen(true)}>
+              合併之前的紀錄
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setUnlinkOpen(true)}>
+              解除連動
+            </Button>
+          </>
+        ) : recordTotal === 0 ? (
           <Button type="button" variant="secondary" onClick={() => setDeleteCounterpartyOpen(true)}>
             刪除對象
           </Button>
-        )}
+        ) : null}
       </div>
 
       <section className={styles.entries} aria-labelledby="counterparty-entries-heading">
@@ -297,7 +287,7 @@ export function CounterpartyDetail({
       <ConfirmDialog
         open={forgiveOpen}
         title="免除剩餘"
-        message={`${person.name}欠你的 ${formatMoney(person.balance)} 將歸零，不產生交易；之後可以刪除這筆免除來還原。`}
+        message={`${person.displayName}欠你的 ${formatMoney(person.balance)} 將歸零`}
         confirmLabel="免除"
         error={forgive.error}
         isPending={forgive.isPending}
@@ -307,7 +297,7 @@ export function CounterpartyDetail({
       <ConfirmDialog
         open={deleteCounterpartyOpen}
         title="刪除對象"
-        message={`確定要刪除「${person.name}」這個對象？`}
+        message={`刪除「${person.displayName}」？`}
         confirmLabel="刪除"
         error={removeCounterparty.error}
         isPending={removeCounterparty.isPending}
@@ -328,9 +318,7 @@ export function CounterpartyDetail({
         <div className={styles.confirmContent}>
           <FormError error={removeEntry.error} />
           <p>{DELETE_ENTRY_MESSAGE}</p>
-          <p className={styles.warning}>
-            這筆已和{linkedUserName}同步。刪除後會請他也刪掉他那筆；他不接受的話，他那邊維持原樣。
-          </p>
+          <p>會請{person.displayName}也刪除</p>
           <div className={styles.dialogActions}>
             <Button
               type="button"
@@ -341,21 +329,14 @@ export function CounterpartyDetail({
               取消
             </Button>
             <Button type="button" disabled={removeEntry.isPending} onClick={confirmEntryDelete}>
-              {removeEntry.isPending ? '刪除中…' : '刪除'}
+              刪除
             </Button>
           </div>
         </div>
       </Dialog>
-      <Dialog
-        open={unlinkOpen}
-        title={`解除和${person.link?.userName ?? '對方'}的連動`}
-        onClose={closeUnlink}
-      >
+      <Dialog open={unlinkOpen} title={`解除和${person.displayName}的連動`} onClose={closeUnlink}>
         <div className={styles.confirmContent}>
-          <p>解除後，「{person.name}」和所有往來紀錄都會保留，只是之後各記各的。</p>
-          <p className={styles.warning}>
-            等待確認中的紀錄與邀請會一起取消。之後想再連動，可以重新邀請。
-          </p>
+          <p>名字和紀錄都會保留</p>
           <FormError error={unlink.error} />
           <div className={styles.dialogActions}>
             <Button
@@ -367,21 +348,26 @@ export function CounterpartyDetail({
               取消
             </Button>
             <Button type="button" disabled={unlink.isPending} onClick={confirmUnlink}>
-              {unlink.isPending ? '解除中…' : '解除連動'}
+              解除連動
             </Button>
           </div>
         </div>
       </Dialog>
       <DebtEntryEditDialog
         entry={entryToEdit}
-        linkedUserName={person.link?.userName}
+        displayName={person.displayName}
         onClose={() => setEntryToEdit(null)}
       />
-      <LinkInviteDialog
-        open={inviteOpen}
+      <NicknameDialog
+        open={nicknameOpen}
         counterpartyId={counterpartyId}
-        counterpartyName={person.name}
-        onClose={() => setInviteOpen(false)}
+        name={person.name}
+        onClose={() => setNicknameOpen(false)}
+      />
+      <MergeDialog
+        open={mergeOpen}
+        counterpartyId={counterpartyId}
+        onClose={() => setMergeOpen(false)}
       />
     </div>
   );
@@ -413,12 +399,12 @@ const ENTRY_KIND_LABELS: Record<DebtEntryKind, string> = {
 };
 
 /** 往來餘額語句只讀 API 的數字，正負號代表誰欠誰。 */
-function formatCounterpartyBalance(name: string, balance: number): string {
+function formatCounterpartyBalance(displayName: string, balance: number): string {
   if (balance > 0) {
-    return `${name}欠你 ${formatMoney(balance)}`;
+    return `${displayName}欠你 ${formatMoney(balance)}`;
   }
   if (balance < 0) {
-    return `你欠${name} ${formatMoney(Math.abs(balance))}`;
+    return `你欠${displayName} ${formatMoney(Math.abs(balance))}`;
   }
   return '兩清';
 }

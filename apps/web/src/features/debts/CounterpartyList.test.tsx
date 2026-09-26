@@ -22,14 +22,39 @@ describe('CounterpartyList', () => {
           ? [
               {
                 id: 'cp-1',
-                name: '小明',
+                name: '舊暱稱',
+                displayName: '小明的暱稱',
+                askMerge: false,
                 balance: 9,
                 link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
               },
-              { id: 'cp-2', name: '阿華', balance: -11, link: null },
-              { id: 'cp-3', name: '老王', balance: 0, link: null },
+              {
+                id: 'cp-2',
+                name: '阿華',
+                displayName: '阿華',
+                askMerge: false,
+                balance: -11,
+                link: null,
+              },
+              {
+                id: 'cp-3',
+                name: '老王',
+                displayName: '老王',
+                askMerge: false,
+                balance: 0,
+                link: null,
+              },
             ]
-          : [{ id: 'cp-4', name: '小美', balance: 20, link: null }];
+          : [
+              {
+                id: 'cp-4',
+                name: '小美',
+                displayName: '小美',
+                askMerge: false,
+                balance: 20,
+                link: null,
+              },
+            ];
       return Promise.resolve(
         new Response(JSON.stringify({ items, page, limit: 20, total: 42 }), {
           status: 200,
@@ -57,6 +82,8 @@ describe('CounterpartyList', () => {
     expect(screen.getByText('我欠 $11')).toBeInTheDocument();
     expect(screen.getByText('兩清')).toBeInTheDocument();
     expect(screen.getByText('連動')).toBeInTheDocument();
+    expect(screen.getByText('小明的暱稱')).toBeInTheDocument();
+    expect(screen.queryByText('舊暱稱')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/counterparties\?page=1&limit=20$/);
   });
 
@@ -65,7 +92,7 @@ describe('CounterpartyList', () => {
     const onSelectCounterparty = vi.fn();
     renderList(onSelectCounterparty);
 
-    await user.click(await screen.findByRole('button', { name: /小明/ }));
+    await user.click(await screen.findByRole('button', { name: /小明的暱稱/ }));
 
     expect(onSelectCounterparty).toHaveBeenCalledWith('cp-1');
   });
@@ -74,7 +101,7 @@ describe('CounterpartyList', () => {
     const user = userEvent.setup();
     renderList();
 
-    await screen.findByRole('button', { name: /小明/ });
+    await screen.findByRole('button', { name: /小明的暱稱/ });
     await user.click(screen.getByRole('button', { name: '下一頁' }));
 
     await waitFor(() =>

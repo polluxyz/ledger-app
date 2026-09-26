@@ -44,12 +44,12 @@ describe('DebtEntryEditDialog', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderDialog(testEntry: DebtEntry = entry, linkedUserName?: string) {
+  function renderDialog(testEntry: DebtEntry = entry, displayName = '王小明') {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onClose = vi.fn();
     const rendered = render(
       <QueryClientProvider client={queryClient}>
-        <DebtEntryEditDialog entry={testEntry} linkedUserName={linkedUserName} onClose={onClose} />
+        <DebtEntryEditDialog entry={testEntry} displayName={displayName} onClose={onClose} />
       </QueryClientProvider>,
     );
     return { onClose, ...rendered };
@@ -87,17 +87,17 @@ describe('DebtEntryEditDialog', () => {
     expect(parseRequestBody(options)).toEqual({ note: null });
   });
 
-  it('shows the neutral sync explanation only for a paired entry', async () => {
+  it('shows one short confirmation line only for a paired entry', async () => {
     const pairedEntry = { ...entry, paired: true };
-    const pairedRender = renderDialog(pairedEntry, '王小明');
+    const pairedRender = renderDialog(pairedEntry, '小明的暱稱');
     const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
-    expect(dialog).toHaveTextContent(
-      '這筆已和王小明同步。存檔後會把新的金額與日期送給他確認；他不接受的話，他那邊維持原樣。備註不會同步。',
-    );
+    expect(dialog).toHaveTextContent('會送給小明的暱稱確認');
+    expect(dialog).not.toHaveTextContent('他不接受的話');
+    expect(dialog).not.toHaveTextContent('備註不會同步');
 
     pairedRender.unmount();
-    renderDialog(entry, '王小明');
+    renderDialog(entry, '小明的暱稱');
     const unpairedDialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
-    expect(unpairedDialog).not.toHaveTextContent('這筆已和王小明同步');
+    expect(unpairedDialog).not.toHaveTextContent('會送給小明的暱稱確認');
   });
 });
