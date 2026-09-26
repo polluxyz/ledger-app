@@ -95,6 +95,7 @@ export interface Transaction {
 export interface TransactionDebtRef {
   entryId: string;
   counterpartyId: string;
+  /** 顯示用的名字（同 `Counterparty.displayName` 的規則，3b-2 修訂 1）。 */
   counterpartyName: string;
 }
 

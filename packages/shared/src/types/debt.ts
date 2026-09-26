@@ -55,8 +55,21 @@ export interface CounterpartyLinkInfo {
 /** 往來對象。 */
 export interface Counterparty {
   id: string;
-  /** 去掉前後空白，1～100 字。同一位使用者底下不重複。 */
-  name: string;
+  /**
+   * **我取的名字**（3b-2 修訂 1，決策 77）。去掉前後空白，1～100 字，同一位使用者底下不重複。
+   * 未連動的對象一定有值；已連動的對象是選填的「暱稱」，沒設時為 `null`。
+   */
+  name: string | null;
+  /**
+   * 顯示用的名字，由後端算好：`name`，沒有就用連動使用者的帳號名稱。
+   * 畫面上除了對象頁的「帳號名稱（暱稱）」，一律顯示這個，前端不自己判斷。
+   */
+  displayName: string;
+  /**
+   * 待詢問（決策 75）：連動成立時自動建立、還沒回答「之前有沒有用別的名字記過他」。
+   * 回答「沒有」或完成合併後變 `false`。
+   */
+  askMerge: boolean;
   /** 往來餘額。正數＝對方欠我，負數＝我欠對方。 */
   balance: number;
   /** 連動中的使用者；沒有連動時為 `null`。 */
@@ -151,17 +164,25 @@ export interface UpdateDebtEntryRequest {
   note?: string | null;
 }
 
-/** `PATCH /counterparties/{id}` 的 body。 */
+/**
+ * `PATCH /counterparties/{id}` 的 body。`null` 只允許已連動的對象（清掉暱稱）；
+ * 未連動的對象送 `null` 回 400。
+ */
 export interface UpdateCounterpartyRequest {
-  name: string;
+  name: string | null;
 }
 
 /** `GET /counterparties` 與 `GET /counterparties/{id}/entries` 的查詢參數。 */
 export interface ListCounterpartiesQuery {
   page?: number;
   limit?: number;
-  /** 只有 `GET /counterparties` 使用：名字包含這段文字（不分大小寫）。 */
+  /**
+   * 只有 `GET /counterparties` 使用：名字或連動使用者的帳號名稱包含這段文字（不分大小寫，
+   * 決策 79）。
+   */
   q?: string;
+  /** 只有 `GET /counterparties` 使用：`true` 時只列待詢問的對象（總覽的待確認卡片）。 */
+  askMerge?: boolean;
 }
 
 /** `POST /counterparties` 的 body：不記帳先新增一個人（3b-2 決策 55）。 */
@@ -169,16 +190,14 @@ export interface CreateCounterpartyRequest {
   name: string;
 }
 
-/** `POST /counterparties/{id}/link-invites` 的 body：用 email 邀請對方連動。 */
-export interface CreateLinkInviteRequest {
-  email: string;
-}
-
 /**
- * 接受連動邀請時，接受者選自己這邊要接上的對象（決策 58）：既有、未連動的對象用 `{ id }`；
- * 新建用 `{ name }`（撞名回 409 `COUNTERPARTY_NAME_TAKEN`）。
+ * `POST /counterparties/{id}/merge` 的 body（決策 76、80）：把 `sourceId`（自己的、未連動）
+ * 併進 `{id}`（自己的、已連動）。紀錄搬過去，`sourceId` 刪除；`{id}` 沒有 `name` 時改用
+ * `sourceId` 的名字。條件不符回 409 `MERGE_NOT_ALLOWED`。
  */
-export type LinkCounterpartyChoice = { id: string } | { name: string };
+export interface MergeCounterpartyRequest {
+  sourceId: string;
+}
 
 // ---------------------------------------------------------------------------
 // 提議（3b-2 §3.3、§5.3）
@@ -210,7 +229,10 @@ export interface DebtProposal {
   direction: DebtProposalDirection;
   type: DebtProposalType;
   status: DebtProposalStatus;
-  /** 另一方：收到的是發起者，送出的是接受者。 */
+  /**
+   * 另一方：收到的是發起者，送出的是接受者。`name` 是**我這邊那個對象的顯示名稱**
+   * （有暱稱就是暱稱，決策 81）；沒有連動的對象可對時（解除後）才是帳號名稱。
+   */
   otherUser: { id: string; name: string };
   /** 我這邊連動的對象；解除連動後可能為 `null`。 */
   counterpartyId: string | null;

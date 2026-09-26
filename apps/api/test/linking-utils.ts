@@ -1,12 +1,18 @@
 import { INestApplication } from '@nestjs/common';
-import type { Counterparty, DebtProposal, FriendRequest, Paginated } from '@ledger/shared';
+import type {
+  Counterparty,
+  DebtProposal,
+  FriendRequest,
+  LinkAccepted,
+  Paginated,
+} from '@ledger/shared';
 import request from 'supertest';
 import { firstAccountId, firstLedgerId, httpServer, registerAndLogin } from './e2e-utils';
 
 /**
  * 3b-2 連動 e2e 的共用工具：建立一個人、把兩個人連動起來、讀提議。
  *
- * 連動一律走真正的 HTTP 流程（A 從對象用 email 邀請 → B 在收到的邀請裡接受），
+ * 連動一律走真正的 HTTP 流程（A 用 email 邀請 → B 在收到的邀請裡接受），
  * 不直接寫資料庫——測試驗的就是這條路徑本身。
  */
 
@@ -59,38 +65,53 @@ export async function pendingIncomingRequest(
 }
 
 /**
- * 把 A 的「aName」與 B 的「bName」連動起來，回傳雙方的對象 id。
- * A 用 email 邀請、B 接受並新建對象。
+ * 把 A 與 B 連動起來，回傳雙方的對象 id（3b-2 修訂 1 的流程）。
+ *
+ * A 用 email 邀請（不綁人，決策 73）→ B 接受（不帶 body，決策 74）→ 雙方各自多一個已連動、
+ * 沒有名字的對象。為了讓既有測試照舊用「小明」「阿A」辨認，最後替雙方各設一個暱稱；
+ * 傳 `null` 就不設，保留「沒有暱稱」的狀態。
  */
 export async function linkPair(
   app: INestApplication,
   a: Person,
   b: Person,
-  aName = '小明',
-  bName = '阿A',
-): Promise<{ aCounterpartyId: string; bCounterpartyId: string }> {
-  const aCounterparty = await createCounterparty(app, a, aName);
+  aName: string | null = '小明',
+  bName: string | null = '阿A',
+): Promise<{ aCounterpartyId: string; bCounterpartyId: string; accepted: LinkAccepted }> {
   await request(httpServer(app))
-    .post(`/api/counterparties/${aCounterparty.id}/link-invites`)
+    .post('/api/friend-requests')
     .set(auth(a.token))
     .send({ email: b.email })
     .expect(201);
   const invite = await pendingIncomingRequest(app, b);
-  await request(httpServer(app))
+  const acceptRes = await request(httpServer(app))
     .post(`/api/friend-requests/${invite.id}/accept`)
     .set(auth(b.token))
-    .send({ counterparty: { name: bName } })
     .expect(200);
+  const accepted = acceptRes.body as LinkAccepted;
 
-  const bList = await request(httpServer(app))
+  const aList = await request(httpServer(app))
     .get('/api/counterparties')
-    .query({ q: bName })
-    .set(auth(b.token))
+    .query({ limit: 100 })
+    .set(auth(a.token))
     .expect(200);
-  const bCounterparty = (bList.body as Paginated<Counterparty>).items.find(
-    (item) => item.name === bName,
+  const aCounterparty = (aList.body as Paginated<Counterparty>).items.find(
+    (item) => item.link?.userId === b.userId,
   )!;
-  return { aCounterpartyId: aCounterparty.id, bCounterpartyId: bCounterparty.id };
+
+  for (const [who, id, name] of [
+    [a, aCounterparty.id, aName],
+    [b, accepted.counterpartyId, bName],
+  ] as const) {
+    if (name !== null) {
+      await request(httpServer(app))
+        .patch(`/api/counterparties/${id}`)
+        .set(auth(who.token))
+        .send({ name })
+        .expect(200);
+    }
+  }
+  return { aCounterpartyId: aCounterparty.id, bCounterpartyId: accepted.counterpartyId, accepted };
 }
 
 export async function proposals(

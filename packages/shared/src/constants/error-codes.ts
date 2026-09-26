@@ -92,6 +92,11 @@ export const ErrorCode = {
   LINK_INVITE_FROM_THEM: 'LINK_INVITE_FROM_THEM',
   /** 這個提議已經被接受、拒絕或作廢。 */
   PROPOSAL_NOT_PENDING: 'PROPOSAL_NOT_PENDING',
+  /**
+   * 合併條件不符（3b-2 修訂 1，決策 80）：併入的一方必須已連動、被併的一方必須未連動，
+   * 而且不能是同一個。
+   */
+  MERGE_NOT_ALLOWED: 'MERGE_NOT_ALLOWED',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */
