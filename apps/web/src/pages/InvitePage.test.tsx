@@ -26,10 +26,13 @@ describe('InvitePage', () => {
     previewStatus = 200;
     previewBody = {
       inviterName: '王小明',
-      forLink: true,
       expiresAt: '2026-09-25T14:32:00.000Z',
     };
-    acceptBody = { counterpartyId: null };
+    acceptBody = {
+      counterpartyId: 'cp-linked',
+      askMerge: false,
+      otherUser: { id: 'user-2', name: '王小明' },
+    };
     counterparties = [];
     holdPreview = false;
     releasePreview = null;
@@ -79,7 +82,7 @@ describe('InvitePage', () => {
             <Routes>
               <Route path="/invite" element={<InvitePage />} />
               <Route path="/" element={<p>總覽目的地</p>} />
-              <Route path="/transactions" element={<TransactionDestination />} />
+              <Route path="/counterparties" element={<CounterpartyDestination />} />
             </Routes>
           </BrowserRouter>
         </TestAuthProvider>
@@ -101,11 +104,10 @@ describe('InvitePage', () => {
     return requests().filter((request) => request.url.endsWith('/friend-invite-links/accept'));
   }
 
-  it('沒有 token 時提示連結不完整，並且不發請求', () => {
+  it('沒有 token 時提示連結無效或已過期，並且不發請求', () => {
     renderInvite({ path: '/invite', authenticated: true });
 
-    expect(screen.getByRole('heading', { name: '連結無法使用' })).toBeInTheDocument();
-    expect(screen.getByText('這個邀請連結不完整，請對方重新傳一次。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '連結無效或已過期' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '回到總覽' })).toHaveAttribute('href', '/');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -113,8 +115,8 @@ describe('InvitePage', () => {
   it('未登入時只顯示登入與註冊入口', () => {
     renderInvite();
 
-    expect(screen.getByRole('heading', { name: '你收到一個連動邀請' })).toBeInTheDocument();
-    expect(screen.getByText('登入後查看邀請。')).toBeInTheDocument();
+    expect(screen.getByText('登入後查看邀請')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '登入' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '註冊' })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -149,75 +151,56 @@ describe('InvitePage', () => {
     expect(previewRequest?.body).toEqual({ token: 'invite token' });
   });
 
-  it('連動邀請預填邀請人並顯示 24 小時制到期時間', async () => {
+  it('預覽只顯示標題與拒絕、接受按鈕', async () => {
     renderInvite({ authenticated: true });
 
     expect(
       await screen.findByRole('heading', { name: '王小明 邀請你連動往來帳' }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('對方在你的往來帳裡是誰？')).toHaveValue('王小明');
-    expect(
-      screen.getByText(/接受後，你們之後記的借還會互相同步。之前的紀錄不會同步。連結有效到/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/連結有效到 \d{2}:\d{2}。/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '拒絕' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '接受並連動' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText(/同步|連結有效到/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      '拒絕',
+      '接受',
+    ]);
   });
 
-  it('接受連動邀請時新名字送出 name，清除 hash 後進入借還檢視', async () => {
+  it('接受不需詢問的連動邀請時本文只有 token、清除 hash 後開啟對象頁', async () => {
     const user = userEvent.setup();
-    acceptBody = { counterpartyId: null };
     renderInvite({ authenticated: true });
 
-    await user.click(await screen.findByRole('button', { name: '接受並連動' }));
+    await user.click(await screen.findByRole('button', { name: '接受' }));
 
-    expect(await screen.findByTestId('destination')).toHaveTextContent('/transactions?view=debts');
+    expect(await screen.findByTestId('destination')).toHaveTextContent('/counterparties');
+    expect(screen.getByTestId('opened-counterparty')).toHaveTextContent('cp-linked');
     expect(window.location.hash).toBe('');
     expect(accepts()).toEqual([
       expect.objectContaining({
         method: 'POST',
-        body: { token: 'invite-token', counterparty: { name: '王小明' } },
+        body: { token: 'invite-token' },
       }),
     ]);
   });
 
-  it('接受連動邀請時改選既有對象送出 id，並打開該往來帳', async () => {
+  it('接受後要詢問時先留在本頁，關閉詢問後開啟對象頁', async () => {
     const user = userEvent.setup();
-    counterparties = [{ id: 'cp-existing', name: '王小明', link: null }];
-    acceptBody = { counterpartyId: 'cp-existing' };
-    renderInvite({ authenticated: true });
-
-    await screen.findByRole('heading', { name: '王小明 邀請你連動往來帳' });
-    await user.click(screen.getByRole('combobox', { name: '對方在你的往來帳裡是誰？' }));
-    await user.click(await screen.findByRole('option', { name: '王小明' }));
-    await user.click(screen.getByRole('button', { name: '接受並連動' }));
-
-    expect(await screen.findByTestId('destination')).toHaveTextContent('/transactions?view=debts');
-    expect(screen.getByTestId('opened-counterparty')).toHaveTextContent('cp-existing');
-    expect(window.location.hash).toBe('');
-    expect(accepts()[0]?.body).toEqual({
-      token: 'invite-token',
-      counterparty: { id: 'cp-existing' },
-    });
-  });
-
-  it('一般邀請不顯示選人，接受時本文只有 token', async () => {
-    const user = userEvent.setup();
-    previewBody = {
-      inviterName: '王小明',
-      forLink: false,
-      expiresAt: '2026-09-25T14:32:00.000Z',
+    acceptBody = {
+      counterpartyId: 'cp-linked',
+      askMerge: true,
+      otherUser: { id: 'user-2', name: '王小明' },
     };
     renderInvite({ authenticated: true });
 
-    expect(await screen.findByRole('heading', { name: '王小明 邀請你' })).toBeInTheDocument();
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '拒絕' })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: '王小明 邀請你連動往來帳' });
     await user.click(screen.getByRole('button', { name: '接受' }));
 
-    expect(await screen.findByTestId('destination')).toHaveTextContent('/transactions?view=debts');
-    expect(accepts()[0]?.body).toEqual({ token: 'invite-token' });
+    const dialog = await screen.findByRole('dialog', { name: '已和 王小明 連動' });
+    expect(window.location.pathname).toBe('/invite');
     expect(window.location.hash).toBe('');
+    expect(accepts()[0]?.body).toEqual({ token: 'invite-token' });
+    await user.click(within(dialog).getByRole('button', { name: '稍後' }));
+    expect(await screen.findByTestId('destination')).toHaveTextContent('/counterparties');
+    expect(screen.getByTestId('opened-counterparty')).toHaveTextContent('cp-linked');
   });
 
   it('拒絕只導回總覽，不新增接受或拒絕請求', async () => {
@@ -233,7 +216,7 @@ describe('InvitePage', () => {
     expect(accepts()).toHaveLength(0);
   });
 
-  it('預覽回報邀請無效時顯示重新產生說明', async () => {
+  it('預覽回報邀請無效時只顯示無效狀態與回總覽', async () => {
     previewStatus = 404;
     previewBody = {
       statusCode: 404,
@@ -242,8 +225,8 @@ describe('InvitePage', () => {
     };
     renderInvite({ authenticated: true });
 
-    expect(await screen.findByRole('heading', { name: '連結無法使用' })).toBeInTheDocument();
-    expect(screen.getByText('這個連結無效或已過期，請對方重新產生。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '連結無效或已過期' })).toBeInTheDocument();
+    expect(screen.queryByText(/重新產生|無效或已過期，/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '回到總覽' })).toHaveAttribute('href', '/');
   });
 
@@ -257,8 +240,7 @@ describe('InvitePage', () => {
     };
     renderInvite({ authenticated: true });
 
-    expect(await screen.findByRole('heading', { name: '連結無法使用' })).toBeInTheDocument();
-    expect(screen.getByText('這個連結無效或已過期，請對方重新產生。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '連結無效或已過期' })).toBeInTheDocument();
     expect(screen.queryByText(/regular expression/)).not.toBeInTheDocument();
   });
 
@@ -298,11 +280,11 @@ describe('InvitePage', () => {
     });
     renderInvite({ authenticated: true });
 
-    await user.click(await screen.findByRole('button', { name: '接受並連動' }));
+    await user.click(await screen.findByRole('button', { name: '接受' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/invite');
-    expect(screen.getByRole('button', { name: '接受並連動' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '接受' })).toBeInTheDocument();
   });
 });
 
@@ -331,7 +313,7 @@ function TestAuthProvider({
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-function TransactionDestination() {
+function CounterpartyDestination() {
   const location = useLocation();
   const counterpartyId = (location.state as { openCounterpartyId?: string } | null)
     ?.openCounterpartyId;

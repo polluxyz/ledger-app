@@ -1,17 +1,17 @@
 import { useState, type ReactNode } from 'react';
 import type {
   AcceptDebtProposalRequest,
+  Counterparty,
   DebtEntryKind,
   DebtProposal,
   FriendRequest,
-  LinkCounterpartyChoice,
   LedgerSummary,
   Account,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
-import { CounterpartyPicker } from '../debts/CounterpartyPicker';
+import { MergePromptDialog, MergePromptForm } from '../debts/MergePrompt';
 import { useAccounts } from '../accounts/use-accounts';
 import { useCounterparty } from '../debts/use-debts';
 import { useActiveLedger } from '../ledgers/use-active-ledger';
@@ -23,32 +23,20 @@ import {
   useDeclineProposal,
   useIncomingLinkInvites,
   useIncomingProposals,
+  useMergePrompts,
 } from './use-linking';
-import { useOpenCounterpartyLedger } from './navigation';
 import { ApiError } from '../../lib/api-client';
 import { formatDate, formatMoney } from '../../lib/format';
 import styles from './PendingCard.module.css';
 
-interface AcceptedInvite {
-  request: FriendRequest;
-  /** 保留 API 原本的位置，接受後的回饋才能留在使用者剛處理的那一列。 */
-  index: number;
-  counterpartyId: string | null;
-}
-
-interface InviteRow {
-  request: FriendRequest;
-  accepted: boolean;
-  counterpartyId: string | null;
-}
-
 /**
- * 總覽只呈現 API 尚待處理的邀請與提議；查詢尚未完成或失敗時整張卡先隱去，
+ * 總覽只呈現 API 尚待處理的邀請、合併詢問與提議；查詢尚未完成或失敗時整張卡先隱去，
  * 免得首頁出現看似壞掉的錯誤區塊。卡片只在展開新增提議時預覽往來餘額，
  * 其餘資料與接受、拒絕結果都由既有 hooks 負責。
  */
 export function PendingCard() {
   const invitesQuery = useIncomingLinkInvites();
+  const mergePromptsQuery = useMergePrompts();
   const proposalsQuery = useIncomingProposals();
   const ledgersQuery = useLedgers();
   const accountsQuery = useAccounts();
@@ -57,80 +45,69 @@ export function PendingCard() {
   const declineLinkInvite = useDeclineLinkInvite();
   const acceptProposal = useAcceptProposal();
   const declineProposal = useDeclineProposal();
-  const openCounterpartyLedger = useOpenCounterpartyLedger();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [acceptedInvites, setAcceptedInvites] = useState<AcceptedInvite[]>([]);
+  const [mergeDialog, setMergeDialog] = useState<{
+    counterpartyId: string;
+    userName: string;
+  } | null>(null);
 
   // 首次查詢失敗時保持總覽安靜；沒有可用資料也先不猜測目前是否真的沒有待確認。
   if (
     invitesQuery.isLoading ||
+    mergePromptsQuery.isLoading ||
     proposalsQuery.isLoading ||
     invitesQuery.error ||
+    mergePromptsQuery.error ||
     proposalsQuery.error ||
     invitesQuery.data === undefined ||
+    mergePromptsQuery.data === undefined ||
     proposalsQuery.data === undefined
   ) {
     return null;
   }
 
-  const proposalItems = proposalsQuery.data.items;
-  const inviteRows: InviteRow[] = invitesQuery.data.map((request) => {
-    const accepted = acceptedInvites.find((item) => item.request.id === request.id);
-    return {
-      request,
-      accepted: accepted !== undefined,
-      counterpartyId: accepted?.counterpartyId ?? null,
-    };
-  });
-
-  // 接受成功會讓 API 清單移除該邀請；先把剛處理的列留在原位，讓成功回饋不會一閃即逝。
-  for (const accepted of [...acceptedInvites].sort((left, right) => left.index - right.index)) {
-    if (inviteRows.some((row) => row.request.id === accepted.request.id)) {
-      continue;
-    }
-    inviteRows.splice(Math.min(accepted.index, inviteRows.length), 0, {
-      request: accepted.request,
-      accepted: true,
-      counterpartyId: accepted.counterpartyId,
-    });
-  }
-
-  const proposals = proposalItems.map((proposal) => ({
+  const proposals = proposalsQuery.data.items.map((proposal) => ({
     proposal,
     id: 'proposal-' + proposal.id,
   }));
   const rows: Array<{ id: string; node: ReactNode }> = [
-    ...inviteRows.map((item, index) => ({
-      id: 'invite-' + item.request.id,
+    ...invitesQuery.data.map((request) => ({
+      id: 'invite-' + request.id,
       node: (
         <InviteRow
-          key={'invite-' + item.request.id}
-          request={item.request}
-          accepted={item.accepted}
-          counterpartyId={item.counterpartyId}
-          index={index}
-          expanded={expandedId === 'invite-' + item.request.id}
-          onToggle={() =>
-            setExpandedId((current) =>
-              current === 'invite-' + item.request.id ? null : 'invite-' + item.request.id,
-            )
-          }
-          onAccept={(requestId, counterparty) =>
-            acceptLinkInvite.mutateAsync({ requestId, counterparty })
-          }
+          key={'invite-' + request.id}
+          request={request}
+          onAccept={(requestId) => acceptLinkInvite.mutateAsync(requestId)}
           onDecline={(requestId) => declineLinkInvite.mutateAsync(requestId)}
-          onAccepted={(request, acceptedIndex, counterpartyId) => {
+          onAccepted={(accepted) => {
             setExpandedId(null);
-            setAcceptedInvites((current) => [
-              ...current.filter((item) => item.request.id !== request.id),
-              { request, index: acceptedIndex, counterpartyId },
-            ]);
+            if (accepted.askMerge) {
+              setMergeDialog({
+                counterpartyId: accepted.counterpartyId,
+                userName: accepted.otherUser.name,
+              });
+            }
           }}
-          onOpenLedger={openCounterpartyLedger}
         />
       ),
     })),
+    ...mergePromptsQuery.data.map((counterparty) => {
+      const id = 'merge-prompt-' + counterparty.id;
+      return {
+        id,
+        node: (
+          <MergePromptRow
+            key={id}
+            counterparty={counterparty}
+            expanded={expandedId === id}
+            onToggle={() => setExpandedId((current) => (current === id ? null : id))}
+            onDone={() => setExpandedId(null)}
+            onLater={() => setExpandedId(null)}
+          />
+        ),
+      };
+    }),
     ...proposals.map(({ proposal, id }) => ({
       id,
       node: (
@@ -157,9 +134,10 @@ export function PendingCard() {
       ),
     })),
   ];
-  const pendingCount = invitesQuery.data.length + proposalsQuery.data.total;
+  const pendingCount =
+    invitesQuery.data.length + mergePromptsQuery.data.length + proposalsQuery.data.total;
 
-  if (pendingCount === 0 && acceptedInvites.length === 0) {
+  if (pendingCount === 0) {
     return null;
   }
 
@@ -194,55 +172,48 @@ export function PendingCard() {
           {showAll ? '收起' : '顯示全部'}
         </Button>
       )}
+      {mergeDialog !== null && (
+        <MergePromptDialog
+          open
+          counterpartyId={mergeDialog.counterpartyId}
+          userName={mergeDialog.userName}
+          onDone={() => setMergeDialog(null)}
+          onLater={() => setMergeDialog(null)}
+        />
+      )}
     </section>
   );
 }
 
 function InviteRow({
   request,
-  accepted,
-  counterpartyId,
-  index,
-  expanded,
-  onToggle,
   onAccept,
   onDecline,
   onAccepted,
-  onOpenLedger,
 }: {
   request: FriendRequest;
-  accepted: boolean;
-  counterpartyId: string | null;
-  index: number;
-  expanded: boolean;
-  onToggle: () => void;
-  onAccept: (
-    requestId: string,
-    counterparty: LinkCounterpartyChoice,
-  ) => Promise<{ counterpartyId: string | null }>;
+  onAccept: (requestId: string) => Promise<{
+    counterpartyId: string;
+    askMerge: boolean;
+    otherUser: { id: string; name: string };
+  }>;
   onDecline: (requestId: string) => Promise<unknown>;
-  onAccepted: (request: FriendRequest, index: number, counterpartyId: string | null) => void;
-  onOpenLedger: (counterpartyId: string) => void;
+  onAccepted: (accepted: {
+    counterpartyId: string;
+    askMerge: boolean;
+    otherUser: { id: string; name: string };
+  }) => void;
 }) {
   const inviterName = request.counterpart.name ?? '對方';
-  const [name, setName] = useState(inviterName);
-  const [selectedCounterpartyId, setSelectedCounterpartyId] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function accept() {
-    const trimmedName = name.trim();
-    if (trimmedName === '') {
-      return;
-    }
     setError(null);
     setIsSubmitting(true);
     try {
-      const choice = selectedCounterpartyId
-        ? { id: selectedCounterpartyId }
-        : { name: trimmedName };
-      const result = await onAccept(request.id, choice);
-      onAccepted(request, index, result.counterpartyId);
+      const result = await onAccept(request.id);
+      onAccepted(result);
     } catch (acceptError) {
       setError(acceptError);
     } finally {
@@ -265,86 +236,71 @@ function InviteRow({
   return (
     <div className={styles.entry}>
       <div className={styles.entryTop}>
-        {accepted ? (
-          <>
-            <p className={styles.message}>
-              <strong>{inviterName}</strong> 已連動。
-            </p>
-            {counterpartyId !== null && (
-              <Button
-                type="button"
-                className={styles.smallButton}
-                variant="secondary"
-                onClick={() => onOpenLedger(counterpartyId)}
-              >
-                查看往來帳
-              </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <p className={styles.message}>
-              <strong>{inviterName}</strong> 邀請你連動往來帳
-            </p>
-            {!expanded && (
-              <div className={styles.actions}>
-                <Button
-                  type="button"
-                  className={styles.smallButton}
-                  variant="secondary"
-                  disabled={isSubmitting}
-                  onClick={() => void decline()}
-                >
-                  拒絕
-                </Button>
-                <Button
-                  type="button"
-                  className={styles.smallButton}
-                  disabled={isSubmitting}
-                  aria-expanded={false}
-                  onClick={onToggle}
-                >
-                  接受
-                </Button>
-              </div>
-            )}
-          </>
+        <p className={styles.message}>
+          <strong>{inviterName}</strong> 邀請你連動往來帳
+        </p>
+        <div className={styles.actions}>
+          <Button
+            type="button"
+            className={styles.smallButton}
+            variant="secondary"
+            disabled={isSubmitting}
+            onClick={() => void decline()}
+          >
+            拒絕
+          </Button>
+          <Button
+            type="button"
+            className={styles.smallButton}
+            disabled={isSubmitting}
+            onClick={() => void accept()}
+          >
+            接受
+          </Button>
+        </div>
+      </div>
+      <FormError error={error} />
+    </div>
+  );
+}
+
+/** 合併詢問沿用既有表單，讓接受後稍後處理的標記仍能在總覽回答。 */
+function MergePromptRow({
+  counterparty,
+  expanded,
+  onToggle,
+  onDone,
+  onLater,
+}: {
+  counterparty: Counterparty;
+  expanded: boolean;
+  onToggle: () => void;
+  onDone: () => void;
+  onLater: () => void;
+}) {
+  const userName = counterparty.link?.userName ?? counterparty.displayName;
+
+  return (
+    <div className={styles.entry}>
+      <div className={styles.entryTop}>
+        <p className={styles.message}>
+          <strong>{userName}</strong> 已接受連動。之前有用別的名字記過他嗎？
+        </p>
+        {!expanded && (
+          <Button
+            type="button"
+            className={styles.smallButton}
+            aria-expanded={false}
+            onClick={onToggle}
+          >
+            回答
+          </Button>
         )}
       </div>
-
-      {accepted ? null : expanded ? (
+      {expanded && (
         <div className={styles.expansion}>
-          <CounterpartyPicker
-            value={name}
-            onChange={(value) => setName(value)}
-            onSelect={(counterparty) => setSelectedCounterpartyId(counterparty?.id ?? null)}
-            excludeLinked
-            label="對方在你的往來帳裡是誰？"
-            hint="已經用別的名字記過對方？改選那個人。只列出還沒連動的人。"
-          />
-          <FormError error={error} />
-          <div className={styles.expansionActions}>
-            <Button
-              type="button"
-              className={styles.smallButton}
-              variant="secondary"
-              disabled={isSubmitting}
-              onClick={onToggle}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              className={styles.smallButton}
-              disabled={isSubmitting || name.trim() === ''}
-              onClick={() => void accept()}
-            >
-              接受並連動
-            </Button>
-          </div>
+          <MergePromptForm counterpartyId={counterparty.id} onDone={onDone} onLater={onLater} />
         </div>
-      ) : (
-        <FormError error={error} />
       )}
     </div>
   );
@@ -404,13 +360,9 @@ function ProposalRow({
       (selectedLedgerId === '' || (requiresAccount && (accountsLoading || accountId === ''))));
   const conflictMessage =
     conflictCode === 'NOTHING_TO_REPAY'
-      ? '你帳上和' +
-        (counterpartyQuery.data?.name ?? proposal.otherUser.name) +
-        '目前兩清，這筆還款記不進去。你可以拒絕，再和' +
-        proposal.otherUser.name +
-        '對一下帳。'
+      ? '你帳上目前兩清'
       : conflictCode === 'REPAYMENT_EXCEEDS_BALANCE'
-        ? '這筆還款超過你帳上的欠款。你可以拒絕，再和' + proposal.otherUser.name + '對一下帳。'
+        ? '超過你帳上的欠款'
         : null;
   const preview = getPreview(proposal, counterpartyQuery.data);
 
@@ -706,7 +658,7 @@ function accountLabel(kind: DebtEntryKind): string {
 
 function getPreview(
   proposal: DebtProposal,
-  counterparty: { name: string; balance: number } | undefined,
+  counterparty: Pick<Counterparty, 'displayName' | 'balance'> | undefined,
 ): string | null {
   if (!isRecordProposal(proposal) || counterparty === undefined) {
     return null;
@@ -725,7 +677,7 @@ function getPreview(
     return '記完後：兩清';
   }
   if (resultingBalance > 0) {
-    return '記完後：' + counterparty.name + '欠你 ' + formatMoney(resultingBalance);
+    return '記完後：' + counterparty.displayName + '欠你 ' + formatMoney(resultingBalance);
   }
-  return '記完後：你欠' + counterparty.name + ' ' + formatMoney(Math.abs(resultingBalance));
+  return '記完後：你欠' + counterparty.displayName + ' ' + formatMoney(Math.abs(resultingBalance));
 }
