@@ -10,11 +10,9 @@ import type {
   CreateCounterpartyRequest,
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
-  CreateLinkInviteRequest,
   DebtEntry,
-  FriendInviteLinkCreated,
-  FriendRequest,
   ListCounterpartiesQuery,
+  MergeCounterpartyRequest,
   Paginated,
   UpdateDebtEntryRequest,
 } from '@ledger/shared';
@@ -135,11 +133,14 @@ export function useDeleteDebtEntry() {
   });
 }
 
-/** 對象改名。撞名回 409 `COUNTERPARTY_NAME_TAKEN`。名字也出現在交易列表，所以一樣全部失效。 */
+/**
+ * 對象改名，或設定、清掉暱稱（3b-2 修訂 1）。`name: null` 只允許已連動的對象，清掉後顯示
+ * 回帳號名稱。撞名回 409 `COUNTERPARTY_NAME_TAKEN`。名字也出現在交易列表，所以一樣全部失效。
+ */
 export function useRenameCounterparty() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ counterpartyId, name }: { counterpartyId: string; name: string }) =>
+    mutationFn: ({ counterpartyId, name }: { counterpartyId: string; name: string | null }) =>
       apiRequest<Counterparty>(`/counterparties/${counterpartyId}`, {
         method: 'PATCH',
         body: { name },
@@ -189,36 +190,6 @@ export function useCreateCounterparty() {
 }
 
 /**
- * 用 email 邀請這個人連動。回應是送出的邀請，`counterpartyId` 就是這個對象（F25），
- * 往來帳靠它顯示「已邀請，等對方接受」。
- */
-export function useSendLinkInvite() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ counterpartyId, email }: { counterpartyId: string } & CreateLinkInviteRequest) =>
-      apiRequest<FriendRequest>(`/counterparties/${counterpartyId}/link-invites`, {
-        method: 'POST',
-        body: { email },
-      }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY }),
-  });
-}
-
-/**
- * 產生連動邀請連結。`token` 的原文只在這個回應出現一次：畫面組成
- * `${origin}/invite#${token}` 給使用者複製，**不要存進任何 storage、不要記 log**。
- * 重新產生會讓同一人之前的連結失效（後端負責）。
- */
-export function useCreateLinkInviteUrl() {
-  return useMutation({
-    mutationFn: (counterpartyId: string) =>
-      apiRequest<FriendInviteLinkCreated>(`/counterparties/${counterpartyId}/invite-links`, {
-        method: 'POST',
-      }),
-  });
-}
-
-/**
  * 解除連動（決策 70、71）。對象、名字與紀錄都保留；待確認的提議與邀請由後端一併取消，
  * 所以除了往來相關的快取，待確認也要失效。
  */
@@ -232,5 +203,34 @@ export function useUnlinkCounterparty() {
       void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
       void queryClient.invalidateQueries({ queryKey: DEBT_PROPOSALS_KEY });
     },
+  });
+}
+
+/**
+ * 合併之前的紀錄（決策 76）：把 `sourceId`（未連動）併進 `counterpartyId`（已連動）。
+ * 紀錄與餘額搬過去、名字可能改變，也會清掉待詢問，所以往來相關與交易一起失效。
+ */
+export function useMergeCounterparty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      counterpartyId,
+      sourceId,
+    }: { counterpartyId: string } & MergeCounterpartyRequest) =>
+      apiRequest<Counterparty>(`/counterparties/${counterpartyId}/merge`, {
+        method: 'POST',
+        body: { sourceId },
+      }),
+    onSuccess: () => invalidateAfterWrite(queryClient),
+  });
+}
+
+/** 回答「沒有」：清掉待詢問標記（決策 75）。 */
+export function useDismissMergePrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (counterpartyId: string) =>
+      apiRequest<void>(`/counterparties/${counterpartyId}/merge-prompt`, { method: 'DELETE' }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY }),
   });
 }
