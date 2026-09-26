@@ -60,7 +60,7 @@ export class CounterpartiesService {
 
   /**
    * 我的對象與往來餘額。排序：餘額不為 0 的在前（還有帳要算的人），其次依名字。
-   * `q` 依名字篩選（包含、不分大小寫），給下拉選單邊打字邊找。
+   * `q` 同時比對暱稱和連動帳號名稱（包含、不分大小寫），給下拉選單邊打字邊找。
    *
    * 餘額用一次 `groupBy` 算出全部對象，不逐一查詢。排序依賴算出來的餘額，資料庫排不了，
    * 所以取出全部對象再切頁——一個人的往來對象數量有限，這是刻意的取捨。
@@ -68,13 +68,33 @@ export class CounterpartiesService {
   async list(userId: string, query: ListCounterpartiesQuery): Promise<Paginated<Counterparty>> {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-    const nameFilter =
+    const nameFilter: Prisma.CounterpartyWhereInput =
       query.q === undefined || query.q === ''
         ? {}
-        : { name: { contains: query.q, mode: 'insensitive' as const } };
+        : {
+            OR: [
+              { name: { contains: query.q, mode: 'insensitive' } },
+              {
+                linkAsLow: {
+                  is: { userHigh: { name: { contains: query.q, mode: 'insensitive' } } },
+                },
+              },
+              {
+                linkAsHigh: {
+                  is: { userLow: { name: { contains: query.q, mode: 'insensitive' } } },
+                },
+              },
+            ],
+          };
 
     const [rows, sums] = await Promise.all([
-      this.prisma.counterparty.findMany({ where: { ownerId: userId, ...nameFilter } }),
+      this.prisma.counterparty.findMany({
+        where: {
+          ownerId: userId,
+          ...(query.askMerge === true ? { askMerge: true } : {}),
+          ...nameFilter,
+        },
+      }),
       this.prisma.debtEntry.groupBy({
         by: ['counterpartyId'],
         where: { deletedAt: null, counterparty: { ownerId: userId } },
@@ -83,18 +103,21 @@ export class CounterpartiesService {
     ]);
     const balances = new Map(sums.map((sum) => [sum.counterpartyId, sum._sum.delta ?? 0]));
 
+    const links = await linkInfoFor(
+      this.prisma,
+      rows.map((row) => row.id),
+    );
     const sorted = rows
       .map((row) => ({ row, balance: balances.get(row.id) ?? 0 }))
       .sort(
         (a, b) =>
           Number(a.balance === 0) - Number(b.balance === 0) ||
-          a.row.name.localeCompare(b.row.name, 'zh-Hant'),
+          (a.row.name ?? links.get(a.row.id)?.userName ?? '').localeCompare(
+            b.row.name ?? links.get(b.row.id)?.userName ?? '',
+            'zh-Hant',
+          ),
       );
     const pageRows = sorted.slice((page - 1) * limit, page * limit);
-    const links = await linkInfoFor(
-      this.prisma,
-      pageRows.map((item) => item.row.id),
-    );
 
     return {
       items: pageRows.map((item) =>
@@ -112,17 +135,24 @@ export class CounterpartiesService {
   }
 
   /** 改名（決策 44）。連動中也可以改，名字是自己的（決策 72）。撞名回 409。 */
-  async rename(userId: string, counterpartyId: string, name: string): Promise<Counterparty> {
-    const row = await loadOwnedCounterparty(this.prisma, userId, counterpartyId);
-    try {
-      const updated = await this.prisma.counterparty.update({
-        where: { id: row.id },
-        data: { name },
-      });
-      return this.present(this.prisma, updated);
-    } catch (error) {
-      throw mapNameTaken(error);
-    }
+  async rename(userId: string, counterpartyId: string, name: string | null): Promise<Counterparty> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await loadOwnedCounterparty(tx, userId, counterpartyId);
+      await lockCounterparty(tx, row.id);
+      if (name === null && (await findLinkOfCounterparty(tx, row.id)) === null) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          'Only a linked counterparty can use the account name.',
+        );
+      }
+      try {
+        const updated = await tx.counterparty.update({ where: { id: row.id }, data: { name } });
+        return this.present(tx, updated);
+      } catch (error) {
+        throw mapNameTaken(error);
+      }
+    });
   }
 
   /**
@@ -219,7 +249,7 @@ export class CounterpartiesService {
 
   /**
    * 解除連動（決策 70、71）：同時解除好友關係、清空配對、作廢待確認的提議與邀請。
-   * 對象與它的名字、紀錄都保留。沒有連動回 404——對呼叫者來說「沒有這個連動」。
+   * 對象與紀錄保留；空暱稱會補上對方帳號名稱。沒有連動回 404。
    */
   async unlink(userId: string, counterpartyId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
@@ -229,6 +259,57 @@ export class CounterpartiesService {
         throw notFound('Link');
       }
       await unlinkUsers(tx, userId, otherSide(link, row.id).userId, new Date());
+    });
+  }
+
+  /** 合併前先驗兩邊都屬於呼叫者，避免從錯誤碼探測別人的對象。 */
+  async merge(userId: string, targetId: string, sourceId: string): Promise<Counterparty> {
+    return this.prisma.$transaction(async (tx) => {
+      await loadOwnedCounterparty(tx, userId, targetId);
+      await loadOwnedCounterparty(tx, userId, sourceId);
+      for (const id of [targetId, sourceId].sort()) await lockCounterparty(tx, id);
+      const target = await loadOwnedCounterparty(tx, userId, targetId);
+      const source = await loadOwnedCounterparty(tx, userId, sourceId);
+      const targetLink = await findLinkOfCounterparty(tx, target.id);
+      const sourceLink = await findLinkOfCounterparty(tx, source.id);
+      if (target.id === source.id || targetLink === null || sourceLink !== null) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.MERGE_NOT_ALLOWED,
+          'The target must be linked and the source must be unlinked.',
+        );
+      }
+      const oldEntries = await tx.debtEntry.findMany({
+        where: { counterpartyId: source.id },
+        select: { id: true },
+      });
+      // 舊連動的待確認／被拒絕狀態不能跟著搬進新連動；已接受的歷史紀錄保留原狀。
+      // 搬入紀錄已清除配對，因此它們在新連動中都顯示為自己的單邊紀錄（sync = NONE）。
+      await tx.debtProposal.updateMany({
+        where: {
+          sourceEntryId: { in: oldEntries.map((entry) => entry.id) },
+          status: { in: ['PENDING', 'DECLINED'] },
+        },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+      await tx.debtEntry.updateMany({
+        where: { counterpartyId: source.id },
+        data: { counterpartyId: target.id, pairedEntryId: null },
+      });
+      await tx.counterparty.delete({ where: { id: source.id } });
+      const updated = await tx.counterparty.update({
+        where: { id: target.id },
+        data: { name: target.name ?? source.name, askMerge: false },
+      });
+      return this.present(tx, updated);
+    });
+  }
+
+  async dismissMergePrompt(userId: string, counterpartyId: string): Promise<void> {
+    await loadOwnedCounterparty(this.prisma, userId, counterpartyId);
+    await this.prisma.counterparty.update({
+      where: { id: counterpartyId },
+      data: { askMerge: false },
     });
   }
 

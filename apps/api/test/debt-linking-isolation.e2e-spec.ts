@@ -118,9 +118,8 @@ describe('Debt linking isolation (e2e)', () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
       carol = await person(app, 'carol@example.com', 'Carol');
-      const counterparty = await createCounterparty(app, alice, '小明');
       await request(server())
-        .post(`/api/counterparties/${counterparty.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email })
         .expect(201);
@@ -129,7 +128,6 @@ describe('Debt linking isolation (e2e)', () => {
       await request(server())
         .post(`/api/friend-requests/${invite.id}/accept`)
         .set(auth(carol.token))
-        .send({ counterparty: { name: 'Alice' } })
         .expect(404);
     });
   });
@@ -160,16 +158,16 @@ describe('Debt linking isolation (e2e)', () => {
       expect(serialized).not.toContain(alice.cashId);
       expect(serialized).not.toContain('小明');
       expect(serialized).not.toContain(aliceSide);
-      expect(proposal.otherUser).toEqual({ id: alice.userId, name: 'Alice' });
+      expect(proposal.otherUser).toEqual({ id: alice.userId, name: '阿A' });
       expect(proposal.counterpartyId).toBe(bobSide);
     });
 
-    it('cannot link with a counterparty that is not their own (404)', async () => {
+    it('rejects a counterparty choice when accepting (400)', async () => {
       alice = await person(app, 'alice@example.com', 'Alice');
       bob = await person(app, 'bob@example.com', 'Bob');
       const aliceCounterparty = await createCounterparty(app, alice, '小明');
       await request(server())
-        .post(`/api/counterparties/${aliceCounterparty.id}/link-invites`)
+        .post('/api/friend-requests')
         .set(auth(alice.token))
         .send({ email: bob.email })
         .expect(201);
@@ -179,7 +177,7 @@ describe('Debt linking isolation (e2e)', () => {
         .post(`/api/friend-requests/${invite.id}/accept`)
         .set(auth(bob.token))
         .send({ counterparty: { id: aliceCounterparty.id } })
-        .expect(404);
+        .expect(400);
       // 失敗時邀請不被消耗，也沒有成為好友。
       expect((await pendingIncomingRequest(app, bob)).id).toBe(invite.id);
     });

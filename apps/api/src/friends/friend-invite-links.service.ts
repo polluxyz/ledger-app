@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ErrorCode } from '@ledger/shared';
 import type {
-  FriendInviteLinkAccepted,
+  LinkAccepted,
   FriendInviteLinkCreated,
   FriendInviteLinkPreview,
 } from '@ledger/shared';
@@ -10,21 +10,8 @@ import { CLOCK } from '../common/clock';
 import type { Clock } from '../common/clock';
 import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  alreadyLinked,
-  assertLinkChoice,
-  establishLink,
-  findLinkOfCounterparty,
-} from '../debts/counterparty-links';
-import { badRequest, loadOwnedCounterparty } from '../debts/debt-entry-rules';
-import {
-  alreadyFriends,
-  areFriends,
-  cannotFriendSelf,
-  createFriendship,
-  orderPair,
-  toFriend,
-} from './friendship';
+import { establishLink } from '../debts/counterparty-links';
+import { cannotFriendSelf } from './friendship';
 
 /** 連結壽命：10 分鐘（spec 決策 6）。主要用途是當面掃 QR code，短壽命讓外流的損害也短。 */
 const INVITE_LINK_TTL_MS = 10 * 60 * 1000;
@@ -88,14 +75,7 @@ export class FriendInviteLinksService {
    * 每人同時只有一條有效連結，等於內建撤銷，不必另做撤銷端點。撤銷與建立放進同一個
    * 交易：若只成功一半，使用者會同時留著兩條有效連結，或一條都不剩。
    */
-  async create(userId: string, counterpartyId?: string): Promise<FriendInviteLinkCreated> {
-    // 連動邀請連結（3b-2 決策 56）：對象要是自己的、而且還沒連動。
-    if (counterpartyId !== undefined) {
-      await loadOwnedCounterparty(this.prisma, userId, counterpartyId);
-      if ((await findLinkOfCounterparty(this.prisma, counterpartyId)) !== null) {
-        throw alreadyLinked();
-      }
-    }
+  async create(userId: string): Promise<FriendInviteLinkCreated> {
     const now = this.now();
     const expiresAt = new Date(now.getTime() + INVITE_LINK_TTL_MS);
     const token = randomBytes(TOKEN_BYTES).toString('base64url');
@@ -110,7 +90,6 @@ export class FriendInviteLinksService {
           inviterId: userId,
           tokenHash: hashToken(token),
           expiresAt,
-          counterpartyId: counterpartyId ?? null,
         },
       });
     });
@@ -135,24 +114,18 @@ export class FriendInviteLinksService {
     return {
       inviterName: link.inviter.name,
       expiresAt: link.expiresAt.toISOString(),
-      forLink: link.counterpartyId !== null,
     };
   }
 
   /**
-   * 接受連結：直接成為好友，產生者不必再確認（spec 決策 5）。
+   * 接受連結：直接成為好友並連動，產生者不必再確認（決策 73～75）。
    *
    * 檢查順序是刻意的：
-   * - 「已經是好友」擋在消耗連結之前，因為這種情況**不消耗連結**（spec §5），
-   *   產生者之後還能把同一條連結交給別人。
+   * - 已連動由 `establishLink` 擋下；它與 token 消耗在同一交易，失敗就不消耗。
    * - 消耗用條件式的 `updateMany`，把「仍然有效」寫進 `where`。兩人同時用同一條連結時，
    *   資料庫只會讓其中一次的 `count` 是 1，另一人拿到 404。先讀再寫的判斷擋不住這種競態。
    */
-  async accept(
-    userId: string,
-    token: string,
-    choice?: { id?: string; name?: string },
-  ): Promise<FriendInviteLinkAccepted> {
+  async accept(userId: string, token: string): Promise<LinkAccepted> {
     const tokenHash = hashToken(token);
 
     return this.prisma.$transaction(async (tx) => {
@@ -167,18 +140,6 @@ export class FriendInviteLinksService {
       if (link.inviterId === userId) {
         throw cannotFriendSelf();
       }
-      // 連動連結：已經是好友也可以連動，不擋；「已連動」由 establishLink 擋（同樣不消耗連結，
-      // 因為它丟出的例外會讓下面的消耗一起回滾）。
-      const linkChoice = link.counterpartyId === null ? undefined : assertLinkChoice(choice);
-      if (link.counterpartyId === null) {
-        if (choice !== undefined) {
-          throw badRequest('counterparty is only valid when accepting a link invite.');
-        }
-        if (await areFriends(tx, link.inviterId, userId)) {
-          throw alreadyFriends();
-        }
-      }
-
       const consumed = await tx.friendInviteLink.updateMany({
         where: { id: link.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
         data: { usedAt: now, usedById: userId },
@@ -187,21 +148,8 @@ export class FriendInviteLinksService {
         throw inviteLinkInvalid();
       }
 
-      if (link.counterpartyId !== null && linkChoice !== undefined) {
-        const counterpartyId = await establishLink(tx, {
-          inviterId: link.inviterId,
-          inviterCounterpartyId: link.counterpartyId,
-          accepterId: userId,
-          choice: linkChoice,
-        });
-        const friendship = await tx.friendship.findUniqueOrThrow({
-          where: { userLowId_userHighId: orderPair(link.inviterId, userId) },
-        });
-        return { ...toFriend(link.inviter, friendship.createdAt), counterpartyId };
-      }
-
-      const since = await createFriendship(tx, link.inviterId, userId);
-      return { ...toFriend(link.inviter, since), counterpartyId: null };
+      const accepted = await establishLink(tx, { inviterId: link.inviterId, accepterId: userId });
+      return { ...accepted, otherUser: link.inviter };
     });
   }
 }

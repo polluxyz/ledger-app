@@ -37,12 +37,11 @@ describe('FriendRequestsService authorization matrix (SC-F6)', () => {
       id: REQUEST_ID,
       requesterId: REQUESTER,
       recipientId: RECIPIENT,
-      counterpartyId: null,
       status,
       respondedAt: status === 'PENDING' ? null : NOW,
       createdAt: new Date('2026-09-20T00:00:00.000Z'),
       updatedAt: NOW,
-      requester: { id: REQUESTER, name: 'Alice', email: 'alice@example.com' },
+      requester: { id: REQUESTER, name: 'Alice' },
       recipient: { id: RECIPIENT, name: 'Bob', email: 'bob@example.com' },
     };
   }
@@ -73,6 +72,16 @@ describe('FriendRequestsService authorization matrix (SC-F6)', () => {
         create: jest.fn(() =>
           Promise.resolve({ userLowId: REQUESTER, userHighId: RECIPIENT, createdAt: NOW }),
         ),
+      },
+      counterparty: {
+        count: jest.fn(() => Promise.resolve(0)),
+        create: jest.fn(({ data }: { data: { ownerId: string; askMerge: boolean } }) =>
+          Promise.resolve({ id: `cp-${data.ownerId}`, askMerge: data.askMerge }),
+        ),
+      },
+      counterpartyLink: {
+        findUnique: jest.fn(() => Promise.resolve(null)),
+        create: jest.fn(() => Promise.resolve({ id: 'link-1' })),
       },
       user: { findUnique: jest.fn(() => Promise.resolve(null)) },
       $transaction: jest.fn((arg: unknown): unknown =>
@@ -181,7 +190,6 @@ describe('FriendRequestsService authorization matrix (SC-F6)', () => {
   // 對的當事人、PENDING 的邀請：允許，且回傳的狀態正確。
   describe('the right party on a pending request succeeds', () => {
     const cases: Array<[Action, Role, Status]> = [
-      ['accept', 'recipient', 'ACCEPTED'],
       ['decline', 'recipient', 'DECLINED'],
       ['cancel', 'requester', 'CANCELLED'],
     ];
@@ -189,8 +197,18 @@ describe('FriendRequestsService authorization matrix (SC-F6)', () => {
     it.each(cases)('%s by the %s → %s', async (action, role, expected) => {
       setup('PENDING');
       const result = await service[action](callerId[role], REQUEST_ID);
-      expect(result.status).toBe(expected);
-      expect(result.id).toBe(REQUEST_ID);
+      expect('status' in result ? result.status : undefined).toBe(expected);
+      expect('id' in result ? result.id : undefined).toBe(REQUEST_ID);
+    });
+
+    it('accept returns the new linked counterparty', async () => {
+      setup('PENDING');
+      const result = await service.accept(RECIPIENT, REQUEST_ID);
+      expect(result).toEqual({
+        counterpartyId: `cp-${RECIPIENT}`,
+        askMerge: false,
+        otherUser: { id: REQUESTER, name: 'Alice' },
+      });
     });
 
     it('only accept creates a friendship', async () => {

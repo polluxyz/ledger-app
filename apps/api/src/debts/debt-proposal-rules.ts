@@ -125,6 +125,7 @@ export function toDebtProposal(
   row: ProposalRow,
   viewerId: string,
   counterpartyId: string | null,
+  displayName?: string,
 ): DebtProposal {
   const incoming = row.toUserId === viewerId;
   const other = incoming ? row.fromUser : row.toUser;
@@ -133,7 +134,7 @@ export function toDebtProposal(
     direction: incoming ? 'incoming' : 'outgoing',
     type: row.type,
     status: row.status,
-    otherUser: { id: other.id, name: other.name },
+    otherUser: { id: other.id, name: displayName ?? other.name },
     counterpartyId,
     entryKind: incoming ? mirrorKind(row.entryKind) : row.entryKind,
     amount: row.amount,
