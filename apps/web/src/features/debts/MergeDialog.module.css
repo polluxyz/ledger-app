@@ -1,8 +1,7 @@
-/* 編輯表單沿用標準 modal 欄位間距，確認動作固定排在視窗右下方。 */
+/* 合併表單維持一個欄位；候選人清單與合併結果都以 API 為準。 */
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
 }
 
 .actions {

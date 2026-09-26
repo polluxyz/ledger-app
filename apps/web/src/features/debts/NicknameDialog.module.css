@@ -1,8 +1,7 @@
-/* 編輯表單沿用標準 modal 欄位間距，確認動作固定排在視窗右下方。 */
+/* 暱稱欄位維持短表單節奏，按鈕集中在視窗右下方。 */
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
 }
 
 .actions {

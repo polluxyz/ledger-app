@@ -8,7 +8,9 @@ import { CounterpartyPicker } from './CounterpartyPicker';
 const counterparties: Counterparty[] = [
   {
     id: 'cp-ming',
-    name: '小明',
+    name: '舊小明',
+    displayName: '小明',
+    askMerge: false,
     balance: 120,
     link: { userId: 'user-1', userName: '王小明', theirBalance: -50 },
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -17,6 +19,8 @@ const counterparties: Counterparty[] = [
   {
     id: 'cp-hua',
     name: '阿華',
+    displayName: '阿華',
+    askMerge: false,
     balance: -11,
     link: null,
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -25,6 +29,8 @@ const counterparties: Counterparty[] = [
   {
     id: 'cp-hua-classmate',
     name: '小華同學',
+    displayName: '小華同學',
+    askMerge: false,
     balance: 0,
     link: null,
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -76,7 +82,7 @@ describe('CounterpartyPicker', () => {
     fetchMock.mockImplementation((url: string) => {
       const query = new URL(url).searchParams.get('q')?.trim() ?? '';
       const items = query
-        ? counterparties.filter((counterparty) => counterparty.name.includes(query))
+        ? counterparties.filter((counterparty) => counterparty.displayName.includes(query))
         : counterparties;
       return Promise.resolve(
         new Response(
@@ -114,6 +120,24 @@ describe('CounterpartyPicker', () => {
     );
     expect(screen.queryByText(/\$\d+/)).not.toBeInTheDocument();
     expect(screen.queryByText(/目前.*欠你/)).not.toBeInTheDocument();
+  });
+
+  it('uses displayName for options, exact matching, selection, and the balance hint', async () => {
+    const onChange = vi.fn();
+    const onSelect = vi.fn();
+    renderPicker({ onChange, onSelect });
+    const input = screen.getByRole('combobox', { name: '對象' });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '小明' } });
+
+    const option = await screen.findByRole('option', { name: /小明.*連動/ });
+    expect(screen.queryByRole('option', { name: /舊小明/ })).not.toBeInTheDocument();
+    expect(await screen.findByText('目前小明欠你 $120')).toBeInTheDocument();
+    fireEvent.click(option);
+
+    expect(onChange).toHaveBeenLastCalledWith('小明');
+    expect(onSelect).toHaveBeenLastCalledWith(counterparties[0]);
+    expect(input).toHaveValue('小明');
   });
 
   it('sends the trimmed q only after the 300 ms debounce', async () => {

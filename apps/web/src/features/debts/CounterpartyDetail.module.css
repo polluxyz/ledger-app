@@ -19,19 +19,33 @@
 
 .headingIdentity {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* 名字與「連動」標籤同一行；標籤不被長名字擠掉。 */
+.titleRow {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--space-sm);
   min-width: 0;
 }
 
 .linkBadge {
+  flex: 0 0 auto;
   padding: 0 var(--space-xs);
-  border: 1px solid var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
   border-radius: var(--radius);
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: var(--text-xs);
   white-space: nowrap;
+}
+
+.accountName {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .balance {
@@ -39,29 +53,6 @@
   font-size: var(--text-xl);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.linkedStatus {
-  margin: calc(var(--space-md) * -1) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.inviteNotice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
-  border-radius: var(--radius);
-  background-color: var(--color-primary-soft);
-}
-
-.cancelInviteButton {
-  height: 1.75rem;
-  padding: 0 var(--space-sm);
-  font-size: var(--text-xs);
 }
 
 .actions,
@@ -184,12 +175,6 @@
 
 .confirmContent p {
   margin: 0;
-}
-
-.warning {
-  padding: var(--space-sm);
-  border-radius: var(--radius);
-  background-color: var(--color-fill);
 }
 
 .empty,

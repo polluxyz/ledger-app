@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Counterparty, FriendRequest } from '@ledger/shared';
+import type { Counterparty } from '@ledger/shared';
 import { CounterpartyDetail } from './CounterpartyDetail';
 
 /** CounterpartyDetail 驗 API 餘額、紀錄呈現，以及只在符合條件時出現的操作。 */
@@ -42,7 +41,11 @@ describe('CounterpartyDetail', () => {
     balance: number,
     items: unknown[] = [baseEntry],
     total = items.length,
-    options: { link?: Counterparty['link']; outgoingInvite?: FriendRequest | null } = {},
+    options: {
+      link?: Counterparty['link'];
+      name?: string | null;
+      displayName?: string;
+    } = {},
   ) {
     fetchMock.mockImplementation((url: string) => {
       const json = (body: unknown) =>
@@ -55,20 +58,16 @@ describe('CounterpartyDetail', () => {
       if (url.includes('/counterparties/cp-1/entries')) {
         return json({ items, page: 1, limit: 20, total });
       }
-      if (url.includes('/friend-requests?direction=outgoing')) {
-        const invite = options.outgoingInvite ?? null;
-        return json({ items: invite ? [invite] : [], page: 1, limit: 20, total: invite ? 1 : 0 });
-      }
-      if (
-        url.includes('/friend-requests/invite-1/cancel') ||
-        url.endsWith('/counterparties/cp-1/link')
-      ) {
+      if (url.endsWith('/counterparties/cp-1/link')) {
         return json({});
       }
       if (url.includes('/counterparties/cp-1')) {
+        const name = options.name === undefined ? (options.link ? null : '小明') : options.name;
         return json({
           id: 'cp-1',
-          name: '小明',
+          name,
+          displayName: options.displayName ?? name ?? options.link?.userName ?? '小明',
+          askMerge: false,
           balance,
           link: options.link ?? null,
           createdAt: '2026-09-01T04:00:00.000Z',
@@ -83,20 +82,22 @@ describe('CounterpartyDetail', () => {
     balance = 9,
     items: unknown[] = [baseEntry],
     total = items.length,
-    options: { link?: Counterparty['link']; outgoingInvite?: FriendRequest | null } = {},
+    options: {
+      link?: Counterparty['link'];
+      name?: string | null;
+      displayName?: string;
+    } = {},
   ) {
     const onRecordEntry = vi.fn();
     const onDeleted = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <CounterpartyDetail
-            counterpartyId="cp-1"
-            onRecordEntry={onRecordEntry}
-            onDeleted={onDeleted}
-          />
-        </MemoryRouter>
+        <CounterpartyDetail
+          counterpartyId="cp-1"
+          onRecordEntry={onRecordEntry}
+          onDeleted={onDeleted}
+        />
       </QueryClientProvider>,
     );
     return { onRecordEntry, onDeleted, ...result };
@@ -121,12 +122,15 @@ describe('CounterpartyDetail', () => {
     expect(onRecordEntry).toHaveBeenCalledWith('小明');
   });
 
-  it('shows forgive only for a positive balance and delete-counterparty only with no entries', async () => {
+  it('shows unlinked management actions and delete only when no entries remain', async () => {
     const firstRender = renderDetail(9, [baseEntry], 1);
     await screen.findByText('小明欠你 $9');
+    expect(screen.getByRole('button', { name: '記一筆' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '免除剩餘' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除對象' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: '邀請連動' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '改名' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '邀請連動' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '合併之前的紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '解除連動' })).not.toBeInTheDocument();
 
     firstRender.unmount();
@@ -136,46 +140,34 @@ describe('CounterpartyDetail', () => {
     expect(screen.getByRole('button', { name: '刪除對象' })).toBeInTheDocument();
   });
 
-  it('shows and cancels an outgoing link invite without offering another invite', async () => {
-    const user = userEvent.setup();
-    const invite: FriendRequest = {
-      id: 'invite-1',
-      direction: 'outgoing',
-      status: 'PENDING',
-      counterpart: { userId: null, name: null, email: 'b@example.com' },
-      forLink: true,
-      counterpartyId: 'cp-1',
-      createdAt: '2026-09-01T04:00:00.000Z',
-      respondedAt: null,
-    };
-    renderDetail(9, [baseEntry], 1, { outgoingInvite: invite });
+  it('shows linked management actions and the account name below a nickname', async () => {
+    const { container } = renderDetail(9, [], 0, {
+      link: linkedUser,
+      name: '內部暱稱',
+      displayName: '小明的暱稱',
+    });
 
-    expect(await screen.findByText('已邀請 b@example.com，等對方接受')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '取消邀請' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '邀請連動' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '取消邀請' }));
-    await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some(
-          ([url, options]) =>
-            typeof url === 'string' &&
-            url.includes('/friend-requests/invite-1/cancel') &&
-            (options as RequestInit).method === 'POST',
-        ),
-      ).toBe(true),
-    );
-  });
-
-  it('shows linked status and unlink action without exposing their balance or delete-counterparty', async () => {
-    const { container } = renderDetail(9, [], 0, { link: linkedUser });
-
-    expect(await screen.findByText('連動')).toBeInTheDocument();
-    expect(screen.getByText('已和 王小明 連動')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '小明的暱稱' })).toBeInTheDocument();
+    expect(screen.getByText('小明的暱稱欠你 $9')).toBeInTheDocument();
+    expect(screen.getByText('王小明', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '設定暱稱' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '記一筆' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '免除剩餘' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '合併之前的紀錄' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '解除連動' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '改名' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '邀請連動' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除對象' })).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent('已和 王小明 連動');
     expect(container).not.toHaveTextContent('$9,876');
     expect(container).not.toHaveTextContent('好友');
+  });
+
+  it('uses the account name once when a linked counterparty has no nickname', async () => {
+    renderDetail(9, [], 0, { link: linkedUser, name: null, displayName: '王小明' });
+
+    expect(await screen.findByRole('heading', { name: '王小明' })).toBeInTheDocument();
+    expect(screen.getAllByText('王小明', { exact: true })).toHaveLength(1);
   });
 
   it('shows Chinese entry kinds, signed deltas, API balances, notes, and the unrecorded label', async () => {
@@ -275,7 +267,11 @@ describe('CounterpartyDetail', () => {
   it('adds the paired deletion explanation and unlinks after the specified confirmation', async () => {
     const user = userEvent.setup();
     const pairedEntry = { ...baseEntry, paired: true };
-    renderDetail(9, [pairedEntry], 1, { link: linkedUser });
+    renderDetail(9, [pairedEntry], 1, {
+      link: linkedUser,
+      name: '小明',
+      displayName: '小明',
+    });
     const row = (await screen.findAllByRole('listitem'))[0];
     if (!row) {
       throw new Error('往來紀錄列不存在');
@@ -283,19 +279,15 @@ describe('CounterpartyDetail', () => {
     await user.click(within(row).getByRole('button', { name: '刪除' }));
 
     const deleteDialog = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
-    expect(deleteDialog).toHaveTextContent(
-      '這筆已和王小明同步。刪除後會請他也刪掉他那筆；他不接受的話，他那邊維持原樣。',
-    );
+    expect(deleteDialog).toHaveTextContent('刪除這筆往來？');
+    expect(deleteDialog).toHaveTextContent('會請小明也刪除');
+    expect(deleteDialog).not.toHaveTextContent('他不接受的話');
     await user.click(within(deleteDialog).getByRole('button', { name: '取消' }));
 
     await user.click(screen.getByRole('button', { name: '解除連動' }));
-    const unlinkDialog = await screen.findByRole('dialog', { name: '解除和王小明的連動' });
-    expect(unlinkDialog).toHaveTextContent(
-      '解除後，「小明」和所有往來紀錄都會保留，只是之後各記各的。',
-    );
-    expect(unlinkDialog).toHaveTextContent(
-      '等待確認中的紀錄與邀請會一起取消。之後想再連動，可以重新邀請。',
-    );
+    const unlinkDialog = await screen.findByRole('dialog', { name: '解除和小明的連動' });
+    expect(unlinkDialog).toHaveTextContent('名字和紀錄都會保留');
+    expect(unlinkDialog).not.toHaveTextContent('之後想再連動');
     await user.click(within(unlinkDialog).getByRole('button', { name: '解除連動' }));
     await waitFor(() =>
       expect(
@@ -308,7 +300,7 @@ describe('CounterpartyDetail', () => {
       ).toBe(true),
     );
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: '解除和王小明的連動' })).toBeNull(),
+      expect(screen.queryByRole('dialog', { name: '解除和小明的連動' })).toBeNull(),
     );
   });
 
@@ -319,10 +311,7 @@ describe('CounterpartyDetail', () => {
     await user.click(screen.getByRole('button', { name: '免除剩餘' }));
 
     const confirmation = await screen.findByRole('dialog', { name: '免除剩餘' });
-    expect(
-      within(confirmation).getByText(
-        '小明欠你的 $50 將歸零，不產生交易；之後可以刪除這筆免除來還原。',
-      ),
-    ).toBeInTheDocument();
+    // 免除會把欠款歸零，和錢有關，所以留一句短話說明金額（W44 的例外）。
+    expect(within(confirmation).getByText('小明欠你的 $50 將歸零')).toBeInTheDocument();
   });
 });

@@ -10,19 +10,19 @@ import styles from './DebtEntryEditDialog.module.css';
 
 interface DebtEntryEditDialogProps {
   entry: DebtEntry | null;
-  linkedUserName?: string;
+  displayName: string;
   onClose: () => void;
 }
 
 /** 編輯一般往來紀錄的小視窗；只傳有變更的欄位，沿用 API 作為唯一資料來源。 */
-export function DebtEntryEditDialog({ entry, linkedUserName, onClose }: DebtEntryEditDialogProps) {
+export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEditDialogProps) {
   return (
     <Dialog open={entry !== null} title="修改往來紀錄" onClose={onClose}>
       {entry && (
         <DebtEntryEditForm
           key={entry.id}
           entry={entry}
-          linkedUserName={linkedUserName}
+          displayName={displayName}
           onClose={onClose}
         />
       )}
@@ -32,11 +32,11 @@ export function DebtEntryEditDialog({ entry, linkedUserName, onClose }: DebtEntr
 
 function DebtEntryEditForm({
   entry,
-  linkedUserName,
+  displayName,
   onClose,
 }: {
   entry: DebtEntry;
-  linkedUserName?: string;
+  displayName: string;
   onClose: () => void;
 }) {
   const originalAmount = Math.abs(entry.delta);
@@ -73,12 +73,7 @@ function DebtEntryEditForm({
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <FormError error={updateEntry.error} />
-      {entry.paired && (
-        <p className={styles.warning}>
-          這筆已和{linkedUserName ?? '對方'}
-          同步。存檔後會把新的金額與日期送給他確認；他不接受的話，他那邊維持原樣。備註不會同步。
-        </p>
-      )}
+      {entry.paired && <p>會送給{displayName}確認</p>}
       <TextField
         label="金額"
         type="number"
