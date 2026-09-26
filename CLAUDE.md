@@ -239,12 +239,13 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 - 規劃、拆解、決策、驗收、開 PR 由 Claude Code 自己做。
 - **實作預設派給 worker**，能平行的一次全部派出去，不要自己一件一件做。
-- 自己動手實作的例外只有三種：涉及授權與資料隔離、要動 Prisma schema 或 API 介面、派工成本明顯高於自己做的瑣碎改動。
+- 自己動手實作的例外只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈，當作驗收 worker 的防線）、派工成本明顯高於自己做的瑣碎改動。
+- **複雜的後端工作（Prisma schema、migration、API、授權邏輯）派給 Codex + `gpt-6-sol`（推理強度 xhigh）**（開發者 2026-09-26 定案）。協調者先寫好契約與隔離測試，驗收時逐行看 diff、自己重跑隔離測試與 e2e。
 
 - **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Codex、Pi 或 GLM。
 - worker 優先用 **Codex + `gpt-6-luna`（推理強度 max）**，以 `codex --dangerously-bypass-approvals-and-sandbox` 啟動。額度用盡就往下一層換：**Pi + `zai/glm-5.3` → Antigravity（`agy` + `gemini-3.8-flash-high`）→ Claude Code（`opus`）**。
 - **額度有沒有用完，只認 worker 帶回來的錯誤原文**（`pi auth check` 驗的是憑證不是用量，判斷不出來）。所以 Task spec 要求 worker 遇到 provider 錯誤時原文回報、不要自己重試。
-- **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作不派給 worker。
+- **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作只派給 Codex `gpt-6-sol` xhigh，不派給其他層的 worker。
 - ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
 

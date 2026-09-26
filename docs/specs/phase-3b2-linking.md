@@ -1,6 +1,6 @@
 # Spec：階段三 (3b-2) — 往來帳連動
 
-> 狀態：**已核可；後端已實作，畫面待寫 `phase-3b2-web.md`**（2026-09-25）
+> 狀態：**已實作**（2026-09-25）；**修訂 1（§12）已核可**（2026-09-26）
 > 依據：`phase-3b-debts.md` §11 的方向；2026-09-25 開發者確認的假設清單（見 §2 決策 51～70 的「來源」）。
 > 前置：3a 好友系統（#54）、3b-1 往來帳版與修訂 1（#67、#69）已合併。
 > 執行順序：**本 spec** → 後端（一個 PR）→ 畫面（先寫 `phase-3b2-web.md`，再一個 PR）。
@@ -388,3 +388,77 @@ link: { userId: string; userName: string; theirBalance: number } | null;
 6. `sync`、`paired`、`theirBalance`。
 
 **3b-2 畫面**（先寫 `phase-3b2-web.md` 送審，再一個 PR；可派 worker）
+
+---
+
+## 12. 修訂 1（2026-09-26）：邀請不綁人、暱稱、合併
+
+> 狀態：**已核可**（2026-09-26）。依據：2026-09-26 開發者操作 3b-2 畫面後的回饋與樣稿（`docs/artifacts/step-3b2-counterparties-page.html` 第三版）。
+> 本節取代決策 56 的「帶上一個人」、決策 58、F25，並改寫決策 71 的名字規則。其餘決策不變。
+
+### 12.1 決策
+
+| #   | 決策                                                                                                                                                                                              | 來源   | 取代           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
+| 73  | **邀請不綁人**：連動邀請（email 或連結）只指定對方，不帶自己這邊的對象。3a 的一般好友邀請不再存在：之後所有邀請都是連動邀請                                                                       | 開發者 | 56 的後半、F25 |
+| 74  | **接受時不選人**：接受後，雙方各自新增一個已連動的對象，**沒有自己取的名字**，顯示對方的帳號名稱                                                                                                  | 開發者 | 58             |
+| 75  | 新建的對象帶「**待詢問**」標記，問擁有者「之前有沒有用別的名字記過他」。只有擁有者當時有未連動的對象才帶。回答「沒有」或完成合併後清掉；「稍後」不清                                              | 開發者 |                |
+| 76  | **合併**：把一個未連動的對象併進一個已連動的對象。紀錄搬過去、餘額一起算，被併的對象刪除。已連動的一方沒有自己取的名字時，改用被併那個的名字；已經有就保留。任何時候都能做，不限於待詢問時        | 開發者 |                |
+| 77  | **名字分兩層**：`name` 是「我取的名字」。未連動必填；已連動選填（畫面叫「暱稱」），清空就顯示對方的帳號名稱。**顯示用的名字由後端算好**（`displayName` = `name` ?? 對方帳號名稱），前端不自己判斷 | 開發者 |                |
+| 78  | 解除連動時，沒有自己取的名字就把**當下的帳號名稱**存成 `name`，讓名字不消失（決策 71）。撞名時加上「 2」「 3」…                                                                                   | 開發者 | 71 的名字部分  |
+| 79  | 搜尋 `?q=` 同時比對 `name` 與對方帳號名稱                                                                                                                                                         | 設計   |                |
+| 80  | 合併的兩邊都必須屬於自己；被併的一方必須**未連動**、併入的一方必須**已連動**。被併的紀錄沒有配對，搬過去後仍是 `sync = NONE`，不送提議給對方（同決策 59）                                         | 設計   |                |
+| 81  | 提議的 `otherUser.name` 改成**我這邊那個對象的顯示名稱**（有暱稱就是暱稱），讓待確認卡片寫「小明 記了一筆」而不是對方的帳號名稱。沒有連動的對象可對時（解除後）才用帳號名稱                       | 設計   |                |
+
+### 12.2 資料模型（Prisma）
+
+> 依 `CLAUDE.md` §14 屬於「先說明再做」。本節核可即視為同意。
+
+```prisma
+model Counterparty {
+  // …既有欄位
+  name        String?   // 改成可為 null：只有「已連動且沒設暱稱」時為 null（service 把關）
+  askMerge    Boolean   @default(false)   // 決策 75 的待詢問標記
+  @@unique([ownerId, name])                // 不變；PostgreSQL 的 unique 允許多個 null
+}
+
+model FriendRequest    { /* 移除 counterpartyId */ }
+model FriendInviteLink { /* 移除 counterpartyId */ }
+```
+
+migration 手寫的部分：
+
+1. `Counterparty_name_trimmed` CHECK 改成允許 `name IS NULL`。
+2. 移除兩個 `counterpartyId` 欄位之前：`PENDING` 的邀請一律改成 `CANCELLED`、未使用的連結一律 `revokedAt = now()`（只影響 dev 資料；舊邀請的語意與新流程不同，不轉換）。
+
+### 12.3 API
+
+| 方法與路徑                                      | 改動                                                                                                                                         |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /friend-requests`                         | 沿用 3a 的端點（`{ email }`），**送出的就是連動邀請**。錯誤碼沿用，已連動回 `409 ALREADY_LINKED`、對方已邀請我回 `409 LINK_INVITE_FROM_THEM` |
+| `POST /friend-invite-links`                     | 沿用 3a 的端點，產生的就是連動邀請連結                                                                                                       |
+| `POST /friend-requests/{id}/accept`             | **不帶 body**。回應多 `counterpartyId`（接受者這邊新建的對象）與 `askMerge`                                                                  |
+| `POST /friend-invite-links/accept`              | body 只有 `{ token }`。回應同上                                                                                                              |
+| `POST /counterparties/{id}/link-invites`        | **移除**                                                                                                                                     |
+| `POST /counterparties/{id}/invite-links`        | **移除**                                                                                                                                     |
+| `GET /counterparties`                           | 每列多 `displayName`、`askMerge`；`name` 變 `string \| null`。新增篩選 `?askMerge=true`（待確認卡片用）。`?q=` 見決策 79                     |
+| `PATCH /counterparties/{id}`                    | `{ name: string \| null }`；`null` 只允許已連動的對象（清掉暱稱），未連動回 `400`                                                            |
+| `POST /counterparties/{id}/merge`               | **新增**。`{ sourceId }`：把 `sourceId` 併進 `{id}`（決策 76、80）。回合併後的對象。條件不符回 `409 MERGE_NOT_ALLOWED`                       |
+| `DELETE /counterparties/{id}/merge-prompt`      | **新增**。回答「沒有」：清掉待詢問標記，回 `204`                                                                                             |
+| 交易列表的 `debt.counterparty.name`             | 改放顯示用的名字（`displayName` 的規則）                                                                                                     |
+| `GET /debt-proposals` 的 `otherUser.name`       | 決策 81                                                                                                                                      |
+| 型別 `FriendRequest`、`FriendInviteLinkPreview` | 移除 `forLink`、`counterpartyId`（全部都是連動邀請）                                                                                         |
+
+新增錯誤碼：`MERGE_NOT_ALLOWED`（409）。
+
+### 12.4 成功條件
+
+- **SC-K19**：A 用 email 邀請 B（不選人）；B 接受（不帶 body）→ 雙方各新增一個 `name = null`、`displayName` 為對方帳號名稱的已連動對象；B 當時有未連動的對象時 `askMerge = true`，沒有時 `false`。
+- **SC-K20**：B 把自己的未連動「阿甲」併進新對象 → 紀錄與餘額搬過去、`name = '阿甲'`、`askMerge = false`、「阿甲」這筆消失；搬過去的紀錄 `sync = NONE`，A 沒收到任何提議。已連動對象已經有 `name` 時合併不改名。
+- **SC-K21**：合併條件不符（併入的一方沒連動、被併的一方已連動、任一方不是自己的、同一個）→ `409 MERGE_NOT_ALLOWED` 或 `404`，不留任何改動。
+- **SC-K22**：`DELETE .../merge-prompt` 後 `askMerge = false`；`?askMerge=true` 只列出帶標記的對象。
+- **SC-K23**：已連動對象 `PATCH { name: null }` 成功、顯示回帳號名稱；未連動 `PATCH { name: null }` → `400`。
+- **SC-K24**：沒有 `name` 的已連動對象解除連動 → `name` 變成當下的帳號名稱；撞名時為「乙 2」。
+- **SC-K25**：`?q=王` 找得到帳號名稱含「王」、沒設暱稱的已連動對象；交易列表的 `debt.counterparty.name` 顯示暱稱或帳號名稱。
+- **SC-K26**（隔離）：第三人合併、清標記、讀取別人的對象 → `404`；合併時 `sourceId` 是別人的對象 → `404`。
+- **SC-K27**：既有 SC-K5～K17（提議、同步、免除、解除、並行）在新的建立方式下維持綠燈。

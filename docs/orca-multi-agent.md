@@ -16,9 +16,12 @@
 | ---------------------------------------------- | -------------------------------------------------- |
 | 寫 spec 與 plan、拆任務、做決策                | 依 spec 實作功能                                   |
 | 驗收 worker 的產出、開 PR、盯 CI               | 寫該功能的單元測試（用 `zai/glm-5.3`，不用 flash） |
-| 授權與資料隔離相關的程式碼                     | 前端頁面與元件                                     |
-| Prisma schema、API 介面                        | 重構、補文件、修 lint                              |
+| `packages/shared` 的型別契約                   | 前端頁面與元件                                     |
+| 授權與資料隔離的測試（先寫、先紅燈）           | Prisma schema、migration、API、授權邏輯（見下）    |
+| —                                              | 重構、補文件、修 lint                              |
 | 派工成本高於自己做的瑣碎改動（改一個字串之類） | —                                                  |
+
+**複雜的後端工作一律派 Codex + `gpt-6-sol`（推理強度 `xhigh`）**（開發者 2026-09-26 定案），不派給其他層。協調者的把關：先寫好 shared 契約與隔離測試；驗收時逐行看 diff（授權條件、交易邊界、migration SQL），自己重跑隔離測試與兩套 e2e。
 
 「派工成本高於自己做」是唯一的模糊地帶。判準：如果寫 Task spec 的時間比自己改還久，就自己改。
 
@@ -120,6 +123,8 @@ orca terminal create --worktree <selector> --command "codex --dangerously-bypass
 orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 ```
 
+複雜的後端工作（§1）把模型換成 `-m gpt-6-sol -c model_reasoning_effort=xhigh`，其餘相同。
+
 - 模型 id 與推理強度以本機 `~/.codex/models_cache.json` 為準（2026-09-24 查過：Codex CLI 0.155.1，`gpt-6-luna` 支援 low / medium / high / xhigh / max）。換模型前先查這個檔，**不要憑記憶填**。
 - `-c model_reasoning_effort=max`：`-c` 的值先當 TOML 解析，失敗就當字串，所以 `max` 不必加引號。
 - 旗標會跳過所有許可確認與沙箱，和 Antigravity 的 `--dangerously-skip-permissions` 同一類，代價與對策也相同：Task spec 寫清楚邊界，驗收看完整的 `git status` 與 `git diff`。
@@ -195,7 +200,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 其餘規則（金額不用浮點數、授權 deny by default、不在前端寫業務邏輯、註解用繁體中文）`CLAUDE.md` 已經有，不必重抄。
 
-涉及授權、資料隔離、Prisma schema、API 介面的工作**不派給 worker**，coordinator 自己做。
+涉及授權、資料隔離、Prisma schema、API 介面的工作**只派給 Codex `gpt-6-sol` xhigh**（§1）；shared 契約與隔離測試由 coordinator 先寫。
 
 ## 6. Session 交接（context 快滿時）
 
