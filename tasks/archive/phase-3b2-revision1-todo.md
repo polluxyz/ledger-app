@@ -1,6 +1,6 @@
 # 任務清單：3b-2 修訂 1
 
-> 依據：`tasks/phase-3b2-revision1-plan.md`。後端 worker：Codex `gpt-6-sol` xhigh；畫面 worker：Codex `gpt-6-luna` max 優先（`CLAUDE.md` §11）。A2、A4～A6 同一個 worker 依序做（改同一批檔案）；B1 完成後 B2、B3 與後端 worker 平行。
+> 依據：`tasks/archive/phase-3b2-revision1-plan.md`。後端 worker：Codex `gpt-6-sol` xhigh；畫面 worker：Codex `gpt-6-luna` max 優先（`CLAUDE.md` §11）。A2、A4～A6 同一個 worker 依序做（改同一批檔案）；B1 完成後 B2、B3 與後端 worker 平行。
 
 | #   | 任務                                                                                                                            | 負責          | 相依   |
 | --- | ------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------ |

@@ -66,7 +66,7 @@ async function answerMergePrompt(scope: Locator, source: string | null): Promise
   if (source === null) {
     await scope.getByRole('radio', { name: '沒有' }).check();
   } else {
-    await scope.getByRole('radio', { name: /有/ }).check();
+    await scope.getByRole('radio', { name: '有：', exact: true }).check();
     await scope.getByRole('combobox', { name: '未連動的人' }).selectOption({ label: source });
   }
   await scope.getByRole('button', { name: '確定' }).click();
@@ -190,9 +190,12 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
 
 test('邀請連結：未登入開啟、頁內登入、接受不選人、打開對象頁', async ({
   signedInPage: pageA,
+  userB,
   browser,
 }) => {
   test.setTimeout(90_000);
+  // fixture 是用到才建立；列出來 B 的帳號才會存在。
+  void userB;
   await openCounterparties(pageA);
   await pageA.getByRole('button', { name: '邀請連動' }).click();
   const invite = pageA.getByRole('dialog', { name: '邀請連動' });

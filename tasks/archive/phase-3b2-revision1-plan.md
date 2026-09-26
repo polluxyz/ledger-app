@@ -81,4 +81,13 @@ B 畫面（A1 完成即可開始，與 A2～A6 平行）
 
 ## 5. 實作紀錄
 
-（實作時補上。）
+2026-09-26。後端 worker：Codex `gpt-6-sol` xhigh（A2、A4～A6，一個 worker 依序做）；畫面 worker：Codex `gpt-6-luna` max（B2、B3 平行，B4 接在 B3 後）。A1、A3、B1、B5 由協調者做。
+
+1. **合併時取消被併紀錄的舊提議**（後端 worker 的決定，驗收同意）：被併的對象可能以前連動過，它的紀錄帶著舊的 `PENDING`／`DECLINED` 提議。若不處理，搬進新連動後會錯誤顯示「對方未接受」。合併時把這些提議改成 `CANCELLED`、清掉配對，搬過去的紀錄一律 `sync = NONE`。
+2. **解除連動補名字時先去空白**（驗收時發現）：帳號名稱註冊時只限長度、不去空白；照抄會違反 `Counterparty_name_trimmed` CHECK，整個解除連動失敗。改成先去空白，空字串用「對方」，並加單元測試。
+3. **免除與刪除對象的確認句**（驗收時補回）：B3 依 W44 把兩個確認視窗的說明清空；免除會把欠款歸零、和錢有關，屬於 W44 的例外，補回一句「{名字}欠你的 $X 將歸零」；刪除對象補「刪除「{名字}」？」讓使用者知道刪的是誰。往來帳標題旁的「連動」標籤也補回（樣稿畫面 5 有）。
+4. **`LinkInviteDialog` 移除**：邀請改由 `features/counterparties/InviteDialog` 發；往來帳不再有邀請入口。
+5. **e2e**：`debt-linking.spec.ts` 改寫成新流程 4 條（主線、邀請連結、錯過詢問後補做、帳上對不起來）；`e2e/api.ts` 的 `linkByEmail` 改成新流程，另加 `mergeCounterparties`。
+6. **派工的坑**：Codex 仍會出現「只貼上沒送出」，兩次補送 Enter（`docs/orca-multi-agent.md` §4 已記）。
+
+驗證：api 單元 319、api e2e 141（隔離 15）、web 單元 533、web e2e 44，lint／typecheck／format:check／build 全綠。
