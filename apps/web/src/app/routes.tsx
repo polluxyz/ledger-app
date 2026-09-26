@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AccountsPage from '../pages/AccountsPage';
 import CategoriesPage from '../pages/CategoriesPage';
+import CounterpartiesPage from '../pages/CounterpartiesPage';
 import HomePage from '../pages/HomePage';
 import InvitePage from '../pages/InvitePage';
 import LedgerDetailPage from '../pages/LedgerDetailPage';
@@ -38,6 +39,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         {/* 交易表格從 2h 的首頁搬過來（spec 2i SC-34.2）；首頁改成 dashboard。 */}
         <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/counterparties" element={<CounterpartiesPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/ledgers" element={<LedgersPage />} />
         <Route path="/ledgers/:ledgerId" element={<LedgerDetailPage />} />

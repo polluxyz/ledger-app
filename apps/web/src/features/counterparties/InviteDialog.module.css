@@ -1,0 +1,52 @@
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.separator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.separator::before,
+.separator::after {
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+  content: '';
+}
+
+.inviteLink {
+  margin-top: var(--space-md);
+}
+
+.inviteLink :global(input) {
+  font-size: var(--text-xs);
+}
+
+.linkMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: calc(-1 * var(--space-sm));
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.copyButton {
+  flex: none;
+  height: 1.875rem;
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-lg);
+}

@@ -161,7 +161,7 @@ describe('AppSidebar 的收合', () => {
 
     await user.click(screen.getByRole('button', { name: '收合側欄' }));
 
-    for (const name of ['首頁', '交易', '帳本', '帳戶', '分類']) {
+    for (const name of ['首頁', '交易', '對象', '帳本', '帳戶', '分類']) {
       expect(screen.getByRole('link', { name })).toBeInTheDocument();
     }
 
@@ -182,10 +182,15 @@ describe('AppSidebar 的收合', () => {
     expect(within(sidebar()).queryByRole('link', { name: '個人資料' })).not.toBeInTheDocument();
   });
 
-  it('navigates to the new transactions page', () => {
+  it('places the counterparties link after transactions and points it to its page', () => {
     render(<App />);
 
     expect(screen.getByRole('link', { name: '交易' })).toHaveAttribute('href', '/transactions');
+    expect(screen.getByRole('link', { name: '對象' })).toHaveAttribute('href', '/counterparties');
+    const links = within(screen.getByRole('navigation', { name: '主要導覽' })).getAllByRole('link');
+    expect(links.indexOf(screen.getByRole('link', { name: '對象' }))).toBe(
+      links.indexOf(screen.getByRole('link', { name: '交易' })) + 1,
+    );
   });
 });
 

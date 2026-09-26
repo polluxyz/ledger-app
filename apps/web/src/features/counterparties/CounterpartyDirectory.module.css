@@ -1,0 +1,133 @@
+.directory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.group,
+.invites {
+  min-width: 0;
+}
+
+.heading {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.list,
+.inviteList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.item + .item,
+.inviteRow + .inviteRow {
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background-color: var(--color-fill);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.nameGroup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.name,
+.nickname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.nickname {
+  color: var(--color-text-muted);
+}
+
+/* 連動標籤沿用借還清單的色彩與框線，讓同一狀態在兩處看起來一致。 */
+.linkBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-xs);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.inviteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.inviteName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cancelButton {
+  flex: none;
+  height: 1.875rem;
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
+}
+
+.empty,
+.limitNote {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.empty {
+  padding: var(--space-xl);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  text-align: center;
+}
+
+.limitNote {
+  text-align: center;
+}
