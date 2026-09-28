@@ -43,6 +43,11 @@ const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 const PENDING_LIMIT = 20;
 /** 送出的待確認邀請、待詢問的對象通常只有幾筆；一頁就夠。 */
 const LIST_LIMIT = 100;
+/**
+ * 待確認卡片多久自己重抓一次。對方送來的邀請與提議沒有推播，卡片只能輪詢；
+ * 30 秒夠即時，又不會讓一直開著的總覽頻繁打 API。分頁在背景時 React Query 不輪詢。
+ */
+export const PENDING_REFRESH_MS = 30_000;
 
 function invalidateAfterResponse(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
@@ -65,6 +70,7 @@ export function useIncomingLinkInvites() {
         `/friend-requests?direction=incoming&status=PENDING&limit=${PENDING_LIMIT}`,
       ),
     select: (page) => page.items,
+    refetchInterval: PENDING_REFRESH_MS,
   });
 }
 
@@ -78,6 +84,7 @@ export function useMergePrompts() {
     queryFn: () =>
       apiRequest<Paginated<Counterparty>>(`/counterparties?askMerge=true&limit=${LIST_LIMIT}`),
     select: (page) => page.items,
+    refetchInterval: PENDING_REFRESH_MS,
   });
 }
 
@@ -89,6 +96,7 @@ export function useIncomingProposals() {
       apiRequest<Paginated<DebtProposal>>(
         `/debt-proposals?direction=incoming&status=PENDING&limit=${PENDING_LIMIT}`,
       ),
+    refetchInterval: PENDING_REFRESH_MS,
   });
 }
 
