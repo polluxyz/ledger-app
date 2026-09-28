@@ -5,63 +5,38 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
-import { TextField } from '../../components/TextField';
 import { formatDate, formatMoney } from '../../lib/format';
 import {
   useCounterparty,
   useCounterpartyEntries,
-  useDeleteCounterparty,
   useDeleteDebtEntry,
   useForgiveCounterparty,
-  useRenameCounterparty,
-  useUnlinkCounterparty,
 } from './use-debts';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
-import { MergeDialog } from './MergeDialog';
-import { NicknameDialog } from './NicknameDialog';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
   counterpartyId: string;
   /** 記往來仍由新增表單負責；這裡只提供對象名字給交易頁。 */
   onRecordEntry: (name: string) => void;
-  /** 對象刪除成功後由交易頁把側欄切回新增表單。 */
-  onDeleted: () => void;
 }
 
-/** 對象往來帳顯示 API 回傳的餘額與逐筆紀錄，所有寫入都交給資料層 hooks。 */
-export function CounterpartyDetail({
-  counterpartyId,
-  onRecordEntry,
-  onDeleted,
-}: CounterpartyDetailProps) {
+/**
+ * 交易頁的往來帳只留帳（spec 修訂 2 W55）：名字＋連動標記、餘額、記一筆、免除剩餘
+ * 與往來紀錄（含修改、刪除）。改名、暱稱、合併、解除連動與刪除對象屬於對象頁的
+ * 「對象」面板（`CounterpartyProfile`），這裡不再出現。餘額與逐筆紀錄全部來自 API，
+ * 寫入交給資料層 hooks。
+ */
+export function CounterpartyDetail({ counterpartyId, onRecordEntry }: CounterpartyDetailProps) {
   const [page, setPage] = useState(1);
   const counterparty = useCounterparty(counterpartyId);
   const entries = useCounterpartyEntries(counterpartyId, { page, limit: 20 });
-  const rename = useRenameCounterparty();
-  const removeCounterparty = useDeleteCounterparty();
   const forgive = useForgiveCounterparty();
   const removeEntry = useDeleteDebtEntry();
-  const unlink = useUnlinkCounterparty();
 
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameName, setRenameName] = useState('');
-  const [nicknameOpen, setNicknameOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
   const [forgiveOpen, setForgiveOpen] = useState(false);
-  const [deleteCounterpartyOpen, setDeleteCounterpartyOpen] = useState(false);
-  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<DebtEntry | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<DebtEntry | null>(null);
-
-  function closeRename() {
-    setRenameOpen(false);
-    rename.reset();
-  }
-
-  function submitRename() {
-    rename.mutate({ counterpartyId, name: renameName.trim() }, { onSuccess: closeRename });
-  }
 
   function closeForgive() {
     setForgiveOpen(false);
@@ -70,20 +45,6 @@ export function CounterpartyDetail({
 
   function confirmForgive() {
     forgive.mutate(counterpartyId, { onSuccess: closeForgive });
-  }
-
-  function closeCounterpartyDelete() {
-    setDeleteCounterpartyOpen(false);
-    removeCounterparty.reset();
-  }
-
-  function confirmCounterpartyDelete() {
-    removeCounterparty.mutate(counterpartyId, {
-      onSuccess: () => {
-        closeCounterpartyDelete();
-        onDeleted();
-      },
-    });
   }
 
   function closeEntryDelete() {
@@ -98,15 +59,6 @@ export function CounterpartyDetail({
     removeEntry.mutate(entryToDelete.id, { onSuccess: closeEntryDelete });
   }
 
-  function closeUnlink() {
-    setUnlinkOpen(false);
-    unlink.reset();
-  }
-
-  function confirmUnlink() {
-    unlink.mutate(counterpartyId, { onSuccess: closeUnlink });
-  }
-
   if (counterparty.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -118,34 +70,14 @@ export function CounterpartyDetail({
   }
 
   const person = counterparty.data;
-  const recordTotal = entries.data?.total;
 
   return (
     <div className={styles.detail}>
       <header className={styles.heading}>
-        <div className={styles.headingIdentity}>
-          <div className={styles.titleRow}>
-            <h3>{person.displayName}</h3>
-            {person.link && <span className={styles.linkBadge}>連動</span>}
-          </div>
-          {person.link && person.name !== null && (
-            <span className={styles.accountName}>{person.link.userName}</span>
-          )}
+        <div className={styles.titleRow}>
+          <h3>{person.displayName}</h3>
+          {person.link && <span className={styles.linkBadge}>連動</span>}
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            if (person.link) {
-              setNicknameOpen(true);
-            } else {
-              setRenameName(person.name ?? '');
-              setRenameOpen(true);
-            }
-          }}
-        >
-          {person.link ? '設定暱稱' : '改名'}
-        </Button>
       </header>
 
       <p className={styles.balance}>
@@ -161,20 +93,6 @@ export function CounterpartyDetail({
             免除剩餘
           </Button>
         )}
-        {person.link ? (
-          <>
-            <Button type="button" variant="secondary" onClick={() => setMergeOpen(true)}>
-              合併之前的紀錄
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setUnlinkOpen(true)}>
-              解除連動
-            </Button>
-          </>
-        ) : recordTotal === 0 ? (
-          <Button type="button" variant="secondary" onClick={() => setDeleteCounterpartyOpen(true)}>
-            刪除對象
-          </Button>
-        ) : null}
       </div>
 
       <section className={styles.entries} aria-labelledby="counterparty-entries-heading">
@@ -251,39 +169,6 @@ export function CounterpartyDetail({
         )}
       </section>
 
-      <Dialog open={renameOpen} title="改名" onClose={closeRename}>
-        <form
-          className={styles.dialogForm}
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitRename();
-          }}
-        >
-          <FormError error={rename.error} />
-          <TextField
-            label="對象名字"
-            value={renameName}
-            required
-            maxLength={100}
-            disabled={rename.isPending}
-            onChange={(event) => setRenameName(event.target.value)}
-          />
-          <div className={styles.dialogActions}>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={rename.isPending}
-              onClick={closeRename}
-            >
-              取消
-            </Button>
-            <Button type="submit" disabled={rename.isPending || renameName.trim() === ''}>
-              {rename.isPending ? '儲存中…' : '儲存'}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-
       <ConfirmDialog
         open={forgiveOpen}
         title="免除剩餘"
@@ -293,16 +178,6 @@ export function CounterpartyDetail({
         isPending={forgive.isPending}
         onConfirm={confirmForgive}
         onCancel={closeForgive}
-      />
-      <ConfirmDialog
-        open={deleteCounterpartyOpen}
-        title="刪除對象"
-        message={`刪除「${person.displayName}」？`}
-        confirmLabel="刪除"
-        error={removeCounterparty.error}
-        isPending={removeCounterparty.isPending}
-        onConfirm={confirmCounterpartyDelete}
-        onCancel={closeCounterpartyDelete}
       />
       <ConfirmDialog
         open={entryToDelete !== null && !entryToDelete.paired}
@@ -334,40 +209,10 @@ export function CounterpartyDetail({
           </div>
         </div>
       </Dialog>
-      <Dialog open={unlinkOpen} title={`解除和${person.displayName}的連動`} onClose={closeUnlink}>
-        <div className={styles.confirmContent}>
-          <p>名字和紀錄都會保留</p>
-          <FormError error={unlink.error} />
-          <div className={styles.dialogActions}>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={unlink.isPending}
-              onClick={closeUnlink}
-            >
-              取消
-            </Button>
-            <Button type="button" disabled={unlink.isPending} onClick={confirmUnlink}>
-              解除連動
-            </Button>
-          </div>
-        </div>
-      </Dialog>
       <DebtEntryEditDialog
         entry={entryToEdit}
         displayName={person.displayName}
         onClose={() => setEntryToEdit(null)}
-      />
-      <NicknameDialog
-        open={nicknameOpen}
-        counterpartyId={counterpartyId}
-        name={person.name}
-        onClose={() => setNicknameOpen(false)}
-      />
-      <MergeDialog
-        open={mergeOpen}
-        counterpartyId={counterpartyId}
-        onClose={() => setMergeOpen(false)}
       />
     </div>
   );

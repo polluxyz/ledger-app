@@ -33,4 +33,9 @@ spec：`docs/specs/phase-3b2-web.md` §11（W52～W56、SC-W61～SC-W66）。純
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+2026-09-29 完成。
+
+1. **派工**：一個 Pi + `zai/glm-5.3` worker 做 T1～T4（約 12 分鐘）。協調者驗收完整 diff，範圍只有 Target 檔案。
+2. **與 plan 的差異**：無。`debts.spec.ts` 沒有管理步驟，不用改。
+3. **e2e 的一處改寫**：「帳上對不起來」那條原本在對象頁點「乙」看往來帳；改到交易頁借還檢視後，列上顯示的是 `displayName`（已合併成「小明」），所以選取改用 `/小明/`。
+4. **驗證**：lint、typecheck、format:check、build 通過；單元測試 API 319、Web 542（+6）；Web e2e 44、API e2e 141 全綠（協調者依序重跑）。

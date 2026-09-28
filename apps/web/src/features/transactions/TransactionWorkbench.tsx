@@ -31,8 +31,6 @@ export interface TransactionWorkbenchProps {
   onClose?: () => void;
   /** 從往來帳按「記一筆」時，要求新增表單開啟借還並預帶對象。 */
   onRecordEntry?: (name: string) => void;
-  /** 對象刪除成功時，讓頁面切回新增表單。 */
-  onCounterpartyDeleted?: () => void;
   /** @deprecated 相容舊的 onEditDone prop */
   onEditDone?: () => void;
 }
@@ -59,7 +57,6 @@ export function TransactionWorkbench({
   editing,
   onClose,
   onRecordEntry,
-  onCounterpartyDeleted,
   onEditDone,
 }: TransactionWorkbenchProps) {
   const { close, focusRequest } = useRightPanel();
@@ -120,7 +117,6 @@ export function TransactionWorkbench({
             key={activeTarget.counterpartyId}
             counterpartyId={activeTarget.counterpartyId}
             onRecordEntry={onRecordEntry ?? (() => {})}
-            onDeleted={onCounterpartyDeleted ?? handleClose}
           />
         </Dialog>
       )}

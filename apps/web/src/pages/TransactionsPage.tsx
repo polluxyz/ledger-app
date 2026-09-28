@@ -252,7 +252,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         target={panelTarget}
         onClose={() => setPanelTarget({ kind: 'new' })}
         onRecordEntry={recordEntry}
-        onCounterpartyDeleted={() => setPanelTarget({ kind: 'new' })}
       />
 
       {/*
