@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  PENDING_REFRESH_MS,
   useAcceptInviteLink,
   useAcceptLinkInvite,
   useAcceptProposal,
@@ -115,6 +116,31 @@ describe('Linking hooks', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(requests()[0]!.url).toMatch(url);
     expect(result.current.data?.map((row) => row.id)).toEqual(['row-1']);
+  });
+
+  /*
+   * 待確認卡片沒有推播，只能輪詢：時間往前推一個週期，三個來源都要再打一次 API。
+   * `shouldAdvanceTime` 讓 waitFor 的輪詢仍會前進，只有週期這一段用手動推進。
+   */
+  it.each([
+    { name: 'incoming link invites', hook: useIncomingLinkInvites },
+    { name: 'merge prompts', hook: useMergePrompts },
+    { name: 'incoming proposals', hook: useIncomingProposals },
+  ])('refetches $name every refresh period', async ({ hook }) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderHook(() => hook(), { wrapper });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PENDING_REFRESH_MS);
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      expect(requests()[1]!.url).toBe(requests()[0]!.url);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lists incoming pending proposals', async () => {
