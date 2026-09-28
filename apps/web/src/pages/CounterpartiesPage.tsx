@@ -1,34 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { RightPanelContent } from '../app/RightPanel';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
+import { Dialog } from '../components/Dialog';
 import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
 import { AddCounterpartyDialog } from '../features/debts/AddCounterpartyDialog';
-import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
 import { CounterpartyDirectory } from '../features/counterparties/CounterpartyDirectory';
+import { CounterpartyProfile } from '../features/counterparties/CounterpartyProfile';
 import { InviteDialog } from '../features/counterparties/InviteDialog';
-import {
-  TransactionWorkbench,
-  type PanelTarget,
-} from '../features/transactions/TransactionWorkbench';
 import styles from './CounterpartiesPage.module.css';
 
 /**
- * 對象頁只負責找人與開啟往來帳；人清單不依賴帳本，因此沒有作用中帳本時也照常顯示。
- * 新增交易與往來帳共用交易頁的右側欄，避免同一種操作在不同頁面長成兩套。
+ * 對象頁只管「有哪些人」（W46、W52）：清單不依賴帳本，右側欄放人的資料與管理
+ * 按鈕。修訂 2 起不再掛新增交易的右側欄（W54）——沒選人時右側欄收起，按叉叉或
+ * Esc 直接收起，不會跳出「新增一筆交易」。
  */
 export default function CounterpartiesPage() {
-  const { ledger } = useActiveLedger();
-  const { open, requestFocus } = useRightPanel();
+  const { open, close } = useRightPanel();
   const location = useLocation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [handledLocationKey, setHandledLocationKey] = useState<string | null>(null);
 
   /*
@@ -43,20 +41,21 @@ export default function CounterpartiesPage() {
   const openCounterpartyId = readOpenCounterpartyState(location.state);
 
   /*
-   * 從總覽或邀請頁導來時，先在 render 期間換面板目標，右側欄 mount 時就能直接顯示那個人。
-   * location key 代表一次導覽；記住它可避免清 state 後的 render 又重播同一個指示。
+   * 從總覽或邀請頁導來時，先在 render 期間換掉選的人，右側欄 mount 時就能直接
+   * 顯示那個人（W56）。location key 代表一次導覽；記住它可避免清 state 後的
+   * render 又重播同一個指示。
    */
   if (openCounterpartyId !== null && handledLocationKey !== location.key) {
     setHandledLocationKey(location.key);
-    setPanelTarget({ kind: 'counterparty', counterpartyId: openCounterpartyId });
+    setSelectedId(openCounterpartyId);
   }
 
   /*
    * 右側欄由外殼按 location key 管理。打開後用 replace 清掉一次性 state，並帶上保留旗標，
-   * 這樣重新整理不會重開往來帳，而 RightPanelProvider 也不會把剛開的欄位收起。
+   * 這樣重新整理不會重開那個人，而 RightPanelProvider 也不會把剛開的欄位收起。
    */
   useEffect(() => {
-    if (openCounterpartyId === null || !ledger) {
+    if (openCounterpartyId === null) {
       return;
     }
     open();
@@ -64,17 +63,20 @@ export default function CounterpartiesPage() {
       replace: true,
       state: { keepRightPanel: true },
     });
-  }, [ledger, location.pathname, location.search, navigate, open, openCounterpartyId]);
+  }, [location.pathname, location.search, navigate, open, openCounterpartyId]);
 
   function openCounterparty(counterpartyId: string) {
-    setPanelTarget({ kind: 'counterparty', counterpartyId });
+    setSelectedId(counterpartyId);
     open();
   }
 
-  /** 記往來沿用交易頁表單，只換成預帶對象的新增目標並把焦點交給欄位。 */
-  function recordEntry(name: string) {
-    setPanelTarget({ kind: 'new', debtCounterparty: name });
-    requestFocus();
+  /*
+   * 叉叉、Esc 或刪除對象成功都走這裡（W54）：清掉選的人並收起右側欄。
+   * 沒有別的預設內容，所以收起後不會出現任何表單。
+   */
+  function closePanel() {
+    setSelectedId(null);
+    close();
   }
 
   return (
@@ -109,14 +111,16 @@ export default function CounterpartiesPage() {
       />
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
 
-      {ledger && (
-        <TransactionWorkbench
-          ledger={ledger}
-          target={panelTarget}
-          onClose={() => setPanelTarget({ kind: 'new' })}
-          onRecordEntry={recordEntry}
-          onCounterpartyDeleted={() => setPanelTarget({ kind: 'new' })}
-        />
+      {selectedId !== null && (
+        <RightPanelContent>
+          <Dialog open={true} title="對象" variant="panel" onClose={closePanel}>
+            <CounterpartyProfile
+              key={selectedId}
+              counterpartyId={selectedId}
+              onDeleted={closePanel}
+            />
+          </Dialog>
+        </RightPanelContent>
       )}
     </>
   );

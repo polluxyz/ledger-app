@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Counterparty, LedgerSummary } from '@ledger/shared';
 import App from '../App';
 
+/**
+ * 對象頁的頁面測試：清單不依賴帳本、選人打開「對象」右側欄（W52）、關閉直接收起
+ * 右側欄而不出現「新增一筆交易」（W54、SC-W62），以及一次性導覽 state 的清理。
+ */
 describe('CounterpartiesPage', () => {
   const fetchMock = vi.fn();
   const ledger: LedgerSummary = {
@@ -110,7 +114,7 @@ describe('CounterpartiesPage', () => {
     });
   });
 
-  it('opens the selected person in the right panel without showing list balances', async () => {
+  it('opens the selected person in the profile panel without showing list balances', async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
@@ -118,8 +122,23 @@ describe('CounterpartiesPage', () => {
     expect(container).not.toHaveTextContent('$');
     await user.click(row);
 
-    const workbench = await screen.findByRole('dialog', { name: '借還往來' });
-    expect(within(workbench).getByRole('button', { name: '記一筆' })).toBeInTheDocument();
+    const panel = await screen.findByRole('dialog', { name: '對象' });
+    expect(within(panel).getByRole('heading', { name: '小明' })).toBeInTheDocument();
+    expect(within(panel).getByText('帳號名稱')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
+  });
+
+  it('closes the panel without falling back to the add-transaction form (SC-W62)', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: /王小明/ }));
+    const panel = await screen.findByRole('dialog', { name: '對象' });
+    // 叉叉的 aria-label 是「關閉」（見 components/Dialog 的 Header）。
+    await user.click(within(panel).getByRole('button', { name: '關閉' }));
+
+    expect(screen.queryByRole('dialog', { name: '對象' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
   it('opens and clears the one-time counterparty location state', async () => {
@@ -131,7 +150,7 @@ describe('CounterpartiesPage', () => {
     window.history.pushState(initialState, '', '/counterparties');
     render(<App />);
 
-    expect(await screen.findByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '對象' })).toBeInTheDocument();
     await waitFor(() => {
       const state = (window.history.state as { usr?: Record<string, unknown> }).usr;
       expect(state?.openCounterpartyId).toBeUndefined();
@@ -148,7 +167,8 @@ describe('CounterpartiesPage', () => {
     await user.type(within(addDialog).getByLabelText('名字'), '新對象');
     await user.click(within(addDialog).getByRole('button', { name: '新增' }));
 
-    expect(await screen.findByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
+    const panel = await screen.findByRole('dialog', { name: '對象' });
+    expect(within(panel).getByRole('heading', { name: '新對象' })).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
@@ -158,11 +178,14 @@ describe('CounterpartiesPage', () => {
     ).toBe(true);
   });
 
-  it('keeps the directory visible without mounting a transaction workbench when no ledger exists', async () => {
+  it('opens a person even when no ledger exists, without any transaction form', async () => {
     withLedger = false;
+    const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByRole('button', { name: /林小安/ })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /林小安/ }));
+    const panel = await screen.findByRole('dialog', { name: '對象' });
+    expect(within(panel).getByRole('heading', { name: '林小安' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 });

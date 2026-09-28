@@ -8,21 +8,12 @@
 .heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
 }
 
 .heading h3,
 .entries h4 {
   margin: 0;
-}
-
-.headingIdentity {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-  min-width: 0;
 }
 
 /* 名字與「連動」標籤同一行；標籤不被長名字擠掉。 */
@@ -41,11 +32,6 @@
   color: var(--color-accent);
   font-size: var(--text-xs);
   white-space: nowrap;
-}
-
-.accountName {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
 }
 
 .balance {

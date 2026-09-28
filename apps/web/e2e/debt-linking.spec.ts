@@ -8,7 +8,7 @@ import {
   TEST_PASSWORD,
 } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
-import { expectNoHorizontalOverflow, openDashboard } from './ui';
+import { expectNoHorizontalOverflow, openDashboard, openTransactions } from './ui';
 
 /**
  * 3b-2 往來帳連動的端對端流程（`docs/specs/phase-3b2-web.md` §6 與修訂 1 §10）。
@@ -19,6 +19,9 @@ import { expectNoHorizontalOverflow, openDashboard } from './ui';
  *
  * 前置條件（加人、連動）凡是別條測試已經走過畫面的，一律用 API 建立。每條結束前檢查頁面文字
  * 沒有「好友」（SC-W47），新彈窗都檢查不會出現橫向捲軸（SC-W59）。
+ *
+ * 修訂 2（W52、W55）：管理動作（暱稱、合併、解除連動）在對象頁的「對象」右側欄做；
+ * 帳（餘額、同步狀態）在交易頁借還檢視的「借還往來」右側欄看。
  */
 
 async function cash(request: APIRequestContext, token: string): Promise<number> {
@@ -52,9 +55,19 @@ function group(page: Page, name: '已連動' | '未連動'): Locator {
   return page.getByRole('region', { name: new RegExp(`^${name}`) });
 }
 
-/** 在對象頁點一個人，打開他的往來帳。 */
-async function openPerson(page: Page, name: string | RegExp): Promise<Locator> {
+/** 在對象頁點一個人，打開他的「對象」右側欄（修訂 2 W52：只放人的資料與管理按鈕）。 */
+async function openProfile(page: Page, name: string | RegExp): Promise<Locator> {
   await openCounterparties(page);
+  await page.getByRole('main').getByRole('button', { name }).first().click();
+  const profile = page.getByRole('dialog', { name: '對象' });
+  await profile.waitFor();
+  return profile;
+}
+
+/** 在交易頁的借還檢視點一個人，打開往來帳（修訂 2 W55：這裡只看帳）。 */
+async function openLedger(page: Page, name: string | RegExp): Promise<Locator> {
+  await openTransactions(page);
+  await page.getByRole('group', { name: '檢視' }).getByRole('button', { name: '借還' }).click();
   await page.getByRole('main').getByRole('button', { name }).first().click();
   const panel = ledgerPanel(page);
   await panel.waitFor();
@@ -144,9 +157,15 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   await openCounterparties(pageA);
   await expect(group(pageA, '已連動')).toContainText('乙（阿乙）');
 
+  // SC-W62（修訂 2）：對象頁打開某人 → 按叉叉 → 右側欄收起，不會跳出「新增一筆交易」。
+  const peek = await openProfile(pageA, /乙/);
+  await peek.getByRole('button', { name: '關閉' }).click();
+  await expect(pageA.getByRole('dialog', { name: '對象' })).toHaveCount(0);
+  await expect(pageA.getByRole('group', { name: '新增一筆交易' })).toHaveCount(0);
+
   // SC-W40（修訂後）：A 記借出 120 → B 的待確認用 B 取的暱稱寫「阿甲」→ 接受並選帳戶。
   const bCashBefore = await cash(request, userB.token);
-  const panelA = await openPerson(pageA, /乙/);
+  const panelA = await openLedger(pageA, /乙/);
   await panelA.getByRole('button', { name: '記一筆' }).click();
   const form = pageA.getByRole('group', { name: '新增一筆交易' });
   await form.getByRole('button', { name: '借出' }).click();
@@ -166,9 +185,10 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   await expect.poll(() => cash(request, userB.token)).toBe(bCashBefore + 120);
 
   // SC-W56：B 清掉暱稱 → 顯示回帳號名稱；再設回來。
-  const panelB = await openPerson(pageB, /甲/);
-  await expect(panelB.getByText('已同步')).toBeVisible();
-  await panelB.getByRole('button', { name: '設定暱稱' }).click();
+  const ledgerB = await openLedger(pageB, /甲/);
+  await expect(ledgerB.getByText('已同步')).toBeVisible();
+  const profileB = await openProfile(pageB, /甲/);
+  await profileB.getByRole('button', { name: '設定暱稱' }).click();
   const nickname = pageB.getByRole('dialog', { name: '設定暱稱' });
   await expectNoHorizontalOverflow(nickname);
   await nickname.getByLabel('暱稱').fill('');
@@ -176,8 +196,8 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   await expect(group(pageB, '已連動').getByRole('button', { name: /甲/ })).not.toContainText('（');
 
   // SC-W45：A 解除連動 → 名字與紀錄保留。
-  const panelAUnlink = await openPerson(pageA, /乙/);
-  await panelAUnlink.getByRole('button', { name: '解除連動' }).click();
+  const profileAUnlink = await openProfile(pageA, /乙/);
+  await profileAUnlink.getByRole('button', { name: '解除連動' }).click();
   const unlink = pageA.getByRole('dialog', { name: '解除和阿乙的連動' });
   await expectNoHorizontalOverflow(unlink);
   await unlink.getByRole('button', { name: '解除連動' }).click();
@@ -219,7 +239,10 @@ test('邀請連結：未登入開啟、頁內登入、接受不選人、打開�
   await pageB.getByRole('button', { name: '接受' }).click();
   await expect(pageB).toHaveURL(/\/counterparties$/);
   expect(new URL(pageB.url()).hash).toBe('');
-  await expect(ledgerPanel(pageB).getByRole('heading', { name: '甲' })).toBeVisible();
+  // W56：導到對象頁打開的是「對象」右側欄，不是往來帳。
+  await expect(
+    pageB.getByRole('dialog', { name: '對象' }).getByRole('heading', { name: '甲' }),
+  ).toBeVisible();
 
   await pageB.goto('/invite#not-a-real-token');
   await expect(pageB.getByText('連結無效或已過期')).toBeVisible();
@@ -228,7 +251,7 @@ test('邀請連結：未登入開啟、頁內登入、接受不選人、打開�
   await context.close();
 });
 
-test('錯過詢問：之後從往來帳「合併之前的紀錄」補做', async ({
+test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async ({
   signedInPage: pageA,
   userA,
   userB,
@@ -245,17 +268,20 @@ test('錯過詢問：之後從往來帳「合併之前的紀錄」補做', async
   });
   await linkByEmail(request, userA, userB);
 
-  // SC-W55：從往來帳補做合併。
-  const panel = await openPerson(pageA, /乙/);
-  await panel.getByRole('button', { name: '合併之前的紀錄' }).click();
+  // SC-W55（修訂 2 起從對象頁補做合併）。
+  const profile = await openProfile(pageA, /乙/);
+  await profile.getByRole('button', { name: '合併之前的紀錄' }).click();
   const merge = pageA.getByRole('dialog', { name: '合併之前的紀錄' });
   await expectNoHorizontalOverflow(merge);
   await merge.getByRole('combobox', { name: '併入' }).selectOption({ label: '舊乙' });
   await merge.getByRole('button', { name: '合併' }).click();
-  await expect(panel.getByRole('heading', { name: '舊乙' })).toBeVisible();
-  await expect(panel.getByText('舊乙欠你 $50')).toBeVisible();
   await expect(group(pageA, '已連動')).toContainText('乙（舊乙）');
   await expect(group(pageA, '未連動').getByRole('button', { name: '舊乙' })).toHaveCount(0);
+
+  // 帳（名字與餘額）在交易頁的往來帳看（W55）。
+  const panel = await openLedger(pageA, /舊乙/);
+  await expect(panel.getByRole('heading', { name: '舊乙' })).toBeVisible();
+  await expect(panel.getByText('舊乙欠你 $50')).toBeVisible();
 
   // 合併完成，待確認不再詢問。
   await openDashboard(pageA);
@@ -298,6 +324,7 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await pendingCard(pageB).getByRole('button', { name: '改成拒絕' }).click();
   await expect(pendingRow(pageB, '你還他 $50')).toHaveCount(0);
 
-  const panelA = await openPerson(pageA, /乙/);
-  await expect(panelA.getByText('對方未接受')).toBeVisible();
+  // 小明已併進乙（displayName＝小明），借還檢視的列顯示 displayName（W47）。
+  const ledgerA = await openLedger(pageA, /小明/);
+  await expect(ledgerA.getByText('對方未接受')).toBeVisible();
 });

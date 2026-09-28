@@ -1,0 +1,86 @@
+/* 「對象」面板分成名字、連動資料與管理按鈕；樣式沿用往來帳的寫法與設計 token。 */
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.heading h3 {
+  margin: 0;
+}
+
+/* 名字與「連動」標籤同一行；標籤不被長名字擠掉。 */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.linkBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-xs);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* 帳號名稱與暱稱各一列：標籤淡色靠左、值靠齊，不另加說明文字（W44、W52）。 */
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.factRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-sm);
+}
+
+.factRow dt {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.factRow dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actions,
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.dialogForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.dialogActions {
+  justify-content: flex-end;
+}
+
+.confirmContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.confirmContent p {
+  margin: 0;
+}
+
+.status {
+  margin: 0;
+  padding: var(--space-lg) 0;
+  color: var(--color-text-muted);
+}
