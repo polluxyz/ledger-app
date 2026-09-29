@@ -57,6 +57,8 @@ interface TransactionRow {
   // 加上判斷「檢視者是不是擁有者」的 ownerId。
   debtEntry: {
     id: string;
+    pairedEntryId: string | null;
+    note: string | null;
     counterparty: {
       id: string;
       name: string | null;
@@ -77,6 +79,8 @@ const TRANSACTION_INCLUDE = {
   debtEntry: {
     select: {
       id: true,
+      pairedEntryId: true,
+      note: true,
       counterparty: {
         select: {
           id: true,
@@ -609,6 +613,8 @@ export class TransactionsService {
         entry.counterparty.linkAsLow?.userHigh.name ??
         entry.counterparty.linkAsHigh?.userLow.name ??
         '',
+      paired: entry.pairedEntryId !== null,
+      note: entry.note,
     };
   }
 

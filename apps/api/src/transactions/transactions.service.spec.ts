@@ -478,12 +478,22 @@ describe('TransactionsService', () => {
       ...joined,
       type: 'LEND' as const,
       category: null,
-      debtEntry: { id: 'entry-1', counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId } },
+      debtEntry: {
+        id: 'entry-1',
+        pairedEntryId: null,
+        note: '晚餐',
+        counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId },
+      },
     };
     const paidForMeRow = {
       ...joined,
       account: null,
-      debtEntry: { id: 'entry-2', counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId } },
+      debtEntry: {
+        id: 'entry-2',
+        pairedEntryId: null,
+        note: '晚餐',
+        counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId },
+      },
     };
 
     it.each([
@@ -492,7 +502,22 @@ describe('TransactionsService', () => {
     ])('shows the counterparty of a %s transaction to its owner', async (_label, row, entryId) => {
       prisma.transaction.findFirst.mockResolvedValue(row);
       const result = await service.getById(ledgerId, 'txn-1', creatorId);
-      expect(result.debt).toEqual({ entryId, counterpartyId: 'cp-1', counterpartyName: '小明' });
+      expect(result.debt).toEqual({
+        entryId,
+        counterpartyId: 'cp-1',
+        counterpartyName: '小明',
+        paired: false,
+        note: '晚餐',
+      });
+    });
+
+    it('marks the debt as paired when the entry is synced with the other side', async () => {
+      prisma.transaction.findFirst.mockResolvedValue({
+        ...lendRow,
+        debtEntry: { ...lendRow.debtEntry, pairedEntryId: 'their-entry' },
+      });
+      const result = await service.getById(ledgerId, 'txn-1', creatorId);
+      expect(result.debt?.paired).toBe(true);
     });
 
     it.each([

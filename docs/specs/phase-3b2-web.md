@@ -407,3 +407,41 @@ apps/web/src/
 - **SC-W64**：改名、刪除對象、設定暱稱、合併之前的紀錄、解除連動都能在對象頁完成，結果同修訂 1（SC-W55、SC-W56 改在對象頁操作）。
 - **SC-W65**：新對話框沿用修訂 1 的文字（§10.2），通過 `expectNoHorizontalOverflow`。
 - **SC-W66**：`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠。
+
+## 12. 修訂 3（2026-09-29）：右側欄直接收起、明細直接編輯借還交易
+
+> 狀態：**已實作**（2026-09-30，實作紀錄：`tasks/archive/phase-3b2-revision3-plan.md` §5）。依據：同日開發者操作修訂 2 後的回饋——交易頁的往來帳按叉叉會跳到「新增一筆交易」；在明細點借還交易打開的是整本往來帳，不是那一筆。
+> 本節取代 `phase-2h-web-visual.md` §3 第 3 點的「面板回到新增表單」，以及 `phase-3b1-web.md` 的 W14 後半「點下去打開那個人的往來帳」與 SC-W24。
+
+### 12.1 決策
+
+| #   | 決策                                                                                                                                                                                                              | 來源   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| W57 | 交易頁與總覽的右側欄，「編輯交易」與「借還往來」兩種面板按**叉叉、Esc、取消、儲存成功**都直接收起右側欄，不回到「新增一筆交易」。要新增時按頁首「＋ 新增交易」                                                    | 開發者 |
+| W58 | 明細點借還交易或代付支出（`debt` 有值的列）→ 右側欄打開「編輯交易」，直接編輯那一筆往來紀錄：顯示那一列的標籤（例如「借出 · 小明」），欄位金額、日期、備註；按鈕「取消」「儲存」。沿用 `PATCH /debt-entries/{id}` | 開發者 |
+| W59 | 那一筆已同步時（`debt.paired`），加一行「會送給{名字}確認」（同 §10.2 的修改已同步紀錄）                                                                                                                          | 設計   |
+| W60 | `Transaction.debt` 新增 `paired: boolean`（同 `DebtEntry.paired`）與 `note`（往來紀錄的備註；借還交易本身的 `note` 一律是 `null`，編輯面板要帶入這一個）。只增欄位，不改資料庫                                    | 開發者 |
+| W61 | 明細的借還列仍然沒有刪除按鈕；刪除往來紀錄在借還檢視的往來帳做（不變）                                                                                                                                            | 設計   |
+
+往來帳面板裡的「記一筆」照舊切到新增表單並預帶對象。
+
+### 12.2 對專案結構的影響
+
+```
+packages/shared/src/types/transaction.ts           ～ TransactionDebtRef.paired
+apps/api/src/transactions/transactions.service.ts  ～ debt ref 帶 paired（select pairedEntryId）
+apps/web/src/features/transactions/TransactionWorkbench.tsx ～ 新目標 debtTransaction；關閉一律收起右側欄
+apps/web/src/features/debts/DebtEntryEditDialog.tsx ～ 表單可放進右側欄重用
+apps/web/src/features/transactions/TransactionList.tsx ～ debt 列點了改為編輯那一筆
+apps/web/src/pages/TransactionsPage.tsx、HomePage.tsx ～ 關閉時收起右側欄
+```
+
+不新增套件、環境變數、CI；不動資料庫。
+
+### 12.3 成功條件
+
+- **SC-W67**：交易頁打開往來帳 → 按叉叉 → 右側欄收起，沒有「新增一筆交易」。編輯交易面板按叉叉、Esc、取消、儲存成功也一樣；總覽頁同樣。
+- **SC-W68**：明細點「借出 · 小明」→ 右側欄「編輯交易」，金額、日期、備註帶入那一筆往來紀錄的值（備註取 `debt.note`）；改金額儲存 → 右側欄收起，明細與往來帳的金額都更新。
+- **SC-W69**：已同步的那一筆打開時有「會送給{名字}確認」；未同步的沒有。
+- **SC-W70**：API 的交易列表與單筆，`debt.paired` 與往來紀錄的 `paired` 一致；非擁有者仍然拿到 `debt: null`。
+- **SC-W71**：`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠。

@@ -84,7 +84,7 @@ type TransactionsView = 'details' | 'debts';
  * 呈現與回報操作，mutation、載入中與錯誤都在這裡。
  */
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
-  const { open, requestFocus } = useRightPanel();
+  const { close, open, requestFocus } = useRightPanel();
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
@@ -114,6 +114,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   function startEditing(transaction: Transaction) {
     setPanelTarget({ kind: 'transaction', transaction });
+    open();
+  }
+
+  function startEditingDebtTransaction(transaction: Transaction) {
+    setPanelTarget({ kind: 'debtTransaction', transaction });
     open();
   }
 
@@ -152,6 +157,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   function recordEntry(name: string) {
     setPanelTarget({ kind: 'new', debtCounterparty: name });
     requestFocus();
+  }
+
+  function closeWorkbench() {
+    setPanelTarget({ kind: 'new' });
+    close();
   }
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
@@ -232,9 +242,13 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
               isFiltered={hasAnyFilter(filters)}
               onEdit={startEditing}
               onRemove={setRemoving}
-              onOpenCounterparty={openCounterparty}
+              onEditDebtTransaction={startEditingDebtTransaction}
               // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
-              selectedId={panelTarget.kind === 'transaction' ? panelTarget.transaction.id : null}
+              selectedId={
+                panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction'
+                  ? panelTarget.transaction.id
+                  : null
+              }
             />
 
             <Pagination
@@ -250,7 +264,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
       <TransactionWorkbench
         ledger={ledger}
         target={panelTarget}
-        onClose={() => setPanelTarget({ kind: 'new' })}
+        onClose={closeWorkbench}
         onRecordEntry={recordEntry}
       />
 

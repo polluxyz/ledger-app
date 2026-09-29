@@ -2,12 +2,8 @@ import type { MouseEvent } from 'react';
 import { isDebtTransactionType, type Transaction } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
-import {
-  formatDate,
-  formatGroupDate,
-  formatTransactionAmount,
-  TRANSACTION_TYPE_LABELS,
-} from '../../lib/format';
+import { getTransactionLabel } from './transaction-label';
+import { formatDate, formatGroupDate, formatTransactionAmount } from '../../lib/format';
 import styles from './TransactionList.module.css';
 
 interface TransactionListProps {
@@ -20,8 +16,8 @@ interface TransactionListProps {
   selectedId?: string | null;
   onEdit: (transaction: Transaction) => void;
   onRemove: (transaction: Transaction) => void;
-  /** 點選自己有關聯對象的借還或代付交易時開啟該對象往來帳。 */
-  onOpenCounterparty?: (counterpartyId: string) => void;
+  /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
+  onEditDebtTransaction?: (transaction: Transaction) => void;
 }
 
 /**
@@ -44,27 +40,13 @@ const AMOUNT_COLOR: Record<Transaction['type'], string> = {
 };
 
 /**
- * 一列在沒有分類時顯示的名稱。轉帳與借還的 4 種都沒有分類，拿型別的中文名當
- * 標題，才不會把借出的錢寫成「轉帳」。
- */
-function typeLabel(transaction: Transaction): string {
-  if (isDebtTransactionType(transaction.type) && transaction.debt) {
-    return `${TRANSACTION_TYPE_LABELS[transaction.type]} · ${transaction.debt.counterpartyName}`;
-  }
-  if (transaction.debt && transaction.category) {
-    return `${transaction.category.name} · ${transaction.debt.counterpartyName}代付`;
-  }
-  return transaction.category?.name ?? TRANSACTION_TYPE_LABELS[transaction.type];
-}
-
-/**
  * 一列的口語描述，給編輯／刪除鈕當無障礙名稱用。
  *
  * 列表上每一列的按鈕只有圖示，光靠圖示分不出是哪一筆——螢幕閱讀器的使用者會
  * 聽到一串一模一樣的按鈕。加上日期與分類才指得明確。
  */
 function describe(transaction: Transaction): string {
-  return `${formatDate(transaction.date)} 的${typeLabel(transaction)}`;
+  return `${formatDate(transaction.date)} 的${getTransactionLabel(transaction)}`;
 }
 
 /** 同一天的一組交易。`key` 同時是分組依據與 React 的 key。 */
@@ -110,11 +92,11 @@ function rowTitle(transaction: Transaction) {
     <>
       {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
       {transaction.category ? (
-        <span className={styles.category}>{typeLabel(transaction)}</span>
+        <span className={styles.category}>{getTransactionLabel(transaction)}</span>
       ) : (
         <span className={styles.category}>
           <Icon name="transfer" />
-          {typeLabel(transaction)}
+          {getTransactionLabel(transaction)}
         </span>
       )}
       {transaction.note && <span className={styles.note}>{transaction.note}</span>}
@@ -130,7 +112,7 @@ export function TransactionList({
   selectedId = null,
   onEdit,
   onRemove,
-  onOpenCounterparty,
+  onEditDebtTransaction,
 }: TransactionListProps) {
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
@@ -152,7 +134,7 @@ export function TransactionList({
    * 所以先問這一下是不是打在按鈕上——否則按「刪除」會同時開啟編輯面板。
    *
    * 往來紀錄產生的交易不能從一般交易端點刪除或編輯。自己的紀錄有 `debt` 時，
-   * 點列要開啟對象往來帳；其他人的借還交易與未提供開啟入口時保持不可點。
+   * 點列直接編輯那筆往來紀錄；其他人的借還交易與未提供編輯入口時保持不可點。
    */
   function handleRowClick(event: MouseEvent<HTMLLIElement>, transaction: Transaction) {
     if ((event.target as Element).closest('button')) {
@@ -161,10 +143,10 @@ export function TransactionList({
     openRow(transaction);
   }
 
-  /** 點一列（或它的第一格按鈕）要做的事：一般交易開編輯，自己的借還交易開債務詳情。 */
+  /** 點一列（或它的第一格按鈕）要做的事：一般交易或自己的往來紀錄進入編輯。 */
   function openRow(transaction: Transaction) {
     if (transaction.debt) {
-      onOpenCounterparty?.(transaction.debt.counterpartyId);
+      onEditDebtTransaction?.(transaction);
       return;
     }
     if (isDebtTransactionType(transaction.type)) {
@@ -189,7 +171,7 @@ export function TransactionList({
           <ul className={styles.rows}>
             {group.transactions.map((transaction) => {
               const isDebt = isDebtTransactionType(transaction.type);
-              const isClickable = transaction.debt ? Boolean(onOpenCounterparty) : !isDebt;
+              const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
               const rowClassNames = [
                 styles.row,
                 isClickable ? styles.clickable : '',
@@ -213,11 +195,7 @@ export function TransactionList({
                     <button
                       type="button"
                       className={`${styles.main} ${styles.mainButton}`}
-                      aria-label={
-                        transaction.debt
-                          ? `查看${transaction.debt.counterpartyName}的借還`
-                          : `編輯${describe(transaction)}`
-                      }
+                      aria-label={`編輯${describe(transaction)}`}
                       onClick={() => openRow(transaction)}
                     >
                       {rowTitle(transaction)}

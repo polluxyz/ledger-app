@@ -139,7 +139,7 @@ describe('Debt ledger (e2e)', () => {
     );
     // SC-L15：擁有者看得到對象名字。
     for (const txn of await ledgerTransactions(user)) {
-      expect(txn.debt).toMatchObject({ counterpartyName: '小明' });
+      expect(txn.debt).toMatchObject({ counterpartyName: '小明', paired: false });
       expect(txn.category).toBeNull();
     }
   });

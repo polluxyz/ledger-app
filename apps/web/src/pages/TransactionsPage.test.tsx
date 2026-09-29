@@ -53,6 +53,7 @@ describe('Transactions page', () => {
     balanceAfter: 5000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
+    paired: false,
   };
   const lunch = {
     id: 'txn-1',
@@ -111,6 +112,13 @@ describe('Transactions page', () => {
   });
 
   const WAIT = { timeout: 5000 };
+
+  function parseRequestBody(options: RequestInit): unknown {
+    if (typeof options.body !== 'string') {
+      throw new Error('往來修改請求缺少 JSON body');
+    }
+    return JSON.parse(options.body) as unknown;
+  }
 
   /** 橫條與內容都在 `<main>` 裡，側欄不在。 */
   const page = () => within(screen.getByRole('main'));
@@ -246,7 +254,7 @@ describe('Transactions page', () => {
     expect(screen.getByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
   });
 
-  it('opens debt detail in right panel when clicking a debt item in debts view', async () => {
+  it('closes the right panel without showing the add form after closing debt detail', async () => {
     const user = userEvent.setup();
     window.history.pushState({}, '', '/transactions?view=debts');
     render(<App />);
@@ -257,6 +265,12 @@ describe('Transactions page', () => {
     const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
     expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
     expect(within(dialog).getByText('往來紀錄')).toBeInTheDocument();
+
+    const rightPanel = dialog.closest('[data-registered]');
+    await user.click(within(dialog).getByRole('button', { name: '關閉' }));
+    await waitFor(() => expect(rightPanel).not.toHaveAttribute('data-open'), WAIT);
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
   });
 
   it('starts a prefilled debt entry when 記一筆 is selected in the counterparty panel', async () => {
@@ -276,13 +290,14 @@ describe('Transactions page', () => {
     expect(within(form).getByLabelText('對象')).toHaveValue('小明');
   });
 
-  it('opens debt detail in right panel when clicking a debt transaction in details view', async () => {
+  it('edits a linked debt transaction directly and closes after sending only the changed amount', async () => {
+    let updatedAmount = 5000;
     const lendTxn = {
       id: 'txn-lend',
       type: 'LEND',
       amount: 5000,
       date: '2026-09-01T04:00:00.000Z',
-      note: '借出款項',
+      note: null,
       category: null,
       account: { id: account.id, name: account.name },
       toAccount: null,
@@ -291,10 +306,12 @@ describe('Transactions page', () => {
         entryId: 'entry-1',
         counterpartyId: 'counterparty-1',
         counterpartyName: '小明',
+        paired: false,
+        note: '借出款項',
       },
       createdAt: '2026-09-01T04:00:00.000Z',
     };
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -302,8 +319,24 @@ describe('Transactions page', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.includes('/debt-entries/entry-1') && options?.method === 'PATCH') {
+        if (typeof options.body !== 'string') {
+          throw new Error('往來修改請求缺少 JSON body');
+        }
+        const input = JSON.parse(options.body) as { amount?: unknown };
+        if (typeof input.amount !== 'number') {
+          throw new Error('往來修改請求沒有數字金額');
+        }
+        updatedAmount = input.amount;
+        return json({ ...debtEntry, delta: updatedAmount });
+      }
       if (url.includes('/transactions')) {
-        return json({ items: [lendTxn], page: 1, limit: 20, total: 1 });
+        return json({
+          items: [{ ...lendTxn, amount: updatedAmount }],
+          page: 1,
+          limit: 20,
+          total: 1,
+        });
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
@@ -328,10 +361,95 @@ describe('Transactions page', () => {
     render(<App />);
 
     const item = await screen.findByRole('listitem', undefined, WAIT);
-    await user.click(within(item).getByRole('button', { name: '查看小明的借還' }));
+    await user.click(within(item).getByRole('button', { name: /^編輯/ }));
 
-    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(dialog).getByText('借出 · 小明')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('金額')).toHaveValue(5000);
+    expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-09-01');
+    expect(within(dialog).getByLabelText('備註（選填）')).toHaveValue('借出款項');
+    expect(within(dialog).queryByText('會送給小明確認')).not.toBeInTheDocument();
+
+    const rightPanel = dialog.closest('[data-registered]');
+    await user.clear(within(dialog).getByLabelText('金額'));
+    await user.type(within(dialog).getByLabelText('金額'), '6000');
+    await user.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, request]) =>
+            String(url).includes('/debt-entries/entry-1') &&
+            (request as RequestInit | undefined)?.method === 'PATCH',
+        ),
+      ).toBe(true);
+    }, WAIT);
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, request]) =>
+        String(url).includes('/debt-entries/entry-1') &&
+        (request as RequestInit | undefined)?.method === 'PATCH',
+    );
+    expect(patchCall).toBeDefined();
+    expect(parseRequestBody(patchCall?.[1] as RequestInit)).toEqual({ amount: 6000 });
+
+    await waitFor(() => expect(rightPanel).not.toHaveAttribute('data-open'), WAIT);
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+    expect(await screen.findByText('-$6,000', undefined, WAIT)).toBeInTheDocument();
+  });
+
+  /*
+   * 借還交易本身的 note 一律是 null，備註存在往來紀錄上（debt.note）。面板要帶入的是後者，
+   * 否則使用者看到空白、填了字就會蓋掉原本的備註。
+   */
+  it('shows the paired line and prefills the note from the debt entry, not the transaction', async () => {
+    const lendTxn = {
+      id: 'txn-lend',
+      type: 'LEND',
+      amount: 5000,
+      date: '2026-09-01T04:00:00.000Z',
+      note: null,
+      category: null,
+      account: { id: account.id, name: account.name },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      debt: {
+        entryId: 'entry-1',
+        counterpartyId: 'counterparty-1',
+        counterpartyName: '小明',
+        paired: true,
+        note: '晚餐錢',
+      },
+      createdAt: '2026-09-01T04:00:00.000Z',
+    };
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.includes('/transactions')) {
+        return json({ items: [lendTxn], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) {
+        return json([expenseCategory]);
+      }
+      if (url.includes('/accounts')) {
+        return json([account]);
+      }
+      return json([ledger]);
+    });
+
+    const user = userEvent.setup();
+    render(<App />);
+    const item = await screen.findByRole('listitem', undefined, WAIT);
+    await user.click(within(item).getByRole('button', { name: /^編輯/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(dialog).getByText('會送給小明確認')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('備註（選填）')).toHaveValue('晚餐錢');
   });
 
   it('keeps an open add panel open while switching between details and debts', async () => {

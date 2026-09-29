@@ -218,7 +218,7 @@ describe('Home dashboard', () => {
     expect(balances.getByRole('link', { name: '管理' })).toHaveAttribute('href', '/accounts');
   });
 
-  it('opens the edit panel when a recent transaction is clicked', async () => {
+  it('opens the edit panel when clicked and collapses the dashboard side panel on close', async () => {
     // 摘要卡上沒有鉛筆與垃圾桶（假設 8）：整列就是「編輯這一筆」，刪除要到交易頁。
     const user = userEvent.setup();
     signIn();
@@ -233,6 +233,12 @@ describe('Home dashboard', () => {
 
     const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(panel).getByLabelText('金額')).toHaveValue(100);
+    await user.click(within(panel).getByRole('button', { name: '關閉' }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
   });
 
   it('opens the edit panel from the keyboard as well', async () => {
@@ -251,11 +257,9 @@ describe('Home dashboard', () => {
     expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
   });
 
-  it('never opens the edit panel for a debt transaction', async () => {
+  it('edits linked debt transactions from recent activity while leaving other peoples debt rows read-only', async () => {
     /*
-     * 借還交易（3b spec §7）在一般交易端點是唯讀的，摘要卡上那一列因此不是按鈕。
-     * 測試刻意在同一份清單裡放一筆支出：先確認點借還那列什麼都沒發生，再點支出
-     * 那列把面板叫出來——否則「面板沒開」可能只是因為整張卡根本還沒載好。
+     * 自己的往來紀錄可從首頁直接編輯；其他人的借還交易沒有 entryId，維持純展示。
      */
     const user = userEvent.setup();
     signIn();
@@ -270,7 +274,16 @@ describe('Home dashboard', () => {
         entryId: 'entry-1',
         counterpartyId: 'counterparty-1',
         counterpartyName: '小明',
+        paired: false,
+        note: null,
       },
+    };
+    const otherLend = {
+      ...lend,
+      id: 'txn-other-lend',
+      amount: 500,
+      note: '他人借出',
+      debt: null,
     };
     const expense = { ...transactions[1], id: 'txn-expense', note: '午餐' };
     const paidExpense = {
@@ -281,6 +294,8 @@ describe('Home dashboard', () => {
         entryId: 'entry-paid',
         counterpartyId: 'counterparty-1',
         counterpartyName: '小明',
+        paired: false,
+        note: null,
       },
     };
     fetchMock.mockImplementation((url: string) => {
@@ -292,7 +307,12 @@ describe('Home dashboard', () => {
           }),
         );
       if (url.includes('/transactions')) {
-        return json({ items: [lend, expense, paidExpense], page: 1, limit: 5, total: 3 });
+        return json({
+          items: [lend, otherLend, expense, paidExpense],
+          page: 1,
+          limit: 5,
+          total: 4,
+        });
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
@@ -308,18 +328,27 @@ describe('Home dashboard', () => {
     const card = await recentCard();
     // 借出的錢從帳戶出去，記負號；名稱是「借出」，不是沒有分類就寫的「轉帳」。
     expect(card.getByText('-$1,000')).toBeInTheDocument();
-    expect(card.getByText('借出')).toBeInTheDocument();
+    expect(card.getAllByText('借出')).toHaveLength(2);
     expect(card.queryByText('轉帳')).not.toBeInTheDocument();
-    // 沒有東西可以開，那一列就不該是按鈕。
-    expect(card.queryByRole('button', { name: /借小明/ })).not.toBeInTheDocument();
+    expect(card.getByRole('button', { name: /借小明/ })).toBeInTheDocument();
 
     await user.click(card.getByText('借小明'));
+    const debtEditor = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(debtEditor).getByText('借出 · 小明')).toBeInTheDocument();
+    expect(within(debtEditor).getByLabelText('金額')).toHaveValue(1000);
+    await user.click(within(debtEditor).getByRole('button', { name: '關閉' }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+
+    expect(card.queryByRole('button', { name: /他人借出/ })).not.toBeInTheDocument();
+    await user.click(card.getByText('他人借出'));
     expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
 
-    // 首頁沒有打開對象往來帳的入口，代付支出也以靜態列呈現。
-    expect(card.queryByRole('button', { name: /代付晚餐/ })).not.toBeInTheDocument();
+    expect(card.getByRole('button', { name: /代付晚餐/ })).toBeInTheDocument();
     await user.click(card.getByText('代付晚餐'));
-    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '關閉' }));
 
     await user.click(card.getByRole('button', { name: /午餐/ }));
     expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();

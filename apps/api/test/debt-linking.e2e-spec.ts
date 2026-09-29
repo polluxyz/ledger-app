@@ -485,6 +485,16 @@ describe('Debt linking (e2e)', () => {
       const [bobEntry] = await entries(bob, bobSide);
       expect(bobEntry).toMatchObject({ kind: 'BORROW', delta: -120, paired: true, sync: 'SYNCED' });
       expect((await entries(alice, aliceSide))[0]).toMatchObject({ paired: true, sync: 'SYNCED' });
+
+      // 修訂 3：交易上的 debt 也帶 paired，明細直接編輯時才知道要不要提醒對方確認。
+      const txns = await request(server())
+        .get(`/api/ledgers/${alice.ledgerId}/transactions`)
+        .set(auth(alice.token))
+        .expect(200);
+      expect((txns.body as Paginated<Transaction>).items[0]!.debt).toMatchObject({
+        entryId: (await entries(alice, aliceSide))[0]!.id,
+        paired: true,
+      });
     });
 
     it('SC-K6: a repayment mirrors REPAY ↔ COLLECT and both reach zero', async () => {

@@ -51,7 +51,7 @@ describe('Transaction workbench in the right panel', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
 
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation((url: string, options?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -59,6 +59,9 @@ describe('Transaction workbench in the right panel', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.endsWith('/transactions/txn-1') && options?.method === 'PATCH') {
+        return json(lunch);
+      }
       if (url.includes('/transactions')) {
         return json({ items: [lunch], page: 1, limit: 20, total: 1 });
       }
@@ -126,12 +129,15 @@ describe('Transaction workbench in the right panel', () => {
     expect(screen.getAllByLabelText('金額')).toHaveLength(1);
 
     await user.click(within(editPanel() as HTMLElement).getByRole('button', { name: '關閉' }));
-    await waitFor(() => expect(newForm()).toBeInTheDocument());
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+    expect(editPanel()).not.toBeInTheDocument();
     expect(screen.getAllByLabelText('金額')).toHaveLength(1);
     expect(pencil).toBeInTheDocument();
   });
 
-  it('returns to the add form and to the pencil button on Escape', async () => {
+  it('collapses the side panel and restores focus to the pencil button on Escape', async () => {
     // 面板是非 modal 的，焦點沒有被鎖住；按 Esc 之後焦點若掉回頁面最上面，
     // 鍵盤使用者得從頭 Tab 一次才回得到原本那一列。
     const user = userEvent.setup();
@@ -140,8 +146,11 @@ describe('Transaction workbench in the right panel', () => {
     const pencil = await openEditor(user);
     await user.keyboard('{Escape}');
 
-    await waitFor(() => expect(newForm()).toBeInTheDocument());
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
     expect(editPanel()).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
     expect(pencil).toHaveFocus();
   });
 
@@ -156,8 +165,38 @@ describe('Transaction workbench in the right panel', () => {
     await openEditor(user);
     await user.click(within(editPanel() as HTMLElement).getByRole('button', { name: '取消' }));
 
-    await waitFor(() => expect(newForm()).toBeInTheDocument());
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
     expect(editPanel()).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+  });
+
+  it('collapses the side panel after a successful ordinary transaction save', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openEditor(user);
+    const panel = editPanel() as HTMLElement;
+    const amount = within(panel).getByLabelText('金額');
+    await user.clear(amount);
+    await user.type(amount, '200');
+    await user.click(within(panel).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, options]) =>
+            String(url).endsWith('/transactions/txn-1') &&
+            (options as RequestInit | undefined)?.method === 'PATCH',
+        ),
+      ).toBe(true);
+    }, WAIT);
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+    expect(editPanel()).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
   });
 
   // ── 2i 新增：收起與焦點（SC-35.2、SC-35.3） ─────────────────────────────
