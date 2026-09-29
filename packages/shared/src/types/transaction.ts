@@ -97,6 +97,11 @@ export interface TransactionDebtRef {
   counterpartyId: string;
   /** 顯示用的名字（同 `Counterparty.displayName` 的規則，3b-2 修訂 1）。 */
   counterpartyName: string;
+  /**
+   * 這筆往來紀錄是否已與對方同步（同 `DebtEntry.paired`，3b-2 修訂 3）。明細直接編輯借還
+   * 交易時，前端靠它決定要不要提醒「會送給對方確認」。
+   */
+  paired: boolean;
 }
 
 /**
