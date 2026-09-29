@@ -5,8 +5,10 @@ import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
 import { CounterpartyDetail } from '../debts/CounterpartyDetail';
+import { DebtEntryEditForm } from '../debts/DebtEntryEditDialog';
 import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
+import { getTransactionLabel } from './transaction-label';
 import styles from './TransactionWorkbench.module.css';
 
 /**
@@ -15,11 +17,13 @@ import styles from './TransactionWorkbench.module.css';
  * - `new`：新增表單（預設）。
  * - `transaction`：編輯一筆一般交易。
  * - `counterparty`：檢視對象的往來帳與紀錄。
+ * - `debtTransaction`：編輯一筆往來紀錄產生的交易。
  */
 export type PanelTarget =
   | { kind: 'new'; debtCounterparty?: string }
   | { kind: 'transaction'; transaction: Transaction }
-  | { kind: 'counterparty'; counterpartyId: string };
+  | { kind: 'counterparty'; counterpartyId: string }
+  | { kind: 'debtTransaction'; transaction: Transaction };
 
 export interface TransactionWorkbenchProps {
   ledger: LedgerSummary;
@@ -44,7 +48,7 @@ export interface TransactionWorkbenchProps {
  * ## 新增、交易編輯與債務詳情互斥
  *
  * 欄位標籤與焦點必須清晰，同一時間只會渲染其中一種內容。
- * 債務詳情以 `Dialog variant="panel"` 包裹，關閉時回到新增表單。
+ * 借還往來與編輯目標都以 `Dialog variant="panel"` 包裹；頁面負責關閉時收起側欄。
  *
  * ## 焦點怎麼進來（SC-35.3）
  *
@@ -117,6 +121,21 @@ export function TransactionWorkbench({
             key={activeTarget.counterpartyId}
             counterpartyId={activeTarget.counterpartyId}
             onRecordEntry={onRecordEntry ?? (() => {})}
+          />
+        </Dialog>
+      )}
+      {activeTarget.kind === 'debtTransaction' && activeTarget.transaction.debt && (
+        <Dialog open={true} title="編輯交易" variant="panel" onClose={handleClose}>
+          <p>{getTransactionLabel(activeTarget.transaction)}</p>
+          <DebtEntryEditForm
+            key={activeTarget.transaction.debt.entryId}
+            entryId={activeTarget.transaction.debt.entryId}
+            amount={activeTarget.transaction.amount}
+            date={activeTarget.transaction.date}
+            note={activeTarget.transaction.debt.note}
+            paired={activeTarget.transaction.debt.paired}
+            displayName={activeTarget.transaction.debt.counterpartyName}
+            onClose={handleClose}
           />
         </Dialog>
       )}

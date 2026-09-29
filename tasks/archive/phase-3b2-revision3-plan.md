@@ -31,4 +31,9 @@ spec：`docs/specs/phase-3b2-web.md` §12（W57～W61、SC-W67～SC-W71）。
 
 ## 5. 實作紀錄
 
-（實作時填寫）
+2026-09-30 完成。
+
+1. **派工**：先派 Pi + GLM，開發者中途指示改派 Codex（`gpt-6-luna` max）；GLM 停掉時還沒改任何檔案。Codex 用同一份 Task spec 在同一個 worktree 做完 Web。
+2. **驗收發現（計畫外）**：借還交易本身的 `note` 一律是 `null`，備註存在往來紀錄上。面板若帶 `transaction.note` 會顯示空白，使用者填字就蓋掉原備註。開發者同意在 `Transaction.debt` 再補 `note`（W60 已更新），協調者自己改 shared、API 與 Web 的帶值，並把測試 fixture 改成真實形狀（交易 note 為 null、備註在 debt.note）。
+3. **e2e 修正**：Codex 寫的 `getByRole('button', { name: /小明/ })` 在切換檢視的當下會同時命中明細列，改成 `/^小明/`。
+4. **新增的共用 helper**：`features/transactions/transaction-label.ts`（列與面板共用標籤）。

@@ -21,7 +21,11 @@ export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEd
       {entry && (
         <DebtEntryEditForm
           key={entry.id}
-          entry={entry}
+          entryId={entry.id}
+          amount={Math.abs(entry.delta)}
+          date={entry.date}
+          note={entry.note}
+          paired={entry.paired}
           displayName={displayName}
           onClose={onClose}
         />
@@ -30,18 +34,29 @@ export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEd
   );
 }
 
-function DebtEntryEditForm({
-  entry,
-  displayName,
-  onClose,
-}: {
-  entry: DebtEntry;
+export interface DebtEntryEditFormProps {
+  entryId: string;
+  /** 往來紀錄金額以正數編輯。 */
+  amount: number;
+  date: string;
+  note: string | null;
+  paired: boolean;
   displayName: string;
   onClose: () => void;
-}) {
-  const originalAmount = Math.abs(entry.delta);
-  const originalDate = toDateInputValue(new Date(entry.date));
-  const originalNote = entry.note ?? '';
+}
+
+/** 可獨立放進對話框或右側欄的往來紀錄編輯表單。 */
+export function DebtEntryEditForm({
+  entryId,
+  amount: originalAmount,
+  date: originalDateValue,
+  note: originalNoteValue,
+  paired,
+  displayName,
+  onClose,
+}: DebtEntryEditFormProps) {
+  const originalDate = toDateInputValue(new Date(originalDateValue));
+  const originalNote = originalNoteValue ?? '';
   const [amount, setAmount] = useState(String(originalAmount));
   const [date, setDate] = useState(originalDate);
   const [note, setNote] = useState(originalNote);
@@ -67,13 +82,13 @@ function DebtEntryEditForm({
       return;
     }
 
-    updateEntry.mutate({ entryId: entry.id, input }, { onSuccess: onClose });
+    updateEntry.mutate({ entryId, input }, { onSuccess: onClose });
   }
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <FormError error={updateEntry.error} />
-      {entry.paired && <p>會送給{displayName}確認</p>}
+      {paired && <p>會送給{displayName}確認</p>}
       <TextField
         label="金額"
         type="number"

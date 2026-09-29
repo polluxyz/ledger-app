@@ -60,7 +60,7 @@ function ledgerPanel(page: Page): Locator {
   return page.getByRole('dialog', { name: '借還往來' });
 }
 
-test('往來帳主線：借出、借入抵銷、以此結清、從明細打開往來帳、刪除與免除、修改', async ({
+test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、刪除與免除、修改', async ({
   signedInPage: page,
   userA,
   request,
@@ -106,9 +106,20 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
   ).toBe(false);
   await expect(page.getByRole('button', { name: /小明.*兩清/ })).toBeVisible();
 
-  // SC-W24：回到明細，點「借出 · 小明」→ 打開小明的往來帳，balanceAfter 新到舊是 0、4、9、120。
+  // SC-W58：明細點借還列直接編輯該筆；收起後改從借還檢視開啟往來帳。
   await viewSwitch(page).getByRole('button', { name: '明細' }).click();
   await transactionRow(page, '借出 · 小明').click();
+  const transactionDialog = page.getByRole('dialog', { name: '編輯交易' });
+  await expect(transactionDialog.getByText('借出 · 小明')).toBeVisible();
+  await expect(transactionDialog.getByLabel('金額')).toHaveValue('120');
+  await transactionDialog.getByRole('button', { name: '關閉' }).click();
+  await expect(transactionDialog).toHaveCount(0);
+  expect(
+    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
+  ).toBe(true);
+
+  await viewSwitch(page).getByRole('button', { name: '借還' }).click();
+  await page.getByRole('button', { name: /^小明/ }).click();
   const panel = ledgerPanel(page);
   await expect(panel.getByText('兩清', { exact: true })).toBeVisible();
   const balances = panel.getByText(/^餘額 /);
@@ -140,6 +151,52 @@ test('往來帳主線：借出、借入抵銷、以此結清、從明細打開�
   await editDialog.getByRole('button', { name: /儲存/ }).click();
   await expect(panel.getByText('小明欠你 $34')).toBeVisible();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 34);
+});
+
+test('SC-W67：交易頁關閉往來帳後收起右側欄', async ({ signedInPage: page }) => {
+  await openTransactions(page);
+  const form = await openDebtTab(page);
+  await fill(form, '小明', '借出', 120, { account: '現金' });
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+
+  await viewSwitch(page).getByRole('button', { name: '借還' }).click();
+  await page.getByRole('button', { name: /^小明/ }).click();
+  const panel = ledgerPanel(page);
+  await expect(panel.getByText('小明欠你 $120')).toBeVisible();
+
+  await panel.getByRole('button', { name: '關閉' }).click();
+  await expect(panel).toHaveCount(0);
+  expect(
+    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
+  ).toBe(true);
+});
+
+test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', async ({ signedInPage: page }) => {
+  await openTransactions(page);
+  const form = await openDebtTab(page);
+  await fill(form, '小明', '借出', 120, { account: '現金' });
+  await form.getByLabel('備註（選填）').fill('原備註');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+
+  const row = transactionRow(page, '借出 · 小明');
+  await expect(row).toBeVisible();
+  await row.click();
+
+  const dialog = page.getByRole('dialog', { name: '編輯交易' });
+  await expect(dialog.getByLabel('金額')).toHaveValue('120');
+  await expect(dialog.getByLabel('備註（選填）')).toHaveValue('原備註');
+  await dialog.getByLabel('金額').fill('180');
+  await dialog.getByRole('button', { name: '儲存' }).click();
+
+  await expect(dialog).toHaveCount(0);
+  expect(
+    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
+  ).toBe(true);
+  await expect(row.getByText('-$180')).toBeVisible();
+
+  await viewSwitch(page).getByRole('button', { name: '借還' }).click();
+  await page.getByRole('button', { name: /^小明/ }).click();
+  await expect(ledgerPanel(page).getByText('小明欠你 $180')).toBeVisible();
 });
 
 test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款要結清', async ({

@@ -58,6 +58,7 @@ interface TransactionRow {
   debtEntry: {
     id: string;
     pairedEntryId: string | null;
+    note: string | null;
     counterparty: {
       id: string;
       name: string | null;
@@ -79,6 +80,7 @@ const TRANSACTION_INCLUDE = {
     select: {
       id: true,
       pairedEntryId: true,
+      note: true,
       counterparty: {
         select: {
           id: true,
@@ -612,6 +614,7 @@ export class TransactionsService {
         entry.counterparty.linkAsHigh?.userLow.name ??
         '',
       paired: entry.pairedEntryId !== null,
+      note: entry.note,
     };
   }
 

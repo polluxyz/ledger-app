@@ -111,7 +111,7 @@ function LedgerView() {
  * 右側欄（portal 過去），兩者只有這個共同的父層。
  */
 function Dashboard({ ledger }: { ledger: LedgerSummary }) {
-  const { open, requestFocus } = useRightPanel();
+  const { close, open, requestFocus } = useRightPanel();
   const [editing, setEditing] = useState<Transaction | null>(null);
 
   // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
@@ -121,6 +121,11 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
     setEditing(transaction);
     // 使用者收起過右側欄時，點了一筆卻沒反應是最糟的情況。
     open();
+  }
+
+  function closeWorkbench() {
+    setEditing(null);
+    close();
   }
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
@@ -162,8 +167,14 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
       <TransactionWorkbench
         ledger={ledger}
-        target={editing ? { kind: 'transaction', transaction: editing } : { kind: 'new' }}
-        onClose={() => setEditing(null)}
+        target={
+          editing
+            ? editing.debt
+              ? { kind: 'debtTransaction', transaction: editing }
+              : { kind: 'transaction', transaction: editing }
+            : { kind: 'new' }
+        }
+        onClose={closeWorkbench}
       />
     </>
   );
@@ -299,12 +310,15 @@ function RecentBody({
         );
 
         /*
-          往來產生的交易要到交易頁開啟對象往來帳；首頁摘要沒有那個入口，
-          所以借還交易與代付支出都維持純展示，避免放一顆沒有正確目的地的按鈕。
+          自己有關聯紀錄的交易可直接編輯；別人的借還交易沒有往來 entryId，維持純展示。
         */
         return (
           <li key={transaction.id}>
-            {isDebtTransactionType(transaction.type) || transaction.debt ? (
+            {transaction.debt ? (
+              <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>
+                {content}
+              </button>
+            ) : isDebtTransactionType(transaction.type) ? (
               <div className={rowClass}>{content}</div>
             ) : (
               <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>

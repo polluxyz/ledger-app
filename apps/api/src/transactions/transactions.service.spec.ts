@@ -481,6 +481,7 @@ describe('TransactionsService', () => {
       debtEntry: {
         id: 'entry-1',
         pairedEntryId: null,
+        note: '晚餐',
         counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId },
       },
     };
@@ -490,6 +491,7 @@ describe('TransactionsService', () => {
       debtEntry: {
         id: 'entry-2',
         pairedEntryId: null,
+        note: '晚餐',
         counterparty: { id: 'cp-1', name: '小明', ownerId: creatorId },
       },
     };
@@ -505,6 +507,7 @@ describe('TransactionsService', () => {
         counterpartyId: 'cp-1',
         counterpartyName: '小明',
         paired: false,
+        note: '晚餐',
       });
     });
 
