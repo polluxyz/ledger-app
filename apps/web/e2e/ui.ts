@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * 畫面操作的共用輔助函式。
@@ -32,6 +32,15 @@ export async function switchLedger(page: Page, name: string): Promise<void> {
  */
 export function newTransactionForm(page: Page): Locator {
   return page.getByRole('group', { name: '新增一筆交易' });
+}
+
+/**
+ * 右側欄按關閉後的樣子（修訂 3 W57）：欄位收起，內容仍留在 inert 的欄位裡讓滑出動畫顯示
+ * 同一個面板，而且沒有換成「新增一筆交易」。所以不檢查面板消失，改檢查欄位與新增表單。
+ */
+export async function expectRightPanelClosedWithoutAddForm(page: Page): Promise<void> {
+  await expect(page.locator('[data-registered]')).not.toHaveAttribute('data-open');
+  await expect(newTransactionForm(page)).toHaveCount(0);
 }
 
 /** 交易列表的篩選列。 */

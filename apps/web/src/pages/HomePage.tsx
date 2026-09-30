@@ -111,7 +111,7 @@ function LedgerView() {
  * 右側欄（portal 過去），兩者只有這個共同的父層。
  */
 function Dashboard({ ledger }: { ledger: LedgerSummary }) {
-  const { close, open, requestFocus } = useRightPanel();
+  const { close, isOpen, open, requestFocus } = useRightPanel();
   const [editing, setEditing] = useState<Transaction | null>(null);
 
   // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
@@ -123,8 +123,11 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
     open();
   }
 
+  /*
+   * 關閉只收起右側欄，不清掉正在編輯的那一筆（W57）：收起有滑出動畫，這時換成新增表單，
+   * 動畫裡滑出去的就會是「新增一筆交易」。打開右側欄的入口都會先設好要顯示的內容。
+   */
   function closeWorkbench() {
-    setEditing(null);
     close();
   }
 
@@ -158,7 +161,7 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
             transactions={recent.data?.items ?? []}
             isLoading={recent.isLoading}
             error={recent.error}
-            selectedId={editing?.id ?? null}
+            selectedId={isOpen ? (editing?.id ?? null) : null}
             onSelect={startEditing}
           />
           <AccountBalances />

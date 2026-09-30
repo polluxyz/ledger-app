@@ -132,7 +132,8 @@ describe('Transaction workbench in the right panel', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    expect(editPanel()).not.toBeInTheDocument();
+    // 收起後留著的是編輯面板（inert），新增表單沒有回來，所以金額欄仍只有一個。
+    expect(editPanel()?.closest('[inert]')).not.toBeNull();
     expect(screen.getAllByLabelText('金額')).toHaveLength(1);
     expect(pencil).toBeInTheDocument();
   });
@@ -149,8 +150,9 @@ describe('Transaction workbench in the right panel', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    expect(editPanel()).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+    // 收起時內容留著讓滑出動畫顯示同一個面板（W57），而不是換成新增表單。
+    expect(editPanel()?.closest('[inert]')).not.toBeNull();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
     expect(pencil).toHaveFocus();
   });
 
@@ -168,8 +170,9 @@ describe('Transaction workbench in the right panel', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    expect(editPanel()).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+    // 收起時內容留著讓滑出動畫顯示同一個面板（W57），而不是換成新增表單。
+    expect(editPanel()?.closest('[inert]')).not.toBeNull();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
   it('collapses the side panel after a successful ordinary transaction save', async () => {
@@ -195,8 +198,9 @@ describe('Transaction workbench in the right panel', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    expect(editPanel()).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+    // 收起時內容留著讓滑出動畫顯示同一個面板（W57），而不是換成新增表單。
+    expect(editPanel()?.closest('[inert]')).not.toBeNull();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
   // ── 2i 新增：收起與焦點（SC-35.2、SC-35.3） ─────────────────────────────

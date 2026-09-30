@@ -38,7 +38,15 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
   // 用計數而不是布林：換頁時新頁面的登記可能比舊頁面的取消先發生。
   const [registrations, setRegistrations] = useState(0);
   const [focusRequest, setFocusRequest] = useState(0);
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [slot, setSlotState] = useState<HTMLElement | null>(null);
+  // close() 是穩定的 callback，要在裡面讀到最新的 slot，所以設定時另外存一份在 ref。
+  const slotRef = useRef<HTMLElement | null>(null);
+  const setSlot = useCallback((element: HTMLElement | null) => {
+    slotRef.current = element;
+    setSlotState(element);
+  }, []);
+  // 打開右側欄時焦點所在的元素（通常是被點的那一列或按鈕），收起時把焦點還給它。
+  const triggerRef = useRef<Element | null>(null);
 
   const isRegistered = registrations > 0;
   const isOpen = isRegistered && openedAt === locationKey;
@@ -65,13 +73,44 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
     previousLocationKey.current = locationKey;
   }, [isRegistered, location.key, location.state, locationKey, navigationType, openedAt]);
 
-  const open = useCallback(() => setOpenedAt(locationKey), [locationKey]);
-  const close = useCallback(() => setOpenedAt(null), []);
+  /*
+   * 記下是誰打開的。從右側欄裡面再打開（例如往來帳的「記一筆」切到新增表單）不算，
+   * 否則收起時焦點會被還到一個已經看不見的按鈕。
+   */
+  const rememberTrigger = useCallback(() => {
+    const active = document.activeElement;
+    if (!slotRef.current?.contains(active)) {
+      triggerRef.current = active;
+    }
+  }, []);
+
+  const open = useCallback(() => {
+    rememberTrigger();
+    setOpenedAt(locationKey);
+  }, [locationKey, rememberTrigger]);
+
+  /*
+   * 收起時內容不卸載（修訂 3 W57：滑出動畫要顯示原本的面板），所以面板卸載時那段「焦點
+   * 還給觸發按鈕」不會跑。這裡在收起的當下補做：焦點還在右側欄裡才搬，使用者若已經點到
+   * 別處就不動。必須在設 state 之前做，之後欄位變 inert，焦點會掉到 body。
+   */
+  const close = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (
+      slotRef.current?.contains(document.activeElement) &&
+      trigger instanceof HTMLElement &&
+      trigger.isConnected
+    ) {
+      trigger.focus();
+    }
+    setOpenedAt(null);
+  }, []);
 
   const requestFocus = useCallback(() => {
+    rememberTrigger();
     setOpenedAt(locationKey);
     setFocusRequest((count) => count + 1);
-  }, [locationKey]);
+  }, [locationKey, rememberTrigger]);
 
   const register = useCallback(() => {
     setRegistrations((count) => count + 1);
@@ -90,7 +129,7 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
       setSlot,
       register,
     }),
-    [isRegistered, isOpen, open, close, requestFocus, focusRequest, slot, register],
+    [isRegistered, isOpen, open, close, requestFocus, focusRequest, slot, setSlot, register],
   );
 
   return <RightPanelContext.Provider value={value}>{children}</RightPanelContext.Provider>;
