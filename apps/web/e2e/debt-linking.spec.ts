@@ -8,7 +8,12 @@ import {
   TEST_PASSWORD,
 } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
-import { expectNoHorizontalOverflow, openDashboard, openTransactions } from './ui';
+import {
+  expectNoHorizontalOverflow,
+  expectRightPanelClosedWithoutAddForm,
+  openDashboard,
+  openTransactions,
+} from './ui';
 
 /**
  * 3b-2 往來帳連動的端對端流程（`docs/specs/phase-3b2-web.md` §6 與修訂 1 §10）。
@@ -160,8 +165,7 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   // SC-W62（修訂 2）：對象頁打開某人 → 按叉叉 → 右側欄收起，不會跳出「新增一筆交易」。
   const peek = await openProfile(pageA, /乙/);
   await peek.getByRole('button', { name: '關閉' }).click();
-  await expect(pageA.getByRole('dialog', { name: '對象' })).toHaveCount(0);
-  await expect(pageA.getByRole('group', { name: '新增一筆交易' })).toHaveCount(0);
+  await expectRightPanelClosedWithoutAddForm(pageA);
 
   // SC-W40（修訂後）：A 記借出 120 → B 的待確認用 B 取的暱稱寫「阿甲」→ 接受並選帳戶。
   const bCashBefore = await cash(request, userB.token);

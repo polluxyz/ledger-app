@@ -2,6 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { listAccounts } from './api';
 import { expect, test } from './fixtures';
 import {
+  expectRightPanelClosedWithoutAddForm,
   newTransactionForm,
   openNewTransaction,
   openTransactions,
@@ -113,10 +114,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   await expect(transactionDialog.getByText('借出 · 小明')).toBeVisible();
   await expect(transactionDialog.getByLabel('金額')).toHaveValue('120');
   await transactionDialog.getByRole('button', { name: '關閉' }).click();
-  await expect(transactionDialog).toHaveCount(0);
-  expect(
-    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
-  ).toBe(true);
+  await expectRightPanelClosedWithoutAddForm(page);
 
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
   await page.getByRole('button', { name: /^小明/ }).click();
@@ -165,10 +163,7 @@ test('SC-W67：交易頁關閉往來帳後收起右側欄', async ({ signedInPag
   await expect(panel.getByText('小明欠你 $120')).toBeVisible();
 
   await panel.getByRole('button', { name: '關閉' }).click();
-  await expect(panel).toHaveCount(0);
-  expect(
-    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
-  ).toBe(true);
+  await expectRightPanelClosedWithoutAddForm(page);
 });
 
 test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', async ({ signedInPage: page }) => {
@@ -188,10 +183,7 @@ test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', as
   await dialog.getByLabel('金額').fill('180');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
-  await expect(dialog).toHaveCount(0);
-  expect(
-    await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
-  ).toBe(true);
+  await expectRightPanelClosedWithoutAddForm(page);
   await expect(row.getByText('-$180')).toBeVisible();
 
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();

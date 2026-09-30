@@ -237,8 +237,9 @@ describe('Home dashboard', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '新增一筆交易' }).closest('[inert]')).not.toBeNull();
+    // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
+    expect(screen.getByRole('dialog', { name: '編輯交易' }).closest('[inert]')).not.toBeNull();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
   it('opens the edit panel from the keyboard as well', async () => {
@@ -343,7 +344,8 @@ describe('Home dashboard', () => {
 
     expect(card.queryByRole('button', { name: /他人借出/ })).not.toBeInTheDocument();
     await user.click(card.getByText('他人借出'));
-    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    // 別人的借還列不可點：右側欄維持收起（收起的面板裡仍留著上一筆，見 W57）。
+    expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
 
     expect(card.getByRole('button', { name: /代付晚餐/ })).toBeInTheDocument();
     await user.click(card.getByText('代付晚餐'));

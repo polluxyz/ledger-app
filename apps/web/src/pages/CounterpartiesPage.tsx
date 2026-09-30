@@ -71,10 +71,15 @@ export default function CounterpartiesPage() {
   }
 
   /*
-   * 叉叉、Esc 或刪除對象成功都走這裡（W54）：清掉選的人並收起右側欄。
-   * 沒有別的預設內容，所以收起後不會出現任何表單。
+   * 叉叉與 Esc（W54）：只收起右側欄，留著那個人，讓滑出動畫裡還是他的資料，
+   * 而不是先變空白。沒有別的預設內容，所以收起後不會出現任何表單。
    */
   function closePanel() {
+    close();
+  }
+
+  /** 刪除成功後那個人已經不存在，留著只會在動畫裡閃出錯誤，所以一併清掉。 */
+  function handleDeleted() {
     setSelectedId(null);
     close();
   }
@@ -117,7 +122,7 @@ export default function CounterpartiesPage() {
             <CounterpartyProfile
               key={selectedId}
               counterpartyId={selectedId}
-              onDeleted={closePanel}
+              onDeleted={handleDeleted}
             />
           </Dialog>
         </RightPanelContent>

@@ -84,7 +84,7 @@ type TransactionsView = 'details' | 'debts';
  * 呈現與回報操作，mutation、載入中與錯誤都在這裡。
  */
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
-  const { close, open, requestFocus } = useRightPanel();
+  const { close, isOpen, open, requestFocus } = useRightPanel();
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
@@ -159,8 +159,12 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     requestFocus();
   }
 
+  /*
+   * 關閉只收起右側欄，不換內容（W57）：收起有滑出動畫，這時先換成新增表單，動畫裡滑出去
+   * 的就會是「新增一筆交易」。每個打開右側欄的入口都會先設好自己的目標，所以留著舊內容
+   * 不會在下次打開時露出來。
+   */
   function closeWorkbench() {
-    setPanelTarget({ kind: 'new' });
     close();
   }
 
@@ -244,8 +248,10 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
               onRemove={setRemoving}
               onEditDebtTransaction={startEditingDebtTransaction}
               // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
+              // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
               selectedId={
-                panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction'
+                isOpen &&
+                (panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction')
                   ? panelTarget.transaction.id
                   : null
               }

@@ -137,7 +137,8 @@ describe('CounterpartiesPage', () => {
     // 叉叉的 aria-label 是「關閉」（見 components/Dialog 的 Header）。
     await user.click(within(panel).getByRole('button', { name: '關閉' }));
 
-    expect(screen.queryByRole('dialog', { name: '對象' })).not.toBeInTheDocument();
+    // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
+    expect(screen.getByRole('dialog', { name: '對象' }).closest('[inert]')).not.toBeNull();
     expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
