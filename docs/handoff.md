@@ -5,37 +5,39 @@
 
 ---
 
-## 最新交接（2026-09-26，3b-2 修訂 1）
+## 最新交接（2026-10-01，3b-2 修訂 2、3 與右側欄修正）
 
 ### 現況
 
-- 3b-2 修訂 1 完成（PR 見 git log）：側欄「對象」頁、邀請不綁人、接受後詢問「之前有沒有用別的名字記過他」並合併、暱稱（`displayName`）、介面文字極簡。spec：`phase-3b2-linking.md` §12（決策 73～81）、`phase-3b2-web.md` §10（W44～W51）。實作紀錄：`tasks/archive/phase-3b2-revision1-plan.md` §5。
-- 交易頁的「借還」檢視維持原樣（看帳）；「對象」頁管人，不顯示欠款。
-- 派工規則更新：複雜後端派 Codex `gpt-6-sol` xhigh（`CLAUDE.md` §11）。
+- 3b-2 已做到修訂 3，全部合併。spec：`docs/specs/phase-3b2-web.md` §11（修訂 2）、§12（修訂 3）；實作紀錄在 `tasks/archive/phase-3b2-revision{2,3}-plan.md`。
+  - #80：總覽「待確認」卡片每 30 秒輪詢（原本的已知問題，已解）。
+  - #82（修訂 2）：對象頁只管人，右側欄「對象」只有資料與管理按鈕；交易頁往來帳只留帳。
+  - #83（修訂 3）：交易頁與總覽右側欄關閉／取消／儲存都直接收起；明細點借還交易直接編輯那一筆。API：`Transaction.debt` 加 `paired`、`note`（只增欄位）。
+  - #84：收起時內容保留到滑出動畫結束；`RightPanelProvider.close()` 把焦點還給打開它的元素。
+- 開發者已確認畫面。沒有進行中的 PR、worker 或 worktree（Orca run `run_3caaf6182415` 已全部結清，不需接手）。
 
 ### 下一步
 
-1. 開發者操作修訂 1 的畫面後給回饋；照 `CLAUDE.md` §5 先改 spec 再動工。
-2. 仍未處理：待確認卡片不會自己刷新（要切回分頁或重新整理）。
-3. 更後面：代墊／多人分帳（要改資料模型）。
+1. 等開發者操作後的回饋；照 `CLAUDE.md` §5 先改 spec 再動工。
+2. 更後面：代墊／多人分帳（要改資料模型），或收尾階段三進入階段四。開發者還沒決定。
 
 ### 開發者的偏好與約束（不在 spec 裡的）
 
-- 回覆用繁體中文；設計涉及金錢時「不能繁瑣，但不能失去嚴謹」。
-- 看到成果再調整：開發者習慣先操作畫面再回饋，spec 視為活文件。
-- 單邊紀錄是「自己的紀錄」，刪改看自己；牽涉到對方（連動）才需要警告或確認。
-- 不要先做半套：付款人欄位這類會一起調整的東西，等整體設計時一次做。
-- 畫面**不出現「好友」**；管人的頁面叫「對象」，分「已連動」「未連動」兩區（修訂 1）。
-- **介面文字極簡**：彈窗只放標題、欄位、按鈕；只有和錢有關、不寫會做錯時留一句短話（W44）。
-- 解除連動後，對象的名字不能消失（決策 71）。
-- worker 順序：Codex（`gpt-6-luna` max）→ Pi GLM → Antigravity Gemini；不必再問（`CLAUDE.md` §11）。
-- 開發者的 dev API 用 `node dist/main` 跑、不是 watch：後端改完要提醒他 `pnpm build` 後重開 API；改了 `packages/shared` 也要重開 Vite。
+- 回覆用繁體中文；金錢流程「不能繁瑣，但不能失去嚴謹」；介面文字極簡（W44）。
+- 看到成果再調整：開發者先操作畫面再回饋，spec 視為活文件。
+- **對象頁只管人（名單與資料），借還資訊只在交易頁**；管理按鈕也只在對象頁。
+- **右側欄的叉叉一律直接收起**，不要退回新增表單，動畫裡也不能出現新增表單（同一問題回報過三次）。
+- 單邊紀錄是「自己的紀錄」；牽涉到對方（連動）才需要警告或確認。畫面不出現「好友」。
+- **worker 順序：Codex（`gpt-6-luna` max）優先**。開發者 09-28 曾改成 GLM 優先，09-29 又改回 Codex；以 `CLAUDE.md` §11 為準。
+- 開發者的 dev 伺服器在 `web-redesign` worktree（detached HEAD，跟 `origin/main`）跑：API 用 `node dist/main`、不是 watch。後端或 `packages/shared` 有改：替他 `git checkout --detach origin/main`、`pnpm --filter @ledger/shared build`、`apps/api` 的 `pnpm build`（有 migration 再 `prisma migrate deploy`），然後請他重開 API 與 Vite。只改前端時 Vite 會自動更新，請他按 `Ctrl + Shift + R`。
 
 ### 已知問題與踩過的坑
 
-- **dev 資料庫要套新的 migration**（`20260926120000_counterparty_nickname_merge`）：在 `apps/api` 跑 `pnpm exec prisma migrate deploy`、`pnpm build`，重開 API（`node dist/main`）與 Vite。這個 migration 會取消所有還沒被接受的舊邀請。
-- Codex 有新版時會停在更新提示，`worker-start` 回 `agent-update-prompt`：選 3「Skip until next version」後關掉終端機重開。
-- `prisma migrate dev` 在 agent 的非互動環境不能跑：用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL（plan §6 第 2 點）。
-- dev 資料有一筆舊規則留下的「我還對方 +$1」（對方欠我時記的），不會自動修正，開發者可自行刪除。
-- **不要用 PowerShell 的 `Get-Content`／`Set-Content` 改含中文的檔案**：預設編碼會把 UTF-8 中文變亂碼（本 session 踩過，已從 git 還原）。改檔用 Edit 工具或 Bash。
-- Codex worker 用 `worker-start --terminal` 時仍會只貼上不送出，派工後要讀畫面、補 `orca terminal send --enter`（`docs/orca-multi-agent.md` §4 已記）。
+- **借還交易本身的 `note` 一律是 `null`**，備註存在往來紀錄上（`Transaction.debt.note`）。顯示或編輯借還交易的備註要用後者。
+- **右側欄收起時內容不卸載**（#84）。新增打開右側欄的入口時，一定要先設定面板目標；列表的選取標示要配合 `isOpen`。
+- Orca 重開後，舊的 `check --wait` 會留下「waiter_exists」而一直回空結果。改用 `worker-list` 的 `projection.outcome` 輪詢，或等舊 waiter 逾時。
+- `worker-start --terminal` 用自己開的終端機時，`worker-stop` 關不掉程序，要再 `orca terminal close`。
+- 主工作區 `git pull` 之後若 typecheck 報 shared 欄位不存在，是 `packages/shared/dist` 舊了：跑 `pnpm --filter @ledger/shared build`。
+- `prisma migrate dev` 在 agent 的非互動環境不能跑：用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL。
+- **不要用 PowerShell 的 `Get-Content`／`Set-Content` 改含中文的檔案**（編碼會壞）。改檔用 Edit 工具或 Bash。
+- Codex worker 用 `worker-start --terminal` 時偶爾只貼上不送出：派工後讀畫面，必要時補 `orca terminal send --enter`。
