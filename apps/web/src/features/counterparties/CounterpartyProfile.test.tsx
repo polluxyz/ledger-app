@@ -14,7 +14,7 @@ describe('CounterpartyProfile', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
 
-  const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 9876 };
+  const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 987600 };
 
   beforeEach(() => {
     localStorage.clear();
@@ -58,7 +58,7 @@ describe('CounterpartyProfile', () => {
           name,
           displayName: options.displayName ?? name ?? options.link?.userName ?? '小明',
           askMerge: false,
-          balance: 9,
+          balance: 900,
           link: options.link ?? null,
           createdAt: '2026-09-01T04:00:00.000Z',
           updatedAt: '2026-09-01T04:00:00.000Z',

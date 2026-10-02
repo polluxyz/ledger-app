@@ -12,8 +12,8 @@ describe('CounterpartyDirectory', () => {
     name: '小明',
     displayName: '小明',
     askMerge: false,
-    balance: 987654,
-    link: { userId: 'user-1', userName: '王小明', theirBalance: -123456 },
+    balance: 98765400,
+    link: { userId: 'user-1', userName: '王小明', theirBalance: -12345600 },
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
   };

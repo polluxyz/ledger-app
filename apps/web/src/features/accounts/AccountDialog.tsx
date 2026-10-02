@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { Account } from '@ledger/shared';
+import { parseMoneyInput, type Account } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog, type DialogVariant } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
@@ -52,15 +52,16 @@ function AccountDialogForm({
   const createAccount = useCreateAccount();
   const updateAccount = useUpdateAccount();
   const mutation = isNew ? createAccount : updateAccount;
+  const initialBalanceCents = parseMoneyInput(initialBalance, { allowNegative: true });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (isNew) {
-      createAccount.mutate(
-        { name, initialBalance: Number(initialBalance) },
-        { onSuccess: onClose },
-      );
+      if (initialBalanceCents === null) {
+        return;
+      }
+      createAccount.mutate({ name, initialBalance: initialBalanceCents }, { onSuccess: onClose });
     } else {
       // 編輯只送名稱。多送 initialBalance 會被後端退回 400（DTO 沒有這個欄位，
       // 且全域開了 forbidNonWhitelisted）。
@@ -88,8 +89,8 @@ function AccountDialogForm({
           <TextField
             label="初始餘額"
             type="number"
-            step={1}
-            inputMode="numeric"
+            step="0.01"
+            inputMode="decimal"
             hint="開始使用本系統時這個帳戶已有的金額，建立後不可更改。信用卡的欠款請填負數。"
             value={initialBalance}
             required
@@ -97,7 +98,11 @@ function AccountDialogForm({
           />
         )}
 
-        <Button type="submit" block disabled={mutation.isPending}>
+        <Button
+          type="submit"
+          block
+          disabled={mutation.isPending || (isNew && initialBalanceCents === null)}
+        >
           {mutation.isPending ? '儲存中…' : isNew ? '新增' : '儲存'}
         </Button>
       </form>

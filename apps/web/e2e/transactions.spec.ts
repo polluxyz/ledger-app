@@ -61,7 +61,7 @@ test('情境 7：編輯金額後帳戶餘額跟著變', async ({ signedInPage: p
 
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: TODAY,
     categoryId: expense!.id,
     accountId: cash!.id,
@@ -93,7 +93,7 @@ test('情境 8：刪除後那一筆從列表消失', async ({ signedInPage: page
 
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: TODAY,
     categoryId: expense!.id,
     accountId: cash!.id,
@@ -118,7 +118,7 @@ test('情境 8：刪除後那一筆從列表消失', async ({ signedInPage: page
 });
 
 test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage: page, userA, request }) => {
-  await createAccount(request, userA.token, { name: '國泰世華', initialBalance: 5000 });
+  await createAccount(request, userA.token, { name: '國泰世華', initialBalance: 500000 });
 
   await page.reload();
   // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
@@ -143,19 +143,42 @@ test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage
   await expect(page.getByLabel('現金餘額')).toHaveText('$500');
 });
 
+test('3c-0：列表將小數金額顯示到分、整數金額不補小數', async ({
+  signedInPage: page,
+  userA,
+  request,
+}) => {
+  const { expense } = await personalSetup(request, userA.token);
+  await openNewTransaction(page);
+
+  const form = newTransactionForm(page);
+  await form.getByLabel('分類').selectOption(expense.id);
+  await form.getByLabel('金額').fill('333.33');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+
+  await expect(transactionRow(page, '-$333.33')).toBeVisible();
+  await expect(page.getByLabel('現金餘額')).toHaveText('-$333.33');
+
+  await form.getByLabel('金額').fill('3000');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+
+  await expect(transactionRow(page, '-$3,000')).toBeVisible();
+  await expect(transactionRow(page, '-$3,000.00')).toHaveCount(0);
+});
+
 test('情境 10：篩選只留下符合條件的交易', async ({ signedInPage: page, userA, request }) => {
   const { ledger, cash, expense, income } = await personalSetup(request, userA.token);
 
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: TODAY,
     categoryId: expense.id,
     accountId: cash.id,
   });
   await createTransaction(request, userA.token, ledger.id, {
     type: 'INCOME',
-    amount: 5000,
+    amount: 500000,
     date: TODAY,
     categoryId: income.id,
     accountId: cash.id,
@@ -187,7 +210,7 @@ test('情境 11：翻到第 2 頁，改篩選就回到第 1 頁', async ({
   for (let index = 0; index < 21; index += 1) {
     await createTransaction(request, userA.token, ledger.id, {
       type: 'EXPENSE',
-      amount: 101 + index,
+      amount: (101 + index) * 100,
       date: TODAY,
       categoryId: expense.id,
       accountId: cash.id,
@@ -231,7 +254,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   // 乙用**自己的**帳戶記一筆。甲看得到金額與分類，看不到帳戶（SC-18）。
   await createTransaction(request, userB.token, shared.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: TODAY,
     categoryId: expense.id,
     accountId: bCash!.id,
@@ -261,7 +284,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
 
   // 這才是重點：錢還是記在乙的戶頭，甲的餘額一毛都沒動。
   const [bCashAfter] = await listAccounts(request, userB.token);
-  expect(bCashAfter!.balance).toBe(-200);
+  expect(bCashAfter!.balance).toBe(-20000);
   await expect(page.getByLabel('現金餘額')).toHaveText('$0');
 });
 
@@ -273,7 +296,7 @@ test('編輯彈窗不會被欄位撐到橫向捲動', async ({ signedInPage: pag
 
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: TODAY,
     categoryId: expense.id,
     accountId: cash.id,

@@ -22,11 +22,11 @@ describe('Filtering and paging the transaction list', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: null,
     category: expenseCategory,

@@ -1,32 +1,26 @@
-import type { TransactionType } from '@ledger/shared';
+import {
+  formatAmount as formatCentsAmount,
+  formatMoney as formatCentsMoney,
+  type Cents,
+  type TransactionType,
+} from '@ledger/shared';
 
 /**
- * 顯示用的格式化工具。純粹是呈現層——不做任何金額運算（加總、換算一律屬
- * 後端職責）。
+ * 顯示用的格式化工具。金額單位換算交給 shared，這裡只組合頁面需要的呈現字串。
  */
 
 /**
- * 把金額整數格式化成人看的字串。
+ * 把分格式化成人看的金額，不帶貨幣符號與正負號。
+ */
+export const formatAmount = formatCentsAmount;
+
+/**
+ * 帶貨幣符號的金額；單位是分，整數元不顯示小數。
  *
- * 後端存的是「帳本幣別的最小單位」，而 TWD 的最小單位就是元，因此**不做任何
- * 除法換算**，只加上千分位。未來支援有輔幣的幣別（如 USD 的分）時，需依幣別
- * 的小數位數處理，屆時對照表會放在 packages/shared。
+ * 負號位置由 shared 統一處理，讓帳戶餘額與交易列表保持同一種寫法；負數餘額
+ *（例如信用卡欠款）是正常狀態，畫面也需要清楚標出方向。
  */
-export function formatAmount(amount: number): string {
-  return amount.toLocaleString('zh-TW');
-}
-
-/**
- * 帶貨幣符號的金額：`$3,240`、`-$6,820`。
- *
- * 負號放在 `$` 前面。直接寫 `` `$${formatAmount(n)}` `` 會得到 `$-6,820`，
- * 而交易列表的支出寫成 `-$120`——同一個 app 兩種寫法，使用者得多想一下
- * 哪個才是「欠錢」。負數餘額（信用卡欠款）是正常狀態，寫法要跟支出一致。
- */
-export function formatMoney(amount: number): string {
-  const sign = amount < 0 ? '-' : '';
-  return `${sign}$${formatAmount(Math.abs(amount))}`;
-}
+export const formatMoney = formatCentsMoney;
 
 /**
  * 7 種交易型別的中文名稱。交易頁與首頁共用同一份——兩邊各寫一份的話，同一筆
@@ -71,8 +65,8 @@ const TRANSACTION_SIGN: Record<TransactionType, string> = {
  * 交易頁的表格與首頁的「最近交易」共用這一個函式（2i）。兩處各寫一份的話，
  * 改了其中一邊，同一筆交易在兩頁就會長得不一樣——e2e 也是靠這個字串找列的。
  */
-export function formatTransactionAmount(type: TransactionType, amount: number): string {
-  return `${TRANSACTION_SIGN[type]}$${formatAmount(amount)}`;
+export function formatTransactionAmount(type: TransactionType, amount: Cents): string {
+  return `${TRANSACTION_SIGN[type]}${formatCentsMoney(Math.abs(amount))}`;
 }
 
 /** ISO 8601 時間字串轉成 `2026/08/12` 這種好讀的日期。 */

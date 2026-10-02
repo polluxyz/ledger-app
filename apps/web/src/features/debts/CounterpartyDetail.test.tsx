@@ -17,18 +17,18 @@ describe('CounterpartyDetail', () => {
     id: 'entry-1',
     counterpartyId: 'cp-1',
     kind: 'LEND',
-    delta: 120,
+    delta: 12000,
     date: '2026-09-01T04:00:00.000Z',
     note: '借款',
     transactionId: 'txn-1',
-    balanceAfter: 120,
+    balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
   };
 
-  const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 9876 };
+  const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 987600 };
 
   beforeEach(() => {
     localStorage.clear();
@@ -82,7 +82,7 @@ describe('CounterpartyDetail', () => {
   }
 
   function renderDetail(
-    balance = 9,
+    balance = 900,
     items: unknown[] = [baseEntry],
     total = items.length,
     options: {
@@ -102,8 +102,8 @@ describe('CounterpartyDetail', () => {
   }
 
   it.each([
-    [9, '小明欠你 $9'],
-    [-11, '你欠小明 $11'],
+    [900, '小明欠你 $9'],
+    [-1100, '你欠小明 $11'],
     [0, '兩清'],
   ])('shows the API balance phrase for balance %i', async (balance, phrase) => {
     renderDetail(balance);
@@ -121,7 +121,7 @@ describe('CounterpartyDetail', () => {
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {
-    renderDetail(9, [baseEntry], 1, {
+    renderDetail(900, [baseEntry], 1, {
       link: linkedUser,
       name: '小明',
       displayName: '小明',
@@ -144,24 +144,24 @@ describe('CounterpartyDetail', () => {
 
   it('shows Chinese entry kinds, signed deltas, API balances, notes, and the unrecorded label', async () => {
     const entries = [
-      { ...baseEntry, id: 'lend', kind: 'LEND', delta: 120, balanceAfter: 120 },
+      { ...baseEntry, id: 'lend', kind: 'LEND', delta: 12000, balanceAfter: 12000 },
       {
         ...baseEntry,
         id: 'borrow',
         kind: 'BORROW',
-        delta: -111,
-        balanceAfter: 9,
+        delta: -11100,
+        balanceAfter: 900,
         transactionId: null,
         note: null,
       },
-      { ...baseEntry, id: 'collect', kind: 'COLLECT', delta: 30 },
-      { ...baseEntry, id: 'repay', kind: 'REPAY', delta: 40 },
-      { ...baseEntry, id: 'paid', kind: 'PAID_FOR_ME', delta: -50, balanceAfter: -11 },
+      { ...baseEntry, id: 'collect', kind: 'COLLECT', delta: 3000 },
+      { ...baseEntry, id: 'repay', kind: 'REPAY', delta: 4000 },
+      { ...baseEntry, id: 'paid', kind: 'PAID_FOR_ME', delta: -5000, balanceAfter: -1100 },
       {
         ...baseEntry,
         id: 'settlement',
         kind: 'SETTLEMENT',
-        delta: -8,
+        delta: -800,
         balanceAfter: 0,
         transactionId: null,
       },
@@ -169,7 +169,7 @@ describe('CounterpartyDetail', () => {
         ...baseEntry,
         id: 'forgive',
         kind: 'FORGIVE',
-        delta: -9,
+        delta: -900,
         balanceAfter: 0,
         transactionId: null,
       },
@@ -239,7 +239,7 @@ describe('CounterpartyDetail', () => {
   it('adds the paired deletion explanation', async () => {
     const user = userEvent.setup();
     const pairedEntry = { ...baseEntry, paired: true };
-    renderDetail(9, [pairedEntry], 1, {
+    renderDetail(900, [pairedEntry], 1, {
       link: linkedUser,
       name: '小明',
       displayName: '小明',
@@ -258,7 +258,7 @@ describe('CounterpartyDetail', () => {
 
   it('confirms forgiveness with the API balance amount', async () => {
     const user = userEvent.setup();
-    renderDetail(50);
+    renderDetail(5000);
     await screen.findByText('小明欠你 $50');
     await user.click(screen.getByRole('button', { name: '免除剩餘' }));
 
