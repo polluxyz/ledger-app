@@ -31,7 +31,7 @@ async function seedTransactions(request: APIRequestContext, token: string): Prom
     date.setDate(date.getDate() - Math.floor(index / 3));
     await createTransaction(request, token, ledger.id, {
       type: 'EXPENSE',
-      amount: 100 + index,
+      amount: (100 + index) * 100,
       date: date.toISOString(),
       categoryId: expense.id,
       accountId: cash!.id,

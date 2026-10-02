@@ -12,11 +12,11 @@ describe('DebtEntryEditDialog', () => {
     id: 'entry-1',
     counterpartyId: 'cp-1',
     kind: 'LEND',
-    delta: 120,
+    delta: 12000,
     date: '2026-09-01T00:00:00.000Z',
     note: '原備註',
     transactionId: 'txn-1',
-    balanceAfter: 120,
+    balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -70,7 +70,7 @@ describe('DebtEntryEditDialog', () => {
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/debt-entries/entry-1');
     expect(options.method).toBe('PATCH');
-    expect(parseRequestBody(options)).toEqual({ amount: 250 });
+    expect(parseRequestBody(options)).toEqual({ amount: 25000 });
   });
 
   it('sends null when the note is cleared', async () => {

@@ -15,7 +15,7 @@ describe('MergeDialog', () => {
       name: '舊名字',
       displayName: '小明',
       askMerge: false,
-      balance: 30,
+      balance: 3000,
       link: null,
     },
     {
@@ -23,8 +23,8 @@ describe('MergeDialog', () => {
       name: null,
       displayName: '王小明',
       askMerge: false,
-      balance: 10,
-      link: { userId: 'user-1', userName: '王小明', theirBalance: -10 },
+      balance: 1000,
+      link: { userId: 'user-1', userName: '王小明', theirBalance: -1000 },
     },
   ];
 

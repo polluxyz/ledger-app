@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  centsToInput,
   isDebtTransactionType,
+  parseMoneyInput,
   type CategoryType,
   type LedgerSummary,
   type ManualTransactionType,
@@ -46,8 +48,8 @@ interface TransactionFormProps {
 /**
  * 記一筆交易的表單，新增與編輯共用。
  *
- * 金額直接以整數送出——後端存的是帳本幣別的最小單位，而 TWD 的最小單位即為
- * 「元」，因此**不做任何換算**。
+ * 輸入框顯示以元為單位的字串；送出前由 shared 將字串解析成整數分，讓畫面與 API
+ * 使用各自清楚的單位。
  *
  * 前端只做「體驗性」的必填與型別限制（required、type="number"）；真正的驗證
  * 一律由後端負責。失敗時訊息的內容仍來自後端，前端只把 `errorCode` 換成
@@ -101,7 +103,7 @@ export function TransactionForm({
         ? 'DEBT'
         : 'EXPENSE',
   );
-  const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '');
+  const [amount, setAmount] = useState(transaction ? centsToInput(transaction.amount) : '');
   const [date, setDate] = useState(() =>
     toDateInputValue(transaction ? new Date(transaction.date) : undefined),
   );
@@ -129,6 +131,7 @@ export function TransactionForm({
   const updateTransaction = useUpdateTransaction(ledgerId);
   const pending = isEdit ? updateTransaction.isPending : createTransaction.isPending;
   const error = isEdit ? updateTransaction.error : createTransaction.error;
+  const amountCents = parseMoneyInput(amount);
 
   /**
    * 帳戶欄位鎖住＝這筆記在別人的帳戶上（D2）。
@@ -204,13 +207,16 @@ export function TransactionForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (amountCents === null || amountCents <= 0) {
+      return;
+    }
     // <input type="date"> 給的是 YYYY-MM-DD，補成後端要的 ISO 8601。
     const isoDate = new Date(date).toISOString();
 
     if (isEdit) {
       const input: UpdateTransactionRequest = {
         type,
-        amount: Number(amount),
+        amount: amountCents,
         date: isoDate,
         // 備註要清空只能送空字串——PATCH 的 undefined 代表「不動」（D8）。
         note,
@@ -228,7 +234,7 @@ export function TransactionForm({
     createTransaction.mutate(
       {
         type,
-        amount: Number(amount),
+        amount: amountCents,
         date: isoDate,
         categoryId: type === 'TRANSFER' ? undefined : categoryId,
         accountId: selectedAccountId === '' ? undefined : selectedAccountId,
@@ -277,7 +283,8 @@ export function TransactionForm({
           className={styles.thumb}
           style={{
             width: `${100 / typeOptions.length}%`,
-            transform: `translateX(${selectedTypeIndex * 100}%)`,
+            transform:
+              selectedTypeIndex === 0 ? 'translateX(0%)' : `translateX(${selectedTypeIndex}00%)`,
           }}
         />
       </span>
@@ -304,9 +311,9 @@ export function TransactionForm({
           label="金額"
           id={amountFieldId}
           type="number"
-          min={1}
-          step={1}
-          inputMode="numeric"
+          min="0.01"
+          step="0.01"
+          inputMode="decimal"
           value={amount}
           required
           onChange={(event) => setAmount(event.target.value)}
@@ -395,7 +402,11 @@ export function TransactionForm({
 
       {/* 編輯模式才有「取消」。新增表單常駐在面板裡，沒有東西可以取消。 */}
       <div className={styles.actions}>
-        <Button type="submit" block disabled={pending || transferBlocked}>
+        <Button
+          type="submit"
+          block
+          disabled={pending || transferBlocked || amountCents === null || amountCents <= 0}
+        >
           {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
         </Button>
         {isEdit && onCancel && (

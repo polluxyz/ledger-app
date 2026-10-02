@@ -31,14 +31,14 @@ describe('Transactions page', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const counterparty = {
     id: 'counterparty-1',
     name: '小明',
     displayName: '小明',
     askMerge: false,
     link: null,
-    balance: 5000,
+    balance: 500000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
   };
@@ -46,11 +46,11 @@ describe('Transactions page', () => {
     id: 'entry-1',
     counterpartyId: 'counterparty-1',
     kind: 'LEND',
-    delta: 5000,
+    delta: 500000,
     date: '2026-09-01T04:00:00.000Z',
     note: null,
     transactionId: 'txn-debt',
-    balanceAfter: 5000,
+    balanceAfter: 500000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
     paired: false,
@@ -58,7 +58,7 @@ describe('Transactions page', () => {
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
     category: expenseCategory,
@@ -137,7 +137,7 @@ describe('Transactions page', () => {
 
     const item = await screen.findByRole('listitem', undefined, WAIT);
     expect(within(item).getByText('餐飲')).toBeInTheDocument();
-    // 金額直接以元顯示，不做任何換算。
+    // API 回傳分，畫面仍顯示原本的人看單位。
     expect(within(item).getByText('-$120')).toBeInTheDocument();
 
     expect(screen.getByRole('region', { name: '篩選交易' })).toBeInTheDocument();
@@ -292,11 +292,11 @@ describe('Transactions page', () => {
   });
 
   it('edits a linked debt transaction directly and closes after sending only the changed amount', async () => {
-    let updatedAmount = 5000;
+    let updatedAmount = 500000;
     const lendTxn = {
       id: 'txn-lend',
       type: 'LEND',
-      amount: 5000,
+      amount: 500000,
       date: '2026-09-01T04:00:00.000Z',
       note: null,
       category: null,
@@ -391,7 +391,7 @@ describe('Transactions page', () => {
         (request as RequestInit | undefined)?.method === 'PATCH',
     );
     expect(patchCall).toBeDefined();
-    expect(parseRequestBody(patchCall?.[1] as RequestInit)).toEqual({ amount: 6000 });
+    expect(parseRequestBody(patchCall?.[1] as RequestInit)).toEqual({ amount: 600000 });
 
     await waitFor(() => expect(rightPanel).not.toHaveAttribute('data-open'), WAIT);
     // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
@@ -408,7 +408,7 @@ describe('Transactions page', () => {
     const lendTxn = {
       id: 'txn-lend',
       type: 'LEND',
-      amount: 5000,
+      amount: 500000,
       date: '2026-09-01T04:00:00.000Z',
       note: null,
       category: null,

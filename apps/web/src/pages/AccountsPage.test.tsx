@@ -16,7 +16,7 @@ import App from '../App';
 describe('Accounts page toolbar', () => {
   const fetchMock = vi.fn();
 
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 3800 };
+  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
 
   beforeEach(() => {
     localStorage.clear();

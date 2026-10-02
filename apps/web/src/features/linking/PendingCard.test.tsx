@@ -26,7 +26,7 @@ describe('PendingCard', () => {
     id: 'account-1',
     name: '現金',
     initialBalance: 0,
-    balance: 500,
+    balance: 50000,
     createdAt: '2026-09-01T00:00:00.000Z',
   };
   const counterparty: Counterparty = {
@@ -34,7 +34,7 @@ describe('PendingCard', () => {
     name: '小明',
     displayName: '小明',
     askMerge: false,
-    balance: 100,
+    balance: 10000,
     link: null,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
@@ -204,7 +204,7 @@ describe('PendingCard', () => {
       otherUser: { id: 'user-2', name: '王小明' },
       counterpartyId: 'counterparty-1',
       entryKind: 'BORROW',
-      amount: 200,
+      amount: 20000,
       date: '2026-09-25T00:00:00.000Z',
       settle: false,
       previous: null,
@@ -236,22 +236,22 @@ describe('PendingCard', () => {
     proposals = [
       proposal({ id: 'lend', entryKind: 'LEND' }),
       proposal({ id: 'borrow', entryKind: 'BORROW' }),
-      proposal({ id: 'collect', entryKind: 'COLLECT', amount: 50, settle: true }),
-      proposal({ id: 'repay', entryKind: 'REPAY', amount: 80 }),
+      proposal({ id: 'collect', entryKind: 'COLLECT', amount: 5000, settle: true }),
+      proposal({ id: 'repay', entryKind: 'REPAY', amount: 8000 }),
       proposal({ id: 'forgiven', entryKind: 'FORGIVEN' }),
       proposal({
         id: 'amend',
         type: 'AMEND',
         entryKind: 'BORROW',
-        amount: 150,
+        amount: 15000,
         date: '2026-09-22T00:00:00.000Z',
-        previous: { amount: 120, date: '2026-09-20T00:00:00.000Z' },
+        previous: { amount: 12000, date: '2026-09-20T00:00:00.000Z' },
       }),
       proposal({
         id: 'amend-null',
         type: 'AMEND',
         entryKind: 'BORROW',
-        amount: 150,
+        amount: 15000,
         date: '2026-09-22T00:00:00.000Z',
         previous: null,
       }),
@@ -259,7 +259,7 @@ describe('PendingCard', () => {
         id: 'delete',
         type: 'DELETE',
         entryKind: 'BORROW',
-        amount: 120,
+        amount: 12000,
         date: '2026-09-20T00:00:00.000Z',
       }),
     ];
@@ -447,7 +447,7 @@ describe('PendingCard', () => {
     proposals = [
       proposal({
         type: 'AMEND',
-        previous: { amount: 120, date: '2026-09-20T00:00:00.000Z' },
+        previous: { amount: 12000, date: '2026-09-20T00:00:00.000Z' },
       }),
     ];
     proposalTotal = 1;
@@ -463,7 +463,7 @@ describe('PendingCard', () => {
   });
 
   it('changes the repayment conflict action to decline and calls decline without a dialog', async () => {
-    proposals = [proposal({ entryKind: 'REPAY', amount: 80 })];
+    proposals = [proposal({ entryKind: 'REPAY', amount: 8000 })];
     proposalTotal = 1;
     failNextProposalAccept = 'REPAYMENT_EXCEEDS_BALANCE';
     await renderHome();
@@ -488,7 +488,7 @@ describe('PendingCard', () => {
   });
 
   it('shows the short settled-balance conflict line and offers decline', async () => {
-    proposals = [proposal({ entryKind: 'REPAY', amount: 80 })];
+    proposals = [proposal({ entryKind: 'REPAY', amount: 8000 })];
     proposalTotal = 1;
     failNextProposalAccept = 'NOTHING_TO_REPAY';
     await renderHome();

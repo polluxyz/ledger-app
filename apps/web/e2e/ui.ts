@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { parseMoneyInput, type Cents } from '@ledger/shared';
 
 /**
  * 畫面操作的共用輔助函式。
@@ -7,9 +8,13 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * ——CSS Modules 的 class 名稱是編譯產生的，改個樣式就爛。
  */
 
-/** 把畫面上的「$1,234」變回數字，好做加減比較。 */
-export function parseAmount(text: string | null): number {
-  return Number((text ?? '').replace(/[$,\s]/g, ''));
+/** 把畫面金額交給 shared 解析成分，讓 e2e 比較時沿用 API 的整數單位。 */
+export function parseAmount(text: string | null): Cents {
+  const amount = parseMoneyInput((text ?? '').replace(/[$,\s]/g, ''), { allowNegative: true });
+  if (amount === null) {
+    throw new Error(`畫面金額格式無效：${text ?? ''}`);
+  }
+  return amount;
 }
 
 /**

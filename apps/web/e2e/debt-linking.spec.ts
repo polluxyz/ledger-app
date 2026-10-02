@@ -106,7 +106,7 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   await createDebtEntry(request, userB.token, {
     counterparty: { id: bOld.id },
     kind: 'BORROW',
-    amount: 30,
+    amount: 3000,
     date: new Date().toISOString(),
     record: null,
   });
@@ -266,7 +266,7 @@ test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async
   await createDebtEntry(request, userA.token, {
     counterparty: { id: old.id },
     kind: 'LEND',
-    amount: 50,
+    amount: 5000,
     date: new Date().toISOString(),
     record: null,
   });
@@ -305,7 +305,7 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await createDebtEntry(request, userA.token, {
     counterparty: { id: xiaoming.id },
     kind: 'LEND',
-    amount: 50,
+    amount: 5000,
     date: new Date().toISOString(),
     record: null,
   });
@@ -315,7 +315,7 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await createDebtEntry(request, userA.token, {
     counterparty: { id: inviterSideId },
     kind: 'REPAYMENT',
-    amount: 50,
+    amount: 5000,
     date: new Date().toISOString(),
     record: null,
   });

@@ -1,5 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import type { DebtEntry, UpdateDebtEntryRequest } from '@ledger/shared';
+import {
+  centsToInput,
+  parseMoneyInput,
+  type DebtEntry,
+  type UpdateDebtEntryRequest,
+} from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
@@ -57,20 +62,24 @@ export function DebtEntryEditForm({
 }: DebtEntryEditFormProps) {
   const originalDate = toDateInputValue(new Date(originalDateValue));
   const originalNote = originalNoteValue ?? '';
-  const [amount, setAmount] = useState(String(originalAmount));
+  const [amount, setAmount] = useState(centsToInput(originalAmount));
   const [date, setDate] = useState(originalDate);
   const [note, setNote] = useState(originalNote);
   const updateEntry = useUpdateDebtEntry();
 
+  const amountCents = parseMoneyInput(amount);
   const hasChanges =
-    Number(amount) !== originalAmount || date !== originalDate || note !== originalNote;
+    amountCents !== originalAmount || date !== originalDate || note !== originalNote;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (amountCents === null || amountCents <= 0) {
+      return;
+    }
 
     const input: UpdateDebtEntryRequest = {};
-    if (Number(amount) !== originalAmount) {
-      input.amount = Number(amount);
+    if (amountCents !== originalAmount) {
+      input.amount = amountCents;
     }
     if (date !== originalDate) {
       input.date = new Date(date).toISOString();
@@ -92,9 +101,9 @@ export function DebtEntryEditForm({
       <TextField
         label="金額"
         type="number"
-        min={1}
-        step={1}
-        inputMode="numeric"
+        min="0.01"
+        step="0.01"
+        inputMode="decimal"
         value={amount}
         required
         disabled={updateEntry.isPending}
@@ -124,7 +133,12 @@ export function DebtEntryEditForm({
         >
           取消
         </Button>
-        <Button type="submit" disabled={updateEntry.isPending || !hasChanges}>
+        <Button
+          type="submit"
+          disabled={
+            updateEntry.isPending || amountCents === null || amountCents <= 0 || !hasChanges
+          }
+        >
           {updateEntry.isPending ? '儲存中…' : '儲存'}
         </Button>
       </div>
