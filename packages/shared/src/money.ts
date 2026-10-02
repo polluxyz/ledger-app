@@ -27,8 +27,14 @@ export const MAX_INITIAL_BALANCE_CENTS: Cents = 2_000_000_000;
  * 300000 → "3,000"；33333 → "333.33"；50 → "0.50"；-120000 → "1,200"（取絕對值）。
  */
 export function formatAmount(cents: Cents): string {
-  void cents;
-  throw new Error('not implemented');
+  const absoluteCents = Math.abs(cents);
+  const wholeAmount = Math.floor(absoluteCents / 100);
+  const remainingCents = absoluteCents % 100;
+  const formattedWhole = wholeAmount.toLocaleString('zh-TW');
+
+  return remainingCents === 0
+    ? formattedWhole
+    : `${formattedWhole}.${String(remainingCents).padStart(2, '0')}`;
 }
 
 /**
@@ -37,8 +43,8 @@ export function formatAmount(cents: Cents): string {
  * 33333 → "$333.33"；300000 → "$3,000"；-120000 → "-$1,200"；0 → "$0"。
  */
 export function formatMoney(cents: Cents): string {
-  void cents;
-  throw new Error('not implemented');
+  const sign = cents < 0 ? '-' : '';
+  return `${sign}$${formatAmount(Math.abs(cents))}`;
 }
 
 /**
@@ -47,8 +53,17 @@ export function formatMoney(cents: Cents): string {
  * 33333 → "333.33"；300000 → "3000"；50 → "0.5"；-120000 → "-1200"。
  */
 export function centsToInput(cents: Cents): string {
-  void cents;
-  throw new Error('not implemented');
+  const sign = cents < 0 ? '-' : '';
+  const absoluteCents = Math.abs(cents);
+  const wholeAmount = Math.floor(absoluteCents / 100);
+  const remainingCents = absoluteCents % 100;
+
+  if (remainingCents === 0) {
+    return `${sign}${wholeAmount}`;
+  }
+
+  const fraction = String(remainingCents).padStart(2, '0').replace(/0$/, '');
+  return `${sign}${wholeAmount}.${fraction}`;
 }
 
 /**
@@ -61,7 +76,32 @@ export function centsToInput(cents: Cents): string {
  * 結果超出 `Number.MAX_SAFE_INTEGER` → null。
  */
 export function parseMoneyInput(text: string, options?: { allowNegative?: boolean }): Cents | null {
-  void text;
-  void options;
-  throw new Error('not implemented');
+  const normalized = text.trim().replaceAll(',', '');
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(normalized);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, sign, wholeText, fractionText = ''] = match;
+  if (sign === '-' && options?.allowNegative !== true) {
+    return null;
+  }
+
+  const wholeAmount = Number(wholeText);
+  const fraction = Number(fractionText.padEnd(2, '0'));
+  if (!Number.isSafeInteger(wholeAmount)) {
+    return null;
+  }
+
+  const absoluteCents = wholeAmount * 100 + fraction;
+  if (!Number.isSafeInteger(absoluteCents)) {
+    return null;
+  }
+
+  if (absoluteCents === 0) {
+    return 0;
+  }
+
+  return sign === '-' ? -absoluteCents : absoluteCents;
 }
