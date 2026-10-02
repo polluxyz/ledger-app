@@ -115,6 +115,13 @@ describe('Accounts (e2e)', () => {
       .set(auth(alice.token))
       .send({ name: '超出上限', initialBalance: -2_000_000_001 })
       .expect(400);
+
+    // 正向的上限同樣擋下。
+    await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '超出上限', initialBalance: 2_000_000_001 })
+      .expect(400);
   });
 
   // SC-M6：期初餘額與收入都在單欄 int4 範圍內，加總後的餘額可超過 int4。

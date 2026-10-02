@@ -212,7 +212,7 @@ export function DebtEntryForm({
             className={styles.thumb}
             style={{
               width: `${100 / KIND_OPTIONS.length}%`,
-              transform: kindIndex === 0 ? 'translateX(0%)' : `translateX(${kindIndex}00%)`,
+              transform: `translateX(${kindIndex * 100}%)`,
             }}
           />
         </span>

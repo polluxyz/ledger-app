@@ -283,8 +283,7 @@ export function TransactionForm({
           className={styles.thumb}
           style={{
             width: `${100 / typeOptions.length}%`,
-            transform:
-              selectedTypeIndex === 0 ? 'translateX(0%)' : `translateX(${selectedTypeIndex}00%)`,
+            transform: `translateX(${selectedTypeIndex * 100}%)`,
           }}
         />
       </span>

@@ -29,6 +29,7 @@ import {
  * 帳（餘額、同步狀態）在交易頁借還檢視的「借還往來」右側欄看。
  */
 
+/** 現金餘額，單位：分（3c-0）。畫面上輸入的是元，比較時要乘 100。 */
 async function cash(request: APIRequestContext, token: string): Promise<number> {
   const accounts = await listAccounts(request, token);
   return accounts.find((account) => account.name === '現金')!.balance;
@@ -186,7 +187,7 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
     .getByRole('combobox', { name: '借到的錢進哪個帳戶' })
     .selectOption({ label: '現金' });
   await pendingCard(pageB).getByRole('button', { name: '接受', exact: true }).click();
-  await expect.poll(() => cash(request, userB.token)).toBe(bCashBefore + 120);
+  await expect.poll(() => cash(request, userB.token)).toBe(bCashBefore + 12000);
 
   // SC-W56：B 清掉暱稱 → 顯示回帳號名稱；再設回來。
   const ledgerB = await openLedger(pageB, /甲/);
