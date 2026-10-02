@@ -5,17 +5,25 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { UpdateDebtEntryRequest } from '@ledger/shared';
 
 /** `PATCH /debt-entries/{id}` 的 body。只有送出的欄位會變（決策 41）。 */
 export class UpdateDebtEntryDto implements UpdateDebtEntryRequest {
-  @ApiPropertyOptional({ description: 'Positive integer; the sign comes from the entry kind.' })
+  @ApiPropertyOptional({
+    description: '正整數金額；單位：分（0.01 元），正負號由紀錄種類決定。',
+    example: 100000,
+    minimum: 1,
+    maximum: MAX_AMOUNT_CENTS,
+  })
   @IsOptional()
   @IsInt()
   @IsPositive()
+  @Max(MAX_AMOUNT_CENTS)
   amount?: number;
 
   @ApiPropertyOptional({ format: 'date-time' })

@@ -10,11 +10,12 @@ import {
   IsString,
   IsUUID,
   Length,
+  Max,
   MaxLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { CREATE_DEBT_ENTRY_KINDS } from '@ledger/shared';
+import { CREATE_DEBT_ENTRY_KINDS, MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { CreateDebtEntryKind, CreateDebtEntryRequest } from '@ledger/shared';
 import { DebtEntryRecordTargetDto } from './debt-entry-record-target.dto';
 
@@ -58,11 +59,14 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
   kind!: CreateDebtEntryKind;
 
   @ApiProperty({
-    description: "Amount in the currency's minor unit; positive integer.",
-    example: 1000,
+    description: '正整數金額；單位：分（0.01 元）。',
+    example: 100000,
+    minimum: 1,
+    maximum: MAX_AMOUNT_CENTS,
   })
   @IsInt()
   @IsPositive()
+  @Max(MAX_AMOUNT_CENTS)
   amount!: number;
 
   @ApiProperty({ example: '2026-09-24T12:00:00.000Z', format: 'date-time' })

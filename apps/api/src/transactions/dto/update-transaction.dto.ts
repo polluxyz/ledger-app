@@ -7,9 +7,10 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
 } from 'class-validator';
-import { MANUAL_TRANSACTION_TYPES } from '@ledger/shared';
+import { MANUAL_TRANSACTION_TYPES, MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { ManualTransactionType, UpdateTransactionRequest } from '@ledger/shared';
 
 /**
@@ -26,10 +27,16 @@ export class UpdateTransactionDto implements UpdateTransactionRequest {
   @IsIn(MANUAL_TRANSACTION_TYPES)
   type?: ManualTransactionType;
 
-  @ApiPropertyOptional({ description: 'Positive integer, minor unit.' })
+  @ApiPropertyOptional({
+    description: '正整數金額；單位：分（0.01 元）。',
+    example: 12000,
+    minimum: 1,
+    maximum: MAX_AMOUNT_CENTS,
+  })
   @IsOptional()
   @IsInt()
   @IsPositive()
+  @Max(MAX_AMOUNT_CENTS)
   amount?: number;
 
   @ApiPropertyOptional({ format: 'date-time' })

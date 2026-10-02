@@ -136,7 +136,7 @@ model Account {
   id             String   @id @default(uuid())
   userId         String
   name           String
-  /// 開始使用本系統時該帳戶已有的金額；可為負（例如信用卡既有欠款）
+  /// 開始使用本系統時該帳戶已有的金額；單位：分（0.01 元），可為負（例如信用卡既有欠款）
   initialBalance Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -219,7 +219,7 @@ model Transaction {
   toAccountId String?
   creatorId   String
   type        TransactionType
-  amount      Int // 最小貨幣單位的整數，> 0；TWD 即為「元」
+  amount      Int // 單位：分（0.01 元）的正整數
   date        DateTime // 消費日期（含時間，查詢以日期區間篩選）
   note        String?
   deletedAt   DateTime? // 軟刪除標記
@@ -287,7 +287,7 @@ model DebtEntry {
   id             String        @id @default(uuid())
   counterpartyId String
   kind           DebtEntryKind
-  /// 對往來餘額的影響，有正負號。正數＝這筆讓對方多欠我。最小貨幣單位。
+  /// 對往來餘額的影響；單位：分（0.01 元）。正數＝這筆讓對方多欠我。
   delta          Int
   date           DateTime
   note           String?
@@ -365,7 +365,7 @@ model DebtProposal {
   targetEntryId String?
   /// 發起者那筆的種類（發起者的角度）。回應給接受者時才換角度。
   entryKind     DebtEntryKind
-  /// 正整數。CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值。
+  /// 單位：分（0.01 元）的正整數。CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值。
   amount        Int
   date          DateTime
   /// 還款帶了以此結清：接受者那邊依自己的餘額補結清差額。
