@@ -25,15 +25,15 @@ describe('CounterpartyList', () => {
                 name: '舊暱稱',
                 displayName: '小明的暱稱',
                 askMerge: false,
-                balance: 9,
-                link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
+                balance: 900,
+                link: { userId: 'user-ming', userName: '王小明', theirBalance: -900 },
               },
               {
                 id: 'cp-2',
                 name: '阿華',
                 displayName: '阿華',
                 askMerge: false,
-                balance: -11,
+                balance: -1100,
                 link: null,
               },
               {
@@ -51,7 +51,7 @@ describe('CounterpartyList', () => {
                 name: '小美',
                 displayName: '小美',
                 askMerge: false,
-                balance: 20,
+                balance: 2000,
                 link: null,
               },
             ];

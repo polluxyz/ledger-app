@@ -55,4 +55,13 @@ spec：`docs/specs/phase-3c0-money-cents.md`（決策 M1～M8、SC-M1～SC-M10�
 
 ## 7. 實作紀錄
 
-（實作時填寫）
+1. **T1 只寫契約，不實作**（2026-10-03）：開發者核可 plan 時要求「盡量調度 worker」。協調者寫 `money.ts` 的簽名、常數與 `money.test.ts`（紅燈），實作併進 T3 派給 worker。T2 只需要常數與 `Cents` 型別，所以 T2、T3 可以立刻平行開工。
+2. **shared 的測試直接跑 `.ts`**：`packages/shared` 解析不到 `@types/node`（pnpm 不提升相依），照 §1 原本的「tsc 編譯再跑」就得新增相依。改成 `node --test "src/**/*.test.ts"`，靠 Node 22.18 起預設開啟的型別剝除；測試檔用 `./money.ts` 帶副檔名 import，並從主 `tsconfig.json` 排除。CI 的 `.node-version` 是 `22`，會裝到最新的 22.x。不新增套件、不改 CI。`dist-test` 因此不需要，`.gitignore`、`.prettierignore` 不改。
+3. **派工**：T2 `ctx_74839aac153f`（worktree `money-cents-api`）、T3 `ctx_d4ff0eebcd78`（worktree `money-cents-web`），Run `run_c1865dc5b0a2`。兩個 Codex 啟動時都跳出更新提示，選「Skip until next version」後重開終端機。兩個 worktree 開得比 docs PR #86 合併早，看不到 spec 與 plan；請 worker 把 `refactor/money-cents` 併進自己的分支解決。
+4. **驗收時的修正**：
+   - T3 為了讓 SC-M9 的 grep 沒有結果，把 `DebtEntryForm`、`TransactionForm` 滑動方塊的 `translateX(${index * 100}%)` 改成字串拼接 `${index}00%`。那個 `* 100` 是 CSS 百分比、不是金額，改寫只讓程式更難讀。協調者改回原寫法；SC-M9 的判讀改成「grep 結果只剩 CSS 百分比這兩處」。
+   - T2 的 SC-M5 只測了期初餘額的負向上限，協調者補上 `+2_000_000_001` → 400。
+5. **SC-M1 改在開發者的 dev 資料上做**：e2e 資料庫每個測試前都清空，在上面灌資料再比對，證明的只是 4 行 `UPDATE` 本身。改成合併後替開發者部署時，先 `pg_dump` 備份 dev 資料庫，記下 4 個金額欄位的筆數與總和，跑 migration 後確認每個總和剛好 ×100。這比原計畫更接近 spec SC-M1 的「同一份 dev 資料」。
+6. **Web e2e 漏改 7 處**：`debts.spec.ts`、`debt-linking.spec.ts` 在畫面輸入元（`120`），再用 API 讀現金餘額（分）比對 `before - 120`。T3 只改了「用 API 建資料」的金額，漏了這種「畫面輸入、API 斷言」的組合。協調者改成分，並在兩個檔的 `cash()` 上註明單位。
+7. **本機 Vite 快取**：第一次跑 Web e2e 有 37 個失敗，全部是 `formatMoney is not a function`。原因是 `apps/web/node_modules/.vite` 裡 `@ledger/shared` 的預先打包是 09-25 的舊版（`vite.config.ts` 的 `optimizeDeps` 註解已寫明改了 shared 要重開）。刪掉快取後重跑。CI 每次都是乾淨環境，不受影響；替開發者部署時要一併刪掉 `web-redesign` 的快取。
+8. **驗證**（合併後的 `refactor/money-cents`）：format:check、lint、typecheck、build 通過；單元測試 shared 52、API 320、Web 548；API e2e 145、Web e2e 47 全綠（依序跑）。

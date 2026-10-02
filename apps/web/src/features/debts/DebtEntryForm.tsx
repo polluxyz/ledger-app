@@ -5,6 +5,7 @@ import type {
   CreateDebtEntryRequest,
   LedgerSummary,
 } from '@ledger/shared';
+import { parseMoneyInput } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
@@ -65,19 +66,19 @@ export function DebtEntryForm({
   const canSettle = kind === 'REPAYMENT';
   const showAccountField = ledger.tracksBalance;
   const needsAccount = showAccountField && !doNotRecord;
-  const amountNumber = Number(amount);
+  const amountCents = parseMoneyInput(amount);
   const repaymentOverage =
     kind === 'REPAYMENT' &&
     counterparty &&
-    Number.isFinite(amountNumber) &&
-    amountNumber > Math.abs(counterparty.balance)
-      ? amountNumber - Math.abs(counterparty.balance)
+    amountCents !== null &&
+    amountCents > Math.abs(counterparty.balance)
+      ? amountCents - Math.abs(counterparty.balance)
       : null;
   const repaymentExceedsBalance = repaymentOverage !== null && !settle;
   const submitDisabled =
     normalizedName === '' ||
-    amount === '' ||
-    !(amountNumber > 0) ||
+    amountCents === null ||
+    amountCents <= 0 ||
     (needsAccount && accountId === '') ||
     (kind === 'REPAYMENT' && !repaymentAvailable) ||
     repaymentExceedsBalance ||
@@ -108,10 +109,10 @@ export function DebtEntryForm({
 
   /** W16 唯一允許在前端加減往來金額的地方；實際餘額仍由 API 回應提供。 */
   let preview: string | null = null;
-  if (normalizedName !== '' && amount !== '' && Number.isFinite(amountNumber)) {
+  if (normalizedName !== '' && amount !== '' && amountCents !== null) {
     const before = counterparty?.balance ?? 0;
-    const delta = kind === 'LEND' ? amountNumber : -amountNumber;
-    const repaymentDelta = before > 0 ? -amountNumber : amountNumber;
+    const delta = kind === 'LEND' ? amountCents : -amountCents;
+    const repaymentDelta = before > 0 ? -amountCents : amountCents;
     const after = before + (kind === 'REPAYMENT' ? repaymentDelta : delta);
 
     if (canSettle && settle) {
@@ -161,14 +162,14 @@ export function DebtEntryForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitDisabled) {
+    if (submitDisabled || amountCents === null || amountCents <= 0) {
       return;
     }
 
     const request: CreateDebtEntryRequest = {
       counterparty: counterparty ? { id: counterparty.id } : { name: normalizedName },
       kind,
-      amount: amountNumber,
+      amount: amountCents,
       date: new Date(date).toISOString(),
       record: doNotRecord
         ? null
@@ -241,9 +242,9 @@ export function DebtEntryForm({
           label="金額"
           id={amountFieldId}
           type="number"
-          min={1}
-          step={1}
-          inputMode="numeric"
+          min="0.01"
+          step="0.01"
+          inputMode="decimal"
           value={amount}
           required
           onChange={(event) => setAmount(event.target.value)}

@@ -32,11 +32,11 @@ describe('Writing a transaction refreshes account balances', () => {
     role: 'OWNER',
   };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 5000, balance: 5000 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 500000, balance: 500000 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
     category,
@@ -77,15 +77,15 @@ describe('Writing a transaction refreshes account balances', () => {
       const method = init?.method ?? 'GET';
 
       if (url.includes('/transactions') && method === 'POST') {
-        balance = 4880;
+        balance = 488000;
         return Promise.resolve(jsonResponse(201, { ...lunch, id: 'txn-new' }));
       }
       if (url.includes('/transactions') && method === 'PATCH') {
-        balance = 4800;
-        return Promise.resolve(jsonResponse(200, { ...lunch, amount: 200 }));
+        balance = 480000;
+        return Promise.resolve(jsonResponse(200, { ...lunch, amount: 20000 }));
       }
       if (url.includes('/transactions') && method === 'DELETE') {
-        balance = 5120;
+        balance = 512000;
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       if (url.includes('/transactions')) {

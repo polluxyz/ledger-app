@@ -12,8 +12,8 @@ import App from '../../App';
 describe('Accounts page', () => {
   const fetchMock = vi.fn();
 
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 3800 };
-  const card = { id: 'acc-2', name: '信用卡', initialBalance: -12000, balance: -12000 };
+  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
+  const card = { id: 'acc-2', name: '信用卡', initialBalance: -1200000, balance: -1200000 };
 
   beforeEach(() => {
     localStorage.clear();
@@ -96,6 +96,26 @@ describe('Accounts page', () => {
     expect(body.name).toBe('國泰世華');
   });
 
+  it('parses a negative decimal opening balance into cents', async () => {
+    const user = userEvent.setup();
+    routeFetch();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: '新增帳戶' }));
+    await user.type(dialog().getByLabelText('名稱'), '信用卡');
+    const openingBalance = dialog().getByLabelText('初始餘額');
+    await user.clear(openingBalance);
+    await user.type(openingBalance, '-333.33');
+    await user.click(dialog().getByRole('button', { name: '新增' }));
+
+    const posted = fetchMock.mock.calls.find(
+      (call) => (call[1] as RequestInit | undefined)?.method === 'POST',
+    );
+    const body = JSON.parse((posted?.[1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body.initialBalance).toBe(-33333);
+  });
+
   it('renames without offering the initial balance', async () => {
     const user = userEvent.setup();
     routeFetch({ write: () => jsonResponse(200, { ...cash, name: '零錢包' }) });
@@ -131,7 +151,7 @@ describe('Accounts page', () => {
 
     render(<App />);
 
-    // 現金的初始餘額是 0、信用卡是 -12000，兩者都不該出現在列表上。
+    // 初始餘額是建立當下的歷史資料，兩者都不該出現在列表上。
     const items = await screen.findAllByRole('listitem');
     expect(within(items[0]!).queryByText(/初始/)).not.toBeInTheDocument();
     expect(within(items[1]!).queryByText(/初始/)).not.toBeInTheDocument();

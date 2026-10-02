@@ -25,11 +25,11 @@ describe('Transactions on the transactions page', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
     category: expenseCategory,
@@ -99,7 +99,7 @@ describe('Transactions on the transactions page', () => {
 
     const item = await screen.findByRole('listitem');
     expect(within(item).getByText('餐飲')).toBeInTheDocument();
-    // 金額直接以元顯示，不做任何換算。
+    // 金額由 shared 以分格式化，整數元的畫面文字維持不變。
     expect(within(item).getByText('-$120')).toBeInTheDocument();
     expect(within(item).getByText(/現金/)).toBeInTheDocument();
   });
@@ -207,8 +207,8 @@ describe('Transactions on the transactions page', () => {
       string,
       unknown
     >;
-    // 金額原樣送出（整數、不換算）。
-    expect(body.amount).toBe(120);
+    // 輸入的元由 shared 解析成整數分後送出。
+    expect(body.amount).toBe(12000);
     expect(body.type).toBe('EXPENSE');
     // 帳戶為必填：使用者沒動下拉，仍會帶上預設（第一個）帳戶——否則後端會回
     // 400 ACCOUNT_REQUIRED，而使用者根本不知道自己漏了什麼。
@@ -230,7 +230,7 @@ describe('Transactions on the transactions page', () => {
     render(<App />);
 
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
-    await user.type(screen.getByLabelText('金額'), '0');
+    await user.type(screen.getByLabelText('金額'), '1');
     await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
     await user.click(screen.getByRole('button', { name: '新增' }));
 

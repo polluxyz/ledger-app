@@ -87,7 +87,7 @@ test('情境 2：切回個人帳本後帳戶欄位回來，餘額跟著變動', 
 
   // SC-18：支出讓餘額減少相同的金額。用差額而非絕對值，才不會被預設值綁死。
   await expect(async () => {
-    expect(parseAmount(await balance.textContent())).toBe(before - 1200);
+    expect(parseAmount(await balance.textContent())).toBe(before - 120000);
   }).toPass();
 });
 
@@ -200,7 +200,7 @@ test('情境 6：刪除帳本要打對名稱，而且有別人的交易時會被
   );
   await createTransaction(request, userB.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 300,
+    amount: 30000,
     date: new Date().toISOString(),
     categoryId: meal!.id,
     accountId: accountB!.id,

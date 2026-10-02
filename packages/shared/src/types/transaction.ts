@@ -1,3 +1,5 @@
+import type { Cents } from '../money';
+
 /**
  * 一筆交易的型別：支出、收入、轉帳，以及借還帳的 4 種（見 `DEBT_TRANSACTION_TYPES`）。
  * 與 Prisma 的 `TransactionType` enum 值
@@ -62,8 +64,8 @@ export interface TransactionRef {
 export interface Transaction {
   id: string;
   type: TransactionType;
-  /** 以帳本幣別最小單位表示的金額；恆為正整數。TWD 的最小單位即為「元」。 */
-  amount: number;
+  /** 金額，單位：分；恆為正整數。 */
+  amount: Cents;
   /** 這筆錢發生的時間（ISO 8601）。 */
   date: string;
   note: string | null;
@@ -127,7 +129,8 @@ export interface TransactionDebtRef {
  */
 export interface CreateTransactionRequest {
   type: ManualTransactionType;
-  amount: number;
+  /** 金額，單位：分。 */
+  amount: Cents;
   date: string;
   /** 支出／收入必填；轉帳不可填。須屬於同一帳本、且型別一致。 */
   categoryId?: string;
@@ -144,7 +147,8 @@ export interface CreateTransactionRequest {
  */
 export interface UpdateTransactionRequest {
   type?: ManualTransactionType;
-  amount?: number;
+  /** 金額，單位：分。 */
+  amount?: Cents;
   date?: string;
   categoryId?: string;
   accountId?: string;

@@ -7,9 +7,10 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
 } from 'class-validator';
-import { MANUAL_TRANSACTION_TYPES } from '@ledger/shared';
+import { MANUAL_TRANSACTION_TYPES, MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { CreateTransactionRequest, ManualTransactionType } from '@ledger/shared';
 
 /**
@@ -29,15 +30,16 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   @IsIn(MANUAL_TRANSACTION_TYPES)
   type!: ManualTransactionType;
 
-  // 金額以帳本幣別的「最小單位」表示的正整數；TWD 的最小單位即為「元」，
-  // 故 120 就是 120 元。絕不用浮點數——整數可避免金額運算的精度誤差。
-  // （未來支援有輔幣的幣別時，於 packages/shared 加「幣別→小數位數」對照表。）
+  // 金額以分（0.01 元）表示；12000 分就是 120 元。維持整數以避免精度誤差。
   @ApiProperty({
-    description: "Amount in the currency's minor unit; positive integer.",
-    example: 120,
+    description: '正整數金額；單位：分（0.01 元）。',
+    example: 12000,
+    minimum: 1,
+    maximum: MAX_AMOUNT_CENTS,
   })
   @IsInt()
   @IsPositive()
+  @Max(MAX_AMOUNT_CENTS)
   amount!: number;
 
   @ApiProperty({ example: '2026-08-08T12:00:00.000Z', format: 'date-time' })

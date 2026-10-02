@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,8 +38,8 @@ describe('Transaction type segmented control', () => {
   const plainLedger = { ...trackingLedger, id: 'ledger-2', tracksBalance: false };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
   const accounts = [
-    { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 },
-    { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 5000 },
+    { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 },
+    { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 500000 },
   ];
 
   function routeFetch(ledger: typeof trackingLedger, options: { items?: unknown[] } = {}) {
@@ -64,7 +64,7 @@ describe('Transaction type segmented control', () => {
             {
               id: 'cp-1',
               name: '小明',
-              balance: 15,
+              balance: 1500,
               createdAt: '2026-09-01T00:00:00.000Z',
               updatedAt: '2026-09-01T00:00:00.000Z',
             },
@@ -108,6 +108,21 @@ describe('Transaction type segmented control', () => {
     const bar = expense.parentElement;
     expect(bar).not.toBeNull();
     return bar as HTMLElement;
+  }
+
+  async function postedTransactionBody(): Promise<Record<string, unknown>> {
+    let body: Record<string, unknown> = {};
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes('/transactions') &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(call).toBeDefined();
+      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
+    });
+    return body;
   }
 
   it('marks the pressed type and moves the mark when another type is picked', async () => {
@@ -233,7 +248,7 @@ describe('Transaction type segmented control', () => {
     const expense = {
       id: 'txn-1',
       type: 'EXPENSE',
-      amount: 120,
+      amount: 12000,
       date: '2026-08-12T04:00:00.000Z',
       note: '午餐',
       category,
@@ -252,5 +267,37 @@ describe('Transaction type segmented control', () => {
     const dialog = await screen.findByRole('dialog', {}, WAIT);
     expect(within(dialog).queryByRole('button', { name: '借還' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '支出' })).toBeInTheDocument();
+  });
+
+  it('converts a decimal amount to cents before submitting', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+
+    render(<App />);
+    await openTypeBar(user);
+    await user.type(screen.getByLabelText('金額'), '333.33');
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    expect(await postedTransactionBody()).toMatchObject({ amount: 33333 });
+  });
+
+  it('does not submit an amount with more than two decimal places', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+
+    render(<App />);
+    await openTypeBar(user);
+    await user.type(screen.getByLabelText('金額'), '1.234');
+
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes('/transactions') &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toBe(false);
   });
 });

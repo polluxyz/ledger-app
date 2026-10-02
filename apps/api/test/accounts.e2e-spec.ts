@@ -99,6 +99,63 @@ describe('Accounts (e2e)', () => {
     expect((created.body as Account).balance).toBe(-12000);
   });
 
+  // SC-M5：期初餘額允許負數，但超過 ±2,000 萬元的分數會先被 DTO 擋下。
+  it('accepts -2 billion cents and rejects a smaller initial balance', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+
+    const created = await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '信用卡', initialBalance: -2_000_000_000 })
+      .expect(201);
+    expect((created.body as Account).balance).toBe(-2_000_000_000);
+
+    await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '超出上限', initialBalance: -2_000_000_001 })
+      .expect(400);
+
+    // 正向的上限同樣擋下。
+    await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '超出上限', initialBalance: 2_000_000_001 })
+      .expect(400);
+  });
+
+  // SC-M6：期初餘額與收入都在單欄 int4 範圍內，加總後的餘額可超過 int4。
+  it('returns a 4 billion cent balance after a 2 billion cent income', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+    const account = await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '銀行', initialBalance: 2_000_000_000 })
+      .expect(201);
+    const accountId = (account.body as Account).id;
+    const categories = await request(server())
+      .get(`/api/ledgers/${ledgerId}/categories?type=INCOME`)
+      .set(auth(alice.token))
+      .expect(200);
+    const categoryId = (categories.body as Array<{ id: string }>)[0]!.id;
+
+    await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send({
+        type: 'INCOME',
+        amount: 2_000_000_000,
+        date: '2026-10-03T00:00:00.000Z',
+        categoryId,
+        accountId,
+      })
+      .expect(201);
+
+    const accounts = await listAccounts(app, alice.token);
+    expect(accounts.find((item) => item.id === accountId)?.balance).toBe(4_000_000_000);
+  });
+
   it('rejects a duplicate name for the same user (409)', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
 

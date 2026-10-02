@@ -11,8 +11,8 @@ import App from '../../App';
 describe('Account balances on the home page', () => {
   const fetchMock = vi.fn();
 
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 3800 };
-  const card = { id: 'acc-2', name: '信用卡', initialBalance: -12000, balance: -12000 };
+  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
+  const card = { id: 'acc-2', name: '信用卡', initialBalance: -1200000, balance: -1200000 };
 
   beforeEach(() => {
     localStorage.clear();

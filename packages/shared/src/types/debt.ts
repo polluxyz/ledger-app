@@ -1,3 +1,5 @@
+import type { Cents } from '../money';
+
 /**
  * 借還帳（階段三 3b，往來帳版）的 request／response 型別。規格見 `docs/specs/phase-3b-debts.md`。
  *
@@ -46,10 +48,10 @@ export interface CounterpartyLinkInfo {
   userId: string;
   userName: string;
   /**
-   * 對方帳上的往來餘額，**換成我的角度**（對方的餘額取負號）。與我的 `balance` 並排，
+   * 對方帳上的往來餘額，單位：分；**換成我的角度**（對方的餘額取負號）。與我的 `balance` 並排，
    * 讓雙方自行核對；兩者可能不同，因為連動前的紀錄不同步（決策 59）。
    */
-  theirBalance: number;
+  theirBalance: Cents;
 }
 
 /** 往來對象。 */
@@ -70,8 +72,8 @@ export interface Counterparty {
    * 回答「沒有」或完成合併後變 `false`。
    */
   askMerge: boolean;
-  /** 往來餘額。正數＝對方欠我，負數＝我欠對方。 */
-  balance: number;
+  /** 往來餘額，單位：分。正數＝對方欠我，負數＝我欠對方。 */
+  balance: Cents;
   /** 連動中的使用者；沒有連動時為 `null`。 */
   link: CounterpartyLinkInfo | null;
   /** ISO 8601。 */
@@ -84,18 +86,18 @@ export interface DebtEntry {
   id: string;
   counterpartyId: string;
   kind: DebtEntryKind;
-  /** 對往來餘額的影響，有正負號，不為 0。正數＝這筆讓對方多欠我。 */
-  delta: number;
+  /** 對往來餘額的影響，單位：分；有正負號，不為 0。正數＝這筆讓對方多欠我。 */
+  delta: Cents;
   /** ISO 8601。 */
   date: string;
   note: string | null;
   /** 產生的交易；調整紀錄與「不記入帳本」為 `null`。 */
   transactionId: string | null;
   /**
-   * 寫入這筆之後的累計往來餘額（依日期、再依建立時間由舊到新累加）。
+   * 寫入這筆之後的累計往來餘額，單位：分（依日期、再依建立時間由舊到新累加）。
    * 只在 `GET /counterparties/{id}/entries` 回傳。
    */
-  balanceAfter?: number;
+  balanceAfter?: Cents;
   /** 與對方的同步狀態（3b-2 §3.4），由後端算出。 */
   sync: DebtEntrySyncStatus;
   /** 是否與對方那邊的一筆紀錄配對。畫面用它決定改或刪之前要不要警告（決策 67）。 */
@@ -129,11 +131,11 @@ export interface CreateDebtEntryRequest {
   counterparty: { id: string } | { name: string };
   kind: CreateDebtEntryKind;
   /**
-   * 正整數。`delta` 的正負號由 `kind` 決定；`REPAYMENT` 由目前餘額決定。
+   * 正整數金額，單位：分。`delta` 的正負號由 `kind` 決定；`REPAYMENT` 由目前餘額決定。
    * `REPAYMENT` 在往來餘額為 0 時回 409 `NOTHING_TO_REPAY`；沒帶 `settle` 又超過欠款時回
    * 409 `REPAYMENT_EXCEEDS_BALANCE`。
    */
-  amount: number;
+  amount: Cents;
   /** ISO 8601。 */
   date: string;
   note?: string;
@@ -158,7 +160,8 @@ export interface CreateDebtEntryResponse {
 
 /** `PATCH /debt-entries/{id}` 的 body。只有送出的欄位會變；調整紀錄不能改。 */
 export interface UpdateDebtEntryRequest {
-  amount?: number;
+  /** 金額，單位：分。 */
+  amount?: Cents;
   date?: string;
   /** 送 `null` 清除備註。 */
   note?: string | null;
@@ -237,8 +240,8 @@ export interface DebtProposal {
   /** 我這邊連動的對象；解除連動後可能為 `null`。 */
   counterpartyId: string | null;
   entryKind: DebtEntryKind;
-  /** 正整數。`CREATE`、`AMEND` 是提議的值；`DELETE` 是刪除當下那筆的值。 */
-  amount: number;
+  /** 單位：分的正整數。`CREATE`、`AMEND` 是提議的值；`DELETE` 是刪除當下那筆的值。 */
+  amount: Cents;
   /** ISO 8601。 */
   date: string;
   /** 還款是否帶了以此結清。 */
@@ -246,11 +249,11 @@ export interface DebtProposal {
   /** 只有送出的提議才有：我自己那筆紀錄。 */
   sourceEntryId?: string;
   /**
-   * 收到的 `AMEND`：**我自己那筆**被改之前的金額與日期（3b-2 web F26），讓畫面寫得出
+   * 收到的 `AMEND`：**我自己那筆**被改之前的金額（單位：分）與日期（3b-2 web F26），讓畫面寫得出
    * 「$120 → $150」。只取接受者自己的資料，不揭露發起者的帳。我那筆已被自己刪掉時、
    * 以及其他所有提議，一律 `null`。
    */
-  previous: { amount: number; date: string } | null;
+  previous: { amount: Cents; date: string } | null;
   /** ISO 8601。 */
   createdAt: string;
   respondedAt: string | null;

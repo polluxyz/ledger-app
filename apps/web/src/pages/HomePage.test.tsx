@@ -29,7 +29,7 @@ describe('Home dashboard', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   let incomingLinkInvites: unknown[] = [];
   let incomingProposals: unknown[] = [];
 
@@ -37,7 +37,7 @@ describe('Home dashboard', () => {
   const transactions = Array.from({ length: 7 }, (_, index) => ({
     id: `txn-${index + 1}`,
     type: 'EXPENSE',
-    amount: 100 + index,
+    amount: (100 + index) * 100,
     date: '2026-08-12T04:00:00.000Z',
     note: `第 ${index + 1} 筆`,
     category: expenseCategory,
@@ -268,7 +268,7 @@ describe('Home dashboard', () => {
       ...transactions[0],
       id: 'txn-lend',
       type: 'LEND',
-      amount: 1000,
+      amount: 100000,
       category: null,
       note: '借小明',
       debt: {
@@ -282,7 +282,7 @@ describe('Home dashboard', () => {
     const otherLend = {
       ...lend,
       id: 'txn-other-lend',
-      amount: 500,
+      amount: 50000,
       note: '他人借出',
       debt: null,
     };
@@ -375,11 +375,11 @@ describe('Home dashboard', () => {
         return json({
           items: [
             transactions[0],
-            { ...transactions[1], type: 'INCOME', amount: 5000, note: '薪水' },
+            { ...transactions[1], type: 'INCOME', amount: 500000, note: '薪水' },
             {
               ...transactions[2],
               type: 'TRANSFER',
-              amount: 500,
+              amount: 50000,
               category: null,
               note: '提款',
               toAccount: { id: 'acc-2', name: '國泰世華' },

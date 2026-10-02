@@ -93,7 +93,7 @@ describe('Debt hooks', () => {
       variables: {
         counterparty: { name: '小明' },
         kind: 'COLLECT',
-        amount: 90,
+        amount: 9000,
         date: 'd',
         record: null,
         settle: true,
@@ -104,7 +104,7 @@ describe('Debt hooks', () => {
       body: {
         counterparty: { name: '小明' },
         kind: 'COLLECT',
-        amount: 90,
+        amount: 9000,
         date: 'd',
         record: null,
         settle: true,

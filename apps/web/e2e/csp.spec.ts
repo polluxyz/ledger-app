@@ -51,7 +51,7 @@ test('在 CSP 之下登入並讀得到資料，過程沒有任何 CSP 違規', a
   const expense = categories.find((category) => category.type === 'EXPENSE');
   await createTransaction(request, user.token, ledger.id, {
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: new Date().toISOString(),
     categoryId: expense!.id,
     accountId: cash!.id,

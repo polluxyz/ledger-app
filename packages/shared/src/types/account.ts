@@ -1,3 +1,5 @@
+import type { Cents } from '../money';
+
 /**
  * 帳戶——錢實際放在哪裡（現金、某家銀行、某張信用卡）。
  *
@@ -9,19 +11,19 @@ export interface Account {
   id: string;
   name: string;
   /**
-   * 開始使用本系統時，這個帳戶已經有的金額。
+   * 開始使用本系統時，這個帳戶已經有的金額。單位：分。
    * **可為負**——例如信用卡在導入前就已經有的欠款。
    */
-  initialBalance: number;
+  initialBalance: Cents;
   /**
-   * 目前餘額。由後端**即時計算**（初始餘額 ± 各筆交易），**不是儲存欄位**。
+   * 目前餘額，單位：分。由後端**即時計算**（初始餘額 ± 各筆交易），**不是儲存欄位**。
    *
    * 之所以不存起來：只要有任何一條路徑忘了更新它，數字就會永久失準，而且
    * 從外面完全看不出來；算出來的則不可能失準。
    *
    * 計算時排除軟刪除的交易，也排除「不與帳戶連動」的帳本（`tracksBalance: false`）。
    */
-  balance: number;
+  balance: Cents;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }
@@ -29,8 +31,8 @@ export interface Account {
 /** POST /accounts 的請求 body。 */
 export interface CreateAccountRequest {
   name: string;
-  /** 省略時視為 0；可為負數。 */
-  initialBalance?: number;
+  /** 單位：分；省略時視為 0，可為負數。 */
+  initialBalance?: Cents;
 }
 
 /**

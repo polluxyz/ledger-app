@@ -25,8 +25,8 @@ describe('CounterpartiesPage', () => {
     name: '小明',
     displayName: '小明',
     askMerge: false,
-    balance: 1_000_000,
-    link: { userId: 'user-1', userName: '王小明', theirBalance: -700_000 },
+    balance: 100000000,
+    link: { userId: 'user-1', userName: '王小明', theirBalance: -70000000 },
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
   };

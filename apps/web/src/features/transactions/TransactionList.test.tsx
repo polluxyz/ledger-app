@@ -38,7 +38,7 @@ describe('TransactionList', () => {
   function makeTransaction(overrides: Partial<Transaction> & { id: string }): Transaction {
     return {
       type: 'EXPENSE',
-      amount: 120,
+      amount: 12000,
       date: '2026-08-16T12:00:00',
       note: null,
       category: { id: 'cat-1', name: '餐飲' },
@@ -56,7 +56,7 @@ describe('TransactionList', () => {
     makeTransaction({ id: 'txn-1' }),
     makeTransaction({
       id: 'txn-2',
-      amount: 80,
+      amount: 8000,
       note: '手沖淺焙',
       category: { id: 'cat-2', name: '飲料' },
     }),
@@ -64,21 +64,21 @@ describe('TransactionList', () => {
       id: 'txn-3',
       date: '2026-08-15T09:00:00',
       type: 'INCOME',
-      amount: 30000,
+      amount: 3000000,
       category: { id: 'cat-3', name: '薪資' },
     }),
     makeTransaction({
       id: 'txn-4',
       date: '2026-08-15T08:00:00',
       type: 'TRANSFER',
-      amount: 5000,
+      amount: 500000,
       category: null,
       toAccount: { id: 'acc-2', name: '國泰世華' },
     }),
     makeTransaction({
       id: 'txn-5',
       date: '2026-08-14T20:00:00',
-      amount: 250,
+      amount: 25000,
       category: { id: 'cat-4', name: '娛樂' },
     }),
   ];
@@ -194,7 +194,7 @@ describe('TransactionList', () => {
       const transaction = makeTransaction({
         id: 'txn-lend',
         type: 'LEND',
-        amount: 1000,
+        amount: 100000,
         category: null,
         debt,
       });

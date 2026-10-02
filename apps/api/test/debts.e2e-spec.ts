@@ -120,6 +120,32 @@ describe('Debt ledger (e2e)', () => {
     return (res.body as { errorCode: string }).errorCode;
   }
 
+  // SC-M5：往來紀錄的建立與修改都使用同一個分的上限，避免 int4 寫入錯誤。
+  it('accepts 2 billion cents and rejects a larger debt entry amount', async () => {
+    const user = await me();
+    const body = {
+      counterparty: { name: '小明' },
+      kind: 'LEND',
+      amount: 2_000_000_000,
+      date: DAY,
+      record: null,
+    };
+
+    const tooLarge = await post(user, { ...body, amount: 2_000_000_001 });
+    expect(tooLarge.status).toBe(400);
+
+    const created = await post(user, body);
+    expect(created.status).toBe(201);
+    const entry = (created.body as CreateDebtEntryResponse).entries[0]!;
+    expect(entry.delta).toBe(2_000_000_000);
+
+    await request(server())
+      .patch(`/api/debt-entries/${entry.id}`)
+      .set(auth(user.token))
+      .send({ amount: 2_000_000_001 })
+      .expect(400);
+  });
+
   // SC-L1
   it('offsets lending and borrowing with the same person into one balance', async () => {
     const user = await me();

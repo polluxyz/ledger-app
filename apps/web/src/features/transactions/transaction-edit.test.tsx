@@ -22,11 +22,11 @@ describe('Editing and deleting a transaction', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 880 };
+  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
-    amount: 120,
+    amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
     category: expenseCategory,
@@ -125,7 +125,7 @@ describe('Editing and deleting a transaction', () => {
     await user.click(within(dialog).getByRole('button', { name: '儲存' }));
 
     const body = await patchedBody();
-    expect(body.amount).toBe(200);
+    expect(body.amount).toBe(20000);
     expect(body.categoryId).toBe('cat-1');
     expect(body.accountId).toBe('acc-1');
   });

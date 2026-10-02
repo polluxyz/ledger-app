@@ -30,8 +30,8 @@ describe('DebtEntryForm', () => {
       name: '舊小明',
       displayName: '小明',
       askMerge: false,
-      balance: 9,
-      link: { userId: 'user-ming', userName: '王小明', theirBalance: -9 },
+      balance: 900,
+      link: { userId: 'user-ming', userName: '王小明', theirBalance: -900 },
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
@@ -40,7 +40,7 @@ describe('DebtEntryForm', () => {
       name: '小華',
       displayName: '小華',
       askMerge: false,
-      balance: -400,
+      balance: -40000,
       link: null,
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
@@ -57,8 +57,8 @@ describe('DebtEntryForm', () => {
     },
   ];
   const accounts = [
-    { id: 'acc-cash', name: '現金', initialBalance: 0, balance: 880 },
-    { id: 'acc-bank', name: '銀行', initialBalance: 0, balance: 5000 },
+    { id: 'acc-cash', name: '現金', initialBalance: 0, balance: 88000 },
+    { id: 'acc-bank', name: '銀行', initialBalance: 0, balance: 500000 },
   ];
 
   beforeEach(() => {
@@ -223,6 +223,17 @@ describe('DebtEntryForm', () => {
     expect(screen.queryByText(/送出後會請/)).not.toBeInTheDocument();
   });
 
+  it('uses parsed cents when previewing the resulting balance', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('對象'), '小明');
+    await screen.findByText('目前小明欠你 $9');
+    await user.type(screen.getByLabelText('金額'), '0.33');
+
+    expect(screen.getByText('記完後：小明欠你 $9.33')).toBeInTheDocument();
+  });
+
   it('does not show a repayment direction while lend is selected', async () => {
     renderForm(ledger, '小明');
     await screen.findByText('目前小明欠你 $9');
@@ -354,7 +365,7 @@ describe('DebtEntryForm', () => {
     const body = await postedBody();
     expect(body.counterparty).toEqual({ id: 'cp-ming' });
     expect(body.kind).toBe('BORROW');
-    expect(body.amount).toBe(11);
+    expect(body.amount).toBe(1100);
     expect(String(body.date)).toMatch(ISO_DATE);
     expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-bank' });
     expect(body.note).toBe('臨時周轉');
@@ -439,7 +450,7 @@ describe('DebtEntryForm', () => {
     await user.selectOptions(await screen.findByLabelText('收進哪個帳戶'), 'acc-cash');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
-    expect(await postedBody()).toMatchObject({ kind: 'REPAYMENT', amount: 9 });
+    expect(await postedBody()).toMatchObject({ kind: 'REPAYMENT', amount: 900 });
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '借出' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByLabelText('金額')).toHaveValue(null);

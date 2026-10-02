@@ -85,6 +85,40 @@ describe('Transactions (e2e)', () => {
     expect((mismatch.body as { errorCode: string }).errorCode).toBe('CATEGORY_TYPE_MISMATCH');
   });
 
+  // SC-M5：金額上限先在 DTO 擋下，避免超出資料庫 int4 範圍時變成 500。
+  it('accepts 2 billion cents and rejects a larger transaction amount', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+    const accountId = await firstAccountId(app, alice.token);
+    const incomeCat = await categoryId(alice.token, ledgerId, 'INCOME');
+    const body = {
+      type: 'INCOME',
+      amount: 2_000_000_000,
+      date: '2026-08-08T12:00:00.000Z',
+      categoryId: incomeCat,
+      accountId,
+    };
+
+    await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send({ ...body, amount: 2_000_000_001 })
+      .expect(400);
+
+    const created = await request(server())
+      .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(auth(alice.token))
+      .send(body)
+      .expect(201);
+    expect((created.body as Transaction).amount).toBe(2_000_000_000);
+
+    await request(server())
+      .patch(`/api/ledgers/${ledgerId}/transactions/${(created.body as Transaction).id}`)
+      .set(auth(alice.token))
+      .send({ amount: 2_000_000_001 })
+      .expect(400);
+  });
+
   // ── 帳戶的條件必填 ───────────────────────────────────────────────────────
 
   it('requires an account in a tracking ledger and rejects a foreign one (SC-C5)', async () => {

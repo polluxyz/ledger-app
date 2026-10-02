@@ -26,8 +26,8 @@ describe('Recording a transfer', () => {
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 1000 };
-  const bank = { id: 'acc-2', name: '國泰世華', initialBalance: 0, balance: 5000 };
+  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 100000 };
+  const bank = { id: 'acc-2', name: '國泰世華', initialBalance: 0, balance: 500000 };
 
   beforeEach(() => {
     localStorage.clear();
@@ -55,7 +55,7 @@ describe('Recording a transfer', () => {
           jsonResponse(201, {
             id: 'txn-new',
             type: 'TRANSFER',
-            amount: 500,
+            amount: 50000,
             date: '2026-08-25T04:00:00.000Z',
             note: null,
             category: null,
