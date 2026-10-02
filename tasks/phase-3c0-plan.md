@@ -55,4 +55,6 @@ spec：`docs/specs/phase-3c0-money-cents.md`（決策 M1～M8、SC-M1～SC-M10�
 
 ## 7. 實作紀錄
 
-（實作時填寫）
+1. **T1 只寫契約，不實作**（2026-10-03）：開發者核可 plan 時要求「盡量調度 worker」。協調者寫 `money.ts` 的簽名、常數與 `money.test.ts`（紅燈），實作併進 T3 派給 worker。T2 只需要常數與 `Cents` 型別，所以 T2、T3 可以立刻平行開工。
+2. **shared 的測試直接跑 `.ts`**：`packages/shared` 解析不到 `@types/node`（pnpm 不提升相依），照 §1 原本的「tsc 編譯再跑」就得新增相依。改成 `node --test "src/**/*.test.ts"`，靠 Node 22.18 起預設開啟的型別剝除；測試檔用 `./money.ts` 帶副檔名 import，並從主 `tsconfig.json` 排除。CI 的 `.node-version` 是 `22`，會裝到最新的 22.x。不新增套件、不改 CI。`dist-test` 因此不需要，`.gitignore`、`.prettierignore` 不改。
+3. **派工**：T2 `ctx_74839aac153f`（worktree `money-cents-api`）、T3 `ctx_d4ff0eebcd78`（worktree `money-cents-web`），Run `run_c1865dc5b0a2`。兩個 Codex 啟動時都跳出更新提示，選「Skip until next version」後重開終端機。
