@@ -30,6 +30,9 @@
 
 ### 已知問題與踩過的坑
 
+- **worker 的 worktree 會帶著 `apps/api/.env`（指向開發者的 `ledger_dev`）**。2026-10-03 3c 的 migration 在 PR 合併前就被套用到 `ledger_dev`（14:40），最可能是後端 worker 沒帶 `.env.test` 跑了 Prisma 的 migration 指令。這次只新增資料表與欄位，資料總和前後一致，沒有損害。**之後派後端 worker 的 Task spec 一律加一條**：Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑，不准對 `.env`。
+- 替開發者部署時，`pnpm install --frozen-lockfile` 不一定會重跑 `prisma generate`；schema 有變就在 `apps/api` 手動跑一次再 build，否則 build 會因為舊的 Prisma Client 報一堆型別錯誤。
+
 - **改了 `packages/shared` 之後，本機 Vite 的預先打包快取（`apps/web/node_modules/.vite`）要刪掉**，否則 dev 與 Web e2e 會出現「xxx is not a function」。替開發者部署時也要刪 `web-redesign` 的。
 - shared 的測試用 Node 內建 test runner 直接跑 `.ts`（型別剝除）：被測檔只能 `import type`，不帶副檔名的值匯入會解析不到（`split-shares.ts` 因此自己定義 `SPLIT_RATIO_TOTAL`）。
 - 共享帳本的其他成員看到分帳時是一筆一筆的交易（`split` 為 `null`，spec 3c SC-S16）；合併顯示只給擁有者。

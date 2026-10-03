@@ -191,10 +191,11 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - **Ownership**：這個 worker 可以改什麼、與其他 worker 的界線。
 - **Observable acceptance**：證明完成的測試、輸出或證據。
 
-`Constraints` 每次都要寫的四條（`CLAUDE.md` 沒有，或 worker 容易誤判）：
+`Constraints` 每次都要寫的五條（`CLAUDE.md` 沒有，或 worker 容易誤判）：
 
 - **不准動 Prisma schema 與 API 介面**；需要動就回報，不要自己改。
 - **不要跑 e2e**，除非 spec 指定由你跑。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
+- **Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑**，不准對 `.env`。`.worktreeinclude` 會把 `apps/api/.env` 複製進 worktree，它指向開發者的 `ledger_dev`；2026-10-03 3c 的 migration 就這樣在合併前被套用到 dev 資料庫。
 - 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
 - **遇到 provider 錯誤時把錯誤原文帶回來**，不要自己重試，也不要只寫「失敗」（理由見 §4）。
 
