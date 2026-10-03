@@ -21,7 +21,7 @@ describe('Editing and deleting a transaction', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
@@ -110,7 +110,10 @@ describe('Editing and deleting a transaction', () => {
     expect(within(dialog).getByLabelText('金額')).toHaveValue(120);
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-08-12');
     expect(within(dialog).getByLabelText('備註')).toHaveValue('午餐');
-    expect(within(dialog).getByLabelText('分類')).toHaveValue('cat-1');
+    expect(within(dialog).getByRole('combobox', { name: '分類' })).toHaveAttribute(
+      'aria-valuetext',
+      '餐飲',
+    );
   });
 
   it('sends only a PATCH with the edited values', async () => {
@@ -196,8 +199,10 @@ describe('Editing and deleting a transaction', () => {
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: /^刪除2026/ }));
-    const dialog = screen.getByRole('dialog');
+    await user.click(await screen.findByRole('button', { name: /編輯.*餐飲/ }));
+    const editor = await screen.findByRole('dialog', { name: '編輯交易' });
+    await user.click(within(editor).getByRole('button', { name: '刪除' }));
+    const dialog = await screen.findByRole('dialog', { name: '刪除交易' });
     expect(within(dialog).getByText(/刪除後無法復原/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: '刪除' }));
 

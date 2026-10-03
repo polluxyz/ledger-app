@@ -6,14 +6,14 @@ import { TransactionList } from './TransactionList';
 import styles from './TransactionList.module.css';
 
 /**
- * 交易表格的呈現契約（phase-2h D16、D17）。
+ * 交易列的呈現契約（phase-3d T1、T5、T7、T8）。
  *
- * 這個 suite 釘四件事：
+ * 這個 suite 釘住單列內容、圖示回退、可編輯入口與分帳展開，確保列不再依賴表格欄位。
  *
  * 1. **DOM 結構**——日期標題不是 `<li>`，所以 `<li>` 的數量必須等於交易筆數。
  *    e2e 有多條斷言靠 listitem 數筆數，結構一變就整批紅。
- * 2. **整列可點**——點空白處是編輯，點操作鈕只做那顆鈕的事。
- * 3. **無障礙名稱**——按鈕改成只有圖示之後，`aria-label` 是唯一的名稱來源。
+ * 2. **整列可點**——點空白處是編輯，點分帳展開鈕只展開明細。
+ * 3. **無障礙名稱**——列內編輯入口用日期與名稱標示。
  * 4. **金額語意色與選取標示**——三種型別各自一個 class，不是「非支出即收入」。
  *
  * 日期字串刻意不帶 `Z`：不帶時區的字串一律以本地時間解讀，分組結果才不會
@@ -42,7 +42,7 @@ describe('TransactionList', () => {
       date: '2026-08-16T12:00:00',
       title: null,
       note: null,
-      category: { id: 'cat-1', name: '餐飲' },
+      category: { id: 'cat-1', name: '餐飲', icon: null },
       account,
       toAccount: null,
       creator,
@@ -60,14 +60,14 @@ describe('TransactionList', () => {
       id: 'txn-2',
       amount: 8000,
       note: '手沖淺焙',
-      category: { id: 'cat-2', name: '飲料' },
+      category: { id: 'cat-2', name: '飲料', icon: null },
     }),
     makeTransaction({
       id: 'txn-3',
       date: '2026-08-15T09:00:00',
       type: 'INCOME',
       amount: 3000000,
-      category: { id: 'cat-3', name: '薪資' },
+      category: { id: 'cat-3', name: '薪資', icon: null },
     }),
     makeTransaction({
       id: 'txn-4',
@@ -81,24 +81,22 @@ describe('TransactionList', () => {
       id: 'txn-5',
       date: '2026-08-14T20:00:00',
       amount: 25000,
-      category: { id: 'cat-4', name: '娛樂' },
+      category: { id: 'cat-4', name: '娛樂', icon: null },
     }),
   ];
 
   function renderList(props: Partial<Parameters<typeof TransactionList>[0]> = {}) {
     const onEdit = vi.fn();
-    const onRemove = vi.fn();
     render(
       <TransactionList
         transactions={transactions}
         isLoading={false}
         error={null}
         onEdit={onEdit}
-        onRemove={onRemove}
         {...props}
       />,
     );
-    return { onEdit, onRemove };
+    return { onEdit };
   }
 
   it('groups consecutive days without turning the headings into list items', () => {
@@ -111,29 +109,71 @@ describe('TransactionList', () => {
     expect(screen.getByText('8月14日 星期五')).toBeInTheDocument();
   });
 
-  it('edits when the row is clicked and only removes when the bin is clicked', async () => {
+  it('renders one name and a fixed amount without account or note text', () => {
+    const transaction = makeTransaction({
+      id: 'txn-named',
+      title: '四十字長名稱也留在自己的欄位',
+      note: '不顯示的備註',
+      category: { id: 'cat-food', name: '餐飲', icon: 'food' },
+    });
+    renderList({ transactions: [transaction] });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText(transaction.title!)).toBeInTheDocument();
+    expect(within(listRow).getByText('-$120')).toBeInTheDocument();
+    expect(within(listRow).queryByText('不顯示的備註')).not.toBeInTheDocument();
+    expect(within(listRow).queryByText('現金')).not.toBeInTheDocument();
+    expect(screen.queryByText('分類／備註')).not.toBeInTheDocument();
+    expect(screen.queryByText('帳戶')).not.toBeInTheDocument();
+  });
+
+  it('shows category, generic, debt direction, and transfer icons', () => {
+    const iconTransactions = [
+      makeTransaction({
+        id: 'category-icon',
+        category: { id: 'cat-food', name: '餐飲', icon: 'food' },
+      }),
+      makeTransaction({
+        id: 'generic-icon',
+        category: { id: 'cat-custom', name: '自訂', icon: null },
+      }),
+      makeTransaction({ id: 'lend-icon', type: 'LEND', category: null }),
+      makeTransaction({ id: 'repay-icon', type: 'REPAY', category: null }),
+      makeTransaction({ id: 'borrow-icon', type: 'BORROW', category: null }),
+      makeTransaction({ id: 'collect-icon', type: 'COLLECT', category: null }),
+      makeTransaction({ id: 'transfer-icon', type: 'TRANSFER', category: null }),
+    ];
+    renderList({ transactions: iconTransactions });
+
+    const iconName = (index: number) =>
+      row(index).querySelector('svg')?.getAttribute('data-category-icon');
+    expect(iconName(0)).toBe('food');
+    expect(iconName(1)).toBe('other');
+    expect(iconName(2)).toBe('lend');
+    expect(iconName(3)).toBe('repay');
+    expect(iconName(4)).toBe('borrow');
+    expect(iconName(5)).toBe('collect');
+    expect(iconName(6)).toBe('transfer');
+  });
+
+  it('edits when the row is clicked and has no row delete action', async () => {
     const user = userEvent.setup();
-    const { onEdit, onRemove } = renderList();
+    const { onEdit } = renderList();
 
     const firstRow = row(0);
     await user.click(within(firstRow).getByText('餐飲'));
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledWith(transactions[0]);
 
-    onEdit.mockClear();
-    // 刪除鈕在列之內，點擊會冒泡上來；沒擋住的話按刪除會順便開啟編輯面板。
-    await user.click(within(firstRow).getByRole('button', { name: /^刪除/ }));
-    expect(onRemove).toHaveBeenCalledWith(transactions[0]);
-    expect(onEdit).not.toHaveBeenCalled();
+    expect(within(firstRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
   });
 
   it('still names the action buttons by date and category', () => {
     renderList();
 
-    // 按鈕改成只有圖示之後，aria-label 是唯一的名稱來源，e2e 也靠它。
+    // 名稱格可用鍵盤操作，日期與列名一起提供清楚的無障礙名稱。
     expect(screen.getByRole('button', { name: '編輯2026/08/16 的餐飲' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '刪除2026/08/16 的餐飲' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '刪除2026/08/15 的轉帳' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '編輯2026/08/15 的轉帳' })).toBeInTheDocument();
   });
 
   // 開發者 2026-09-24：點整列就是編輯，鉛筆圖示是重複的入口，拿掉。但鍵盤使用者
@@ -168,14 +208,13 @@ describe('TransactionList', () => {
     expect(row(4)).not.toHaveClass(cssClass('selected'));
   });
 
-  it('keeps both action buttons on an ordinary expense row', async () => {
-    // 對照組：唯讀只針對借還交易，一般交易的兩顆鈕與整列可點都不受影響。
+  it('keeps the edit entry on an ordinary expense row', async () => {
     const user = userEvent.setup();
     const { onEdit } = renderList();
 
     const firstRow = row(0);
     expect(within(firstRow).getByRole('button', { name: /^編輯/ })).toBeInTheDocument();
-    expect(within(firstRow).getByRole('button', { name: /^刪除/ })).toBeInTheDocument();
+    expect(within(firstRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
 
     await user.click(within(firstRow).getByText('餐飲'));
     expect(onEdit).toHaveBeenCalledWith(transactions[0]);
@@ -275,7 +314,7 @@ describe('TransactionList', () => {
         transactions: [
           makeTransaction({
             id: 'txn-paid',
-            category: { id: 'cat-1', name: '餐飲' },
+            category: { id: 'cat-1', name: '餐飲', icon: null },
             debt: { ...debt, kind: 'PAID_FOR_ME' },
           }),
         ],
@@ -283,7 +322,7 @@ describe('TransactionList', () => {
       });
 
       const listRow = row(0);
-      expect(screen.getByText('餐飲 · 幫我付 · 小明')).toBeInTheDocument();
+      expect(within(listRow).getByText('餐飲')).toBeInTheDocument();
       expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
       await user.click(within(listRow).getByRole('button', { name: /^編輯/ }));
       expect(onEditDebtTransaction).toHaveBeenCalledWith(
@@ -302,7 +341,7 @@ describe('TransactionList', () => {
           }),
           makeTransaction({
             id: 'paid-for-me',
-            category: { id: 'cat-1', name: '餐飲' },
+            category: { id: 'cat-1', name: '餐飲', icon: null },
             debt: { ...debt, kind: 'PAID_FOR_ME' },
           }),
           makeTransaction({
@@ -314,16 +353,16 @@ describe('TransactionList', () => {
           makeTransaction({
             id: 'received-for-me',
             type: 'INCOME',
-            category: { id: 'cat-2', name: '薪資' },
+            category: { id: 'cat-2', name: '薪資', icon: null },
             debt: { ...debt, kind: 'RECEIVED_FOR_ME' },
           }),
         ],
       });
 
       expect(screen.getByText('代墊 · 小明')).toBeInTheDocument();
-      expect(screen.getByText('餐飲 · 幫我付 · 小明')).toBeInTheDocument();
+      expect(screen.getAllByText('餐飲')).toHaveLength(1);
       expect(screen.getByText('代收 · 小明')).toBeInTheDocument();
-      expect(screen.getByText('薪資 · 幫我收 · 小明')).toBeInTheDocument();
+      expect(screen.getByText('薪資')).toBeInTheDocument();
     });
 
     it('keeps an unlinked debt transaction unclickable and without a delete action', async () => {

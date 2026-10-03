@@ -1,12 +1,22 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { createTransaction, listAccounts, listCategories, personalLedger } from './api';
+import {
+  createAccount,
+  createCounterparty,
+  createDebtEntry,
+  createSplit,
+  createTransaction,
+  listAccounts,
+  listCategories,
+  personalLedger,
+} from './api';
 import { expect, test } from './fixtures';
 import {
   newTransactionForm,
+  openTransactionFilters,
   openNewTransaction,
   openTransactions,
   openUserMenu,
-  transactionFilters,
+  transactionRow,
 } from './ui';
 
 /**
@@ -101,10 +111,170 @@ test('SC-24.3：1440×900 的交易頁首屏至少看得到 10 筆交易', async
   expect(await fullyVisibleRows(page)).toBeGreaterThanOrEqual(10);
 });
 
+test('SC-T2：有名稱、無名稱、借還、分帳與轉帳列等高', async ({
+  signedInPage: page,
+  userA,
+  request,
+}) => {
+  const ledger = await personalLedger(request, userA.token);
+  const [cash] = await listAccounts(request, userA.token);
+  const categories = await listCategories(request, userA.token, ledger.id);
+  const expense = categories.find((category) => category.type === 'EXPENSE')!;
+  const secondAccount = await createAccount(request, userA.token, { name: 'SC-T2 轉入' });
+  const today = new Date().toISOString();
+
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 10000,
+    date: today,
+    title: '有名稱',
+    categoryId: expense.id,
+    accountId: cash!.id,
+  });
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 10100,
+    date: today,
+    categoryId: expense.id,
+    accountId: cash!.id,
+  });
+
+  const counterparty = await createCounterparty(request, userA.token, 'SC-T2 對象');
+  await createDebtEntry(request, userA.token, {
+    counterparty: { id: counterparty.id },
+    kind: 'LEND',
+    amount: 10200,
+    date: today,
+    record: { ledgerId: ledger.id, accountId: cash!.id },
+  });
+
+  await createSplit(request, userA.token, {
+    type: 'EXPENSE',
+    ledgerId: ledger.id,
+    categoryId: expense.id,
+    total: 10300,
+    date: today,
+    title: '分帳列',
+    payer: null,
+    accountId: cash!.id,
+    method: 'EQUAL',
+    participants: [{ counterpartyId: null }],
+  });
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'TRANSFER',
+    amount: 10400,
+    date: today,
+    accountId: cash!.id,
+    toAccountId: secondAccount.id,
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await openTransactions(page);
+
+  const rows = [
+    transactionRow(page, '-$100'),
+    transactionRow(page, '-$101'),
+    transactionRow(page, '-$102'),
+    transactionRow(page, '-$103'),
+    transactionRow(page, '$104'),
+  ];
+  const heights = await Promise.all(
+    rows.map(async (row) => {
+      await expect(row).toBeVisible();
+      return Math.round((await row.boundingBox())!.height);
+    }),
+  );
+
+  expect(new Set(heights).size).toBe(1);
+});
+
+test('SC-T3：40 字英文名稱不推動金額欄，375px 與 1440px 都無橫向捲動', async ({
+  signedInPage: page,
+  userA,
+  request,
+}) => {
+  const ledger = await personalLedger(request, userA.token);
+  const [cash] = await listAccounts(request, userA.token);
+  const expense = (await listCategories(request, userA.token, ledger.id)).find(
+    (category) => category.type === 'EXPENSE',
+  )!;
+  const title = 'InternationallyLongTransactionNameFortyX';
+
+  expect(title).toHaveLength(40);
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 12000,
+    date: new Date().toISOString(),
+    title,
+    categoryId: expense.id,
+    accountId: cash!.id,
+  });
+
+  const rightOffsetAtWidth = async (width: number) => {
+    await page.setViewportSize({ width, height: 900 });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${width}px 出現橫向捲動`).toBe(0);
+
+    const row = transactionRow(page, '-$120');
+    const rowBox = await row.boundingBox();
+    const amountBox = await row.getByText('-$120', { exact: true }).boundingBox();
+    expect(rowBox).not.toBeNull();
+    expect(amountBox).not.toBeNull();
+    return rowBox!.x + rowBox!.width - amountBox!.x - amountBox!.width;
+  };
+
+  await page.reload();
+  await openTransactions(page);
+  const wideOffset = await rightOffsetAtWidth(1440);
+  const narrowOffset = await rightOffsetAtWidth(375);
+  expect(Math.abs(wideOffset - narrowOffset)).toBeLessThanOrEqual(1);
+});
+
+test('SC-T4：不同日期的分組至少相隔 24px', async ({ signedInPage: page, userA, request }) => {
+  const ledger = await personalLedger(request, userA.token);
+  const [cash] = await listAccounts(request, userA.token);
+  const expense = (await listCategories(request, userA.token, ledger.id)).find(
+    (category) => category.type === 'EXPENSE',
+  )!;
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 10000,
+    date: today.toISOString(),
+    categoryId: expense.id,
+    accountId: cash!.id,
+  });
+  await createTransaction(request, userA.token, ledger.id, {
+    type: 'EXPENSE',
+    amount: 10100,
+    date: yesterday.toISOString(),
+    categoryId: expense.id,
+    accountId: cash!.id,
+  });
+
+  await page.reload();
+  await openTransactions(page);
+  const groups = page.getByRole('main').getByRole('list');
+  const firstLastRow = groups.nth(0).getByRole('listitem').last();
+  const secondHeading = groups.nth(1).locator('xpath=preceding-sibling::p[1]');
+  await expect(firstLastRow).toBeVisible();
+  await expect(secondHeading).toBeVisible();
+
+  const firstRowBox = await firstLastRow.boundingBox();
+  const secondHeadingBox = await secondHeading.boundingBox();
+  expect(secondHeadingBox!.y - (firstRowBox!.y + firstRowBox!.height)).toBeGreaterThanOrEqual(24);
+});
+
 test('SC-28.1：篩選列的四個欄位一樣高', async ({ signedInPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openTransactions(page);
-  const filters = transactionFilters(page);
+  const filters = await openTransactionFilters(page);
   await expect(filters).toBeVisible();
 
   const heights = await Promise.all(
@@ -123,7 +293,7 @@ test('SC-28.1：篩選列的四個欄位一樣高', async ({ signedInPage: page 
  */
 test('SC-26.7：用 Tab 走到篩選的日期欄位，看得到焦點框', async ({ signedInPage: page }) => {
   await openTransactions(page);
-  const filters = transactionFilters(page);
+  const filters = await openTransactionFilters(page);
   await filters.getByLabel('分類').focus();
   await page.keyboard.press('Tab');
 

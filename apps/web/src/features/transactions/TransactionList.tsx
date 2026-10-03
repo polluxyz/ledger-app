@@ -1,8 +1,8 @@
 import { useState, type MouseEvent } from 'react';
 import { isDebtTransactionType, type Transaction } from '@ledger/shared';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
-import { Icon } from '../../components/Icon';
 import { getTransactionLabel } from './transaction-label';
 import {
   formatDate,
@@ -18,10 +18,13 @@ interface TransactionListProps {
   error: unknown;
   /** 目前有沒有套用篩選條件——決定空清單要說哪一句話。 */
   isFiltered?: boolean;
+  /** 總覽最近交易沿用同一列樣式，但不顯示日期分組。 */
+  variant?: 'grouped' | 'recent';
+  /** 首頁摘要使用自己的空狀態文案。 */
+  emptyMessage?: string;
   /** 正在編輯的那一筆的 id，該列會標成選取中。沒有就傳 null 或不傳。 */
   selectedId?: string | null;
   onEdit: (transaction: Transaction) => void;
-  onRemove: (transaction: Transaction) => void;
   /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
   onEditDebtTransaction?: (transaction: Transaction) => void;
 }
@@ -51,8 +54,15 @@ const AMOUNT_COLOR: Record<Transaction['type'], string> = {
  * 列表上每一列的按鈕只有圖示，光靠圖示分不出是哪一筆——螢幕閱讀器的使用者會
  * 聽到一串一模一樣的按鈕。加上日期與分類才指得明確。
  */
+function rowTitle(transaction: Transaction): string {
+  const title = transaction.title?.trim();
+  if (title) return title;
+  if (transaction.category) return transaction.category.name;
+  return getTransactionLabel(transaction);
+}
+
 function describe(transaction: Transaction): string {
-  return `${formatDate(transaction.date)} 的${getTransactionLabel(transaction)}`;
+  return `${formatDate(transaction.date)} 的${rowTitle(transaction)}`;
 }
 
 /** 同一天的一組交易。`key` 同時是分組依據與 React 的 key。 */
@@ -89,37 +99,18 @@ function groupByDate(transactions: Transaction[]): DateGroup[] {
  * 交易列表。順序完全依後端給的（日期新→舊），前端不重新排序、不加總，也不做
  * 每日小計——那些都是後端的職責。
  *
- * DOM 結構刻意寫成「一個日期標題 `<p>` ＋ 一個 `<ul>`」：標題**不是** `<li>`，
- * 這樣整個列表的 `<li>` 數量就等於交易筆數（e2e 拿它斷言筆數）。
+ * 每列只保留分類圖示、名稱、金額與分帳展開鈕；首頁摘要也直接使用這個列元件，
+ * 讓兩處的列高與長字截斷規則只有一份來源。
  */
-/** 一列以名稱作標題；沒有名稱時沿用分類或型別，副標列出分類、付款人與備註。 */
-function rowTitle(transaction: Transaction) {
-  return (
-    <>
-      <span className={styles.text}>
-        <span className={styles.title}>
-          {transaction.title || getTransactionLabel(transaction)}
-        </span>
-        <span className={styles.subtitle}>
-          {transaction.title && <span>{getTransactionLabel(transaction)}</span>}
-          {transaction.split?.payer && (
-            <span>{transaction.type === 'INCOME' ? '代收' : '先付'}</span>
-          )}
-          {transaction.note && <span>{transaction.note}</span>}
-        </span>
-      </span>
-    </>
-  );
-}
-
 export function TransactionList({
   transactions,
   isLoading,
   error,
   isFiltered = false,
+  variant = 'grouped',
+  emptyMessage,
   selectedId = null,
   onEdit,
-  onRemove,
   onEditDebtTransaction,
 }: TransactionListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -133,14 +124,15 @@ export function TransactionList({
     // 篩選中的空清單不是「還沒開始記帳」。叫人「新增第一筆」會讓他以為資料不見了。
     return (
       <p className={styles.empty}>
-        {isFiltered ? '沒有符合條件的交易。' : '還沒有任何交易，從上方新增第一筆吧。'}
+        {emptyMessage ??
+          (isFiltered ? '沒有符合條件的交易。' : '還沒有任何交易，從上方新增第一筆吧。')}
       </p>
     );
   }
 
   /**
-   * 整列可點就是編輯（D17）。兩顆操作鈕在列之內，點它們會一路冒泡上來，
-   * 所以先問這一下是不是打在按鈕上——否則按「刪除」會同時開啟編輯面板。
+   * 整列可點就是編輯（D17）。分帳展開鈕在列之內，點它會一路冒泡上來，
+   * 所以略過按鈕目標，避免展開時同時打開編輯面板。
    *
    * 往來紀錄產生的交易不能從一般交易端點刪除或編輯。自己的紀錄有 `debt` 時，
    * 點列直接編輯那筆往來紀錄；其他人的借還交易與未提供編輯入口時保持不可點。
@@ -164,19 +156,16 @@ export function TransactionList({
     onEdit(transaction);
   }
 
+  const groups =
+    variant === 'recent'
+      ? [{ key: 'recent', heading: '', transactions }]
+      : groupByDate(transactions);
+
   return (
     <div className={styles.list}>
-      {/* 欄位標題。純粹是視覺對位，螢幕閱讀器聽每一列自己的文字就夠了。 */}
-      <div className={styles.header} aria-hidden="true">
-        <span>分類／備註</span>
-        <span>帳戶</span>
-        <span className={styles.amountHead}>金額</span>
-        <span />
-      </div>
-
-      {groupByDate(transactions).map((group) => (
-        <div key={group.key}>
-          <p className={styles.groupHeading}>{group.heading}</p>
+      {groups.map((group) => (
+        <div key={group.key} className={styles.dateGroup}>
+          {variant === 'grouped' && <p className={styles.groupHeading}>{group.heading}</p>}
           <ul className={styles.rows}>
             {group.transactions.map((transaction) => {
               const isDebt = isDebtTransactionType(transaction.type);
@@ -203,8 +192,13 @@ export function TransactionList({
                   className={rowClassNames}
                   onClick={(event) => handleRowClick(event, transaction)}
                 >
+                  <CategoryIcon
+                    className={styles.categoryIcon}
+                    icon={transaction.category?.icon}
+                    transactionType={transaction.category ? undefined : transaction.type}
+                  />
                   {/*
-                    第一格在可點的列上是一顆「看起來不像按鈕」的按鈕：滑鼠點整列就夠了，
+                    名稱格在可點的列上是一顆「看起來不像按鈕」的按鈕：滑鼠點整列就夠了，
                     但鍵盤與螢幕閱讀器需要一個聚焦得到的入口，否則拿掉鉛筆圖示之後就
                     再也進不了編輯。它的點擊由自己處理，列的 onClick 看到目標在按鈕裡會略過。
                   */}
@@ -215,26 +209,18 @@ export function TransactionList({
                       aria-label={`編輯${describe(transaction)}`}
                       onClick={() => openRow(transaction)}
                     >
-                      {rowTitle(transaction)}
+                      <span className={styles.title}>{rowTitle(transaction)}</span>
                       {split && <span className={styles.splitBadge}>分帳</span>}
                     </button>
                   ) : (
                     <span className={styles.main}>
-                      {rowTitle(transaction)}
+                      <span className={styles.title}>{rowTitle(transaction)}</span>
                       {split && <span className={styles.splitBadge}>分帳</span>}
                     </span>
                   )}
-                  {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
-                  <span className={styles.account}>
-                    {transaction.account?.name}
-                    {transaction.toAccount && ` → ${transaction.toAccount.name}`}
-                  </span>
                   <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
                     {formatTransactionAmount(transaction.type, amount)}
                   </span>
-                  {/* 只剩刪除：編輯就是點這一列（開發者 2026-09-24），鉛筆圖示是重複的入口。
-                    借還交易只能從債務端點改動，放一顆必定得到 409 的刪除鈕只是在騙人。
-                    那一格仍然留著、而且欄寬固定，金額才不會一列一個位置。 */}
                   <span className={styles.actions}>
                     {split && (
                       <button
@@ -245,17 +231,6 @@ export function TransactionList({
                         onClick={() => setExpandedId(expanded ? null : transaction.id)}
                       >
                         ›
-                      </button>
-                    )}
-                    {!isDebt && !transaction.debt && !split && (
-                      <button
-                        type="button"
-                        className={`${styles.action} ${styles.remove}`}
-                        title="刪除"
-                        onClick={() => onRemove(transaction)}
-                        aria-label={`刪除${describe(transaction)}`}
-                      >
-                        <Icon name="trash" />
                       </button>
                     )}
                   </span>

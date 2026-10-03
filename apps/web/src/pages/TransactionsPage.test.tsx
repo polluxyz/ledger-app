@@ -6,7 +6,7 @@ import App from '../App';
 /**
  * 交易頁（spec 2i SC-34.2）：2h 首頁的交易表格整組搬過來。
  *
- * 這一檔只驗「搬過來之後這一頁該有什麼」——頁首、篩選列、列表、分頁、刪除確認，
+ * 這一檔只驗「搬過來之後這一頁該有什麼」——頁首、收起的篩選、列表、分頁、編輯面板刪除，
  * 以及整列可點會在右側欄開啟編輯。篩選與分頁各自的行為仍由
  * `features/transactions/transaction-filters.test.tsx` 負責，這裡不重複。
  *
@@ -30,7 +30,7 @@ describe('Transactions page', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const counterparty = {
     id: 'counterparty-1',
@@ -60,7 +60,8 @@ describe('Transactions page', () => {
     type: 'EXPENSE',
     amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
-    note: '午餐',
+    title: '午餐',
+    note: null,
     category: expenseCategory,
     account: { id: account.id, name: account.name },
     toAccount: null,
@@ -69,14 +70,17 @@ describe('Transactions page', () => {
     createdAt: '2026-08-12T04:00:00.000Z',
   };
 
+  let transactionDeleted = false;
+
   beforeEach(() => {
+    transactionDeleted = false;
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     window.history.pushState({}, '', '/transactions');
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
 
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -84,9 +88,13 @@ describe('Transactions page', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.includes('/transactions') && init?.method === 'DELETE') {
+        transactionDeleted = true;
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
       if (url.includes('/transactions')) {
         // `total` 刻意大於 `limit`：只有不只一頁時分頁列才會出現。
-        return json({ items: [lunch], page: 1, limit: 20, total: 42 });
+        return json({ items: transactionDeleted ? [] : [lunch], page: 1, limit: 20, total: 42 });
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
@@ -136,11 +144,13 @@ describe('Transactions page', () => {
     render(<App />);
 
     const item = await screen.findByRole('listitem', undefined, WAIT);
-    expect(within(item).getByText('餐飲')).toBeInTheDocument();
+    expect(within(item).getByText('午餐')).toBeInTheDocument();
     // API 回傳分，畫面仍顯示原本的人看單位。
     expect(within(item).getByText('-$120')).toBeInTheDocument();
 
-    expect(screen.getByRole('region', { name: '篩選交易' })).toBeInTheDocument();
+    const filterToggle = screen.getByRole('button', { name: '篩選' });
+    expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '分頁' })).toBeInTheDocument();
   });
 
@@ -173,15 +183,27 @@ describe('Transactions page', () => {
     expect(within(panel).getByLabelText('金額')).toHaveValue(120);
   });
 
-  it('asks before deleting and says that it cannot be undone', async () => {
-    // 後端是軟刪除，但畫面上沒有還原的路——文案要照實說。
+  it('deletes from the editor, confirms, refreshes the list, and closes the panel', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: /^刪除/ }, WAIT));
+    const item = await screen.findByRole('listitem', undefined, WAIT);
+    expect(within(item).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
+    await user.click(within(item).getByText('午餐'));
+    const editor = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    await user.click(within(editor).getByRole('button', { name: '刪除' }));
 
     const confirm = await screen.findByRole('dialog', { name: '刪除交易' }, WAIT);
     expect(within(confirm).getByText(/刪除後無法復原/)).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: '刪除' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '刪除交易' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open'),
+    );
+    expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
   });
 
   it('says there is no ledger instead of showing an empty table', async () => {
@@ -212,7 +234,7 @@ describe('Transactions page', () => {
     expect(page().getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
 
     // 明細那套（篩選列與交易列表）不該同時出現。
-    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '篩選' })).not.toBeInTheDocument();
     expect(screen.queryByText('午餐')).not.toBeInTheDocument();
   });
 

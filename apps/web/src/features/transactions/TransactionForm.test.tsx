@@ -34,7 +34,7 @@ describe('TransactionForm', () => {
     createdAt: '2026-09-01T00:00:00.000Z',
   };
   const plainLedger = { ...trackingLedger, id: 'ledger-2', tracksBalance: false };
-  const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const accounts = [
     { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 },
     { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 500000 },
@@ -115,6 +115,17 @@ describe('TransactionForm', () => {
     const bar = expense.parentElement;
     expect(bar).not.toBeNull();
     return bar as HTMLElement;
+  }
+
+  async function selectFoodCategory(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('combobox', { name: '分類' }));
+    await user.click(
+      await within(screen.getByRole('listbox', { name: '分類' })).findByRole(
+        'option',
+        { name: '餐飲' },
+        WAIT,
+      ),
+    );
   }
 
   async function postedTransactionBody(): Promise<Record<string, unknown>> {
@@ -311,7 +322,7 @@ describe('TransactionForm', () => {
     render(<App />);
     await openTypeBar(user);
     await user.type(screen.getByLabelText('金額'), '333.33');
-    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: /^新增$/ }));
 
     expect(await postedTransactionBody()).toMatchObject({ amount: 33333 });
@@ -352,7 +363,9 @@ describe('TransactionForm', () => {
     const labels = Array.from(container.querySelectorAll('form label'))
       .map((label) => label.textContent?.trim())
       .filter((label) => label !== undefined);
-    expect(labels.slice(0, 7)).toEqual(['金額', '日期', '分類', '帳戶', '名稱', '備註', '分帳']);
+    expect(labels.slice(0, 2)).toEqual(['金額', '日期']);
+    expect(screen.getByRole('combobox', { name: '分類' })).toBeInTheDocument();
+    expect(labels.slice(2, 6)).toEqual(['帳戶', '名稱', '備註', '分帳']);
     expect(container.textContent).not.toContain('（選填）');
   });
 
@@ -371,7 +384,7 @@ describe('TransactionForm', () => {
 
     await screen.findByLabelText('帳戶', {}, WAIT);
     await user.type(screen.getByLabelText('金額'), '750');
-    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await selectFoodCategory(user);
     await user.type(screen.getByLabelText('名稱'), '晚餐');
     await user.click(screen.getByRole('button', { name: '改為選付款人' }));
     const payer = screen.getByRole('combobox', { name: '付款人' });
@@ -442,7 +455,7 @@ describe('TransactionForm', () => {
 
     await screen.findByLabelText('帳戶', {}, WAIT);
     await user.type(screen.getByLabelText('金額'), '3000');
-    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('checkbox', { name: '分帳' }));
     const addPerson = screen.getByRole('combobox', { name: '＋ 新增分帳對象' });
     await user.type(addPerson, '小明');
@@ -478,7 +491,7 @@ describe('TransactionForm', () => {
     await screen.findByLabelText('帳戶', {}, WAIT);
     await user.click(screen.getByRole('button', { name: '收入' }));
     await user.type(screen.getByLabelText('金額'), '750');
-    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '改為選收款人' }));
     const payee = screen.getByRole('combobox', { name: '收款人' });
     expect(payee).toHaveValue('');
@@ -584,7 +597,7 @@ describe('TransactionForm', () => {
 
     await screen.findByLabelText('帳戶', {}, WAIT);
     await user.type(screen.getByLabelText('金額'), '3000');
-    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await selectFoodCategory(user);
     await user.type(screen.getByLabelText('名稱'), '晚餐');
     await user.click(screen.getByRole('checkbox', { name: '分帳' }));
     const addPerson = screen.getByRole('combobox', { name: '＋ 新增分帳對象' });
