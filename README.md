@@ -4,10 +4,9 @@ Personal & family expense tracking system with AI-powered entry (NestJS + React 
 
 Supports two modes on one ledger model: **personal** (one member) and **family** (multiple members sharing a ledger, with role-based permissions). AI-assisted entry is planned for a later phase.
 
-> **Status:** The backend core and the web app are both complete — authentication, ledgers and
-> members, accounts with live balances, category management, transactions (including transfers,
-> filtering and pagination), and a profile page. The mobile app and AI-assisted entry come in later
-> phases.
+> **Status:** The backend and the web app cover authentication, ledgers and members, accounts with
+> live balances, categories, transactions, friends, lending and borrowing, and split bills. The
+> mobile app and AI-assisted entry come in later phases.
 
 ## What the web app does
 
@@ -22,6 +21,10 @@ Supports two modes on one ledger model: **personal** (one member) and **family**
 - **Category management.** List, add, rename and delete a ledger's categories, split into expense
   and income groups. The page picks its own ledger, independently of the one you are recording
   into — it says so on screen when the two differ.
+- **Friends.** Invite friends by email or invite link.
+- **Lending and borrowing.** Record money lent to or borrowed from a person, settle it in parts, and
+  optionally link the record with a friend's ledger so both sides stay in sync.
+- **Split bills.** Pay on someone else's behalf, or split one expense across several people.
 - **Profile.** View your email (fixed) and change your display name.
 
 ## Tech stack

@@ -46,7 +46,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash(git log:*), Bash(git status:*), Bas
 - **版面 mockup，並排 2～3 個方案**。開發者對版面「還沒有特別想法、要比較看看」，所以**預設就是並排**，不要只給一個。
 - **忠實度：中高。** 用 `apps/web/src/styles/global.css` 的真實 token 與既有元件樣式（見 `docs/artifacts/design-system.html`），做到「談定後樣式可以直接抄進 `*.module.css`」的程度。但要在頁面上明說**這是版面與資訊層級的提案，不是最終視覺定稿**。
 - 元件外觀對齊既有的 `Button`（primary / secondary）、`TextField`、`Select`、`FormError`、`TransactionList` 的列樣式、`HomePage` 的統計卡。
-- 示範資料自己編，貼近真實情境：帳戶用「現金」「國泰世華」、金額用整數（`formatAmount` 只加千分位、不做除法）、日期用 `2026/08/16` 格式。**絕不使用 `.env` 內容或真實 email / token。**
+- 示範資料自己編，貼近真實情境：帳戶用「現金」「國泰世華」、金額照畫面上的格式（`@ledger/shared` 的 `formatMoney`，資料以「分」為單位）、日期用 `2026/08/16` 格式。**絕不使用 `.env` 內容或真實 email / token。**
 
 **動到資料流或執行順序時：**
 
