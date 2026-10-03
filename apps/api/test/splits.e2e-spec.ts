@@ -416,8 +416,12 @@ describe('Splits (e2e)', () => {
     const alice = await person(app, 'alice@example.com', 'Alice');
     const ming = await createCounterparty(app, alice, '小明');
     const input = await body(alice, [ming.id], { total: 200 });
-    const results = await Promise.all([create(alice, input), create(alice, input)]);
-    expect(results.map((result) => result.status)).toEqual([201, 201]);
+    // 一次送 8 筆：只送 2 筆時，死結（外鍵的共享鎖 → FOR UPDATE）只在 CI 偶爾撞到，本機重現不了。
+    const CONCURRENT = 8;
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENT }, () => create(alice, input)),
+    );
+    expect(results.map((result) => result.status)).toEqual(Array(CONCURRENT).fill(201));
     expect(
       (
         await prisma.debtEntry.aggregate({
@@ -425,7 +429,7 @@ describe('Splits (e2e)', () => {
           _sum: { delta: true },
         })
       )._sum.delta,
-    ).toBe(200);
+    ).toBe(100 * CONCURRENT);
     const bad = await request(server())
       .post(`/api/ledgers/${alice.ledgerId}/transactions`)
       .set(auth(alice.token))

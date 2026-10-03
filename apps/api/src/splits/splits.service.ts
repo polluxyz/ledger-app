@@ -37,6 +37,7 @@ export class SplitsService {
     const shares = this.shares(input, false);
     const id = await this.prisma.$transaction(async (tx) => {
       await this.validateReferences(tx, userId, input);
+      await lockCounterparties(tx, referencedCounterparties(input));
       if (input.fromTransactionId) {
         const original = await tx.transaction.findFirst({
           where: {
@@ -158,14 +159,17 @@ export class SplitsService {
         (transaction) => transaction.deletedAt === null,
       );
       const desired = dissolve ? [] : composeSplitEntries(input, shares);
-      // 對象鎖依 id 排序，避免並發分帳以不同順序等待造成死結。
-      const ids = [
-        ...new Set([
-          ...oldEntries.map((entry) => entry.counterpartyId),
-          ...desired.map((entry) => entry.counterpartyId),
-        ]),
-      ].sort();
-      for (const counterpartyId of ids) await lockCounterparty(tx, counterpartyId);
+      await lockCounterparties(tx, [
+        ...oldEntries.map((entry) => entry.counterpartyId),
+        ...desired.map((entry) => entry.counterpartyId),
+        ...referencedCounterparties(input),
+        ...referencedCounterparties({
+          participants: current.participants,
+          payer: current.payerCounterpartyId
+            ? { counterpartyId: current.payerCounterpartyId }
+            : null,
+        }),
+      ]);
       if (dissolve) {
         const now = new Date();
         await this.deleteEntries(tx, userId, oldEntries, now, current.title);
@@ -583,6 +587,31 @@ export class SplitsService {
     if (!row) throw notFound('Split');
     return row;
   }
+}
+
+/**
+ * 一次鎖住這筆分帳牽涉到的所有對象，依 id 排序，而且**必須在任何寫入之前**。
+ *
+ * 寫入名單（`SplitParticipant`）或往來紀錄時，外鍵會讓 PostgreSQL 對被引用的對象加共享鎖；
+ * 之後再 `FOR UPDATE` 同一個對象，兩個同時進來的請求會各自握著共享鎖等對方放手——死結
+ * （CI 上 SC-S17 實際撞到 `40P01 deadlock detected`）。所以先把排他鎖全部拿到，再開始寫。
+ */
+async function lockCounterparties(
+  tx: Prisma.TransactionClient,
+  ids: ReadonlyArray<string | null>,
+): Promise<void> {
+  const unique = [...new Set(ids.filter((id): id is string => id !== null))].sort();
+  for (const counterpartyId of unique) await lockCounterparty(tx, counterpartyId);
+}
+
+function referencedCounterparties(input: {
+  participants: ReadonlyArray<{ counterpartyId: string | null }>;
+  payer: { counterpartyId: string } | null;
+}): Array<string | null> {
+  return [
+    ...input.participants.map((person) => person.counterpartyId),
+    input.payer?.counterpartyId ?? null,
+  ];
 }
 
 /** 鎖住一筆分帳（同一筆分帳的修改、刪除互相排隊）。不存在時什麼都不鎖，交給 loadOwned 回 404。 */

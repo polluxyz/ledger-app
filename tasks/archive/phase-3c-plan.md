@@ -62,3 +62,4 @@ spec：`docs/specs/phase-3c-split.md`（決策 82～107、SC-S1～SC-S19、§5.5
    - **授權缺口**：`fromTransactionId` 只檢查「是我記的」，沒檢查原交易所在的帳本仍可寫入；被移出共享帳本的人能藉這條路軟刪除以前記的交易。補隔離測試（先看到 201 紅燈）再加 `assertLedgerWritable`。
    - `update` 用交易外讀的資料做逐人比對。改成交易內先 `SELECT … FOR UPDATE` 鎖住分帳再讀；`remove` 同樣先鎖。
    - 解散成一般交易時備註會消失。改成搬到交易上，SC-S11 的 e2e 補斷言。
+4. **CI 抓到死結（PR #88 第一次 CI）**：SC-S17 在 CI 上 `40P01 deadlock detected`。原因：建立分帳時先寫名單（`SplitParticipant` 的外鍵讓 PostgreSQL 對被引用的對象加共享鎖），之後才 `FOR UPDATE` 同一個對象；兩個同時進來的請求各握共享鎖等對方。改成交易一開始、任何寫入之前，依 id 排序一次鎖住所有牽涉到的對象（名單、付款人、舊的往來紀錄）。SC-S17 的同時請求從 2 筆提高到 8 筆：舊程式本機 5/5 次死結，新程式 0/5。
