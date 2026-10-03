@@ -13,9 +13,6 @@ interface CounterpartyPickerProps {
   excludeLinked?: boolean;
   label?: string;
   hint?: string;
-  /** 付款人欄位可直接選「我」，一般借還對象選擇不顯示這個項目。 */
-  includeSelf?: boolean;
-  onSelectSelf?: () => void;
   /** 新名字只有在使用者明確選擇「新增」時才提交給呼叫端。 */
   onAddName?: (name: string) => void;
 }
@@ -31,8 +28,6 @@ export function CounterpartyPicker({
   excludeLinked = false,
   label = '對象',
   hint,
-  includeSelf = false,
-  onSelectSelf,
   onAddName,
 }: CounterpartyPickerProps) {
   const listId = `counterparties-${useId()}`;
@@ -57,23 +52,18 @@ export function CounterpartyPicker({
   const counterparties = excludeLinked
     ? responseItems.filter((counterparty) => counterparty.link === null)
     : responseItems;
-  const selfSelected = includeSelf && normalizedValue === '我';
-  const exactMatch = selfSelected ? null : findCounterparty(normalizedValue, counterparties);
+  const exactMatch = findCounterparty(normalizedValue, counterparties);
   // 查詢結果還沒追上輸入時先不提供「新增」，否則打既有的名字會短暫閃過「新增」與「新對象」。
-  const canAddName =
-    hasCurrentResults && normalizedValue !== '' && exactMatch === null && !selfSelected;
-  const optionOffset = includeSelf ? 1 : 0;
-  const newNameIndex = optionOffset + counterparties.length;
-  const optionCount = optionOffset + counterparties.length + (canAddName ? 1 : 0);
+  const canAddName = hasCurrentResults && normalizedValue !== '' && exactMatch === null;
+  const newNameIndex = counterparties.length;
+  const optionCount = counterparties.length + (canAddName ? 1 : 0);
   const activeIndex = requestedActiveIndex < optionCount ? requestedActiveIndex : -1;
   const activeOptionId =
-    includeSelf && activeIndex === 0
-      ? `${listId}-self`
-      : activeIndex >= optionOffset && activeIndex < newNameIndex
-        ? `${listId}-${counterparties[activeIndex - optionOffset]!.id}`
-        : activeIndex === newNameIndex && canAddName
-          ? `${listId}-new`
-          : '';
+    activeIndex >= 0 && activeIndex < newNameIndex
+      ? `${listId}-${counterparties[activeIndex]!.id}`
+      : activeIndex === newNameIndex && canAddName
+        ? `${listId}-new`
+        : '';
   const showMoreHint =
     hasCurrentResults && (query.data?.total ?? 0) > (query.data?.items.length ?? 0);
 
@@ -88,14 +78,6 @@ export function CounterpartyPicker({
     onChange(normalizedValue);
     onSelect?.(null);
     onAddName?.(normalizedValue);
-    setIsOpen(false);
-    setActiveIndex(-1);
-  }
-
-  function selectSelf() {
-    onChange('我');
-    onSelect?.(null);
-    onSelectSelf?.();
     setIsOpen(false);
     setActiveIndex(-1);
   }
@@ -129,10 +111,8 @@ export function CounterpartyPicker({
 
     if (event.key === 'Enter' && isOpen && activeIndex >= 0) {
       event.preventDefault();
-      if (includeSelf && activeIndex === 0) {
-        selectSelf();
-      } else if (activeIndex >= optionOffset && activeIndex < newNameIndex) {
-        selectExisting(counterparties[activeIndex - optionOffset]!);
+      if (activeIndex < newNameIndex) {
+        selectExisting(counterparties[activeIndex]!);
       } else if (canAddName && activeIndex === newNameIndex) {
         selectNewName();
       }
@@ -190,29 +170,15 @@ export function CounterpartyPicker({
         aria-label={`${label}選項`}
         hidden={!isOpen}
       >
-        {includeSelf && (
-          <li
-            id={`${listId}-self`}
-            className={`${styles.option} ${activeIndex === 0 ? styles.active : ''}`}
-            role="option"
-            aria-selected={activeIndex === 0}
-            onMouseDown={(event) => event.preventDefault()}
-            onMouseMove={() => setActiveIndex(0)}
-            onClick={selectSelf}
-          >
-            我
-          </li>
-        )}
-
         {counterparties.map((counterparty, index) => (
           <li
             key={counterparty.id}
             id={`${listId}-${counterparty.id}`}
-            className={`${styles.option} ${activeIndex === index + optionOffset ? styles.active : ''}`}
+            className={`${styles.option} ${activeIndex === index ? styles.active : ''}`}
             role="option"
-            aria-selected={activeIndex === index + optionOffset}
+            aria-selected={activeIndex === index}
             onMouseDown={(event) => event.preventDefault()}
-            onMouseMove={() => setActiveIndex(index + optionOffset)}
+            onMouseMove={() => setActiveIndex(index)}
             onClick={() => selectExisting(counterparty)}
           >
             <span>{counterparty.displayName}</span>

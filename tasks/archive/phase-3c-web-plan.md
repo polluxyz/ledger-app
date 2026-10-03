@@ -61,3 +61,4 @@ spec：`docs/specs/phase-3c-web.md`（W62～W88、SC-W72～SC-W81）。與 3c �
    - **送出分帳後，下一筆仍是分帳模式、名單還在**：與 W66 的預設「我付、不分」不符。送出後重設分帳與付款人。
 4. **手動驗收**：用 Playwright 在 e2e 資料庫截 6 張圖（表單分帳、分帳選項比例、列表展開、別人先付預覽、待確認卡片、接受表單），不碰開發者的 dev 資料。修正後重截確認。
 5. **驗證**：format:check、lint、typecheck、build 通過；單元測試 shared 80、API 326、Web 566；API e2e 169、Web e2e 48 全綠（依序跑）。
+6. **修訂 1**（2026-10-03，開發者回饋，spec `phase-3c-web.md` §5、`phase-3c-split.md` §13）：付款人／收款人清單拿掉「我」、預設空白；別人付時不顯示分帳，名單只有我；編輯舊的「別人付多人分帳」時金額顯示我那份。派 Codex `gpt-6-luna` max（`ctx_a02cdd1fc7fe`，commit `13f8619`），連帶移除沒有人用的 `CounterpartyPicker` `includeSelf`。驗證：Web 單元測試 570、API e2e 169、Web e2e 48 全綠；截圖確認付款人欄位空白、清單只有別人、選了之後沒有分帳開關。

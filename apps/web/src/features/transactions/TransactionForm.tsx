@@ -126,7 +126,16 @@ export function TransactionForm({
           : 'EXPENSE',
   );
   const [amount, setAmount] = useState(
-    split ? centsToInput(split.total) : transaction ? centsToInput(transaction.amount) : '',
+    split
+      ? centsToInput(
+          split.payer
+            ? (split.participants.find((person) => person.counterpartyId === null)?.share ??
+                split.total)
+            : split.total,
+        )
+      : transaction
+        ? centsToInput(transaction.amount)
+        : '',
   );
   const [date, setDate] = useState(() =>
     toDateInputValue(
@@ -143,7 +152,7 @@ export function TransactionForm({
   const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
     split?.payer ? 'counterparty' : ledger.tracksBalance ? 'account' : 'self',
   );
-  const [payerName, setPayerName] = useState(split?.payer?.name ?? '我');
+  const [payerName, setPayerName] = useState(split?.payer?.name ?? '');
   const [selectedPayer, setSelectedPayer] = useState<{
     counterpartyId: string;
     name: string;
@@ -298,16 +307,19 @@ export function TransactionForm({
   const previewPayerId =
     selectedPayer?.counterpartyId ??
     (isPayerOther ? `new:${selectedPayer?.name ?? payerName.trim()}` : null);
-  const splitPeople = splitEnabled
-    ? participants.filter((person) => person.included)
-    : [makeMeParticipant()];
+  const splitPeople =
+    splitEnabled && !isPayerOther
+      ? participants.filter((person) => person.included)
+      : [makeMeParticipant()];
+  const previewMethod: SplitMethod = isPayerOther ? 'EQUAL' : splitMethod;
+  const previewPrecision: SplitPrecision = isPayerOther ? 'CENT' : splitPrecision;
   const filledCustomValues =
-    splitMethod === 'EQUAL'
+    previewMethod === 'EQUAL'
       ? null
       : fillRemainingShares({
           total: amountCents ?? 0,
-          method: splitMethod,
-          precision: splitPrecision,
+          method: previewMethod,
+          precision: previewPrecision,
           payerCounterpartyId: previewPayerId,
           participants: splitPeople.map((person) => ({
             counterpartyId: splitPreviewCounterpartyId(person),
@@ -323,10 +335,10 @@ export function TransactionForm({
         });
   const splitPreviewInput: SplitParticipantInput[] = splitPeople.map((person, index) => ({
     counterpartyId: splitPreviewCounterpartyId(person),
-    ...(splitMethod === 'AMOUNT' && filledCustomValues
+    ...(previewMethod === 'AMOUNT' && filledCustomValues
       ? { amount: filledCustomValues.values[index]! }
       : {}),
-    ...(splitMethod === 'RATIO' && filledCustomValues
+    ...(previewMethod === 'RATIO' && filledCustomValues
       ? { ratio: filledCustomValues.values[index]! }
       : {}),
   }));
@@ -334,22 +346,26 @@ export function TransactionForm({
     type !== 'TRANSFER' && amountCents !== null && amountCents > 0
       ? computeSplitShares({
           total: amountCents,
-          method: splitMethod,
-          precision: splitPrecision,
+          method: previewMethod,
+          precision: previewPrecision,
           payerCounterpartyId: previewPayerId,
           participants: splitPreviewInput,
         })
       : null;
   const previewShares =
-    splitEnabled && splitPreview?.ok
+    splitEnabled && !isPayerOther && splitPreview?.ok
       ? new Map(splitPeople.map((person, index) => [person.key, splitPreview.shares[index]!]))
       : null;
   const myShareIndex = splitPeople.findIndex((person) => person.isMe);
-  const myShare = splitEnabled
-    ? splitPreview?.ok && myShareIndex >= 0
+  const myShare = isPayerOther
+    ? splitPreview?.ok
       ? splitPreview.shares[myShareIndex]!
       : undefined
-    : (amountCents ?? undefined);
+    : splitEnabled
+      ? splitPreview?.ok && myShareIndex >= 0
+        ? splitPreview.shares[myShareIndex]!
+        : undefined
+      : (amountCents ?? undefined);
   const paymentPreview =
     isPayerOther && myShare !== undefined
       ? {
@@ -394,26 +410,12 @@ export function TransactionForm({
     };
   }
 
-  function addSelectedPayer(counterparty: { counterpartyId: string; name: string }) {
-    if (!splitEnabled) return;
-    setParticipants((current) => {
-      if (current.some((person) => person.counterpartyId === counterparty.counterpartyId)) {
-        return current;
-      }
-      return clearFixedValues([
-        ...current,
-        newParticipant(counterparty.counterpartyId, counterparty.name),
-      ]);
-    });
-  }
-
   function handlePayerSelect(counterparty: Counterparty | null) {
     setSelectedPayer(
       counterparty ? { counterpartyId: counterparty.id, name: counterparty.displayName } : null,
     );
     if (counterparty) {
       setPayerName(counterparty.displayName);
-      addSelectedPayer({ counterpartyId: counterparty.id, name: counterparty.displayName });
     }
   }
 
@@ -421,9 +423,9 @@ export function TransactionForm({
     setPaymentMode(nextMode);
     if (nextMode !== 'counterparty') {
       setSelectedPayer(null);
-      setPayerName('我');
+      setPayerName('');
     } else if (!isPayerOther) {
-      setPayerName('我');
+      setPayerName('');
     }
   }
 
@@ -436,16 +438,6 @@ export function TransactionForm({
     setParticipants((current) => {
       let next = current.filter((person) => person.included);
       if (next.length === 0) next = [makeMeParticipant()];
-      if (
-        isPayerOther &&
-        !next.some((person) =>
-          selectedPayer
-            ? person.counterpartyId === selectedPayer.counterpartyId
-            : !person.isMe && person.name === payerName.trim(),
-        )
-      ) {
-        next = [...next, newParticipant(selectedPayer?.counterpartyId ?? null, payerDisplayName)];
-      }
       return clearFixedValues(next);
     });
   }
@@ -486,16 +478,21 @@ export function TransactionForm({
 
       if (requiresSplit) {
         const splitType: SplitType = type === 'INCOME' ? 'INCOME' : 'EXPENSE';
-        const splitPeople = splitEnabled
-          ? participants.filter((person) => person.included)
-          : [makeMeParticipant()];
+        // 別人付時金額就是我的份額；舊多人名單保留在表單 state，但不影響這次送出。
+        const requestMethod: SplitMethod = isPayerOther ? 'EQUAL' : splitMethod;
+        const requestPrecision: SplitPrecision = isPayerOther ? 'CENT' : splitPrecision;
+        const splitPeople = isPayerOther
+          ? [makeMeParticipant()]
+          : splitEnabled
+            ? participants.filter((person) => person.included)
+            : [makeMeParticipant()];
         const filled =
-          splitMethod === 'EQUAL'
+          requestMethod === 'EQUAL'
             ? null
             : fillRemainingShares({
                 total: amountCents!,
-                method: splitMethod,
-                precision: splitPrecision,
+                method: requestMethod,
+                precision: requestPrecision,
                 payerCounterpartyId: previewPayerId,
                 participants: splitPeople.map((person) => ({
                   counterpartyId: splitPreviewCounterpartyId(person),
@@ -517,8 +514,8 @@ export function TransactionForm({
             : (person.counterpartyId ?? (await resolveName(person.name)));
           requestParticipants.push({
             counterpartyId,
-            ...(splitMethod === 'AMOUNT' && filled ? { amount: filled.values[index]! } : {}),
-            ...(splitMethod === 'RATIO' && filled ? { ratio: filled.values[index]! } : {}),
+            ...(requestMethod === 'AMOUNT' && filled ? { amount: filled.values[index]! } : {}),
+            ...(requestMethod === 'RATIO' && filled ? { ratio: filled.values[index]! } : {}),
           });
         }
         const payerId = isPayerOther
@@ -534,8 +531,8 @@ export function TransactionForm({
           note,
           payer: payerId === null ? null : { counterpartyId: payerId },
           ...(payerId === null && showAccountField ? { accountId: selectedAccountId } : {}),
-          method: splitMethod,
-          ...(splitMethod === 'AMOUNT' ? {} : { precision: splitPrecision }),
+          method: requestMethod,
+          ...(requestMethod === 'AMOUNT' ? {} : { precision: requestPrecision }),
           participants: requestParticipants,
         };
 
@@ -562,7 +559,7 @@ export function TransactionForm({
             setParticipants([makeMeParticipant()]);
             setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
             setSelectedPayer(null);
-            setPayerName('我');
+            setPayerName('');
           }
         }
         return;
@@ -754,19 +751,7 @@ export function TransactionForm({
           onAccountChange={setAccountId}
           onModeChange={handlePayerModeChange}
           onPayerNameChange={setPayerName}
-          onPayerNameAdded={(name) => {
-            if (!splitEnabled) return;
-            setParticipants((current) => {
-              if (current.some((person) => person.name === name)) return current;
-              return clearFixedValues([...current, newParticipant(null, name)]);
-            });
-          }}
           onPayerSelect={handlePayerSelect}
-          onSelectSelf={() => {
-            setSelectedPayer(null);
-            setPayerName('我');
-            setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
-          }}
         />
       )}
 
@@ -784,7 +769,7 @@ export function TransactionForm({
         onChange={(event) => setNote(event.target.value)}
       />
 
-      {type !== 'TRANSFER' && (
+      {type !== 'TRANSFER' && !isPayerOther && (
         <SplitSection
           enabled={splitEnabled}
           pending={pending}
@@ -860,7 +845,7 @@ export function TransactionForm({
         {segmented}
         {transactionFields}
       </div>
-      {splitEnabled && splitOptionsOpen && type !== 'TRANSFER' && (
+      {splitEnabled && splitOptionsOpen && type !== 'TRANSFER' && !isPayerOther && (
         <SplitOptionsView
           total={amountCents}
           type={type}
