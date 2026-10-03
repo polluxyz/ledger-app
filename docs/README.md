@@ -48,8 +48,9 @@
 | [`phase-3b1-web.md`](specs/phase-3b1-web.md)                   | 階段三：3b-1 的借還畫面（往來帳版）       | 已完成    |
 | [`phase-3b2-linking.md`](specs/phase-3b2-linking.md)           | 階段三：3b-2 往來帳連動（含修訂 1）       | 已完成    |
 | [`phase-3b2-web.md`](specs/phase-3b2-web.md)                   | 階段三：3b-2 連動的畫面（含修訂 1～3）    | 已完成    |
-| [`phase-3c0-money-cents.md`](specs/phase-3c0-money-cents.md)   | 階段三：3c-0 金額單位改成分               | 已核可    |
-| [`phase-3c-split.md`](specs/phase-3c-split.md)                 | 階段三：3c 代墊與分帳（後端）             | 已核可    |
+| [`phase-3c0-money-cents.md`](specs/phase-3c0-money-cents.md)   | 階段三：3c-0 金額單位改成分               | 已完成    |
+| [`phase-3c-split.md`](specs/phase-3c-split.md)                 | 階段三：3c 代墊與分帳（後端）             | 進行中    |
+| [`phase-3c-web.md`](specs/phase-3c-web.md)                     | 階段三：3c 代墊與分帳的畫面               | 進行中    |
 | [`security-baseline.md`](specs/security-baseline.md)           | 跨階段的安全基準                          | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。

@@ -385,6 +385,14 @@ interface TransactionSplitRef {
 新增：`SPLIT_SUM_MISMATCH`、`SPLIT_SHARE_NOT_POSITIVE`、`SPLIT_WITHOUT_ME`、`SPLIT_NOT_NEEDED`（皆 400）；`SPLIT_TRANSACTION_READ_ONLY`、`SPLIT_ENTRY_READ_ONLY`、`TRANSACTION_NOT_CONVERTIBLE`（皆 409）。
 沿用：`LEDGER_ARCHIVED`、`COUNTERPARTY_HAS_ENTRIES`、`LEDGER_HAS_DEBT_TRANSACTIONS`、3b-2 的提議錯誤碼。
 
+### 5.5 寫 shared 契約時的補充（2026-10-03）
+
+以下三點在寫 `packages/shared` 契約時補上，都只增加欄位或錯誤碼，不改既有形狀：
+
+1. **`SPLIT_PARTICIPANTS_INVALID`（400）**：§3.4 第 1 步（名單為空、重複、我出現兩次，或分法需要的值缺了）原本沒有對應的錯誤碼。
+2. **`Split.payerEntryId`**：別人先付時，付款人不一定在名單裡，那筆「我欠付款人」的往來紀錄掛不到任何一列名單上，所以單獨列出。
+3. **`TransactionDebtRef.kind`**：交易型別只管資金方向，「我幫對方付」是 `LEND`（決策 89）。沒有往來種類，畫面只能寫成「借出」。
+
 ---
 
 ## 6. 可驗證的成功條件

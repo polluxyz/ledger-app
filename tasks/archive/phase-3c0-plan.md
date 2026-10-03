@@ -65,3 +65,4 @@ spec：`docs/specs/phase-3c0-money-cents.md`（決策 M1～M8、SC-M1～SC-M10�
 6. **Web e2e 漏改 7 處**：`debts.spec.ts`、`debt-linking.spec.ts` 在畫面輸入元（`120`），再用 API 讀現金餘額（分）比對 `before - 120`。T3 只改了「用 API 建資料」的金額，漏了這種「畫面輸入、API 斷言」的組合。協調者改成分，並在兩個檔的 `cash()` 上註明單位。
 7. **本機 Vite 快取**：第一次跑 Web e2e 有 37 個失敗，全部是 `formatMoney is not a function`。原因是 `apps/web/node_modules/.vite` 裡 `@ledger/shared` 的預先打包是 09-25 的舊版（`vite.config.ts` 的 `optimizeDeps` 註解已寫明改了 shared 要重開）。刪掉快取後重跑。CI 每次都是乾淨環境，不受影響；替開發者部署時要一併刪掉 `web-redesign` 的快取。
 8. **驗證**（合併後的 `refactor/money-cents`）：format:check、lint、typecheck、build 通過；單元測試 shared 52、API 320、Web 548；API e2e 145、Web e2e 47 全綠（依序跑）。
+9. **SC-M1 通過**（2026-10-03，#87 合併後部署到開發者的 dev 資料庫時）：先 `pg_dump` 備份。migration 前後，4 個金額欄位的筆數不變（交易 22、帳戶 30、往來 6、提議 1），總和與絕對值總和都剛好 ×100（交易 6,107 → 610,700、往來絕對值 448 → 44,800、提議 123 → 12,300），最大值 1,234 → 123,400。同時刪掉 `web-redesign` 的 Vite 快取。
