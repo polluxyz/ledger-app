@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SplitParticipantDraft } from './split-form';
 import { SplitSection } from './SplitSection';
@@ -38,7 +38,12 @@ const shares = new Map([
   ['hua', 100000],
 ]);
 
-function renderSection(isPayerOther: boolean, type: 'EXPENSE' | 'INCOME' = 'EXPENSE') {
+function renderSection(
+  isPayerOther: boolean,
+  type: 'EXPENSE' | 'INCOME' = 'EXPENSE',
+  people: SplitParticipantDraft[] = participants,
+  onToggleMe = vi.fn(),
+) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <SplitSection
@@ -46,12 +51,13 @@ function renderSection(isPayerOther: boolean, type: 'EXPENSE' | 'INCOME' = 'EXPE
         pending={false}
         type={type}
         isPayerOther={isPayerOther}
-        participants={participants}
+        participants={people}
         previewShares={shares}
         onToggle={vi.fn()}
         onAddCounterparty={vi.fn()}
         onAddName={vi.fn()}
         onRemoveParticipant={vi.fn()}
+        onToggleMe={onToggleMe}
         onOpenOptions={vi.fn()}
       />
     </QueryClientProvider>,
@@ -90,5 +96,29 @@ describe('SplitSection 的箭頭預覽', () => {
     renderSection(true);
     expect(screen.queryByText(/欠你/)).not.toBeInTheDocument();
     expect(screen.queryByText(/你欠/)).not.toBeInTheDocument();
+  });
+
+  // 修訂 2（W92）：「我」用「−」移除後沒有地方加回來，改成勾選框。
+  it('「我」是勾選框，沒有移除按鈕；取消勾選呼叫 onToggleMe(false)', () => {
+    const onToggleMe = vi.fn();
+    renderSection(false, 'EXPENSE', participants, onToggleMe);
+    const me = screen.getByRole('checkbox', { name: '我' });
+    expect(me).toBeChecked();
+    expect(screen.queryByRole('button', { name: '移除我' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '移除乙' })).toBeInTheDocument();
+    fireEvent.click(me);
+    expect(onToggleMe).toHaveBeenCalledWith(false);
+  });
+
+  it('沒勾「我」時那一列還在、沒有金額，可以再勾回來', () => {
+    const onToggleMe = vi.fn();
+    const withoutMe = participants.map((person) =>
+      person.isMe ? { ...person, included: false } : person,
+    );
+    renderSection(false, 'EXPENSE', withoutMe, onToggleMe);
+    const me = screen.getByRole('checkbox', { name: '我' });
+    expect(me).not.toBeChecked();
+    fireEvent.click(me);
+    expect(onToggleMe).toHaveBeenCalledWith(true);
   });
 });

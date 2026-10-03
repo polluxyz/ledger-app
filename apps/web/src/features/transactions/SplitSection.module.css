@@ -87,3 +87,9 @@
   gap: var(--space-xs);
   padding: var(--space-xs) 0;
 }
+
+/* 「我」那一列的勾選框（修訂 2，W92）：與名字之間留一點空隙。 */
+.name input[type='checkbox'] {
+  margin: 0 var(--space-sm) 0 0;
+  vertical-align: middle;
+}

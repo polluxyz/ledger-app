@@ -162,19 +162,21 @@ export function TransactionForm({
   const [splitPrecision, setSplitPrecision] = useState<SplitPrecision>(split?.precision ?? 'CENT');
   const [participants, setParticipants] = useState<SplitParticipantDraft[]>(() =>
     split
-      ? split.participants.map((person, index) => ({
-          key: `participant-${index}`,
-          counterpartyId: person.counterpartyId,
-          name: person.counterpartyId === null ? '我' : (person.name ?? ''),
-          isMe: person.counterpartyId === null,
-          included: true,
-          amountFixed: split.method === 'AMOUNT',
-          amountInput: split.method === 'AMOUNT' ? centsToInput(person.share) : '',
-          amountValue: person.share,
-          ratioFixed: split.method === 'RATIO' && person.ratio !== null,
-          ratioInput: person.ratio === null ? '' : centsToInput(person.ratio),
-          ratioValue: person.ratio ?? 0,
-        }))
+      ? withMeRow(
+          split.participants.map((person, index) => ({
+            key: `participant-${index}`,
+            counterpartyId: person.counterpartyId,
+            name: person.counterpartyId === null ? '我' : (person.name ?? ''),
+            isMe: person.counterpartyId === null,
+            included: true,
+            amountFixed: split.method === 'AMOUNT',
+            amountInput: split.method === 'AMOUNT' ? centsToInput(person.share) : '',
+            amountValue: person.share,
+            ratioFixed: split.method === 'RATIO' && person.ratio !== null,
+            ratioInput: person.ratio === null ? '' : centsToInput(person.ratio),
+            ratioValue: person.ratio ?? 0,
+          })),
+        )
       : [makeMeParticipant()],
   );
   const [splitOptionsOpen, setSplitOptionsOpen] = useState(false);
@@ -796,7 +798,14 @@ export function TransactionForm({
           }}
           onRemoveParticipant={(key) =>
             setParticipants((current) =>
-              clearFixedValues(current.filter((person) => person.key !== key)),
+              clearFixedValues(current.filter((person) => person.key !== key || person.isMe)),
+            )
+          }
+          onToggleMe={(checked) =>
+            setParticipants((current) =>
+              clearFixedValues(
+                current.map((person) => (person.isMe ? { ...person, included: checked } : person)),
+              ),
             )
           }
           onOpenOptions={() => setSplitOptionsOpen(true)}
@@ -939,6 +948,15 @@ export function TransactionForm({
       )}
     </fieldset>
   );
+}
+
+/**
+ * 名單一定有「我」這一列（修訂 2，W92）：只幫別人付的分帳，名單裡沒有我，打開編輯時補一列
+ * 沒勾選的「我」，讓使用者能再勾回來。
+ */
+function withMeRow(people: SplitParticipantDraft[]): SplitParticipantDraft[] {
+  if (people.some((person) => person.isMe)) return people;
+  return [{ ...makeMeParticipant(), included: false }, ...people];
 }
 
 function makeMeParticipant(): SplitParticipantDraft {
