@@ -54,4 +54,9 @@ spec：`docs/specs/phase-3d-tx-list.md`（T1～T12、SC-T1～SC-T9）。一個 P
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+1. **派工**：Run `run_e2035b727bd0`；後端 `backend`（`ctx_300ce382d2ba`，commit `8710ba2`），前端 `default`（`ctx_bedd06f4a673`，commit `48cb93a`）。前端的任務第一次只貼進輸入框沒有送出，補一次 Enter 後開始。
+2. **後端**：`Category.icon`、migration 依名稱回填（只補 `icon IS NULL` 的列）、修改分類只更新送出的欄位（兩個都沒送回 400）。API 單元測試 328、e2e 172。
+3. **前端**：`lucide-react` 1.x；`CategoryIcon` 是唯一的代號對照表。記帳表單的分類改成自訂的圖示選單（原生 `<select>` 放不了圖示），待確認卡片的分類仍是原生下拉。bundle 433→449 kB（gzip 131→138 kB）。Web 單元測試 614。
+4. **合併後 Web e2e 5 個失敗，都是測試沒跟上**：分類選單改成自訂選單後要先打開才看得到選項（2 個）；CSP 測試檢查列上的備註，但列已不顯示備註；SC-T2 的分帳測試資料名單只有我（後端回 `SPLIT_NOT_NEEDED`）；SC-W80 把待確認卡片的分類當成新選單操作。協調者修正。
+5. **截圖後協調者修正**：「分帳」膠囊被推到金額旁邊，改成緊跟名稱；漏斗原本自己佔列表卡片一整列，改放在「明細／借還」那一列右邊（`TransactionFilters` 拆成 `TransactionFilterToggle` 與 `TransactionFilterPanel`，原本的 `TransactionFilterBar` 保留為兩者的組合）；拆開後面板補上內距。
+6. **驗證**：單元測試 shared 80、API 328、Web 614；API e2e 172、Web e2e 51；1440 與 375 寬截圖確認沒有橫向捲動、長英文名稱截斷、日期分組間距。

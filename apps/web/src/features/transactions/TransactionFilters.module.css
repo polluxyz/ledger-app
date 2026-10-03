@@ -47,8 +47,15 @@
   line-height: 1;
 }
 
+/* 面板直接放在列表卡片頂端（3d：漏斗移到檢視切換那一列），自己帶內距與分隔線。 */
 .panel {
-  padding-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bar .panel {
+  padding: var(--space-sm) 0 0;
+  border-bottom: 0;
 }
 
 /* 欄位窄時換行；負邊距抵銷 TextField 內建的下邊距。 */
