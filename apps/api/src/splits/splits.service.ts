@@ -53,6 +53,9 @@ export class SplitsService {
             ErrorCode.TRANSACTION_NOT_CONVERTIBLE,
             'This transaction cannot become a split.',
           );
+        // 轉分帳會軟刪除原交易，等於對原交易所在的帳本做一次刪除，所以那本帳本也要可寫入。
+        // 只看「是我記的」不夠：被移出共享帳本的人，不能藉這條路刪掉他以前記的交易。
+        await assertLedgerWritable(tx, userId, original.ledgerId);
         await tx.transaction.update({
           where: { id: original.id },
           data: { deletedAt: new Date() },
@@ -135,18 +138,23 @@ export class SplitsService {
     id: string,
     input: Omit<Input, 'fromTransactionId'>,
   ): Promise<UpdateSplitResponse> {
-    const existing = await this.loadOwned(this.prisma, userId, id);
+    // 交易外先讀一次，只為了讓別人的分帳先回 404，不洩漏「這筆輸入格式錯不錯」。
+    // 比對一律用交易內、鎖住分帳之後讀到的 current。
+    await this.loadOwned(this.prisma, userId, id);
     const shares = this.shares(input, true);
     const dissolve =
       input.payer === null &&
       input.participants.length === 1 &&
       input.participants[0]?.counterpartyId === null;
     const remainingId = await this.prisma.$transaction(async (tx) => {
+      // 先鎖住分帳本身：同一筆分帳的兩個修改同時到時，後到的要看到前一個寫完的結果，
+      // 否則兩邊都拿舊的往來組合比對，會重複建立或漏刪往來紀錄。
+      await lockSplit(tx, id);
       const current = await this.loadOwned(tx, userId, id);
       await assertLedgerWritable(tx, userId, current.ledgerId);
       await this.validateReferences(tx, userId, input);
-      const oldEntries = existing.entries.filter((entry) => entry.deletedAt === null);
-      const oldTransactions = existing.transactions.filter(
+      const oldEntries = current.entries.filter((entry) => entry.deletedAt === null);
+      const oldTransactions = current.transactions.filter(
         (transaction) => transaction.deletedAt === null,
       );
       const desired = dissolve ? [] : composeSplitEntries(input, shares);
@@ -160,7 +168,7 @@ export class SplitsService {
       for (const counterpartyId of ids) await lockCounterparty(tx, counterpartyId);
       if (dissolve) {
         const now = new Date();
-        await this.deleteEntries(tx, userId, oldEntries, now, existing.title);
+        await this.deleteEntries(tx, userId, oldEntries, now, current.title);
         const plain = oldTransactions.find((transaction) => transaction.debtEntry === null);
         let transactionId: string;
         if (plain) {
@@ -173,6 +181,8 @@ export class SplitsService {
               amount: input.total,
               date: new Date(input.date),
               title: input.title ?? null,
+              // 解散後它是一般交易：分帳的備註原本只存在分帳上，這時要搬到交易，否則就消失了。
+              note: input.note ?? null,
               categoryId: input.categoryId,
               accountId: input.accountId ?? null,
             },
@@ -190,7 +200,10 @@ export class SplitsService {
             title: input.title,
             splitId: id,
           });
-          await tx.transaction.update({ where: { id: transactionId }, data: { splitId: null } });
+          await tx.transaction.update({
+            where: { id: transactionId },
+            data: { splitId: null, note: input.note ?? null },
+          });
         }
         await tx.transaction.updateMany({
           where: { splitId: id, id: { not: transactionId }, deletedAt: null },
@@ -238,6 +251,7 @@ export class SplitsService {
 
   async remove(userId: string, id: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      await lockSplit(tx, id);
       const row = await this.loadOwned(tx, userId, id);
       await assertLedgerWritable(tx, userId, row.ledgerId);
       const entries = row.entries.filter((entry) => entry.deletedAt === null);
@@ -569,6 +583,11 @@ export class SplitsService {
     if (!row) throw notFound('Split');
     return row;
   }
+}
+
+/** 鎖住一筆分帳（同一筆分帳的修改、刪除互相排隊）。不存在時什麼都不鎖，交給 loadOwned 回 404。 */
+async function lockSplit(tx: Prisma.TransactionClient, id: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "Split" WHERE id = ${id} FOR UPDATE`;
 }
 
 function bad(message: string): AppException {

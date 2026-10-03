@@ -348,9 +348,13 @@ describe('Splits (e2e)', () => {
     const result = await request(server())
       .patch(`/api/splits/${split.id}`)
       .set(auth(alice.token))
-      .send({ ...input, participants: [{ counterpartyId: null }] })
+      .send({ ...input, note: '改成自己付', participants: [{ counterpartyId: null }] })
       .expect(200);
-    expect(result.body).toMatchObject({ split: null, transaction: { amount: 300000 } });
+    // 解散後它是一般交易，分帳的備註要搬過來（合併驗收時補上，plan §6）。
+    expect(result.body).toMatchObject({
+      split: null,
+      transaction: { amount: 300000, note: '改成自己付', split: null },
+    });
     expect(await prisma.debtEntry.count({ where: { splitId: split.id, deletedAt: null } })).toBe(0);
   });
 

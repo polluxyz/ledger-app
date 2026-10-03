@@ -207,6 +207,41 @@ describe('Split isolation (e2e)', () => {
       expect(await countRows('Counterparty')).toBe(0);
       await expectNothingWritten();
     });
+
+    // 合併驗收時補上（plan §6）：轉分帳會軟刪除原交易，所以原交易所在的帳本也要檢查權限，
+    // 不能只看「是不是我記的」——被移出共享帳本的人不能藉這條路刪掉他以前記的交易。
+    it('fromTransactionId：原交易所在的帳本已經不能寫入 → 404，原交易不受影響', async () => {
+      const alice = await person(app, 'alice@example.com', 'Alice');
+      const bob = await person(app, 'bob@example.com', 'Bob');
+      const ming = await createCounterparty(app, alice, '小明');
+      const shared = await createSharedLedger(app, bob.token);
+      await addMember(bob, shared, 'alice@example.com', 'EDITOR');
+      const original = await request(server())
+        .post(`/api/ledgers/${shared}/transactions`)
+        .set(auth(alice.token))
+        .send({
+          type: 'EXPENSE',
+          amount: 300000,
+          date: DAY,
+          categoryId: await categoryId(alice, shared),
+          accountId: alice.cashId,
+        })
+        .expect(201);
+      const originalId = (original.body as Transaction).id;
+      await request(server())
+        .delete(`/api/ledgers/${shared}/members/${alice.userId}`)
+        .set(auth(bob.token))
+        .expect((res) => expect([200, 204]).toContain(res.status));
+
+      await postSplit(
+        alice,
+        await dinner(alice, [ming.id], { fromTransactionId: originalId }),
+      ).expect(404);
+      expect(await countRows('Split')).toBe(0);
+      expect(await countRows('Transaction', `"id" = '${originalId}' AND "deletedAt" IS NULL`)).toBe(
+        1,
+      );
+    });
   });
 
   describe('SC-S16：帳本成員與連動的對方看不到分帳', () => {
