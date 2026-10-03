@@ -1,0 +1,95 @@
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import {
+  addMember,
+  createCounterparty,
+  createLedger,
+  linkByEmail,
+  listAccounts,
+  listCategories,
+} from './api';
+import { expect, test, USER_B_EMAIL } from './fixtures';
+import {
+  newTransactionForm,
+  openNewTransaction,
+  openTransactions,
+  switchLedger,
+  transactionRow,
+} from './ui';
+
+async function cash(request: APIRequestContext, token: string): Promise<number> {
+  const accounts = await listAccounts(request, token);
+  return accounts.find((account) => account.name === '現金')!.balance;
+}
+
+async function choosePerson(form: Locator, name: string): Promise<void> {
+  const picker = form.getByRole('combobox', { name: '＋ 新增分帳對象', exact: true });
+  await picker.fill(name);
+  await form.getByRole('option', { name, exact: true }).click();
+}
+
+function pendingRow(page: Page, title: string): Locator {
+  return page
+    .getByRole('region', { name: /待確認/ })
+    .getByRole('listitem')
+    .filter({ hasText: title });
+}
+
+test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份', async ({
+  signedInPage: pageA,
+  userA,
+  userB,
+  openAs,
+  request,
+}) => {
+  const ledger = await createLedger(request, userA.token, {
+    name: '晚餐分帳',
+    kind: 'SHARED',
+  });
+  await addMember(request, userA.token, ledger.id, { email: USER_B_EMAIL, role: 'EDITOR' });
+  const linkedCounterparty = await linkByEmail(request, userA, userB);
+  await createCounterparty(request, userA.token, '小華');
+  const category = (await listCategories(request, userA.token, ledger.id)).find(
+    (item) => item.type === 'EXPENSE',
+  )!;
+  const bCashBefore = await cash(request, userB.token);
+
+  await pageA.reload();
+  await switchLedger(pageA, ledger.name);
+  await openTransactions(pageA);
+  await openNewTransaction(pageA);
+  const form = newTransactionForm(pageA);
+  await form.getByLabel('金額').fill('3000');
+  await form.getByLabel('日期').fill(new Date().toISOString().slice(0, 10));
+  await form.getByLabel('分類').selectOption(category.id);
+  await form.getByLabel('名稱').fill('晚餐');
+  await form.getByLabel('分帳').check();
+  await choosePerson(form, '乙');
+  await choosePerson(form, '小華');
+
+  await expect(form.getByRole('region', { name: '分帳' })).toContainText('$1,000');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+  const aRow = transactionRow(pageA, '晚餐');
+  await expect(aRow).toBeVisible();
+  await expect(aRow).toContainText('−$3,000');
+  await expect(aRow).toContainText('分帳');
+
+  const pageB = await openAs(userB);
+  await switchLedger(pageB, ledger.name);
+  const proposal = pendingRow(pageB, '晚餐');
+  await expect(proposal).toContainText('幫你付');
+  await proposal.getByRole('button', { name: '接受' }).click();
+  await expect(proposal.getByLabel('名稱')).toHaveValue('晚餐');
+  await expect(proposal.getByLabel('分類')).toBeVisible();
+  await expect(proposal.getByLabel('帳戶')).toHaveCount(0);
+  await proposal.getByLabel('分類').selectOption(category.id);
+  await proposal.getByRole('button', { name: '接受' }).click();
+
+  await openTransactions(pageB);
+  const bRow = transactionRow(pageB, '晚餐');
+  await expect(bRow).toBeVisible();
+  await expect(bRow).toContainText('−$1,000');
+  expect(await cash(request, userB.token)).toBe(bCashBefore);
+
+  // 連動對象 id 由 API 建立，確定甲送出的名單使用了這位乙。
+  expect(linkedCounterparty.inviterSideId).toBeTruthy();
+});

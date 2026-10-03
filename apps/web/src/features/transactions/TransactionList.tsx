@@ -1,9 +1,15 @@
-import type { MouseEvent } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { isDebtTransactionType, type Transaction } from '@ledger/shared';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
 import { getTransactionLabel } from './transaction-label';
-import { formatDate, formatGroupDate, formatTransactionAmount } from '../../lib/format';
+import {
+  formatDate,
+  formatGroupDate,
+  formatMoney,
+  formatTransactionAmount,
+} from '../../lib/format';
 import styles from './TransactionList.module.css';
 
 interface TransactionListProps {
@@ -86,20 +92,22 @@ function groupByDate(transactions: Transaction[]): DateGroup[] {
  * DOM 結構刻意寫成「一個日期標題 `<p>` ＋ 一個 `<ul>`」：標題**不是** `<li>`，
  * 這樣整個列表的 `<li>` 數量就等於交易筆數（e2e 拿它斷言筆數）。
  */
-/** 一列的標題：分類（或型別的中文名）加上備註。 */
+/** 一列以名稱作標題；沒有名稱時沿用分類或型別，副標列出分類、付款人與備註。 */
 function rowTitle(transaction: Transaction) {
   return (
     <>
-      {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
-      {transaction.category ? (
-        <span className={styles.category}>{getTransactionLabel(transaction)}</span>
-      ) : (
-        <span className={styles.category}>
-          <Icon name="transfer" />
-          {getTransactionLabel(transaction)}
+      <span className={styles.text}>
+        <span className={styles.title}>
+          {transaction.title || getTransactionLabel(transaction)}
         </span>
-      )}
-      {transaction.note && <span className={styles.note}>{transaction.note}</span>}
+        <span className={styles.subtitle}>
+          {transaction.title && <span>{getTransactionLabel(transaction)}</span>}
+          {transaction.split?.payer && (
+            <span>{transaction.type === 'INCOME' ? '代收' : '先付'}</span>
+          )}
+          {transaction.note && <span>{transaction.note}</span>}
+        </span>
+      </span>
     </>
   );
 }
@@ -114,6 +122,7 @@ export function TransactionList({
   onRemove,
   onEditDebtTransaction,
 }: TransactionListProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -171,11 +180,19 @@ export function TransactionList({
           <ul className={styles.rows}>
             {group.transactions.map((transaction) => {
               const isDebt = isDebtTransactionType(transaction.type);
+              const split = transaction.split;
+              const expanded = expandedId === transaction.id;
               const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
+              const amount = split
+                ? split.payer === null
+                  ? split.total
+                  : split.myShare
+                : transaction.amount;
               const rowClassNames = [
                 styles.row,
                 isClickable ? styles.clickable : '',
                 transaction.id === selectedId ? styles.selected : '',
+                expanded ? styles.rowExpanded : '',
               ]
                 .filter(Boolean)
                 .join(' ');
@@ -199,9 +216,13 @@ export function TransactionList({
                       onClick={() => openRow(transaction)}
                     >
                       {rowTitle(transaction)}
+                      {split && <span className={styles.splitBadge}>分帳</span>}
                     </button>
                   ) : (
-                    <span className={styles.main}>{rowTitle(transaction)}</span>
+                    <span className={styles.main}>
+                      {rowTitle(transaction)}
+                      {split && <span className={styles.splitBadge}>分帳</span>}
+                    </span>
                   )}
                   {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
                   <span className={styles.account}>
@@ -209,13 +230,24 @@ export function TransactionList({
                     {transaction.toAccount && ` → ${transaction.toAccount.name}`}
                   </span>
                   <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
-                    {formatTransactionAmount(transaction.type, transaction.amount)}
+                    {formatTransactionAmount(transaction.type, amount)}
                   </span>
                   {/* 只剩刪除：編輯就是點這一列（開發者 2026-09-24），鉛筆圖示是重複的入口。
                     借還交易只能從債務端點改動，放一顆必定得到 409 的刪除鈕只是在騙人。
                     那一格仍然留著、而且欄寬固定，金額才不會一列一個位置。 */}
                   <span className={styles.actions}>
-                    {!isDebt && !transaction.debt && (
+                    {split && (
+                      <button
+                        type="button"
+                        className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
+                        aria-label={`${expanded ? '收合' : '展開'}分帳明細`}
+                        aria-expanded={expanded}
+                        onClick={() => setExpandedId(expanded ? null : transaction.id)}
+                      >
+                        ›
+                      </button>
+                    )}
+                    {!isDebt && !transaction.debt && !split && (
                       <button
                         type="button"
                         className={`${styles.action} ${styles.remove}`}
@@ -227,6 +259,26 @@ export function TransactionList({
                       </button>
                     )}
                   </span>
+                  {expanded && split && (
+                    <div className={styles.details}>
+                      {split.counterparts.map((counterpart) => (
+                        <DebtArrow
+                          key={counterpart.counterpartyId}
+                          from={counterpart.direction === 'THEY_OWE_ME' ? counterpart.name : '我'}
+                          to={counterpart.direction === 'THEY_OWE_ME' ? '我' : counterpart.name}
+                          amount={counterpart.amount}
+                          srText={
+                            counterpart.direction === 'THEY_OWE_ME'
+                              ? `${counterpart.name}欠你 ${formatMoney(counterpart.amount)}`
+                              : `你欠${counterpart.name} ${formatMoney(counterpart.amount)}`
+                          }
+                        />
+                      ))}
+                      {split.myShare > 0 && (
+                        <span className={styles.myShare}>我 {formatMoney(split.myShare)}</span>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

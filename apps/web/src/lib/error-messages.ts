@@ -60,6 +60,16 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   NOTHING_TO_REPAY: '目前和對方沒有欠款，不需要還款。',
   REPAYMENT_EXCEEDS_BALANCE: '還款超過目前的欠款。要兩清請勾「以此結清」，或把多出的部分另記一筆。',
 
+  // ── 代墊與分帳（3c）──────────────────────────────────────────────────────
+  SPLIT_PARTICIPANTS_INVALID: '請重新檢查分帳名單。',
+  SPLIT_SUM_MISMATCH: '各份金額要等於總額，比例要加總成 100%。',
+  SPLIT_SHARE_NOT_POSITIVE: '每一份都要大於零。',
+  SPLIT_WITHOUT_ME: '請把自己加進分帳名單。',
+  SPLIT_NOT_NEEDED: '只剩自己時請關閉分帳。',
+  SPLIT_TRANSACTION_READ_ONLY: '請從分帳編輯畫面修改或刪除。',
+  SPLIT_ENTRY_READ_ONLY: '請從分帳編輯畫面修改或刪除這筆往來。',
+  TRANSACTION_NOT_CONVERTIBLE: '請直接新增分帳。',
+
   // ── 連動（3b-2，spec phase-3b2-web.md §4.7）──────────────────────────────
   // 後端沿用 3a 的好友錯誤碼，但畫面不出現「好友」（W22），所以這幾個一律改寫。
   CANNOT_FRIEND_SELF: '不能邀請自己。',

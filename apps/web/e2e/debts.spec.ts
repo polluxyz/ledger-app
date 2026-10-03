@@ -76,7 +76,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   await expect(form.getByText('新對象，送出時建立')).toBeVisible();
   await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
-  await expect(form.getByText('記完後：小明欠你 $120')).toBeVisible();
+  await expect(form.getByText('記完後：小明欠你 $120')).toHaveCount(1);
   await form.getByRole('button', { name: '新增' }).click();
 
   await expect.poll(() => cash(request, userA.token)).toBe(before - 12000);
@@ -84,9 +84,9 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
 
   // SC-W21：同一個人借入 111，送出前先看到目前餘額與記完後的餘額。對象與種類在成功後保留。
   await typeCounterparty(form, '小明');
-  await expect(form.getByText('目前小明欠你 $120')).toBeVisible();
+  await expect(form.getByText('目前小明欠你 $120')).toHaveCount(1);
   await fill(form, '小明', '借入', 111, { account: '現金' });
-  await expect(form.getByText('記完後：小明欠你 $9')).toBeVisible();
+  await expect(form.getByText('記完後：小明欠你 $9')).toHaveCount(1);
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 900);
 
@@ -128,7 +128,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   const settlementRow = panel.getByRole('listitem').filter({ hasText: '結清差額' });
   await settlementRow.getByRole('button', { name: /刪除/ }).click();
   await page.getByRole('dialog', { name: /刪除/ }).getByRole('button', { name: '刪除' }).click();
-  await expect(panel.getByText('小明欠你 $4')).toBeVisible();
+  await expect(panel.getByText('小明欠你 $4')).toHaveCount(1);
 
   await panel.getByRole('button', { name: '免除剩餘' }).click();
   await page
@@ -140,7 +140,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   const forgiveRow = panel.getByRole('listitem').filter({ hasText: '免除' });
   await forgiveRow.getByRole('button', { name: /刪除/ }).click();
   await page.getByRole('dialog', { name: /刪除/ }).getByRole('button', { name: '刪除' }).click();
-  await expect(panel.getByText('小明欠你 $4')).toBeVisible();
+  await expect(panel.getByText('小明欠你 $4')).toHaveCount(1);
 
   // SC-W26：把借出 120 改成 150 → 現金再少 30，往來餘額跟著變。
   const lendRow = panel.getByRole('listitem').filter({ hasText: '借出' });
@@ -148,7 +148,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   const editDialog = page.getByRole('dialog', { name: /修改/ });
   await editDialog.getByLabel('金額').fill('150');
   await editDialog.getByRole('button', { name: /儲存/ }).click();
-  await expect(panel.getByText('小明欠你 $34')).toBeVisible();
+  await expect(panel.getByText('小明欠你 $34')).toHaveCount(1);
   await expect.poll(() => cash(request, userA.token)).toBe(before - 3400);
 });
 
@@ -161,7 +161,7 @@ test('SC-W67：交易頁關閉往來帳後收起右側欄', async ({ signedInPag
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
   await page.getByRole('button', { name: /^小明/ }).click();
   const panel = ledgerPanel(page);
-  await expect(panel.getByText('小明欠你 $120')).toBeVisible();
+  await expect(panel.getByText('小明欠你 $120')).toHaveCount(1);
 
   await panel.getByRole('button', { name: '關閉' }).click();
   await expectRightPanelClosedWithoutAddForm(page);
@@ -171,7 +171,7 @@ test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', as
   await openTransactions(page);
   const form = await openDebtTab(page);
   await fill(form, '小明', '借出', 120, { account: '現金' });
-  await form.getByLabel('備註（選填）').fill('原備註');
+  await form.getByLabel('備註').fill('原備註');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   const row = transactionRow(page, '借出 · 小明');
@@ -180,7 +180,7 @@ test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', as
 
   const dialog = page.getByRole('dialog', { name: '編輯交易' });
   await expect(dialog.getByLabel('金額')).toHaveValue('120');
-  await expect(dialog.getByLabel('備註（選填）')).toHaveValue('原備註');
+  await expect(dialog.getByLabel('備註')).toHaveValue('原備註');
   await dialog.getByLabel('金額').fill('180');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
@@ -189,7 +189,7 @@ test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', as
 
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
   await page.getByRole('button', { name: /^小明/ }).click();
-  await expect(ledgerPanel(page).getByText('小明欠你 $180')).toBeVisible();
+  await expect(ledgerPanel(page).getByText('小明欠你 $180')).toHaveCount(1);
 });
 
 test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款要結清', async ({

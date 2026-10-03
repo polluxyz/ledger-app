@@ -180,9 +180,7 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
 
   await pageB.reload();
   await openDashboard(pageB);
-  await pendingRow(pageB, '阿甲 記了一筆：你向他借入 $120')
-    .getByRole('button', { name: '接受' })
-    .click();
+  await pendingRow(pageB, '你欠阿甲 $120').getByRole('button', { name: '接受' }).click();
   await pendingCard(pageB)
     .getByRole('combobox', { name: '借到的錢進哪個帳戶' })
     .selectOption({ label: '現金' });
@@ -286,7 +284,7 @@ test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async
   // 帳（名字與餘額）在交易頁的往來帳看（W55）。
   const panel = await openLedger(pageA, /舊乙/);
   await expect(panel.getByRole('heading', { name: '舊乙' })).toBeVisible();
-  await expect(panel.getByText('舊乙欠你 $50')).toBeVisible();
+  await expect(panel.getByText('舊乙欠你 $50')).toHaveCount(1);
 
   // 合併完成，待確認不再詢問。
   await openDashboard(pageA);
@@ -322,12 +320,14 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   });
 
   const pageB = await openAs(userB);
-  await pendingRow(pageB, '記了一筆：你還他 $50').getByRole('button', { name: '接受' }).click();
+  await pendingRow(pageB, /你欠.*\$50/)
+    .getByRole('button', { name: '接受' })
+    .click();
   await pendingCard(pageB).getByLabel('不記入帳本（只記往來）').check();
   await pendingCard(pageB).getByRole('button', { name: '接受', exact: true }).click();
   await expect(pendingCard(pageB).getByText('你帳上目前兩清')).toBeVisible();
   await pendingCard(pageB).getByRole('button', { name: '改成拒絕' }).click();
-  await expect(pendingRow(pageB, '你還他 $50')).toHaveCount(0);
+  await expect(pendingRow(pageB, /你欠.*\$50/)).toHaveCount(0);
 
   // 小明已併進乙（displayName＝小明），借還檢視的列顯示 displayName（W47）。
   const ledgerA = await openLedger(pageA, /小明/);

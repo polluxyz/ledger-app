@@ -384,12 +384,38 @@ describe('Home dashboard', () => {
               note: '提款',
               toAccount: { id: 'acc-2', name: '國泰世華' },
             },
-            // 共享帳本裡別人的帳戶會被後端遮成 null，那一格就留白。
-            { ...transactions[3], account: null, note: '別人記的' },
+            {
+              ...transactions[3],
+              id: 'txn-split-other-payer',
+              title: '晚餐',
+              note: '朋友聚餐',
+              account: null,
+              split: {
+                id: 'split-other-payer',
+                type: 'EXPENSE',
+                total: 300000,
+                myShare: 75000,
+                payer: { counterpartyId: 'cp-ming', name: '小明' },
+                counterparts: [],
+              },
+            },
+            {
+              ...transactions[4],
+              id: 'txn-split-me',
+              title: '露營',
+              split: {
+                id: 'split-me',
+                type: 'EXPENSE',
+                total: 300000,
+                myShare: 75000,
+                payer: null,
+                counterparts: [],
+              },
+            },
           ],
           page: 1,
           limit: 5,
-          total: 4,
+          total: 5,
         });
       }
       if (url.includes('/accounts')) {
@@ -421,9 +447,18 @@ describe('Home dashboard', () => {
     expect(within(transferRow).getByText('轉帳')).toBeInTheDocument();
     expect(transferRow).toHaveTextContent('現金 → 國泰世華');
 
-    // 帳戶被遮蔽的那一列留白，其餘照常顯示。
-    expect(rows[3]).not.toHaveTextContent('現金');
-    expect(rows[3]).toHaveTextContent('別人記的');
+    // 首頁最近交易同步顯示交易名稱、分帳標記、付款人與分帳金額。
+    const otherPayerRow = rows[3] as HTMLElement;
+    expect(within(otherPayerRow).getByText('晚餐')).toBeInTheDocument();
+    expect(within(otherPayerRow).getByText('分帳')).toBeInTheDocument();
+    expect(within(otherPayerRow).getByText('小明先付')).toBeInTheDocument();
+    expect(within(otherPayerRow).getByText('-$750')).toBeInTheDocument();
+    expect(otherPayerRow).not.toHaveTextContent('現金');
+    expect(otherPayerRow).toHaveTextContent('朋友聚餐');
+
+    const mePayerRow = rows[4] as HTMLElement;
+    expect(within(mePayerRow).getByText('露營')).toBeInTheDocument();
+    expect(within(mePayerRow).getByText('-$3,000')).toBeInTheDocument();
   });
 
   it('puts the ledger switcher and the add button in the page toolbar', async () => {

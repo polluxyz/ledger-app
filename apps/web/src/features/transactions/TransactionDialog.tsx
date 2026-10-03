@@ -1,6 +1,8 @@
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { Dialog } from '../../components/Dialog';
+import { FormError } from '../../components/FormError';
 import { TransactionForm } from './TransactionForm';
+import { useSplit } from './use-splits';
 
 interface TransactionDialogProps {
   ledger: LedgerSummary;
@@ -24,9 +26,24 @@ interface TransactionDialogProps {
  * 新增表單、焦點回到原本那顆按鈕，這些由 `Dialog` 的 panel 變體負責。
  */
 export function TransactionDialog({ ledger, transaction, onClose }: TransactionDialogProps) {
+  const splitId = transaction?.split?.id ?? null;
+  const split = useSplit(splitId);
+
   return (
     <Dialog open={transaction !== null} title="編輯交易" variant="panel" onClose={onClose}>
-      {transaction && (
+      {transaction && splitId && split.isLoading && <p>載入中…</p>}
+      {transaction && splitId && split.error && <FormError error={split.error} />}
+      {transaction && splitId && split.data && (
+        <TransactionForm
+          key={split.data.id}
+          ledger={ledger}
+          transaction={transaction}
+          split={split.data}
+          onSaved={onClose}
+          onCancel={onClose}
+        />
+      )}
+      {transaction && !splitId && (
         <TransactionForm
           ledger={ledger}
           transaction={transaction}

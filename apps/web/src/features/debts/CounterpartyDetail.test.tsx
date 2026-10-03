@@ -21,6 +21,7 @@ describe('CounterpartyDetail', () => {
     date: '2026-09-01T04:00:00.000Z',
     note: '借款',
     transactionId: 'txn-1',
+    splitId: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
@@ -92,13 +93,18 @@ describe('CounterpartyDetail', () => {
     } = {},
   ) {
     const onRecordEntry = vi.fn();
+    const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
       <QueryClientProvider client={queryClient}>
-        <CounterpartyDetail counterpartyId="cp-1" onRecordEntry={onRecordEntry} />
+        <CounterpartyDetail
+          counterpartyId="cp-1"
+          onRecordEntry={onRecordEntry}
+          onEditSplit={onEditSplit}
+        />
       </QueryClientProvider>,
     );
-    return { onRecordEntry, ...result };
+    return { onRecordEntry, onEditSplit, ...result };
   }
 
   it.each([
@@ -216,6 +222,19 @@ describe('CounterpartyDetail', () => {
       expect(within(row).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
       expect(within(row).getByRole('button', { name: '刪除' })).toBeInTheDocument();
     }
+  });
+
+  it('opens split entries through the split editor and hides entry edits', async () => {
+    const user = userEvent.setup();
+    const { onEditSplit } = renderDetail(0, [{ ...baseEntry, splitId: 'split-1' }]);
+    const entryRow = (await screen.findAllByRole('listitem'))[0];
+    if (!entryRow) throw new Error('往來紀錄列不存在');
+
+    expect(within(entryRow).getByRole('button', { name: '分帳' })).toBeInTheDocument();
+    expect(within(entryRow).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
+    expect(within(entryRow).queryByRole('button', { name: '刪除' })).not.toBeInTheDocument();
+    await user.click(within(entryRow).getByRole('button', { name: '分帳' }));
+    expect(onEditSplit).toHaveBeenCalledWith('split-1');
   });
 
   it('confirms entry deletion with its linked transaction and balance consequences', async () => {

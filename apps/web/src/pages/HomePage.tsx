@@ -278,9 +278,13 @@ function RecentBody({
       */}
       {transactions.slice(0, RECENT_LIMIT).map((transaction) => {
         const rowClass = `${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`;
+        const split = transaction.split;
+        const rowAmount = split ? (split.payer ? split.myShare : split.total) : transaction.amount;
+        const fallbackTitle =
+          transaction.category?.name ?? TRANSACTION_TYPE_LABELS[transaction.type];
         /*
-          兩行：上行「分類 備註」、下行「日期・帳戶」。dashboard 的卡片只有交易頁
-          表格一半寬，擠成一行的話備註第一個被截掉。
+          兩行：上行名稱或分類、分帳狀態與次要文字，下行日期與帳戶。dashboard 的卡片
+          只有交易頁表格一半寬，保留一行次要資訊才不會把金額擠掉。
         */
         const content = (
           <>
@@ -288,15 +292,24 @@ function RecentBody({
               <span className={styles.recentMain}>
                 {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
                 <span className={styles.recentCategory}>
-                  {transaction.category ? (
-                    transaction.category.name
-                  ) : (
-                    <>
-                      <Icon name="transfer" />
-                      {TRANSACTION_TYPE_LABELS[transaction.type]}
-                    </>
-                  )}
+                  {transaction.title ||
+                    (transaction.category ? (
+                      transaction.category.name
+                    ) : (
+                      <>
+                        <Icon name="transfer" />
+                        {TRANSACTION_TYPE_LABELS[transaction.type]}
+                      </>
+                    ))}
                 </span>
+                {split && <span className={styles.recentSplitBadge}>分帳</span>}
+                {transaction.title && <span className={styles.recentNote}>{fallbackTitle}</span>}
+                {split?.payer && (
+                  <span className={styles.recentNote}>
+                    {split.payer.name}
+                    {transaction.type === 'INCOME' ? '代收' : '先付'}
+                  </span>
+                )}
                 {transaction.note && <span className={styles.recentNote}>{transaction.note}</span>}
               </span>
               {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
@@ -307,7 +320,7 @@ function RecentBody({
               </span>
             </span>
             <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
-              {formatTransactionAmount(transaction.type, transaction.amount)}
+              {formatTransactionAmount(transaction.type, rowAmount)}
             </span>
           </>
         );
