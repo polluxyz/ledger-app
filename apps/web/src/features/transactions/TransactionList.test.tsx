@@ -127,6 +127,37 @@ describe('TransactionList', () => {
     expect(screen.queryByText('帳戶')).not.toBeInTheDocument();
   });
 
+  // 3d 修訂 1（T13）：第一行永遠是分類，第二行永遠是名稱，兩種資訊不再共用同一個位置。
+  it('puts the category on the first line and the name on the second, never swapping them', () => {
+    renderList({
+      transactions: [
+        makeTransaction({
+          id: 'with-name',
+          title: '晚餐',
+          category: { id: 'cat-food', name: '餐飲', icon: 'food' },
+        }),
+        makeTransaction({
+          id: 'without-name',
+          title: null,
+          category: { id: 'cat-food', name: '餐飲', icon: 'food' },
+        }),
+      ],
+    });
+
+    const named = row(0);
+    const unnamed = row(1);
+    const firstLine = (element: HTMLElement) =>
+      element.querySelector('[class*="title"]')?.textContent;
+    const secondLine = (element: HTMLElement) =>
+      element.querySelector('[class*="name"]')?.textContent;
+
+    expect(firstLine(named)).toBe('餐飲');
+    expect(secondLine(named)).toBe('晚餐');
+    expect(firstLine(unnamed)).toBe('餐飲');
+    // 沒有名稱就空著，不拿分類來補。
+    expect(secondLine(unnamed)).toBe('');
+  });
+
   it('shows category, generic, debt direction, and transfer icons', () => {
     const iconTransactions = [
       makeTransaction({

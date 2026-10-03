@@ -54,15 +54,23 @@ const AMOUNT_COLOR: Record<Transaction['type'], string> = {
  * 列表上每一列的按鈕只有圖示，光靠圖示分不出是哪一筆——螢幕閱讀器的使用者會
  * 聽到一串一模一樣的按鈕。加上日期與分類才指得明確。
  */
-function rowTitle(transaction: Transaction): string {
-  const title = transaction.title?.trim();
-  if (title) return title;
+/**
+ * 第一行：這筆是什麼（3d 修訂 1，T13）。永遠是分類；沒有分類的借還與轉帳用它們的標籤
+ * （「借出 · 小明」「轉帳」）。每一列的這個位置都是同一種資訊，掃過去才不會亂。
+ */
+function rowLabel(transaction: Transaction): string {
   if (transaction.category) return transaction.category.name;
   return getTransactionLabel(transaction);
 }
 
+/** 第二行：交易名稱；沒有名稱就是空的，不拿分類來補（補了就又混在一起）。 */
+function rowName(transaction: Transaction): string {
+  return transaction.title?.trim() ?? '';
+}
+
 function describe(transaction: Transaction): string {
-  return `${formatDate(transaction.date)} 的${rowTitle(transaction)}`;
+  const name = rowName(transaction);
+  return `${formatDate(transaction.date)} 的${rowLabel(transaction)}${name ? ` ${name}` : ''}`;
 }
 
 /** 同一天的一組交易。`key` 同時是分組依據與 React 的 key。 */
@@ -209,13 +217,19 @@ export function TransactionList({
                       aria-label={`編輯${describe(transaction)}`}
                       onClick={() => openRow(transaction)}
                     >
-                      <span className={styles.title}>{rowTitle(transaction)}</span>
-                      {split && <span className={styles.splitBadge}>分帳</span>}
+                      <span className={styles.title}>{rowLabel(transaction)}</span>
+                      <span className={styles.subtitle}>
+                        <span className={styles.name}>{rowName(transaction)}</span>
+                        {split && <span className={styles.splitBadge}>分帳</span>}
+                      </span>
                     </button>
                   ) : (
                     <span className={styles.main}>
-                      <span className={styles.title}>{rowTitle(transaction)}</span>
-                      {split && <span className={styles.splitBadge}>分帳</span>}
+                      <span className={styles.title}>{rowLabel(transaction)}</span>
+                      <span className={styles.subtitle}>
+                        <span className={styles.name}>{rowName(transaction)}</span>
+                        {split && <span className={styles.splitBadge}>分帳</span>}
+                      </span>
                     </span>
                   )}
                   <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
