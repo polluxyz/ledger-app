@@ -32,7 +32,13 @@ e2e/           Playwright 測試
 **`@ledger/shared` 必須留在 `vite.config.ts` 的 `optimizeDeps.include` 裡。**
 shared 編譯成 CommonJS，而 Vite 預設不預先打包 workspace 連結的套件。拿掉這行，第一個「值」匯入（不是 `import type`）就會讓整頁全白。
 
-**改了 `packages/shared` 並重新 build 之後，dev server 要重開**才會拿到新的預先打包結果。
+**改了 `packages/shared` 並重新 build 之後，要刪掉 `apps/web/node_modules/.vite` 再重開 dev server。** 否則 dev 與 Web e2e 會拿到舊的預先打包結果，出現「xxx is not a function」。
+
+**右側欄收起時內容不卸載**（#84）。新增打開右側欄的入口時，要先設定面板目標；列表的選取標示要配合 `isOpen`。
+
+**借還交易本身的 `note` 一律是 `null`**，備註存在 `Transaction.debt.note`。顯示或編輯借還交易的備註要用後者。
+
+**共享帳本的其他成員看到分帳時是一筆一筆的交易**（`split` 為 `null`，spec 3c SC-S16），合併顯示只給擁有者。
 
 ## 指令
 

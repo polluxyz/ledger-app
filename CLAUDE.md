@@ -66,6 +66,10 @@ tasks/           進行中的 plan 與 todo（做完移到 tasks/archive/）
 
 跨端共用的型別（特別是 API 的 request / response）放 `packages/shared`，確保前後端一致。
 
+- 改了 `packages/shared` 要跑 `pnpm --filter @ledger/shared build`。`dist` 舊了，其他 package 的 typecheck 會說 shared 的欄位不存在。
+- shared 的測試用 Node 內建 test runner 直接跑 `.ts`。被測檔只能 `import type`，不帶副檔名的值匯入會解析不到。
+- 改含中文的檔案不要用 PowerShell 的 `Get-Content`／`Set-Content`，編碼會壞。用 Edit 工具或 Bash。
+
 ### 常用指令（repo 根目錄）
 
 ```bash
@@ -87,7 +91,7 @@ NestJS / Prisma 的細節見 `apps/api/CLAUDE.md`；React / Vite 的細節見 `a
 
 ## 4. 開發階段
 
-**目前在階段三**（好友 + 借還帳），拆成 3a 好友系統與 3b 借還帳。3a、3b-1（往來帳版）與 3b-2（往來帳連動，含畫面）已完成，接下來依開發者操作後的回饋調整。階段二（含 2c～2g）已完成。
+**目前在階段三**（好友、借還帳、代墊與分帳）。3a、3b-1、3b-2、3c-0、3c 都已完成，接下來依開發者操作後的回饋調整。階段二已完成。
 
 完整階段表、每份 spec 的用途與狀態見 [`docs/README.md`](docs/README.md)。後續依序是：階段三 好友 + 借還帳 → 階段四 AI 文字版 → 階段五 語音 + 本地模型。
 
@@ -235,24 +239,18 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 ### 多代理
 
-預設 agent 是 Claude Code，它是協調者。**它的主要工作是規劃與驗收，不是實作。**
+Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 
-- 規劃、拆解、決策、驗收、開 PR 由 Claude Code 自己做。
-- **實作預設派給 worker**，能平行的一次全部派出去，不要自己一件一件做。
-- 自己動手實作的例外只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈，當作驗收 worker 的防線）、派工成本明顯高於自己做的瑣碎改動。
-- **複雜的後端工作（Prisma schema、migration、API、授權邏輯）派給 Codex + `gpt-6-sol`（推理強度 xhigh）**（開發者 2026-09-26 定案）。協調者先寫好契約與隔離測試，驗收時逐行看 diff、自己重跑隔離測試與 e2e。
-
-- **派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool**——它只開得了 Claude subagent，指定不了 Codex、Pi 或 GLM。
-- worker 優先用 **Codex + `gpt-6-luna`（推理強度 max）**，以 `codex --dangerously-bypass-approvals-and-sandbox` 啟動。額度用盡就往下一層換：**Pi + `zai/glm-5.3` → Antigravity（`agy` + `gemini-3.8-flash-high`）→ Claude Code（`opus`）**。
-- **額度有沒有用完，只認 worker 帶回來的錯誤原文**（`pi auth check` 驗的是憑證不是用量，判斷不出來）。所以 Task spec 要求 worker 遇到 provider 錯誤時原文回報、不要自己重試。
-- **Pi worker 會讀本檔**（實測），但 Task spec 仍要自足。涉及授權、資料隔離、Prisma schema、API 介面的工作只派給 Codex `gpt-6-sol` xhigh，不派給其他層的 worker。
-- ⚠️ **不要新增 `AGENTS.md`**：Pi 每個目錄只取第一個命中的指引檔，`AGENTS.md` 會蓋掉同目錄的 `CLAUDE.md`。
+- 實作預設派給 worker，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
+- 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它指定不了 Codex、Pi 等其他 agent。
+- 要用哪個模型，看 `docs/orca-multi-agent.md` §0 的角色表。這是唯一記錄模型 id 的地方，其他文件只寫角色名（`default`、`backend`、`fallback-1`～`3`）。
+- Prisma schema、migration、API 介面、授權與資料隔離的工作只派給 `backend` 角色。驗收時逐行看 diff，自己重跑隔離測試與 e2e。
+- 額度用完由協調者主動查（`orca account list` 的用量與 worker 畫面），自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
+- 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
+- 換 session 時先讀 `docs/handoff.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
 
-- **換 session 時先讀 `docs/handoff.md`**；交接前由舊 session 更新它（只寫重點）。新 session 用 `claude --dangerously-skip-permissions` 開。
-- **交接之後舊 session 要收掉。** 一次交接只留下一個活著的 session——兩個 agent 留在同一個 worktree，使用者對著舊分頁打字就會變成兩個 agent 改同一批檔案。舊 session **不要自己關自己**（指令送出的瞬間對話就沒了，使用者拿不到說明），而是報告自己的 handle 與關閉指令，由使用者收掉。程序見 `docs/orca-multi-agent.md` §6.0。
-
-派工指令、模型分流準則、額度切換、Task spec 格式、**context 快滿時的 session 交接程序**，全部見 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
+派工指令、Task spec 格式、換層、各 agent 的坑、交接程序，都在 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
 
 ---
 

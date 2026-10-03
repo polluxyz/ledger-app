@@ -36,6 +36,8 @@ pnpm --filter @ledger/api exec prisma studio                     # 看資料
 ```
 
 - **不可手動改資料庫**，一律走 migration。
+- `prisma migrate dev` 在 agent 的非互動環境不能跑。改用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL，放進新的 migration 資料夾。
+- worktree 裡的 `apps/api/.env` 指向開發者的 `ledger_dev`。agent 跑 `migrate`／`db` 指令只能對 `.env.test` 的資料庫。
 - `pnpm install` 會透過 `postinstall` 自動跑 `prisma generate`。新 worktree 裡忘了裝相依，型別就會整批紅。
 
 ## 測試
