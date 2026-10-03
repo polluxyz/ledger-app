@@ -161,17 +161,30 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 不需要兩段式：`worker-start --model` 本來就支援 Claude 的 model id，一行就能指定 `--agent claude --model opus`。
 
-| 要什麼              | 填什麼                                            |
-| ------------------- | ------------------------------------------------- |
-| 最新的 Opus（建議） | `opus`                                            |
-| 釘住 Opus 4.8       | `claude-opus-4-8`                                 |
-| 搭配 1M context     | 後綴 `[1m]`，如 `opus[1m]`、`claude-opus-4-8[1m]` |
+| 要什麼              | 填什麼                     |
+| ------------------- | -------------------------- |
+| 最新的 Opus（建議） | `opus`                     |
+| 釘住 Opus 5.5       | `claude-opus-5-5`          |
+| 搭配 1M context     | 後綴 `[1m]`，如 `opus[1m]` |
 
-**建議用 `opus` 別名，不要釘版本。** 別名解析為帳號上最新的 Opus；這台機器的 `/model` 選擇器顯示的是 Opus 5，比 4.8 新。釘死版本只在「新版行為有問題、要退回去」時才需要。
+**建議用 `opus` 別名，不要釘版本。** 別名解析為帳號上最新的 Opus（2026-10-03 是 Opus 5.5）。釘死版本只在「新版行為有問題、要退回去」時才需要。
 
 完整 id 一定要寫對：Claude Code 在 Anthropic API 上會驗證模型名稱，不認得的字串會被拒絕並顯示 `Model "<name>" is not a recognized model id.`。它接受別名、選擇器裡的項目，以及任何 `claude-` 開頭的名稱。
 
 `--effort` 要搭配 `--model` 一起給，兩者都不能與 `--terminal` 並用。
+
+**Opus 5.5 的 effort 從 `medium` 開始。** 依據是 Anthropic 的 [Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)（2026-10-03 讀過）：
+
+- `medium` 是 Opus 5.5 的預設，寫程式的表現已追平或超過 Opus 5 的 `high`。同一個等級名稱在不同模型代表的思考量不同，不要沿用舊模型的設定。
+- 同一等級下 Opus 5.5 想得比 Opus 5 多，`xhigh` 與 `max` 尤其明顯。只有實際比過、確定品質有提升的任務才用這兩級。
+- 想減少思考就調低 effort。在 Task spec 寫「想清楚再做」之類的話沒有幫助，也不要要求它把推理過程寫進回覆。
+
+**Opus 5.5 worker 會在做到一半時用一段進度報告結束回合。** 它在長任務中會主動回報進度，有時回報完就停下來等人，`worker_done` 卻沒送出。對策：
+
+1. Task spec 的 Observable acceptance 寫成可以逐項打勾的清單，並加一句：
+   > 清單還有未完成項目、又沒有東西擋住你時，不要用摘要或「接下來我會做 X」結束回合，直接做下一項。真正卡住（需要協調者決定，或碰到不准碰的邊界）才停下來 escalation。
+2. 協調者看到 worker 閒置、沒有 `worker_done`，就用 `orca terminal send` 點名還沒做的項目請它繼續。例如「清單還剩 W3、W4，繼續做。如果被擋住，說明是什麼擋住」。
+3. 同一個任務最多催 2～3 次。仍然停著就當成真的卡住，讀畫面判斷原因，不要一直催。
 
 三層的順序是成本與可用性的取捨，不是品質排名。有新模型可用時回來改這一節。
 

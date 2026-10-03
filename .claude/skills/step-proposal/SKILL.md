@@ -6,7 +6,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash(git log:*), Bash(git status:*), Bas
 
 # Step 開工提案書
 
-`CLAUDE.md §5` 門控規則 2 要求每個 Step 開工前說明四件事：**要做什麼與為什麼、打算怎麼做、預期產出與驗收方式、有哪些替代方案與為什麼選這個**。
+`CLAUDE.md §5` 決策門控第 1 條要求 spec 與 plan 寫具體，開工前要說清楚四件事：**要做什麼與為什麼、打算怎麼做、預期產出與驗收方式、有哪些替代方案與為什麼選這個**。
 
 前三項用文字說得清楚。**第四項說不清楚**——方案 A 與方案 B 並排才比得出來，寫成上下兩段散文比不出來。`tasks/archive/phase-2b-slice-1-plan.md §4` 的 D1～D6 就是現成的例子：六個決策、48 行散文，得逐字讀完才能說「同意」。這個 skill 就是把那 48 行變成看得懂的一頁。
 
@@ -17,7 +17,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash(git log:*), Bash(git status:*), Bas
 
 ## 鐵則：提案 ≠ 開工
 
-**產出這一頁不代表可以動手。** `CLAUDE.md §5` 規則 3 照舊：說明完停下來，等開發者明確同意（「同意」「開始」「OK」）才寫程式。若開發者提出修改意見，**更新這一頁再重新確認**，不要口頭帶過。
+**產出這一頁不代表可以動手。** `CLAUDE.md §5` 決策門控第 1 條照舊：說明完停下來，等開發者明確同意（「同意」「開始」「OK」）才寫程式。若開發者提出修改意見，**更新這一頁再重新確認**，不要口頭帶過。
 
 同樣地，這一頁**不是決策紀錄**。談定之後，結論必須回寫到 `docs/specs/` 或 `tasks/` 的 Markdown，否則決策會隨著頁面被刪而消失。
 
@@ -25,7 +25,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash(git log:*), Bash(git status:*), Bas
 
 1. 讀對應的 spec 與 plan，抓出這個 Step 的**驗收條件與它對應的 `SC-x`**（如 Slice 1 對應 SC-14、SC-18）。
 2. 用 Glob / Grep 確認**實際會動到的檔案**——不要憑 plan 的描述猜。plan 是幾週前寫的，檔案可能已經變了。
-3. 確認有沒有新增 npm 套件、環境變數、API 介面變更。這三項在 `CLAUDE.md §12` 都是 **Ask first**，必須在頁面上獨立標示，不能混在內文裡。
+3. 確認有沒有新增 npm 套件、環境變數、API 介面變更。這三項在 `CLAUDE.md §14` 都是 **Ask first**，必須在頁面上獨立標示，不能混在內文裡。
 
 ## 頁面區塊（依 Step 性質取用，不必全上）
 
