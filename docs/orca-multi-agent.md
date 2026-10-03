@@ -9,12 +9,12 @@
 | 角色         | 什麼時候用                                         | 啟動方式                                                                                                           |
 | ------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `default`    | 一般實作：前端、測試、重構、補文件                 | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"` |
-| `backend`    | Prisma schema、migration、API 介面、授權與資料隔離 | 一行，`--agent codex --model gpt-6-sol --effort xhigh`                                                             |
+| `backend`    | Prisma schema、migration、API 介面、授權與資料隔離 | 一行，`--agent codex --model gpt-6-sol --effort high`                                                              |
 | `fallback-1` | `default` 額度用完                                 | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
 | `fallback-2` | `fallback-1` 也用完                                | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
 | `fallback-3` | 前三層都不能用                                     | 一行，`--agent claude --model opus --effort medium`                                                                |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先）。順序是成本與可用性的取捨，不是品質排名。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），不要自己調高或調低。
 
 兩種啟動方式：
 
@@ -33,7 +33,6 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
   2. Orca 不接受這個強度。Orca 1.4.218 對 `gpt-6-luna` 拒絕 `--effort max`（`does not support effort max`），但 Codex 本身支援。改成 `xhigh` 就能用一行。
 - 一行派工不用自己帶跳過許可的旗標。Orca 設定的 `agentDefaultArgs` 已經替 codex 與 antigravity 加上。兩段式是自己開終端機，旗標要寫在 `--command` 裡，表上的指令已經寫好。
 - 換模型前先查可用清單，不要憑記憶填：Codex 看 `~/.codex/models_cache.json`，Pi 跑 `pi --list-models`，agy 跑 `agy models`。Claude 用 `opus` 別名就會自動跟到最新版。
-- `backend` 的 Codex 額度用完時，不要往下換層，先問開發者。
 - 2026-10-03 實測過一行派 Codex（`gpt-6-luna xhigh`），`launch.effective` 相符，worker 回報是 full access、沒有許可提示。`fallback-2` 的一行寫法還沒實測。失敗的話改用兩段式。
 
 ## 1. 分工
@@ -49,13 +48,14 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 ```bash
 orca orchestration run-create --objective "<目標>" --json
 orca orchestration worker-start ...                      # 見 §0
-orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
+orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 300000 --json
 ```
 
 - 不在 Orca 終端機裡時，`worker-start` 會被拒絕（`requires the coordinator terminal currently bound to the Task Run`）。用 `run-current --json` 取 `coordinator_handle`，再傳給 `worker-start --from` 與 `check --terminal`。`worker-release` 兩個旗標都不收。
 - 整個 run 用同一個 `orca` 執行檔。它失敗就回報那個錯誤，不要換執行檔。
 - 收到 `worker_done` 的順序：驗收 → `reply` → `check --ack <delivery_id>` → `worker-release`。驗收沒過不要 ack。
 - `worker-start` 非 0 結束不要重開，先讀 receipt 的 `failedStage` 與 `residualResources`。
+- 每次 `check` 逾時（5 分鐘），對每個還沒回報的 worker 做 §4 的「執行中檢查」。逾時不要設長，額度用完的 worker 不會自己回報。
 - 連續三次空等，改用 `worker-list --include-remote --json`，依每列的 `projection.nextAction` 處理。查不到不等於結束。
 
 ## 3. Task spec
@@ -69,7 +69,7 @@ Constraints 每次都寫這六條：
 - Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑。`.worktreeinclude` 會把指向開發者 `ledger_dev` 的 `apps/api/.env` 複製進 worktree，3c 的 migration 曾因此在合併前被套用到 dev 資料庫。
 - 只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`，不要跑根目錄的 `pnpm format`。平行時會改到別人的檔案。
 - 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
-- 遇到 provider 錯誤時，把錯誤訊息原文用 escalation 或 `worker_done --outcome failed` 帶回來。不要自己重試，也不要只寫「失敗」。
+- 遇到 provider 錯誤時，把錯誤訊息原文用 escalation 或 `worker_done --outcome failed` 帶回來。不要自己重試，也不要只寫「失敗」。（額度完全用完時 worker 發不出回報，所以協調者還要自己查，見 §4。）
 
 依 agent 再加：
 
@@ -78,17 +78,49 @@ Constraints 每次都寫這六條：
 
 通用規則（金額不用浮點數、授權 deny by default、前端不寫業務邏輯、註解用繁體中文）已寫在 `CLAUDE.md`，不必重抄。
 
-## 4. 額度用盡與換層
+## 4. 額度用盡、自動換層、自動回復
 
-額度有沒有用完，只看 worker 帶回的錯誤原文。`pi auth check` 只驗憑證，額度用完一樣回 ready。
+額度用完的 worker 叫不動模型，也就發不出 escalation。所以不能等 worker 回報，要由協調者主動查。訊號有兩個：
 
-| 錯誤訊息講什麼                              | 做什麼                                   |
-| ------------------------------------------- | ---------------------------------------- |
-| rate limit、too many requests、請稍後再試   | 暫時性。同一個角色 `--retry-of` 重派一次 |
-| quota、insufficient balance、用量／方案額度 | 換 §0 的下一層                           |
-| 看不出來                                    | 先重派一次；同樣錯誤再出現就換層         |
+- **用量 API**：`orca account list --json` 的 `result.rateLimits`。Codex（`codex`）與 Claude（`claude`）有 `session`（5 小時視窗）與 `weekly` 的 `usedPercent` 與 `resetsAt`。GLM 與 Gemini 目前查不到（`status: "unavailable"`）。
+- **worker 畫面**：`orca terminal read --terminal <handle> --screen`。找 quota、usage limit、rate limit、insufficient balance、Eligibility check failed 這類字樣。
 
-重派用 `--retry-of <dispatch_id> --task <task_id>`。`--retry-of` 不繼承 placement，worktree 與 agent 要重新指定。重派那一次要報告，不要默默試到通。
+`pi auth check` 只驗憑證，額度用完一樣回 ready，不能當訊號。
+
+### 判定「用完」
+
+任一條成立就當作這個 provider 用完：
+
+- `rateLimits` 的 `session` 或 `weekly` 的 `usedPercent` ≥ 95。
+- worker 畫面或回報出現額度類錯誤。
+- worker 閒置（`orca terminal wait --for tui-idle` 立刻返回）、沒有 `worker_done`，畫面最後一段是 provider 錯誤。
+
+畫面只寫 rate limit、too many requests、請稍後再試，而且用量沒到 95：當作暫時性，同一個角色重派一次並報告。
+
+### 派工前檢查
+
+每次 `worker-start` 前跑一次 `orca account list --json`，從角色表最上面的可用層開始：
+
+- `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。
+- `backend`：Codex 沒用完就派。用完的話，看 `resetsAt`：一小時內會重置就等重置再派，否則問開發者。這類工作不派給其他層。
+- `fallback-3`（Claude）和協調者共用同一個 Claude 額度。`claude` 的 `session` 超過 80 就不派，避免協調者自己被卡住。
+
+### 執行中檢查
+
+每次 `check --wait` 逾時，對每個還沒回報的 worker：
+
+1. 跑 `orca account list --json`，看它的 provider 有沒有用完。
+2. 讀它的畫面，看有沒有額度類錯誤。
+3. 判定用完：`worker-stop`（兩段式再 `orca terminal close`），用 `--retry-of <dispatch_id> --task <task_id>` 換下一層重派，並在訊息裡告訴開發者換到哪一層。不用等開發者同意。`--retry-of` 不繼承 placement，worktree 與 agent 要重新指定。
+
+### 自動回復
+
+換層只對那一次派工有效，不是永久切換。
+
+- 下一次派工前照樣做「派工前檢查」。上層的 `usedPercent` 降回 95 以下，或已經過了記下的 `resetsAt`，就回到原本的層。
+- 查不到用量的層（GLM、Gemini）被判定用完時，記下時間。過 5 小時後的派工，先試它一次。
+- 已經在下層執行中的 worker 讓它做完，不要因為上層恢復就中途換回去。
+- 回到原本的層時，也告訴開發者一聲。
 
 ## 5. 各 agent 的坑
 

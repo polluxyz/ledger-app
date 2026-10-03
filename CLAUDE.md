@@ -245,7 +245,7 @@ Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它指定不了 Codex、Pi 等其他 agent。
 - 要用哪個模型，看 `docs/orca-multi-agent.md` §0 的角色表。這是唯一記錄模型 id 的地方，其他文件只寫角色名（`default`、`backend`、`fallback-1`～`3`）。
 - Prisma schema、migration、API 介面、授權與資料隔離的工作只派給 `backend` 角色。驗收時逐行看 diff，自己重跑隔離測試與 e2e。
-- 額度有沒有用完，只看 worker 帶回的錯誤原文。
+- 額度用完由協調者主動查（`orca account list` 的用量與 worker 畫面），自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
 - 換 session 時先讀 `docs/handoff.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
