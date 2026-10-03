@@ -82,6 +82,7 @@ export class LedgersService {
         ledgerId: ledger.id,
         name: category.name,
         type: category.type,
+        icon: category.icon,
         sortOrder: index,
       })),
     });

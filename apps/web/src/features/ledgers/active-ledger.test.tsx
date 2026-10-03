@@ -44,7 +44,7 @@ describe('Active ledger selection', () => {
     });
   }
 
-  /** 交易端點回一筆帶帳本名稱的備註，好從畫面上看出「現在用的是哪一本」。 */
+  /** 交易端點回一筆帶帳本名稱的交易名稱，方便從新列版面辨認作用中的帳本。 */
   function routeFetch(ledgers: unknown[]) {
     fetchMock.mockImplementation((url: string) => {
       const target = String(url);
@@ -58,6 +58,7 @@ describe('Active ledger selection', () => {
                 type: 'EXPENSE',
                 amount: '100',
                 occurredAt: '2026-08-01T00:00:00.000Z',
+                title: `記在 ${ledgerId}`,
                 note: `記在 ${ledgerId}`,
                 categoryId: null,
                 categoryName: null,

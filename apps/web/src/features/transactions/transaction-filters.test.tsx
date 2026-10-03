@@ -21,7 +21,7 @@ describe('Filtering and paging the transaction list', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
@@ -82,6 +82,35 @@ describe('Filtering and paging the transaction list', () => {
 
   const filterBar = () => screen.getByRole('region', { name: '篩選交易' });
 
+  async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+    const toggle = screen.getByRole('button', { name: '篩選' });
+    if (toggle.getAttribute('aria-expanded') !== 'true') {
+      await user.click(toggle);
+    }
+    return filterBar();
+  }
+
+  it('keeps filters collapsed and shows the selected condition count', async () => {
+    const user = userEvent.setup();
+    routeFetch();
+
+    render(<App />);
+    await screen.findByRole('listitem');
+
+    const toggle = screen.getByRole('button', { name: '篩選' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await user.selectOptions(within(filterBar()).getByLabelText('分類'), 'cat-1');
+    expect(within(toggle).getByText('1')).toBeInTheDocument();
+
+    await user.click(within(filterBar()).getByRole('button', { name: '清除' }));
+    expect(within(toggle).queryByText('1')).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('asks the backend to filter by type', async () => {
     const user = userEvent.setup();
     routeFetch();
@@ -89,7 +118,7 @@ describe('Filtering and paging the transaction list', () => {
     render(<App />);
     await screen.findByRole('listitem');
 
-    await user.selectOptions(within(filterBar()).getByLabelText('型別'), 'INCOME');
+    await user.selectOptions(within(await openFilters(user)).getByLabelText('型別'), 'INCOME');
 
     await waitFor(() => {
       expect(lastQuery().get('type')).toBe('INCOME');
@@ -105,7 +134,7 @@ describe('Filtering and paging the transaction list', () => {
     render(<App />);
     await screen.findByRole('listitem');
 
-    await user.type(within(filterBar()).getByLabelText('迄日'), '2026-08-25');
+    await user.type(within(await openFilters(user)).getByLabelText('迄日'), '2026-08-25');
 
     await waitFor(() => {
       const to = lastQuery().get('to');
@@ -122,7 +151,7 @@ describe('Filtering and paging the transaction list', () => {
     render(<App />);
     await screen.findByRole('listitem');
 
-    await user.selectOptions(within(filterBar()).getByLabelText('型別'), 'TRANSFER');
+    await user.selectOptions(within(await openFilters(user)).getByLabelText('型別'), 'TRANSFER');
 
     // 轉帳沒有分類。這裡用「停用」是對的：切回支出就恢復。
     expect(within(filterBar()).getByLabelText('分類')).toBeDisabled();
@@ -157,7 +186,7 @@ describe('Filtering and paging the transaction list', () => {
       expect(lastQuery().get('page')).toBe('2');
     });
 
-    await user.selectOptions(within(filterBar()).getByLabelText('型別'), 'EXPENSE');
+    await user.selectOptions(within(await openFilters(user)).getByLabelText('型別'), 'EXPENSE');
 
     await waitFor(() => {
       expect(lastQuery().get('page')).toBe('1');
@@ -171,7 +200,7 @@ describe('Filtering and paging the transaction list', () => {
     render(<App />);
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
 
-    await user.selectOptions(within(filterBar()).getByLabelText('型別'), 'INCOME');
+    await user.selectOptions(within(await openFilters(user)).getByLabelText('型別'), 'INCOME');
 
     expect(await screen.findByText('沒有符合條件的交易。')).toBeInTheDocument();
   });

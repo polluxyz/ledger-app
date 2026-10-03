@@ -194,6 +194,8 @@ model Category {
   ledgerId  String
   name      String
   type      TransactionType
+  /// 圖示代號（3d）；null 代表使用通用圖示，合法代號由 shared 的 CATEGORY_ICONS 定義。
+  icon      String?
   /// 顯示順序。預設分類依 `DEFAULT_CATEGORIES` 的定義順序填 0..n，讓「餐飲」
   /// 這類常用分類排在前面。
   ///

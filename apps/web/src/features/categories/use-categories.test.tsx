@@ -7,7 +7,7 @@ import {
   useCategories,
   useCreateCategory,
   useDeleteCategory,
-  useRenameCategory,
+  useUpdateCategory,
 } from './use-categories';
 
 /**
@@ -28,6 +28,7 @@ describe('Category mutations', () => {
     id: 'cat-1',
     name: '餐飲',
     type: 'EXPENSE',
+    icon: null,
     createdAt: '2026-08-01T00:00:00.000Z',
   };
 
@@ -145,13 +146,13 @@ describe('Category mutations', () => {
     await expectBothListsRefetched(before);
   });
 
-  it('refetches both category lists after a category is renamed', async () => {
+  it('refetches both category lists after a category is updated', async () => {
     routeFetch();
     const { wrapper, before } = await mountCategoryLists();
 
-    const rename = renderHook(() => useRenameCategory(LEDGER_ID), { wrapper });
+    const update = renderHook(() => useUpdateCategory(LEDGER_ID), { wrapper });
     await act(async () => {
-      await rename.result.current.mutateAsync({ id: category.id, name: '伙食' });
+      await update.result.current.mutateAsync({ id: category.id, name: '伙食', icon: 'food' });
     });
 
     await expectBothListsRefetched(before);

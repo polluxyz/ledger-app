@@ -1,3 +1,4 @@
+import type { CategoryIcon } from '../constants/category-icons';
 import type { CategoryType } from './transaction';
 
 /** API 回傳的分類形狀。 */
@@ -13,6 +14,11 @@ export interface Category {
    * 前端自己再排一次等於把排序規則複製到第二個地方，兩邊遲早分岔。
    */
   sortOrder: number;
+  /**
+   * 圖示代號（3d），合法值見 `CATEGORY_ICONS`。`null` 顯示通用圖示。
+   * 前端遇到清單外的值（例如舊版前端讀到新代號）也退回通用圖示。
+   */
+  icon: CategoryIcon | null;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }
@@ -21,13 +27,16 @@ export interface Category {
 export interface CreateCategoryRequest {
   name: string;
   type: CategoryType;
+  /** 省略或 `null`＝通用圖示；不在 `CATEGORY_ICONS` 裡回 400。 */
+  icon?: CategoryIcon | null;
 }
 
 /**
  * PATCH /ledgers/{ledgerId}/categories/{categoryId} 的請求 body。
- * 只有名稱可改；變更型別會破壞既有交易的型別一致性，因此要「換型別」等同於
- * 刪除後重建。
+ * 可以改名稱與圖示；變更型別會破壞既有交易的型別一致性，因此要「換型別」等同於
+ * 刪除後重建。只有送出的欄位會變；`icon: null` 清除圖示。
  */
 export interface UpdateCategoryRequest {
-  name: string;
+  name?: string;
+  icon?: CategoryIcon | null;
 }

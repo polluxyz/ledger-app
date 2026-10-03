@@ -27,6 +27,7 @@ describe('CategoriesService', () => {
     id: 'cat-1',
     ledgerId,
     name: '餐飲',
+    icon: null,
     type: 'EXPENSE' as const,
     sortOrder: 0,
     createdAt: new Date('2026-08-07T00:00:00.000Z'),
@@ -61,6 +62,7 @@ describe('CategoriesService', () => {
     await expect(service.create(ledgerId, '餐飲', 'EXPENSE')).resolves.toEqual({
       id: 'cat-1',
       name: '餐飲',
+      icon: null,
       type: 'EXPENSE',
       sortOrder: 0,
       createdAt: row.createdAt.toISOString(),
@@ -82,7 +84,7 @@ describe('CategoriesService', () => {
       ledgerId: 'other-ledger',
     });
 
-    await expect(service.rename(ledgerId, 'cat-1', '飲食')).rejects.toMatchObject({
+    await expect(service.update(ledgerId, 'cat-1', { name: '飲食' })).rejects.toMatchObject({
       constructor: AppException,
       errorCode: 'NOT_FOUND',
     });
@@ -152,7 +154,7 @@ describe('CategoriesService', () => {
       select: { sortOrder: true },
     });
     expect(prisma.category.create).toHaveBeenCalledWith({
-      data: { ledgerId, name: '寵物', type: 'EXPENSE', sortOrder: 8 },
+      data: { ledgerId, name: '寵物', type: 'EXPENSE', sortOrder: 8, icon: null },
     });
   });
 
@@ -163,7 +165,28 @@ describe('CategoriesService', () => {
     await service.create(ledgerId, '薪資', 'INCOME');
 
     expect(prisma.category.create).toHaveBeenCalledWith({
-      data: { ledgerId, name: '薪資', type: 'INCOME', sortOrder: 0 },
+      data: { ledgerId, name: '薪資', type: 'INCOME', sortOrder: 0, icon: null },
     });
+  });
+
+  it('updates only supplied fields and allows clearing an icon', async () => {
+    prisma.category.findUnique.mockResolvedValue(row);
+    prisma.category.update.mockResolvedValue({ ...row, icon: null });
+
+    await expect(service.update(ledgerId, 'cat-1', { icon: null })).resolves.toMatchObject({
+      icon: null,
+    });
+    expect(prisma.category.update).toHaveBeenCalledWith({
+      where: { id: 'cat-1' },
+      data: { icon: null },
+    });
+  });
+
+  it('rejects an empty update', async () => {
+    await expect(service.update(ledgerId, 'cat-1', {})).rejects.toMatchObject({
+      constructor: AppException,
+      errorCode: 'VALIDATION_FAILED',
+    });
+    expect(prisma.category.update).not.toHaveBeenCalled();
   });
 });

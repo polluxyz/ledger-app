@@ -9,6 +9,16 @@ import App from '../../App';
  */
 const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
 
+async function selectFoodCategory(user: ReturnType<typeof userEvent.setup>) {
+  const form = within(newTransactionForm());
+  await user.click(form.getByRole('combobox', { name: '分類' }));
+  await user.click(
+    await within(form.getByRole('listbox', { name: '分類' })).findByRole('option', {
+      name: '餐飲',
+    }),
+  );
+}
+
 /**
  * Slice 0 的核心流程測試（SC-3、SC-4）：已登入者在交易頁看到帳本交易，新增一筆後
  * 不必重整就出現在列表。以真實的 App 出發，只把 fetch 換成 mock。
@@ -24,7 +34,7 @@ describe('Transactions on the transactions page', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   const lunch = {
     id: 'txn-1',
@@ -101,7 +111,8 @@ describe('Transactions on the transactions page', () => {
     expect(within(item).getByText('餐飲')).toBeInTheDocument();
     // 金額由 shared 以分格式化，整數元的畫面文字維持不變。
     expect(within(item).getByText('-$120')).toBeInTheDocument();
-    expect(within(item).getByText(/現金/)).toBeInTheDocument();
+    expect(within(item).queryByText(/現金/)).not.toBeInTheDocument();
+    expect(within(item).queryByText('午餐')).not.toBeInTheDocument();
   });
 
   it("shows no account for another member's transaction", async () => {
@@ -131,7 +142,7 @@ describe('Transactions on the transactions page', () => {
     const item = await screen.findByRole('listitem');
     expect(within(item).getByText('轉帳')).toBeInTheDocument();
     expect(within(item).getByText('$120')).toBeInTheDocument();
-    expect(within(item).getByText(/國泰世華/)).toBeInTheDocument();
+    expect(within(item).queryByText(/國泰世華/)).not.toBeInTheDocument();
   });
 
   it('colors a transfer neutrally instead of as income', async () => {
@@ -194,7 +205,7 @@ describe('Transactions on the transactions page', () => {
     // 等分類載入完成，下拉才有選項。
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('金額'), '120');
-    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     // 列表自動重取，新的一筆出現。
@@ -231,7 +242,7 @@ describe('Transactions on the transactions page', () => {
 
     expect(await screen.findByText(/還沒有任何交易/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('金額'), '1');
-    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('amount must be a positive number');
@@ -256,7 +267,7 @@ describe('Transactions on the transactions page', () => {
     expect(screen.queryByText(/這本帳本不影響你的帳戶餘額/)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText('金額'), '123');
-    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await waitFor(() => {

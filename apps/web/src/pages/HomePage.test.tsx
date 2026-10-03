@@ -28,7 +28,7 @@ describe('Home dashboard', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   let incomingLinkInvites: unknown[] = [];
   let incomingProposals: unknown[] = [];
@@ -195,7 +195,8 @@ describe('Home dashboard', () => {
 
     const card = await recentCard();
     expect(card.getAllByRole('listitem')).toHaveLength(5);
-    expect(card.getByText('第 1 筆')).toBeInTheDocument();
+    expect(card.getAllByText('餐飲')).toHaveLength(5);
+    expect(card.queryByText('第 1 筆')).not.toBeInTheDocument();
     expect(card.queryByText('第 6 筆')).not.toBeInTheDocument();
 
     // 「最近」是後端的事，所以請求要把 5 帶過去。
@@ -226,10 +227,10 @@ describe('Home dashboard', () => {
     render(<App />);
 
     const card = await recentCard();
-    expect(card.queryByRole('button', { name: /^編輯/ })).not.toBeInTheDocument();
+    expect(card.getAllByRole('button', { name: /^編輯/ })).toHaveLength(5);
     expect(card.queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
 
-    await user.click(card.getByRole('button', { name: /第 1 筆/ }));
+    await user.click(card.getAllByRole('button', { name: /^編輯/ })[0]!);
 
     const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(panel).getByLabelText('金額')).toHaveValue(100);
@@ -251,7 +252,7 @@ describe('Home dashboard', () => {
     render(<App />);
 
     const card = await recentCard();
-    const row = card.getByRole('button', { name: /第 2 筆/ });
+    const row = card.getAllByRole('button', { name: /餐飲/ })[1]!;
     row.focus();
     await user.keyboard('{Enter}');
 
@@ -329,11 +330,12 @@ describe('Home dashboard', () => {
     const card = await recentCard();
     // 借出的錢從帳戶出去，記負號；名稱是「借出」，不是沒有分類就寫的「轉帳」。
     expect(card.getByText('-$1,000')).toBeInTheDocument();
-    expect(card.getAllByText('借出')).toHaveLength(2);
+    expect(card.getByText('借出 · 小明')).toBeInTheDocument();
+    expect(card.getByText('借出', { exact: true })).toBeInTheDocument();
     expect(card.queryByText('轉帳')).not.toBeInTheDocument();
-    expect(card.getByRole('button', { name: /借小明/ })).toBeInTheDocument();
+    expect(card.getByRole('button', { name: /借出/ })).toBeInTheDocument();
 
-    await user.click(card.getByText('借小明'));
+    await user.click(card.getByText('借出 · 小明'));
     const debtEditor = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(debtEditor).getByText('借出 · 小明')).toBeInTheDocument();
     expect(within(debtEditor).getByLabelText('金額')).toHaveValue(1000);
@@ -342,26 +344,21 @@ describe('Home dashboard', () => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
 
-    expect(card.queryByRole('button', { name: /他人借出/ })).not.toBeInTheDocument();
-    await user.click(card.getByText('他人借出'));
+    expect(card.queryByText('他人借出')).not.toBeInTheDocument();
+    await user.click(card.getByText('借出', { exact: true }));
     // 別人的借還列不可點：右側欄維持收起（收起的面板裡仍留著上一筆，見 W57）。
     expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
 
-    expect(card.getByRole('button', { name: /代付晚餐/ })).toBeInTheDocument();
-    await user.click(card.getByText('代付晚餐'));
+    expect(card.getAllByText('餐飲')).toHaveLength(2);
+    await user.click(card.getAllByRole('button', { name: /編輯.*餐飲/ })[1]!);
     expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '關閉' }));
 
-    await user.click(card.getByRole('button', { name: /午餐/ }));
+    await user.click(card.getAllByRole('button', { name: /編輯.*餐飲/ })[0]!);
     expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
   });
 
-  it('reads each row the same way the transactions page does', async () => {
-    /*
-     * e2e 有好幾個情境是拿「-$120 那一列」找到交易，再讀它的備註與帳戶。那些情境
-     * 在 dashboard 上完成（這裡同時有最近交易、新增表單與帳戶餘額），所以一列的
-     * 文字必須與交易頁的列一致：分類、備註、帳戶、同一套金額格式。
-     */
+  it('uses the same compact transaction rows as the transactions page', async () => {
     signIn();
     fetchMock.mockImplementation((url: string) => {
       const json = (body: unknown) =>
@@ -434,27 +431,28 @@ describe('Home dashboard', () => {
     // 整頁的 `<li>` 只有這五列以內的交易，e2e 才數得準。
     expect(screen.getAllByRole('listitem')).toHaveLength(rows.length);
 
-    // 支出帶負號、收入帶正號、轉帳不帶號（錢只是換了帳戶）。
+    // 首頁與交易頁共用名稱、分帳膠囊與金額列，備註和帳戶不出現在列上。
     expect(within(rows[0] as HTMLElement).getByText('-$100')).toBeInTheDocument();
     expect(within(rows[0] as HTMLElement).getByText('餐飲')).toBeInTheDocument();
-    expect(within(rows[0] as HTMLElement).getByText('第 1 筆')).toBeInTheDocument();
-    expect(rows[0]).toHaveTextContent('現金');
+    expect(within(rows[0] as HTMLElement).queryByText('第 1 筆')).not.toBeInTheDocument();
+    expect(rows[0]).not.toHaveTextContent('現金');
 
     expect(within(rows[1] as HTMLElement).getByText('+$5,000')).toBeInTheDocument();
 
     const transferRow = rows[2] as HTMLElement;
     expect(within(transferRow).getByText('$500')).toBeInTheDocument();
     expect(within(transferRow).getByText('轉帳')).toBeInTheDocument();
-    expect(transferRow).toHaveTextContent('現金 → 國泰世華');
+    expect(transferRow).not.toHaveTextContent('現金');
+    expect(transferRow).not.toHaveTextContent('國泰世華');
 
-    // 首頁最近交易同步顯示交易名稱、分帳標記、付款人與分帳金額。
+    // 分帳列只加膠囊與「›」展開入口，不在名稱旁放付款人或備註。
     const otherPayerRow = rows[3] as HTMLElement;
     expect(within(otherPayerRow).getByText('晚餐')).toBeInTheDocument();
     expect(within(otherPayerRow).getByText('分帳')).toBeInTheDocument();
-    expect(within(otherPayerRow).getByText('小明先付')).toBeInTheDocument();
+    expect(within(otherPayerRow).getByRole('button', { name: '展開分帳明細' })).toBeInTheDocument();
     expect(within(otherPayerRow).getByText('-$750')).toBeInTheDocument();
     expect(otherPayerRow).not.toHaveTextContent('現金');
-    expect(otherPayerRow).toHaveTextContent('朋友聚餐');
+    expect(otherPayerRow).not.toHaveTextContent('朋友聚餐');
 
     const mePayerRow = rows[4] as HTMLElement;
     expect(within(mePayerRow).getByText('露營')).toBeInTheDocument();

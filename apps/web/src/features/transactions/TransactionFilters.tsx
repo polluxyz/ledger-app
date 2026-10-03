@@ -1,8 +1,10 @@
+import { useId, useState } from 'react';
 import type { TransactionType } from '@ledger/shared';
+import { Filter } from 'lucide-react';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { useCategories } from '../categories/use-categories';
-import { EMPTY_FILTERS, hasAnyFilter, type TransactionFilters } from './transaction-query';
+import { EMPTY_FILTERS, type TransactionFilters } from './transaction-query';
 import styles from './TransactionFilters.module.css';
 
 interface TransactionFiltersProps {
@@ -21,6 +23,75 @@ interface TransactionFiltersProps {
  * 等真的有這個需求再改。
  */
 export function TransactionFilterBar({ ledgerId, filters, onChange }: TransactionFiltersProps) {
+  const filterFieldsId = useId();
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className={styles.bar}>
+      <div className={styles.toolbar}>
+        <TransactionFilterToggle
+          filters={filters}
+          expanded={isExpanded}
+          controlsId={filterFieldsId}
+          onToggle={() => setIsExpanded((current) => !current)}
+        />
+      </div>
+      {isExpanded && (
+        <TransactionFilterPanel
+          id={filterFieldsId}
+          ledgerId={ledgerId}
+          filters={filters}
+          onChange={onChange}
+        />
+      )}
+    </div>
+  );
+}
+
+interface TransactionFilterToggleProps {
+  filters: TransactionFilters;
+  expanded: boolean;
+  controlsId: string;
+  onToggle: () => void;
+}
+
+/**
+ * 漏斗按鈕（3d T6）。與欄位面板拆開，讓交易頁把它放在「明細／借還」那一列的右邊，
+ * 不必為了一顆按鈕在列表卡片上多佔一整列。有條件時右上角顯示條件數量。
+ */
+export function TransactionFilterToggle({
+  filters,
+  expanded,
+  controlsId,
+  onToggle,
+}: TransactionFilterToggleProps) {
+  const filterCount = countFilters(filters);
+  return (
+    <button
+      type="button"
+      className={styles.toggle}
+      aria-label="篩選"
+      aria-expanded={expanded}
+      aria-controls={controlsId}
+      onClick={onToggle}
+    >
+      <Filter aria-hidden="true" size={18} />
+      {filterCount > 0 && <span className={styles.count}>{filterCount}</span>}
+    </button>
+  );
+}
+
+interface TransactionFilterPanelProps extends TransactionFiltersProps {
+  id: string;
+}
+
+/** 展開後的四個欄位與「清除」。 */
+export function TransactionFilterPanel({
+  id,
+  ledgerId,
+  filters,
+  onChange,
+}: TransactionFilterPanelProps) {
   // 不帶型別＝拿全部分類。使用者可能還沒選型別，就想直接挑一個分類。
   const categories = useCategories(ledgerId);
 
@@ -29,9 +100,10 @@ export function TransactionFilterBar({ ledgerId, filters, onChange }: Transactio
   }
 
   const isTransfer = filters.type === 'TRANSFER';
+  const filterCount = countFilters(filters);
 
   return (
-    <section className={styles.bar} aria-label="篩選交易">
+    <section id={id} className={styles.panel} aria-label="篩選交易">
       {/* 欄位另外包一層，才抵銷得掉它們自帶的下邊距（見 module.css 的說明）。 */}
       <div className={styles.fields}>
         <Select
@@ -77,12 +149,16 @@ export function TransactionFilterBar({ ledgerId, filters, onChange }: Transactio
           onChange={(event) => update({ to: event.target.value })}
         />
 
-        {hasAnyFilter(filters) && (
+        {filterCount > 0 && (
           <button type="button" className={styles.clear} onClick={() => onChange(EMPTY_FILTERS)}>
-            清除篩選
+            清除
           </button>
         )}
       </div>
     </section>
   );
+}
+
+function countFilters(filters: TransactionFilters): number {
+  return Object.values(filters).filter((value) => value !== '').length;
 }

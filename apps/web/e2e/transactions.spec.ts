@@ -11,11 +11,13 @@ import {
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   newTransactionForm,
+  openTransactionFilters,
   openDashboard,
   openNewTransaction,
   openTransactions,
+  expectRightPanelClosedWithoutAddForm,
+  selectCategory,
   switchLedger,
-  transactionFilters,
   transactionRow,
 } from './ui';
 
@@ -102,16 +104,19 @@ test('情境 8：刪除後那一筆從列表消失', async ({ signedInPage: page
   await page.reload();
   await expect(page.getByLabel('現金餘額')).toHaveText('-$120');
 
-  // 刪除鈕只在交易頁的表格上。
+  // 刪除收在一般交易的編輯面板底部。
   await openTransactions(page);
-  await transactionRow(page, '-$120').getByRole('button', { name: /^刪除/ }).click();
+  await transactionRow(page, '-$120').click();
+  const editor = page.getByRole('dialog', { name: '編輯交易' });
+  await editor.getByRole('button', { name: '刪除', exact: true }).click();
 
   const dialog = page.getByRole('dialog', { name: '刪除交易' });
   await expect(dialog.getByText('刪除後無法復原')).toBeVisible();
-  await dialog.getByRole('button', { name: '刪除' }).click();
+  await dialog.getByRole('button', { name: '刪除', exact: true }).click();
 
   // 後端是軟刪除，但對使用者而言它就是不在了——列表與餘額都要反映這件事。
   await expect(page.getByText('還沒有任何交易')).toBeVisible();
+  await expectRightPanelClosedWithoutAddForm(page);
   // 餘額只在首頁。點連結回去（不重新載入），快取仍是刪除後的那一份。
   await openDashboard(page);
   await expect(page.getByLabel('現金餘額')).toHaveText('$0');
@@ -137,7 +142,8 @@ test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage
   // 錢只是換了帳戶：不加正負號，也不屬於任何分類。
   const entry = transactionRow(page, '$500');
   await expect(entry).toContainText('轉帳');
-  await expect(entry).toContainText('國泰世華 → 現金');
+  await expect(entry).not.toContainText('國泰世華');
+  await expect(entry).not.toContainText('現金');
 
   await expect(page.getByLabel('國泰世華餘額')).toHaveText('$4,500');
   await expect(page.getByLabel('現金餘額')).toHaveText('$500');
@@ -152,7 +158,7 @@ test('3c-0：列表將小數金額顯示到分、整數金額不補小數', asyn
   await openNewTransaction(page);
 
   const form = newTransactionForm(page);
-  await form.getByLabel('分類').selectOption(expense.id);
+  await selectCategory(form, expense.name);
   await form.getByLabel('金額').fill('333.33');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
@@ -188,13 +194,14 @@ test('情境 10：篩選只留下符合條件的交易', async ({ signedInPage: 
   await openTransactions(page);
   await expect(page.getByRole('listitem')).toHaveCount(2);
 
-  await transactionFilters(page).getByLabel('型別').selectOption('INCOME');
+  const filters = await openTransactionFilters(page);
+  await filters.getByLabel('型別').selectOption('INCOME');
 
   // 篩選由後端執行，前端不自行過濾當頁——這裡驗的是查詢真的送出去了。
   await expect(page.getByRole('listitem')).toHaveCount(1);
   await expect(transactionRow(page, '+$5,000')).toBeVisible();
 
-  await transactionFilters(page).getByRole('button', { name: '清除篩選' }).click();
+  await filters.getByRole('button', { name: '清除' }).click();
   await expect(page.getByRole('listitem')).toHaveCount(2);
 });
 
@@ -232,7 +239,8 @@ test('情境 11：翻到第 2 頁，改篩選就回到第 1 頁', async ({
   await expect(transactionRow(page, '-$101')).toBeVisible();
 
   // 改條件卻停在第 2 頁的話，使用者會看到一片空白而不知道為什麼。
-  await transactionFilters(page).getByLabel('型別').selectOption('EXPENSE');
+  const filters = await openTransactionFilters(page);
+  await filters.getByLabel('型別').selectOption('EXPENSE');
 
   await expect(pager.getByText('第 1 / 2 頁')).toBeVisible();
   await expect(transactionRow(page, '-$121')).toBeVisible();

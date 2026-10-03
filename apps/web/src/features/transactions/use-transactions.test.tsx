@@ -31,7 +31,7 @@ describe('Writing a transaction refreshes account balances', () => {
     archivedAt: null,
     role: 'OWNER',
   };
-  const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
+  const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 500000, balance: 500000 };
   const lunch = {
     id: 'txn-1',
@@ -124,6 +124,16 @@ describe('Writing a transaction refreshes account balances', () => {
     expect(await screen.findByText(balance)).toBeInTheDocument();
   }
 
+  async function selectFoodCategory(user: ReturnType<typeof userEvent.setup>) {
+    const form = within(newTransactionForm());
+    await user.click(form.getByRole('combobox', { name: '分類' }));
+    await user.click(
+      await within(form.getByRole('listbox', { name: '分類' })).findByRole('option', {
+        name: '餐飲',
+      }),
+    );
+  }
+
   it('asks for the balances again after a transaction is created', async () => {
     const user = userEvent.setup();
     routeFetch();
@@ -132,7 +142,7 @@ describe('Writing a transaction refreshes account balances', () => {
     const before = await waitForInitialBalance();
 
     await user.type(screen.getByLabelText('金額'), '120');
-    await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');
+    await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await expectRefetched(before, '$4,880');
@@ -147,7 +157,7 @@ describe('Writing a transaction refreshes account balances', () => {
     const before = await waitForInitialBalance();
 
     // dashboard 的最近交易沒有鉛筆，整列本身就是「編輯這一筆」的按鈕（假設 8）。
-    await user.click(await screen.findByRole('button', { name: /午餐/ }));
+    await user.click(await screen.findByRole('button', { name: /編輯.*餐飲/ }));
     const dialog = await screen.findByRole('dialog');
     await user.clear(within(dialog).getByLabelText('金額'));
     await user.type(within(dialog).getByLabelText('金額'), '200');
@@ -168,8 +178,14 @@ describe('Writing a transaction refreshes account balances', () => {
     await screen.findByLabelText('帳戶');
     const before = accountRequests();
 
-    await user.click(await screen.findByRole('button', { name: /^刪除2026/ }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '刪除' }));
+    await user.click(await screen.findByRole('button', { name: /編輯.*餐飲/ }));
+    const editor = await screen.findByRole('dialog', { name: '編輯交易' });
+    await user.click(within(editor).getByRole('button', { name: '刪除' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: '刪除交易' })).getByRole('button', {
+        name: '刪除',
+      }),
+    );
 
     await waitFor(() => {
       expect(accountRequests()).toBeGreaterThan(before);

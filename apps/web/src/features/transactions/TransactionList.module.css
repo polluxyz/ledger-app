@@ -1,67 +1,49 @@
-/*
- * 交易列表：日期分組標題 ＋ 單行高度的資料列（phase-2h D16、D17）。
- *
- * 這裡**不畫外框**。列表放在首頁的卡片裡，卡片已經有邊框與圓角；再畫一層
- * 會變成兩張卡片疊在一起。
- */
-
+/* 交易列共用在交易頁與總覽，固定圖示、金額與操作欄避免長名稱推動版面。 */
 .list {
-  /* 分組標題與列都是滿寬的橫條，容器本身只負責堆疊。 */
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
-/*
- * 欄寬只定義一次，標題列與資料列共用，兩者才對得齊。
- * 四欄：分類／備註、帳戶、金額、操作。
- */
-.header,
-.row {
-  display: grid;
-  /* 最後一欄固定一顆圖示鈕寬：每一列是各自的 grid，寫 auto 的話沒有按鈕的借還列
-     會少一截，金額就對不齊（開發者 2026-09-24 回報）。 */
-  grid-template-columns: minmax(0, 1fr) 9rem 7rem 1.75rem;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 0 var(--space-md);
+.dateGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.header {
-  height: 2rem;
-  background-color: var(--color-fill);
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+/* 日期組之間留一個 24px 間距，同日的交易列則緊接排列。 */
+.dateGroup + .dateGroup {
+  margin-top: var(--space-lg);
 }
 
-.amountHead {
-  text-align: right;
-}
-
-/*
- * 日期標題。一天一條，不是 <li>——列表的 <li> 數量必須等於交易筆數。
- * 內距刻意比列小（spec §4.8）：一個畫面常有 4～5 條日期標題，每條省幾 px，
- * 1440×900 的首屏才放得下 10 筆（SC-24.3）。
- */
 .groupHeading {
   margin: 0;
   padding: var(--space-xs) var(--space-md);
-  line-height: var(--leading-tight);
   border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-xs);
-  font-weight: 600;
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  text-align: left;
 }
 
 .rows {
+  width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* 一列固定 44px 單行：掃視一頁 20 筆時，等高的列比較好對照金額。 */
+/* 每列固定 44px；只有分帳展開時才額外長出明細列。 */
 .row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) 7rem 1.75rem;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
   height: 2.75rem;
+  padding: 0 var(--space-md);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -78,48 +60,37 @@
   background-color: var(--color-fill);
 }
 
-/*
- * 選取中的列（正在編輯的那一筆）。左側的 3px 標示用 inset box-shadow 而不是
- * border-left——border 會改變這一列的內容寬度，選取時整列文字會往右跳 3px。
- */
+/* 選取時用內陰影標記，不改變固定欄寬或文字起點。 */
 .selected,
 .selected:hover {
   background-color: var(--color-primary-soft);
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
-/* 分類與備註同一欄，備註被擠掉時截斷，分類永遠看得見。 */
+.categoryIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  justify-self: center;
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
 .main {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-}
-
-.text {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.title,
-.subtitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  height: 100%;
 }
 
 .title {
+  /* 分帳膠囊緊跟在名稱後面（3d T1），名稱太長時才截斷。 */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
-}
-
-.subtitle {
-  display: flex;
-  gap: var(--space-sm);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .splitBadge {
@@ -140,35 +111,17 @@
   padding: 0 0 var(--space-sm);
 }
 
-.category {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex: 0 1 auto;
+.amount {
   min-width: 0;
   overflow: hidden;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.note,
-.account {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.amount {
-  text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 三種型別各自一個顏色。轉帳既不是支出也不是收入，用中性色。 */
+/* 借還沿用中性色；收入與支出才分別表示金額方向。 */
 .expense {
   color: var(--color-expense);
 }
@@ -181,11 +134,7 @@
   color: var(--color-transfer);
 }
 
-/*
- * 操作鈕一直顯示，不是滑過才出現——只在 hover 出現的按鈕，觸控裝置永遠碰不到。
- */
-/* 第一格在可點的列上是按鈕（見 TransactionList.tsx）。把瀏覽器預設的按鈕外觀全部拿掉，
-   看起來與不可點的列一樣，只在鍵盤聚焦時顯示焦點框。 */
+/* 名稱格是鍵盤進入編輯的入口，外觀維持一般列文字。 */
 .mainButton {
   width: 100%;
   height: 100%;
@@ -206,7 +155,9 @@
 
 .actions {
   display: flex;
-  gap: var(--space-xs);
+  justify-content: center;
+  width: 1.75rem;
+  min-width: 1.75rem;
 }
 
 .action {
@@ -223,10 +174,6 @@
   cursor: pointer;
 }
 
-/*
- * 滑過按鈕時浮起來一點（surface 底＋細框）。不能用 fill 當底色——整列滑過時本身就是
- * fill，按鈕會融進列裡，看不出游標停在哪一顆上。
- */
 .action:hover {
   background-color: var(--color-surface);
   box-shadow: inset 0 0 0 1px var(--color-border);
@@ -242,11 +189,6 @@
   font-size: var(--text-sm);
 }
 
-.remove:hover {
-  color: var(--color-danger);
-}
-
-/* 載入中、錯誤、空清單共用的置中訊息。外框由卡片負責，這裡不畫虛線框。 */
 .empty,
 .status {
   margin: 0;

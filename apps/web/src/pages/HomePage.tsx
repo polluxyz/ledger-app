@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { isDebtTransactionType, type LedgerSummary, type Transaction } from '@ledger/shared';
+import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -14,9 +14,9 @@ import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
+import { TransactionList } from '../features/transactions/TransactionList';
 import { useTransactions } from '../features/transactions/use-transactions';
 import { PendingCard } from '../features/linking/PendingCard';
-import { formatDate, formatTransactionAmount, TRANSACTION_TYPE_LABELS } from '../lib/format';
 import styles from './HomePage.module.css';
 
 /** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
@@ -195,18 +195,8 @@ interface RecentTransactionsProps {
 /**
  * 「最近交易」卡（SC-34.1、假設 8）。
  *
- * 與交易頁的 `TransactionList` 刻意不共用元件：這裡是一張**摘要**卡——不分組、
- * 不分頁、沒有鉛筆與垃圾桶（刪除要到交易頁），每一列本身就是「編輯這一筆」。
- * 把兩種需求塞進同一個元件，只會得到一串互相牴觸的開關。
- *
- * 每一筆用一個 `<li>` 包一顆 `<button>`：滑鼠與鍵盤都能操作，而且不必自己補
- * `tabIndex` 與 Enter／Space 的處理。`<li>` 的數量因此剛好等於交易筆數。
- *
- * **一列的文字與交易頁的列相同**：分類（轉帳顯示「轉帳」）、備註、帳戶
- * （轉帳是「現金 → 國泰世華」）、金額。e2e 有好幾個情境是拿「-$120 那一列」
- * 去找交易再讀它的備註，兩頁的列讀起來不一樣的話，同一段選取器只有一頁對得到。
- * 正負號與顏色的規則也照抄 `TransactionList`（那兩張對照表是它的模組私有變數，
- * 拿不到，只能各留一份——改動時兩邊要一起改）。
+ * 最近交易沿用交易頁的單列元件，版面與名稱規則只有一份；這裡只保留摘要卡的
+ * 載入、錯誤與空狀態，並由呼叫端提供五筆資料。
  */
 function RecentTransactions({
   transactions,
@@ -238,17 +228,6 @@ function RecentTransactions({
   );
 }
 
-/** 金額的語意色，同樣每種型別各自對一個 class；借還的 4 種沿用轉帳的中性色。 */
-const AMOUNT_COLOR: Record<Transaction['type'], string> = {
-  EXPENSE: styles.expense ?? '',
-  INCOME: styles.income ?? '',
-  TRANSFER: styles.transfer ?? '',
-  LEND: styles.transfer ?? '',
-  BORROW: styles.transfer ?? '',
-  COLLECT: styles.transfer ?? '',
-  REPAY: styles.transfer ?? '',
-};
-
 /** 載入中 / 失敗 / 沒有交易 / 有資料，四種呈現。 */
 function RecentBody({
   transactions,
@@ -270,81 +249,15 @@ function RecentBody({
   }
 
   return (
-    <ul className={styles.recent}>
-      {/*
-        排序與「最近」的定義都在後端（請求帶的是 `limit=5`）。這裡再截一次只是
-        守住標題的承諾：卡片寫著「最近交易」而後端多給了幾筆時，這張摘要卡不該
-        默默長高、把下面的內容推走。不做任何排序、篩選或加總。
-      */}
-      {transactions.slice(0, RECENT_LIMIT).map((transaction) => {
-        const rowClass = `${styles.recentRow} ${transaction.id === selectedId ? styles.selected : ''}`;
-        const split = transaction.split;
-        const rowAmount = split ? (split.payer ? split.myShare : split.total) : transaction.amount;
-        const fallbackTitle =
-          transaction.category?.name ?? TRANSACTION_TYPE_LABELS[transaction.type];
-        /*
-          兩行：上行名稱或分類、分帳狀態與次要文字，下行日期與帳戶。dashboard 的卡片
-          只有交易頁表格一半寬，保留一行次要資訊才不會把金額擠掉。
-        */
-        const content = (
-          <>
-            <span className={styles.recentText}>
-              <span className={styles.recentMain}>
-                {/* 分類為 null＝轉帳或借還交易，這兩種都沒有分類，改寫型別的中文名。 */}
-                <span className={styles.recentCategory}>
-                  {transaction.title ||
-                    (transaction.category ? (
-                      transaction.category.name
-                    ) : (
-                      <>
-                        <Icon name="transfer" />
-                        {TRANSACTION_TYPE_LABELS[transaction.type]}
-                      </>
-                    ))}
-                </span>
-                {split && <span className={styles.recentSplitBadge}>分帳</span>}
-                {transaction.title && <span className={styles.recentNote}>{fallbackTitle}</span>}
-                {split?.payer && (
-                  <span className={styles.recentNote}>
-                    {split.payer.name}
-                    {transaction.type === 'INCOME' ? '代收' : '先付'}
-                  </span>
-                )}
-                {transaction.note && <span className={styles.recentNote}>{transaction.note}</span>}
-              </span>
-              {/* 帳戶為 null＝別人的帳戶（已遮蔽），或這本帳本不與餘額連動。 */}
-              <span className={styles.recentMeta}>
-                {formatDate(transaction.date)}
-                {transaction.account && `・${transaction.account.name}`}
-                {transaction.toAccount && ` → ${transaction.toAccount.name}`}
-              </span>
-            </span>
-            <span className={`${styles.recentAmount} ${AMOUNT_COLOR[transaction.type]}`}>
-              {formatTransactionAmount(transaction.type, rowAmount)}
-            </span>
-          </>
-        );
-
-        /*
-          自己有關聯紀錄的交易可直接編輯；別人的借還交易沒有往來 entryId，維持純展示。
-        */
-        return (
-          <li key={transaction.id}>
-            {transaction.debt ? (
-              <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>
-                {content}
-              </button>
-            ) : isDebtTransactionType(transaction.type) ? (
-              <div className={rowClass}>{content}</div>
-            ) : (
-              <button type="button" className={rowClass} onClick={() => onSelect(transaction)}>
-                {content}
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <TransactionList
+      transactions={transactions.slice(0, RECENT_LIMIT)}
+      isLoading={false}
+      error={null}
+      variant="recent"
+      selectedId={selectedId}
+      onEdit={onSelect}
+      onEditDebtTransaction={onSelect}
+    />
   );
 }
 

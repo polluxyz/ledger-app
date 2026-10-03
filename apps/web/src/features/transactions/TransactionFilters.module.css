@@ -1,19 +1,64 @@
-/*
- * 篩選列。它坐在首頁交易卡片的最上方，所以**不畫自己的外框與底色**——
- * 那會在卡片裡再切出一張卡片。只留一條下邊框跟列表分開。
- */
+/* 漏斗鈕固定靠右，欄位只有展開後才佔用列表上方空間。 */
 .bar {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-xs) var(--space-md);
   border-bottom: 1px solid var(--color-border);
 }
 
-/*
- * 欄位橫向排開，窄畫面時自動換行——每個欄位都保有可讀的最小寬度。
- *
- * 負的下邊距是拿來抵銷欄位自帶的 1rem 下邊距（`TextField.module.css` 的
- * `.field`）。不從這裡去蓋掉那個 class：兩邊的選擇器權重相同，誰贏取決於
- * CSS 的載入順序，那種樣式很難維護。
- */
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toggle {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.toggle:hover,
+.toggle[aria-expanded='true'] {
+  border-color: var(--color-border);
+  background-color: var(--color-fill);
+  color: var(--color-text);
+}
+
+.count {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  display: grid;
+  place-items: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* 面板直接放在列表卡片頂端（3d：漏斗移到檢視切換那一列），自己帶內距與分隔線。 */
+.panel {
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bar .panel {
+  padding: var(--space-sm) 0 0;
+  border-bottom: 0;
+}
+
+/* 欄位窄時換行；負邊距抵銷 TextField 內建的下邊距。 */
 .fields {
   display: flex;
   flex-wrap: wrap;
@@ -22,15 +67,10 @@
   margin-bottom: calc(-1 * var(--space-md));
 }
 
-/* 7.25rem：側欄收合的 1024px 寬時，四個欄位剛好排得下一列（8rem 會把「迄日」擠到第二列）。 */
 .fields > * {
   flex: 1 1 7.25rem;
 }
 
-/*
- * 「清除篩選」不是表單欄位：用文字鈕的樣子，也不跟著欄位一起長寬。
- * 下邊距與欄位相同，才會跟輸入框的底線切齊。
- */
 .clear {
   flex: 0 0 auto;
   margin-bottom: var(--space-md);

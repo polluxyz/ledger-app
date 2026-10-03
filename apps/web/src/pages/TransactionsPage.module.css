@@ -68,3 +68,16 @@
   margin: 0;
   color: var(--color-text-muted);
 }
+
+/* 檢視切換與漏斗同一列（3d T6）：漏斗靠右。viewSwitch 自帶的下邊距移到這一列。 */
+.toolbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.toolbarRow .viewSwitch {
+  margin-bottom: 0;
+}

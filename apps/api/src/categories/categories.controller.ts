@@ -43,17 +43,17 @@ export class CategoriesController {
   @Post()
   @RequireLedgerRole('EDITOR')
   create(@Param('ledgerId') ledgerId: string, @Body() dto: CreateCategoryDto): Promise<Category> {
-    return this.categories.create(ledgerId, dto.name, dto.type);
+    return this.categories.create(ledgerId, dto.name, dto.type, dto.icon);
   }
 
   @Patch(':categoryId')
   @RequireLedgerRole('EDITOR')
-  rename(
+  update(
     @Param('ledgerId') ledgerId: string,
     @Param('categoryId') categoryId: string,
     @Body() dto: UpdateCategoryDto,
   ): Promise<Category> {
-    return this.categories.rename(ledgerId, categoryId, dto.name);
+    return this.categories.update(ledgerId, categoryId, dto);
   }
 
   @Delete(':categoryId')

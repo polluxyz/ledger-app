@@ -1,4 +1,5 @@
 import type { Category } from '@ledger/shared';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
 import styles from './CategoryList.module.css';
@@ -50,6 +51,7 @@ export function CategoryList({
     <ul className={styles.list}>
       {categories.map((category) => (
         <li className={styles.item} key={category.id}>
+          <CategoryIcon className={styles.icon} icon={category.icon} />
           <span className={styles.name}>{category.name}</span>
           {canEdit && (
             <div className={styles.actions}>

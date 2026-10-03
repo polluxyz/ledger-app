@@ -69,11 +69,8 @@ export function useCreateCategory(ledgerId: string | null) {
   });
 }
 
-/**
- * 分類改名。**只有名稱可改**——型別牽動既有交易的型別一致性，要「換型別」
- * 等於刪除後重建（見 `UpdateCategoryRequest` 的說明），所以 body 只送 `{ name }`。
- */
-export function useRenameCategory(ledgerId: string | null) {
+/** 分類可改名稱與圖示；型別維持建立時的值，避免影響既有交易。 */
+export function useUpdateCategory(ledgerId: string | null) {
   const queryClient = useQueryClient();
 
   return useMutation({
