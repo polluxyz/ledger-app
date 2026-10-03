@@ -17,6 +17,8 @@ interface SplitSectionProps {
   onAddCounterparty: (counterparty: Counterparty) => void;
   onAddName: (name: string) => void;
   onRemoveParticipant: (key: string) => void;
+  /** 「我」那一列是勾選框（修訂 2，W92）：取消＝只幫別人付，可以再勾回來。 */
+  onToggleMe: (included: boolean) => void;
   onOpenOptions: () => void;
 }
 
@@ -32,9 +34,12 @@ export function SplitSection({
   onAddCounterparty,
   onAddName,
   onRemoveParticipant,
+  onToggleMe,
   onOpenOptions,
 }: SplitSectionProps) {
   const included = participants.filter((person) => person.included);
+  const me = participants.find((person) => person.isMe);
+  const others = included.filter((person) => !person.isMe);
   const [pickerValue, setPickerValue] = useState('');
 
   function selectCounterparty(counterparty: Counterparty) {
@@ -75,7 +80,29 @@ export function SplitSection({
       {enabled && (
         <>
           <ul className={styles.people}>
-            {included.map((person) => {
+            {/*
+             * 「我」不用「−」移除：移除後沒有地方加回來（選人清單裡沒有「我」，W89）。
+             * 改成勾選框，取消勾選代表只幫別人付，名單裡仍留著這一列。
+             */}
+            {me && (
+              <li className={styles.person} key={me.key}>
+                <label className={styles.name}>
+                  <input
+                    type="checkbox"
+                    checked={me.included}
+                    disabled={pending}
+                    onChange={(event) => onToggleMe(event.target.checked)}
+                  />
+                  {me.name}
+                </label>
+                <span className={styles.share}>
+                  {me.included && previewShares?.get(me.key) !== undefined
+                    ? formatMoney(previewShares.get(me.key)!)
+                    : ''}
+                </span>
+              </li>
+            )}
+            {others.map((person) => {
               const share = previewShares?.get(person.key);
               return (
                 <li className={styles.person} key={person.key}>
