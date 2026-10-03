@@ -180,9 +180,7 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
 
   await pageB.reload();
   await openDashboard(pageB);
-  await pendingRow(pageB, '阿甲 記了一筆：你向他借入 $120')
-    .getByRole('button', { name: '接受' })
-    .click();
+  await pendingRow(pageB, '你欠阿甲 $120').getByRole('button', { name: '接受' }).click();
   await pendingCard(pageB)
     .getByRole('combobox', { name: '借到的錢進哪個帳戶' })
     .selectOption({ label: '現金' });
@@ -322,12 +320,14 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   });
 
   const pageB = await openAs(userB);
-  await pendingRow(pageB, '記了一筆：你還他 $50').getByRole('button', { name: '接受' }).click();
+  await pendingRow(pageB, /你欠.*\$50/)
+    .getByRole('button', { name: '接受' })
+    .click();
   await pendingCard(pageB).getByLabel('不記入帳本（只記往來）').check();
   await pendingCard(pageB).getByRole('button', { name: '接受', exact: true }).click();
   await expect(pendingCard(pageB).getByText('你帳上目前兩清')).toBeVisible();
   await pendingCard(pageB).getByRole('button', { name: '改成拒絕' }).click();
-  await expect(pendingRow(pageB, '你還他 $50')).toHaveCount(0);
+  await expect(pendingRow(pageB, /你欠.*\$50/)).toHaveCount(0);
 
   // 小明已併進乙（displayName＝小明），借還檢視的列顯示 displayName（W47）。
   const ledgerA = await openLedger(pageA, /小明/);

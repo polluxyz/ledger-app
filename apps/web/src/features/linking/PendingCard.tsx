@@ -666,11 +666,26 @@ function renderProposalSentence(proposal: DebtProposal): ReactNode {
   }
 
   if (proposal.type === 'CREATE') {
+    const direction = proposalDebtDirection(proposal.entryKind, name, proposal.amount);
+    if (direction) {
+      const settle = proposal.settle ? '，並以此結清' : '';
+      return (
+        <>
+          <strong>{name}</strong> 記了一筆：
+          <DebtArrow
+            from={direction.from}
+            to={direction.to}
+            amount={proposal.amount}
+            srText={direction.srText}
+          />
+          {' · '}
+          {shortDate(proposal.date)}
+          {settle}
+        </>
+      );
+    }
+
     const description: Record<string, string> = {
-      LEND: '你借給他',
-      BORROW: '你向他借入',
-      COLLECT: '他還你',
-      REPAY: '你還他',
       FORGIVEN: '記下一筆免除',
       SETTLEMENT: '記下一筆結清差額',
       FORGIVE: '免除他欠你的錢',
@@ -719,6 +734,33 @@ function renderProposalSentence(proposal: DebtProposal): ReactNode {
       {dateChange}
     </>
   );
+}
+
+/** W84 將待確認新增提議中的欠款方向交給箭頭，讀屏文字保留欠款關係句。 */
+function proposalDebtDirection(
+  kind: DebtEntryKind,
+  name: string,
+  amount: number,
+): { from: string; to: string; srText: string } | null {
+  const formattedAmount = formatMoney(amount);
+  switch (kind) {
+    case 'LEND':
+    case 'COLLECT':
+      return {
+        from: name,
+        to: '我',
+        srText: `${name}欠你 ${formattedAmount}`,
+      };
+    case 'BORROW':
+    case 'REPAY':
+      return {
+        from: '我',
+        to: name,
+        srText: `你欠${name} ${formattedAmount}`,
+      };
+    default:
+      return null;
+  }
 }
 
 function entryKindLabel(kind: DebtEntryKind): string {
