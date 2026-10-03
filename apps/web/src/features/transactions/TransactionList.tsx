@@ -200,11 +200,14 @@ export function TransactionList({
                   className={rowClassNames}
                   onClick={(event) => handleRowClick(event, transaction)}
                 >
-                  <CategoryIcon
-                    className={styles.categoryIcon}
-                    icon={transaction.category?.icon}
-                    transactionType={transaction.category ? undefined : transaction.type}
-                  />
+                  {/* 圓形底色＋金色圖示，與提案頁樣板一致（3d 修訂 2）。 */}
+                  <span className={styles.iconBadge} aria-hidden="true">
+                    <CategoryIcon
+                      className={styles.categoryIcon}
+                      icon={transaction.category?.icon}
+                      transactionType={transaction.category ? undefined : transaction.type}
+                    />
+                  </span>
                   {/*
                     名稱格在可點的列上是一顆「看起來不像按鈕」的按鈕：滑鼠點整列就夠了，
                     但鍵盤與螢幕閱讀器需要一個聚焦得到的入口，否則拿掉鉛筆圖示之後就
