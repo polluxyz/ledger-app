@@ -12,9 +12,9 @@
 | `backend`    | Prisma schema、migration、API 介面、授權與資料隔離 | 一行，`--agent codex --model gpt-6-sol --effort high`                                                              |
 | `fallback-1` | `default` 額度用完                                 | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
 | `fallback-2` | `fallback-1` 也用完                                | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
-| `fallback-3` | 前三層都不能用                                     | 一行，`--agent claude --model opus --effort medium`                                                                |
+| `fallback-3` | 前三層都不能用                                     | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                     |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），不要自己調高或調低。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
 
 兩種啟動方式：
 
@@ -32,7 +32,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
   1. Orca 不支援這個 agent 的 `--model`。Pi 屬於這種。
   2. Orca 不接受這個強度。Orca 1.4.218 對 `gpt-6-luna` 拒絕 `--effort max`（`does not support effort max`），但 Codex 本身支援。改成 `xhigh` 就能用一行。
 - 一行派工不用自己帶跳過許可的旗標。Orca 設定的 `agentDefaultArgs` 已經替 codex 與 antigravity 加上。兩段式是自己開終端機，旗標要寫在 `--command` 裡，表上的指令已經寫好。
-- 換模型前先查可用清單，不要憑記憶填：Codex 看 `~/.codex/models_cache.json`，Pi 跑 `pi --list-models`，agy 跑 `agy models`。Claude 用 `opus` 別名就會自動跟到最新版。
+- 換模型前先查可用清單，不要憑記憶填：Codex 看 `~/.codex/models_cache.json`，Pi 跑 `pi --list-models`，agy 跑 `agy models`。Claude 的模型 id 是 `claude-<家族>-<版本>`，例如 `claude-sonnet-5-5`。
 - 2026-10-03 實測過一行派 Codex（`gpt-6-luna xhigh`），`launch.effective` 相符，worker 回報是 full access、沒有許可提示。`fallback-2` 的一行寫法還沒實測。失敗的話改用兩段式。
 
 ## 1. 分工
@@ -74,7 +74,7 @@ Constraints 每次都寫這六條：
 依 agent 再加：
 
 - **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。
-- **Claude（Opus 5.5）**：加一句「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」。Opus 5.5 做長任務時，可能報完進度就停下，`worker_done` 也沒送出。
+- **Claude**：加一句「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」。Claude 做長任務時，可能報完進度就停下，`worker_done` 也沒送出。
 
 通用規則（金額不用浮點數、授權 deny by default、前端不寫業務邏輯、註解用繁體中文）已寫在 `CLAUDE.md`，不必重抄。
 
@@ -153,8 +153,7 @@ Constraints 每次都寫這六條：
 
 **Claude Code**
 
-- 用 `opus` 別名，不要釘版本（2026-10-03 解析為 Opus 5.5，固定版本是 `claude-opus-5-5`）。要 1M context 就加後綴 `opus[1m]`。
-- effort 從 `medium` 開始。它是 Opus 5.5 的預設，寫程式的表現追平 Opus 5 的 `high`。`xhigh`／`max` 只用在比過、確定有提升的任務。想少思考就降 effort，不要在 spec 寫「想清楚再做」，也不要要求它把推理寫進回覆。依據：[Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)。
+- 不要在 spec 寫「想清楚再做」，也不要要求它把推理寫進回覆。思考量只用 `--effort` 調。依據：[Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)。
 - 它停在半途、沒送 `worker_done` 時，用 `orca terminal send` 點名還沒做的項目請它繼續。同一個任務最多催 2～3 次，之後讀畫面判斷是不是真的卡住。
 
 ## 6. Session 交接（context 快滿時）
