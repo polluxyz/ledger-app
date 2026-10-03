@@ -10,6 +10,7 @@ import type {
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
   CreateLedgerRequest,
+  CreateSplitRequest,
   CreateTransactionRequest,
   FriendRequest,
   LedgerMemberInfo,
@@ -17,6 +18,7 @@ import type {
   LedgerRole,
   LedgerSummary,
   Paginated,
+  Split,
   Transaction,
 } from '@ledger/shared';
 import { API_BASE_URL } from './env';
@@ -192,6 +194,19 @@ export async function createTransaction(
     data: body,
   });
   return readJson<Transaction>(response, '記一筆交易');
+}
+
+/** 建立一筆分帳供版面測試當前置資料；被測操作仍透過畫面完成。 */
+export async function createSplit(
+  request: APIRequestContext,
+  token: string,
+  body: CreateSplitRequest,
+): Promise<Split> {
+  const response = await request.post(`${API_BASE_URL}/splits`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<Split>(response, '建立分帳');
 }
 
 /** 新增一個帳戶。`initialBalance` 省略時是 0，可為負數（信用卡既有欠款）。 */

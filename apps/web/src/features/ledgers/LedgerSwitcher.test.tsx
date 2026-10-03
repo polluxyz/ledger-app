@@ -51,7 +51,7 @@ describe('Ledger switcher', () => {
     });
   }
 
-  /** 交易端點回一筆帶帳本 id 的備註，好從畫面上看出現在用的是哪一本。 */
+  /** 交易端點回一筆帶帳本 id 的交易名稱，好從新版面看出現在用的是哪一本。 */
   function routeFetch(ledgers: unknown[]) {
     fetchMock.mockImplementation((url: string) => {
       const target = String(url);
@@ -65,6 +65,7 @@ describe('Ledger switcher', () => {
                 type: 'EXPENSE',
                 amount: '100',
                 occurredAt: '2026-08-01T00:00:00.000Z',
+                title: `記在 ${ledgerId}`,
                 note: `記在 ${ledgerId}`,
                 categoryId: null,
                 categoryName: null,

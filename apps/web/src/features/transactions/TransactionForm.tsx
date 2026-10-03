@@ -1,11 +1,13 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import {
   centsToInput,
   computeSplitShares,
   fillRemainingShares,
   isDebtTransactionType,
   parseMoneyInput,
+  type Category,
   type CategoryType,
   type CreateSplitRequest,
   type Counterparty,
@@ -21,6 +23,7 @@ import {
   type UpdateTransactionRequest,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
@@ -35,11 +38,86 @@ import { SplitOptionsView } from './SplitOptionsView';
 import { SplitSection } from './SplitSection';
 import { type SplitParticipantDraft, splitPreviewCounterpartyId } from './split-form';
 import { useCreateSplit, useDeleteSplit, useUpdateSplit } from './use-splits';
-import { useCreateTransaction, useUpdateTransaction } from './use-transactions';
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+} from './use-transactions';
 import styles from './TransactionForm.module.css';
+import fieldStyles from '../../components/TextField.module.css';
 
 /** 新增模式的分段控制多一格「借還」：它不是交易型別，只是改渲染 DebtEntryForm。 */
 type EntryTab = ManualTransactionType | 'DEBT';
+
+interface CategoryPickerProps {
+  categories: Category[];
+  value: string;
+  onChange: (categoryId: string) => void;
+}
+
+/** 分類選單用按鈕列出圖示與名稱，原生 select 的 option 無法顯示 lucide 圖示。 */
+function CategoryPicker({ categories, value, onChange }: CategoryPickerProps) {
+  const pickerId = useId();
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectedCategory = categories.find((category) => category.id === value);
+
+  function handleOptionsKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    }
+  }
+
+  return (
+    <div className={`${fieldStyles.field} ${styles.categoryField}`}>
+      <span className={fieldStyles.label}>分類</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        className={`${fieldStyles.input} ${styles.categoryTrigger}`}
+        aria-label="分類"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={pickerId}
+        aria-valuetext={selectedCategory?.name ?? '請選擇分類'}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <CategoryIcon icon={selectedCategory?.icon} size={16} />
+        <span className={styles.categoryValue}>{selectedCategory?.name ?? '請選擇分類'}</span>
+        <ChevronDown aria-hidden="true" className={styles.categoryChevron} size={16} />
+      </button>
+      {isOpen && (
+        <div
+          id={pickerId}
+          role="listbox"
+          aria-label="分類"
+          className={styles.categoryOptions}
+          onKeyDown={handleOptionsKeyDown}
+        >
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              role="option"
+              aria-selected={category.id === value}
+              className={styles.categoryOption}
+              onClick={() => {
+                onChange(category.id);
+                setIsOpen(false);
+                triggerRef.current?.focus();
+              }}
+            >
+              <CategoryIcon icon={category.icon} size={16} />
+              <span className={styles.categoryValue}>{category.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface TransactionFormProps {
   ledger: LedgerSummary;
@@ -181,6 +259,7 @@ export function TransactionForm({
   );
   const [splitOptionsOpen, setSplitOptionsOpen] = useState(false);
   const [deleteSplitOpen, setDeleteSplitOpen] = useState(false);
+  const [deleteTransactionOpen, setDeleteTransactionOpen] = useState(false);
   const [splitEditWarningOpen, setSplitEditWarningOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
   const [resolvingNames, setResolvingNames] = useState(false);
@@ -203,6 +282,7 @@ export function TransactionForm({
   const accounts = useAccounts();
   const createTransaction = useCreateTransaction(ledgerId);
   const updateTransaction = useUpdateTransaction(ledgerId);
+  const deleteTransaction = useDeleteTransaction(ledgerId);
   const createCounterparty = useCreateCounterparty();
   const createSplit = useCreateSplit();
   const updateSplit = useUpdateSplit();
@@ -687,19 +767,11 @@ export function TransactionForm({
         {/* 轉帳沒有分類（「從銀行領錢」不屬於任何消費類別），欄位整個不渲染。
             那時這一列只剩日期，auto-fit 會讓它自己撐滿。 */}
         {type !== 'TRANSFER' && (
-          <Select
-            label="分類"
+          <CategoryPicker
+            categories={categories.data ?? []}
             value={categoryId}
-            required
-            onChange={(event) => setCategoryId(event.target.value)}
-          >
-            <option value="">請選擇</option>
-            {categories.data?.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </Select>
+            onChange={setCategoryId}
+          />
         )}
       </div>
 
@@ -835,6 +907,19 @@ export function TransactionForm({
             取消
           </Button>
         )}
+        {transaction && !split && (
+          <Button
+            type="button"
+            variant="secondary"
+            className={styles.deleteButton}
+            onClick={() => {
+              deleteTransaction.reset();
+              setDeleteTransactionOpen(true);
+            }}
+          >
+            刪除
+          </Button>
+        )}
         {split && (
           <Button type="button" variant="secondary" onClick={() => setDeleteSplitOpen(true)}>
             刪除分帳
@@ -890,6 +975,28 @@ export function TransactionForm({
             {editorPages}
           </fieldset>
         </form>
+        {transaction && !split && (
+          <ConfirmDialog
+            open={deleteTransactionOpen}
+            title="刪除交易"
+            message="確定要刪除這筆交易嗎？刪除後無法復原。"
+            confirmLabel="刪除"
+            error={deleteTransaction.error}
+            isPending={deleteTransaction.isPending}
+            onCancel={() => {
+              setDeleteTransactionOpen(false);
+              deleteTransaction.reset();
+            }}
+            onConfirm={() => {
+              deleteTransaction.mutate(transaction.id, {
+                onSuccess: () => {
+                  setDeleteTransactionOpen(false);
+                  onSaved?.();
+                },
+              });
+            }}
+          />
+        )}
         {split && (
           <ConfirmDialog
             open={deleteSplitOpen}

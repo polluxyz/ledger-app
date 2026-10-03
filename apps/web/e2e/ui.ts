@@ -53,6 +53,26 @@ export function transactionFilters(page: Page): Locator {
   return page.getByRole('region', { name: '篩選交易' });
 }
 
+/** 展開交易篩選後回傳四個欄位所在的區域。 */
+export async function openTransactionFilters(page: Page): Promise<Locator> {
+  const toggle = page.getByRole('button', { name: '篩選' });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
+  const filters = transactionFilters(page);
+  await filters.waitFor({ state: 'visible' });
+  return filters;
+}
+
+/** 透過圖示選項挑分類，讓表單 e2e 走與使用者相同的可見選單。 */
+export async function selectCategory(scope: Locator, categoryName: string): Promise<void> {
+  await scope.getByRole('combobox', { name: '分類' }).click();
+  await scope
+    .getByRole('listbox', { name: '分類' })
+    .getByRole('option', { name: categoryName, exact: true })
+    .click();
+}
+
 /** 交易列表裡符合某段文字的那一列（例如金額）。 */
 export function transactionRow(page: Page, hasText: string): Locator {
   return page.getByRole('listitem').filter({ hasText });

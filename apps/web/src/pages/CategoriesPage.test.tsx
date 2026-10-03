@@ -66,7 +66,14 @@ describe('Categories page', () => {
   /** sortOrder 依呼叫順序給值——這一頁不拿它排序（後端排好了），但型別要求它存在。 */
   let nextSortOrder = 0;
   function category(id: string, name: string, type: CategoryType): Category {
-    return { id, name, type, sortOrder: nextSortOrder++, createdAt: '2026-08-01T00:00:00.000Z' };
+    return {
+      id,
+      name,
+      type,
+      icon: null,
+      sortOrder: nextSortOrder++,
+      createdAt: '2026-08-01T00:00:00.000Z',
+    };
   }
 
   beforeEach(() => {
@@ -144,6 +151,7 @@ describe('Categories page', () => {
             id: 'cat-created',
             name: body.name,
             type: body.type,
+            icon: null,
             sortOrder: 99,
             createdAt: '2026-08-02T00:00:00.000Z',
           };
@@ -250,8 +258,9 @@ describe('Categories page', () => {
       const body = JSON.parse(readBody(post?.[1] as RequestInit | undefined)) as {
         name: string;
         type: CategoryType;
+        icon: string | null;
       };
-      expect(body).toEqual({ name: '娛樂', type: 'EXPENSE' });
+      expect(body).toEqual({ name: '娛樂', type: 'EXPENSE', icon: null });
     });
     // 建立成功 → 快取失效 → 重取，新分類出現在支出那一組。
     expect(await screen.findByRole('heading', { name: '支出（3）' })).toBeInTheDocument();

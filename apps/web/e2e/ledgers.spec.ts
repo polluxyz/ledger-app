@@ -5,6 +5,7 @@ import {
   openDashboard,
   openNewTransaction,
   parseAmount,
+  selectCategory,
   switchLedger,
 } from './ui';
 
@@ -48,7 +49,7 @@ test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ sig
   await expect(newTransactionForm(page).getByText('付款人：我')).toBeVisible();
 
   await page.getByLabel('金額').fill('1200');
-  await newTransactionForm(page).getByLabel('分類').selectOption({ label: '餐飲' });
+  await selectCategory(newTransactionForm(page), '餐飲');
   await page.getByRole('button', { name: '新增', exact: true }).click();
 
   // 限定在交易列表的那一列裡找。整頁搜尋「餐飲」會同時對到分類下拉的選項。
@@ -83,7 +84,7 @@ test('情境 2：切回個人帳本後帳戶欄位回來，餘額跟著變動', 
   const before = parseAmount(await balance.textContent());
 
   await page.getByLabel('金額').fill('1200');
-  await newTransactionForm(page).getByLabel('分類').selectOption({ label: '餐飲' });
+  await selectCategory(newTransactionForm(page), '餐飲');
   await page.getByRole('button', { name: '新增', exact: true }).click();
 
   // SC-18：支出讓餘額減少相同的金額。用差額而非絕對值，才不會被預設值綁死。

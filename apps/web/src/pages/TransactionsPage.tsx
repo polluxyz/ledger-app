@@ -4,7 +4,6 @@ import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
-import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError } from '../components/FormError';
 import { Icon } from '../components/Icon';
 import { PageContent } from '../components/PageContent';
@@ -26,7 +25,7 @@ import {
   toListQuery,
   type TransactionFilters,
 } from '../features/transactions/transaction-query';
-import { useDeleteTransaction, useTransactions } from '../features/transactions/use-transactions';
+import { useTransactions } from '../features/transactions/use-transactions';
 import styles from './TransactionsPage.module.css';
 
 /**
@@ -80,8 +79,7 @@ type TransactionsView = 'details' | 'debts';
  * 要傳給面板，所以 `editing` 只能放這裡。點一列或點鉛筆都做兩件事：設定 `editing`、
  * 呼叫 `open()` 把右側欄打開——使用者收起過面板時，點了卻沒反應是最糟的情況。
  *
- * 兩個彈窗的**資料流留在這一層**（比照 `AccountsPage`）：`ConfirmDialog` 只負責
- * 呈現與回報操作，mutation、載入中與錯誤都在這裡。
+ * 交易列表負責選取，編輯面板負責儲存與刪除；這一層只協調右側欄的目標與開合。
  */
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
@@ -92,11 +90,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const view: TransactionsView = searchParams.get('view') === 'debts' ? 'debts' : 'details';
 
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
-  const deleteTransaction = useDeleteTransaction(ledger.id);
-
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
-  const [removing, setRemoving] = useState<Transaction | null>(null);
 
   /** 切換檢視寫回網址；「明細」時清掉參數，回到乾淨的 /transactions。 */
   function switchView(next: TransactionsView) {
@@ -174,20 +169,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     requestFocus();
   }
 
-  function closeRemove() {
-    setRemoving(null);
-    // 清掉上一次的失敗，下次開啟才不會殘留紅字。
-    deleteTransaction.reset();
-  }
-
-  function confirmRemove() {
-    if (removing) {
-      // 失敗時**不關彈窗**，錯誤由 ConfirmDialog 就地顯示——關掉的話使用者只會
-      // 看到「什麼都沒發生」。
-      deleteTransaction.mutate(removing.id, { onSuccess: closeRemove });
-    }
-  }
-
   return (
     <>
       {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
@@ -245,7 +226,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
               error={transactions.error}
               isFiltered={hasAnyFilter(filters)}
               onEdit={startEditing}
-              onRemove={setRemoving}
               onEditDebtTransaction={startEditingDebtTransaction}
               // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
               // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
@@ -272,23 +252,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         target={panelTarget}
         onClose={closeWorkbench}
         onRecordEntry={recordEntry}
-      />
-
-      {/*
-        刪除確認刻意留在版面之外：它是 modal，不屬於任何一欄，也不該被內容的
-        最大寬度或捲動容器影響。
-      */}
-      <ConfirmDialog
-        open={removing !== null}
-        title="刪除交易"
-        // 後端是軟刪除（資料列保留供稽核），但畫面上沒有還原的路，對使用者而言
-        // 就是回不去。文案要照實說。
-        message="確定要刪除這筆交易嗎？刪除後無法復原。"
-        confirmLabel="刪除"
-        error={deleteTransaction.error}
-        isPending={deleteTransaction.isPending}
-        onConfirm={confirmRemove}
-        onCancel={closeRemove}
       />
     </>
   );

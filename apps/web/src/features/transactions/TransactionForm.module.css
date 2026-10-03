@@ -90,6 +90,73 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 原生 option 無法畫 SVG，分類欄改用清單按鈕，讓圖示與名稱一起可選。 */
+.categoryField {
+  position: relative;
+}
+
+.categoryTrigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.categoryTrigger[aria-expanded='true'] {
+  border-color: var(--color-accent);
+}
+
+.categoryValue {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryChevron {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.categoryOptions {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% - var(--space-md) - 1px);
+  right: 0;
+  left: 0;
+  max-height: 15rem;
+  padding: var(--space-xs);
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.categoryOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.categoryOption:hover,
+.categoryOption[aria-selected='true'] {
+  background-color: var(--color-fill);
+}
+
 /*
  * 日期與分類並排。窄到放不下兩欄時自動改成上下兩列——硬塞兩欄會把日期輸入框
  * 壓到看不清楚。轉帳時分類不渲染，這一列只剩日期，auto-fit 會讓它撐滿。
@@ -110,6 +177,10 @@
 .actions > button:first-child {
   flex: 1;
   min-width: 0;
+}
+
+.deleteButton {
+  color: var(--color-danger);
 }
 
 /* 沒有任何帳戶時取代整張表單的引導文字（見 TransactionForm 的 early return）。 */
