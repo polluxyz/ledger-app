@@ -109,7 +109,7 @@ describe('Editing and deleting a transaction', () => {
 
     expect(within(dialog).getByLabelText('金額')).toHaveValue(120);
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-08-12');
-    expect(within(dialog).getByLabelText('備註（選填）')).toHaveValue('午餐');
+    expect(within(dialog).getByLabelText('備註')).toHaveValue('午餐');
     expect(within(dialog).getByLabelText('分類')).toHaveValue('cat-1');
   });
 
@@ -138,7 +138,7 @@ describe('Editing and deleting a transaction', () => {
     render(<App />);
     const dialog = await openEditor();
 
-    await user.clear(within(dialog).getByLabelText('備註（選填）'));
+    await user.clear(within(dialog).getByLabelText('備註'));
     await user.click(within(dialog).getByRole('button', { name: '儲存' }));
 
     const body = await patchedBody();
@@ -156,7 +156,7 @@ describe('Editing and deleting a transaction', () => {
     const dialog = await openEditor();
 
     expect(within(dialog).queryByLabelText('帳戶')).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/這筆記在其他成員的帳戶/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/這筆記在其他成員的帳戶/)).not.toBeInTheDocument();
     // 轉出沿用他的帳戶、轉入是我的——這種交易後端會接受，但沒有人是那個意思。
     expect(within(dialog).queryByRole('button', { name: '轉帳' })).not.toBeInTheDocument();
 

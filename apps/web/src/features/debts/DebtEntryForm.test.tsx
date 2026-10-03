@@ -165,14 +165,14 @@ describe('DebtEntryForm', () => {
     {
       name: '小明',
       balanceHint: '目前小明欠你 $9',
-      direction: '小明還你',
+      direction: '記完後：小明欠你 $6',
       accountLabel: '收進哪個帳戶',
       accountId: 'acc-cash',
     },
     {
       name: '小華',
       balanceHint: '目前你欠小華 $400',
-      direction: '你還小華',
+      direction: '記完後：你欠小華 $397',
       accountLabel: '從哪個帳戶付出',
       accountId: 'acc-bank',
     },
@@ -185,8 +185,8 @@ describe('DebtEntryForm', () => {
       await user.type(screen.getByLabelText('對象'), name);
       await screen.findByText(balanceHint);
       await user.click(screen.getByRole('button', { name: '還款' }));
-      expect(screen.getByText(direction)).toBeInTheDocument();
       await user.type(screen.getByLabelText('金額'), '3');
+      expect(screen.getByText(direction)).toBeInTheDocument();
       await user.selectOptions(await screen.findByLabelText(accountLabel), accountId);
       await user.click(screen.getByRole('button', { name: '新增' }));
 
@@ -205,7 +205,7 @@ describe('DebtEntryForm', () => {
     fireEvent.click(screen.getByRole('button', { name: '還款' }));
     fireEvent.change(screen.getByLabelText('對象'), { target: { value: '小華' } });
 
-    expect(await screen.findByText('你還小華')).toBeInTheDocument();
+    expect(await screen.findByText('目前你欠小華 $400')).toBeInTheDocument();
     expect(screen.getByLabelText('從哪個帳戶付出')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '還款' })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -239,7 +239,7 @@ describe('DebtEntryForm', () => {
     await screen.findByText('目前小明欠你 $9');
 
     expect(screen.getByRole('button', { name: '借出' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('小明還你')).not.toBeInTheDocument();
+    expect(screen.queryByText('記完後：小明欠你 $9')).not.toBeInTheDocument();
     expect(screen.queryByText('目前沒有欠款')).not.toBeInTheDocument();
   });
 
@@ -359,7 +359,7 @@ describe('DebtEntryForm', () => {
     await user.click(screen.getByRole('button', { name: '借入' }));
     await user.type(screen.getByLabelText('金額'), '11');
     await user.selectOptions(await screen.findByLabelText('借到的錢進哪個帳戶'), 'acc-bank');
-    await user.type(screen.getByLabelText('備註（選填）'), '臨時周轉');
+    await user.type(screen.getByLabelText('備註'), '臨時周轉');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     const body = await postedBody();
@@ -371,7 +371,7 @@ describe('DebtEntryForm', () => {
     expect(body.note).toBe('臨時周轉');
     await waitFor(() => {
       expect(screen.getByLabelText('金額')).toHaveValue(null);
-      expect(screen.getByLabelText('備註（選填）')).toHaveValue('');
+      expect(screen.getByLabelText('備註')).toHaveValue('');
       expect(screen.getByLabelText('對象')).toHaveValue(' 小明 ');
       expect(screen.getByRole('button', { name: '借入' })).toHaveAttribute('aria-pressed', 'true');
     });
@@ -454,7 +454,7 @@ describe('DebtEntryForm', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '借出' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByLabelText('金額')).toHaveValue(null);
-      expect(screen.getByLabelText('備註（選填）')).toHaveValue('');
+      expect(screen.getByLabelText('備註')).toHaveValue('');
       expect(screen.getByLabelText('對象')).toHaveValue('小明');
     });
   });

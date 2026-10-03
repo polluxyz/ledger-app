@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
@@ -8,6 +8,7 @@ import { CounterpartyDetail } from '../debts/CounterpartyDetail';
 import { DebtEntryEditForm } from '../debts/DebtEntryEditDialog';
 import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
+import { SplitEditPanel } from './SplitEditPanel';
 import { getTransactionLabel } from './transaction-label';
 import styles from './TransactionWorkbench.module.css';
 
@@ -67,6 +68,7 @@ export function TransactionWorkbench({
   const amountFieldId = useId();
   // 初值就是目前的計數，所以「第一次 render」永遠不算一次 focus 要求。
   const seenFocusRequest = useRef(focusRequest);
+  const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
 
   const handleClose = onClose ?? onEditDone ?? (() => {});
   const activeTarget: PanelTarget =
@@ -116,12 +118,26 @@ export function TransactionWorkbench({
         />
       )}
       {activeTarget.kind === 'counterparty' && (
-        <Dialog open={true} title="借還往來" variant="panel" onClose={handleClose}>
-          <CounterpartyDetail
-            key={activeTarget.counterpartyId}
-            counterpartyId={activeTarget.counterpartyId}
-            onRecordEntry={onRecordEntry ?? (() => {})}
-          />
+        <Dialog
+          open={true}
+          title={editingSplitId ? '編輯交易' : '借還往來'}
+          variant="panel"
+          onClose={editingSplitId ? () => setEditingSplitId(null) : handleClose}
+        >
+          {editingSplitId ? (
+            <SplitEditPanel
+              ledger={ledger}
+              splitId={editingSplitId}
+              onClose={() => setEditingSplitId(null)}
+            />
+          ) : (
+            <CounterpartyDetail
+              key={activeTarget.counterpartyId}
+              counterpartyId={activeTarget.counterpartyId}
+              onRecordEntry={onRecordEntry ?? (() => {})}
+              onEditSplit={setEditingSplitId}
+            />
+          )}
         </Dialog>
       )}
       {activeTarget.kind === 'debtTransaction' && activeTarget.transaction.debt && (

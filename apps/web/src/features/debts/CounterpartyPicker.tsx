@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import type { Counterparty } from '@ledger/shared';
+import { DebtArrow } from '../../components/DebtArrow';
 import { TextField } from '../../components/TextField';
 import { formatMoney } from '../../lib/format';
 import { useCounterparties } from './use-debts';
@@ -12,6 +13,11 @@ interface CounterpartyPickerProps {
   excludeLinked?: boolean;
   label?: string;
   hint?: string;
+  /** 付款人欄位可直接選「我」，一般借還對象選擇不顯示這個項目。 */
+  includeSelf?: boolean;
+  onSelectSelf?: () => void;
+  /** 新名字只有在使用者明確選擇「新增」時才提交給呼叫端。 */
+  onAddName?: (name: string) => void;
 }
 
 /**
@@ -25,6 +31,9 @@ export function CounterpartyPicker({
   excludeLinked = false,
   label = '對象',
   hint,
+  includeSelf = false,
+  onSelectSelf,
+  onAddName,
 }: CounterpartyPickerProps) {
   const listId = `counterparties-${useId()}`;
   const normalizedValue = value.trim();
@@ -48,17 +57,23 @@ export function CounterpartyPicker({
   const counterparties = excludeLinked
     ? responseItems.filter((counterparty) => counterparty.link === null)
     : responseItems;
-  const exactMatch = findCounterparty(normalizedValue, counterparties);
+  const selfSelected = includeSelf && normalizedValue === '我';
+  const exactMatch = selfSelected ? null : findCounterparty(normalizedValue, counterparties);
   // 查詢結果還沒追上輸入時先不提供「新增」，否則打既有的名字會短暫閃過「新增」與「新對象」。
-  const canAddName = hasCurrentResults && normalizedValue !== '' && exactMatch === null;
-  const optionCount = counterparties.length + (canAddName ? 1 : 0);
+  const canAddName =
+    hasCurrentResults && normalizedValue !== '' && exactMatch === null && !selfSelected;
+  const optionOffset = includeSelf ? 1 : 0;
+  const newNameIndex = optionOffset + counterparties.length;
+  const optionCount = optionOffset + counterparties.length + (canAddName ? 1 : 0);
   const activeIndex = requestedActiveIndex < optionCount ? requestedActiveIndex : -1;
   const activeOptionId =
-    activeIndex >= 0 && activeIndex < counterparties.length
-      ? `${listId}-${counterparties[activeIndex]!.id}`
-      : activeIndex === counterparties.length && canAddName
-        ? `${listId}-new`
-        : '';
+    includeSelf && activeIndex === 0
+      ? `${listId}-self`
+      : activeIndex >= optionOffset && activeIndex < newNameIndex
+        ? `${listId}-${counterparties[activeIndex - optionOffset]!.id}`
+        : activeIndex === newNameIndex && canAddName
+          ? `${listId}-new`
+          : '';
   const showMoreHint =
     hasCurrentResults && (query.data?.total ?? 0) > (query.data?.items.length ?? 0);
 
@@ -72,6 +87,15 @@ export function CounterpartyPicker({
   function selectNewName() {
     onChange(normalizedValue);
     onSelect?.(null);
+    onAddName?.(normalizedValue);
+    setIsOpen(false);
+    setActiveIndex(-1);
+  }
+
+  function selectSelf() {
+    onChange('我');
+    onSelect?.(null);
+    onSelectSelf?.();
     setIsOpen(false);
     setActiveIndex(-1);
   }
@@ -105,9 +129,11 @@ export function CounterpartyPicker({
 
     if (event.key === 'Enter' && isOpen && activeIndex >= 0) {
       event.preventDefault();
-      if (activeIndex < counterparties.length) {
-        selectExisting(counterparties[activeIndex]!);
-      } else if (canAddName && activeIndex === counterparties.length) {
+      if (includeSelf && activeIndex === 0) {
+        selectSelf();
+      } else if (activeIndex >= optionOffset && activeIndex < newNameIndex) {
+        selectExisting(counterparties[activeIndex - optionOffset]!);
+      } else if (canAddName && activeIndex === newNameIndex) {
         selectNewName();
       }
     }
@@ -116,14 +142,24 @@ export function CounterpartyPicker({
   const balanceHint = excludeLinked
     ? null
     : exactMatch
-      ? exactMatch.balance > 0
-        ? `目前${exactMatch.displayName}欠你 ${formatMoney(exactMatch.balance)}`
-        : exactMatch.balance < 0
-          ? `目前你欠${exactMatch.displayName} ${formatMoney(Math.abs(exactMatch.balance))}`
-          : `目前和${exactMatch.displayName}兩清`
+      ? exactMatch.balance === 0
+        ? `目前和${exactMatch.displayName}兩清`
+        : null
       : canAddName
         ? '新對象，送出時建立'
         : null;
+  const balanceArrow =
+    exactMatch && exactMatch.balance !== 0
+      ? {
+          from: exactMatch.balance > 0 ? exactMatch.displayName : '我',
+          to: exactMatch.balance > 0 ? '我' : exactMatch.displayName,
+          amount: Math.abs(exactMatch.balance),
+          srText:
+            exactMatch.balance > 0
+              ? `目前${exactMatch.displayName}欠你 ${formatMoney(exactMatch.balance)}`
+              : `目前你欠${exactMatch.displayName} ${formatMoney(Math.abs(exactMatch.balance))}`,
+        }
+      : null;
 
   return (
     <div className={styles.picker}>
@@ -154,15 +190,29 @@ export function CounterpartyPicker({
         aria-label={`${label}選項`}
         hidden={!isOpen}
       >
+        {includeSelf && (
+          <li
+            id={`${listId}-self`}
+            className={`${styles.option} ${activeIndex === 0 ? styles.active : ''}`}
+            role="option"
+            aria-selected={activeIndex === 0}
+            onMouseDown={(event) => event.preventDefault()}
+            onMouseMove={() => setActiveIndex(0)}
+            onClick={selectSelf}
+          >
+            我
+          </li>
+        )}
+
         {counterparties.map((counterparty, index) => (
           <li
             key={counterparty.id}
             id={`${listId}-${counterparty.id}`}
-            className={`${styles.option} ${activeIndex === index ? styles.active : ''}`}
+            className={`${styles.option} ${activeIndex === index + optionOffset ? styles.active : ''}`}
             role="option"
-            aria-selected={activeIndex === index}
+            aria-selected={activeIndex === index + optionOffset}
             onMouseDown={(event) => event.preventDefault()}
-            onMouseMove={() => setActiveIndex(index)}
+            onMouseMove={() => setActiveIndex(index + optionOffset)}
             onClick={() => selectExisting(counterparty)}
           >
             <span>{counterparty.displayName}</span>
@@ -173,11 +223,11 @@ export function CounterpartyPicker({
         {canAddName && (
           <li
             id={`${listId}-new`}
-            className={`${styles.option} ${styles.addOption} ${activeIndex === counterparties.length ? styles.active : ''}`}
+            className={`${styles.option} ${styles.addOption} ${activeIndex === newNameIndex ? styles.active : ''}`}
             role="option"
-            aria-selected={activeIndex === counterparties.length}
+            aria-selected={activeIndex === newNameIndex}
             onMouseDown={(event) => event.preventDefault()}
-            onMouseMove={() => setActiveIndex(counterparties.length)}
+            onMouseMove={() => setActiveIndex(newNameIndex)}
             onClick={selectNewName}
           >
             ＋ 新增「{normalizedValue}」
@@ -196,11 +246,16 @@ export function CounterpartyPicker({
         )}
       </ul>
 
-      {balanceHint && (
+      {balanceArrow ? (
+        <p className={styles.balanceHint} role="status">
+          <span aria-hidden="true">目前</span>
+          <DebtArrow {...balanceArrow} />
+        </p>
+      ) : balanceHint ? (
         <p className={styles.balanceHint} role="status">
           {balanceHint}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

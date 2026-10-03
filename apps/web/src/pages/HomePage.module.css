@@ -137,6 +137,15 @@
   font-size: var(--text-sm);
 }
 
+.recentSplitBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius);
+  background-color: var(--color-primary-soft);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+}
+
 /* 備註是附註，淡一階；太長就截斷，金額的位置是固定的。 */
 .recentNote {
   min-width: 0;

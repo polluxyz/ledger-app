@@ -286,7 +286,7 @@ test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async
   // 帳（名字與餘額）在交易頁的往來帳看（W55）。
   const panel = await openLedger(pageA, /舊乙/);
   await expect(panel.getByRole('heading', { name: '舊乙' })).toBeVisible();
-  await expect(panel.getByText('舊乙欠你 $50')).toBeVisible();
+  await expect(panel.getByText('舊乙欠你 $50')).toHaveCount(1);
 
   // 合併完成，待確認不再詢問。
   await openDashboard(pageA);

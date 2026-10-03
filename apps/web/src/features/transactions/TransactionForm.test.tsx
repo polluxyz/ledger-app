@@ -44,7 +44,7 @@ describe('Transaction type segmented control', () => {
 
   function routeFetch(ledger: typeof trackingLedger, options: { items?: unknown[] } = {}) {
     const items = options.items ?? [];
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -58,13 +58,21 @@ describe('Transaction type segmented control', () => {
       if (url.includes('/debts')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });
       }
+      if (url.includes('/counterparties') && init?.method === 'POST') {
+        const requestBody =
+          typeof init.body === 'string' ? (JSON.parse(init.body) as { name?: string }) : {};
+        return json({ id: `new-${requestBody.name}`, displayName: requestBody.name });
+      }
       if (url.includes('/counterparties')) {
         return json({
           items: [
             {
               id: 'cp-1',
               name: '小明',
+              displayName: '小明',
+              askMerge: false,
               balance: 1500,
+              link: null,
               createdAt: '2026-09-01T00:00:00.000Z',
               updatedAt: '2026-09-01T00:00:00.000Z',
             },
@@ -77,6 +85,7 @@ describe('Transaction type segmented control', () => {
       if (url.includes('/transactions')) {
         return json({ items, page: 1, limit: 20, total: items.length });
       }
+      if (url.endsWith('/splits')) return json({ id: 'split-1' });
       if (url.includes('/categories')) {
         return json([category]);
       }
@@ -117,6 +126,20 @@ describe('Transaction type segmented control', () => {
         ([url, init]) =>
           String(url).includes('/transactions') &&
           (init as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(call).toBeDefined();
+      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
+    });
+    return body;
+  }
+
+  async function postedBody(pathPart: string): Promise<Record<string, unknown>> {
+    let body: Record<string, unknown> = {};
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes(pathPart) && (init as RequestInit | undefined)?.method === 'POST',
       );
       expect(call).toBeDefined();
       const raw = (call?.[1] as RequestInit | undefined)?.body;
@@ -211,7 +234,7 @@ describe('Transaction type segmented control', () => {
 
     await user.click(debtTab);
 
-    expect(debtTab).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
     // 借還分頁只有三種往來選項，交易欄位整個換掉。
     expect(await screen.findByRole('button', { name: '借出' }, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '借入' })).toBeInTheDocument();
@@ -276,6 +299,7 @@ describe('Transaction type segmented control', () => {
     render(<App />);
     await openTypeBar(user);
     await user.type(screen.getByLabelText('金額'), '333.33');
+    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
     await user.click(screen.getByRole('button', { name: /^新增$/ }));
 
     expect(await postedTransactionBody()).toMatchObject({ amount: 33333 });
@@ -299,5 +323,115 @@ describe('Transaction type segmented control', () => {
           (init as RequestInit | undefined)?.method === 'POST',
       ),
     ).toBe(false);
+  });
+
+  it('renders the expense fields in the specified order without optional markers', async () => {
+    routeFetch(trackingLedger);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    const labels = Array.from(container.querySelectorAll('form label'))
+      .map((label) => label.textContent?.trim())
+      .filter((label) => label !== undefined);
+    expect(labels.slice(0, 7)).toEqual(['金額', '日期', '分類', '帳戶', '名稱', '備註', '分帳']);
+    expect(container.textContent).not.toContain('（選填）');
+  });
+
+  it('uses POST /splits for another payer and previews my full share when splitting is off', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.type(screen.getByLabelText('金額'), '750');
+    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await user.type(screen.getByLabelText('名稱'), '晚餐');
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    await user.type(payer, '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+
+    expect(screen.getByText('你欠小明 $750')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const body = await postedBody('/splits');
+    expect(body).toMatchObject({
+      type: 'EXPENSE',
+      categoryId: 'cat-1',
+      title: '晚餐',
+      total: 75000,
+      payer: { counterpartyId: 'cp-1' },
+      participants: [{ counterpartyId: null }],
+    });
+    expect(body).not.toHaveProperty('accountId');
+  });
+
+  it('submits an equal split with the selected account and all four participants', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.type(screen.getByLabelText('金額'), '3000');
+    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await user.type(screen.getByLabelText('名稱'), '晚餐');
+    await user.click(screen.getByRole('checkbox', { name: '分帳' }));
+    const addPerson = screen.getByRole('combobox', { name: '＋ 新增分帳對象' });
+    await user.type(addPerson, '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+    await user.type(addPerson, '小華');
+    await user.click(await screen.findByRole('option', { name: '＋ 新增「小華」' }, WAIT));
+    await user.type(addPerson, '阿美');
+    await user.click(await screen.findByRole('option', { name: '＋ 新增「阿美」' }, WAIT));
+
+    const splitSection = screen.getByRole('region', { name: '分帳' });
+    const participants = within(splitSection).getAllByRole('listitem');
+    expect(participants).toHaveLength(4);
+    participants.forEach((participant) => {
+      expect(within(participant).getByText('$750')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const body = await postedBody('/splits');
+    expect(body).toMatchObject({
+      type: 'EXPENSE',
+      categoryId: 'cat-1',
+      title: '晚餐',
+      total: 300000,
+      accountId: 'acc-1',
+      method: 'EQUAL',
+    });
+    expect(body.participants).toHaveLength(4);
+    expect(body.participants).toEqual(
+      expect.arrayContaining([
+        { counterpartyId: null },
+        { counterpartyId: 'cp-1' },
+        { counterpartyId: 'new-小華' },
+        { counterpartyId: 'new-阿美' },
+      ]),
+    );
   });
 });

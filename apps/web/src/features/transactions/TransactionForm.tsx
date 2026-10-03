@@ -1,23 +1,40 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
   centsToInput,
+  computeSplitShares,
+  fillRemainingShares,
   isDebtTransactionType,
   parseMoneyInput,
   type CategoryType,
+  type CreateSplitRequest,
+  type Counterparty,
   type LedgerSummary,
   type ManualTransactionType,
+  type Split,
+  type SplitMethod,
+  type SplitParticipantInput,
+  type SplitPrecision,
+  type SplitType,
   type Transaction,
+  type UpdateSplitRequest,
   type UpdateTransactionRequest,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
-import { toDateInputValue } from '../../lib/format';
+import { formatMoney, toDateInputValue } from '../../lib/format';
 import { useAccounts } from '../accounts/use-accounts';
 import { useCategories } from '../categories/use-categories';
 import { DebtEntryForm } from '../debts/DebtEntryForm';
+import { useCreateCounterparty } from '../debts/use-debts';
+import { PaymentRow } from './PaymentRow';
+import { SplitOptionsView } from './SplitOptionsView';
+import { SplitSection } from './SplitSection';
+import { type SplitParticipantDraft, splitPreviewCounterpartyId } from './split-form';
+import { useCreateSplit, useDeleteSplit, useUpdateSplit } from './use-splits';
 import { useCreateTransaction, useUpdateTransaction } from './use-transactions';
 import styles from './TransactionForm.module.css';
 
@@ -28,6 +45,8 @@ interface TransactionFormProps {
   ledger: LedgerSummary;
   /** 有值＝編輯模式，欄位預填這一筆。 */
   transaction?: Transaction;
+  /** 有值＝透過分帳端點編輯；會從 API 回應還原完整名單與分法。 */
+  split?: Split;
   /** 編輯成功後呼叫（通常用來關閉彈窗）。新增模式不會呼叫。 */
   onSaved?: () => void;
   /**
@@ -80,13 +99,14 @@ interface TransactionFormProps {
 export function TransactionForm({
   ledger,
   transaction,
+  split,
   onSaved,
   onCancel,
   amountFieldId,
   initialDebtCounterparty,
 }: TransactionFormProps) {
   const ledgerId = ledger.id;
-  const isEdit = transaction !== undefined;
+  const isEdit = transaction !== undefined || split !== undefined;
 
   /**
    * 這張表單只處理使用者自己記得出來的 3 種型別（`ManualTransactionType`）。
@@ -97,20 +117,63 @@ export function TransactionForm({
    * 進來時會一路送出一個後端必拒的 body；退回「支出」至少是個講得通的狀態。
    */
   const [tab, setTab] = useState<EntryTab>(
-    transaction && !isDebtTransactionType(transaction.type)
-      ? transaction.type
-      : !isEdit && initialDebtCounterparty
-        ? 'DEBT'
-        : 'EXPENSE',
+    split
+      ? split.type
+      : transaction && !isDebtTransactionType(transaction.type)
+        ? transaction.type
+        : !isEdit && initialDebtCounterparty
+          ? 'DEBT'
+          : 'EXPENSE',
   );
-  const [amount, setAmount] = useState(transaction ? centsToInput(transaction.amount) : '');
+  const [amount, setAmount] = useState(
+    split ? centsToInput(split.total) : transaction ? centsToInput(transaction.amount) : '',
+  );
   const [date, setDate] = useState(() =>
-    toDateInputValue(transaction ? new Date(transaction.date) : undefined),
+    toDateInputValue(
+      split ? new Date(split.date) : transaction ? new Date(transaction.date) : undefined,
+    ),
   );
-  const [categoryId, setCategoryId] = useState(transaction?.category?.id ?? '');
-  const [accountId, setAccountId] = useState(transaction?.account?.id ?? '');
+  const [categoryId, setCategoryId] = useState(
+    split?.category.id ?? transaction?.category?.id ?? '',
+  );
+  const [accountId, setAccountId] = useState(split?.account?.id ?? transaction?.account?.id ?? '');
   const [toAccountId, setToAccountId] = useState(transaction?.toAccount?.id ?? '');
-  const [note, setNote] = useState(transaction?.note ?? '');
+  const [title, setTitle] = useState(split?.title ?? transaction?.title ?? '');
+  const [note, setNote] = useState(split?.note ?? transaction?.note ?? '');
+  const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
+    split?.payer ? 'counterparty' : ledger.tracksBalance ? 'account' : 'self',
+  );
+  const [payerName, setPayerName] = useState(split?.payer?.name ?? '我');
+  const [selectedPayer, setSelectedPayer] = useState<{
+    counterpartyId: string;
+    name: string;
+  } | null>(split?.payer ?? null);
+  const [splitEnabled, setSplitEnabled] = useState(split !== undefined);
+  const [splitMethod, setSplitMethod] = useState<SplitMethod>(split?.method ?? 'EQUAL');
+  const [splitPrecision, setSplitPrecision] = useState<SplitPrecision>(split?.precision ?? 'CENT');
+  const [participants, setParticipants] = useState<SplitParticipantDraft[]>(() =>
+    split
+      ? split.participants.map((person, index) => ({
+          key: `participant-${index}`,
+          counterpartyId: person.counterpartyId,
+          name: person.counterpartyId === null ? '我' : (person.name ?? ''),
+          isMe: person.counterpartyId === null,
+          included: true,
+          amountFixed: split.method === 'AMOUNT',
+          amountInput: split.method === 'AMOUNT' ? centsToInput(person.share) : '',
+          amountValue: person.share,
+          ratioFixed: split.method === 'RATIO' && person.ratio !== null,
+          ratioInput: person.ratio === null ? '' : centsToInput(person.ratio),
+          ratioValue: person.ratio ?? 0,
+        }))
+      : [makeMeParticipant()],
+  );
+  const [splitOptionsOpen, setSplitOptionsOpen] = useState(false);
+  const [deleteSplitOpen, setDeleteSplitOpen] = useState(false);
+  const [splitEditWarningOpen, setSplitEditWarningOpen] = useState(false);
+  const [submissionError, setSubmissionError] = useState<unknown>(null);
+  const [resolvingNames, setResolvingNames] = useState(false);
+  const participantSequence = useRef(0);
 
   /**
    * 「借還」分頁選中時，交易欄位整個不渲染、改渲染 `DebtEntryForm`。對交易
@@ -129,9 +192,28 @@ export function TransactionForm({
   const accounts = useAccounts();
   const createTransaction = useCreateTransaction(ledgerId);
   const updateTransaction = useUpdateTransaction(ledgerId);
-  const pending = isEdit ? updateTransaction.isPending : createTransaction.isPending;
-  const error = isEdit ? updateTransaction.error : createTransaction.error;
+  const createCounterparty = useCreateCounterparty();
+  const createSplit = useCreateSplit();
+  const updateSplit = useUpdateSplit();
+  const deleteSplit = useDeleteSplit();
+  const pending =
+    resolvingNames ||
+    createCounterparty.isPending ||
+    (split
+      ? updateSplit.isPending || deleteSplit.isPending
+      : isEdit
+        ? updateTransaction.isPending || createSplit.isPending
+        : createTransaction.isPending || createSplit.isPending);
+  const error =
+    submissionError ??
+    (split
+      ? (updateSplit.error ?? deleteSplit.error)
+      : isEdit
+        ? (updateTransaction.error ?? createSplit.error)
+        : (createTransaction.error ?? createSplit.error));
   const amountCents = parseMoneyInput(amount);
+  const hasSyncedSplitEntries =
+    split?.participants.some((person) => person.sync === 'SYNCED') ?? false;
 
   /**
    * 帳戶欄位鎖住＝這筆記在別人的帳戶上（D2）。
@@ -144,7 +226,11 @@ export function TransactionForm({
    * 後端會沿用原值。若照新增模式那樣「沒選就落到第一個帳戶」，會把別人的交易
    * 悄悄搬到自己的戶頭——而且送得出去，後端不會擋。
    */
-  const accountLocked = isEdit && ledger.tracksBalance && transaction.account === null;
+  const accountLocked =
+    transaction !== undefined &&
+    split === undefined &&
+    ledger.tracksBalance &&
+    transaction.account === null;
   const showAccountField = ledger.tracksBalance && !accountLocked;
 
   /**
@@ -173,7 +259,7 @@ export function TransactionForm({
    * 回不去——這個情況罕見，而且不可逆的方向是安全的那一邊。
    */
   const canTransfer = ledger.tracksBalance && !accountLocked;
-  const showTransferButton = canTransfer || type === 'TRANSFER';
+  const showTransferButton = (canTransfer && split === undefined) || type === 'TRANSFER';
   /** 轉帳至少要有兩個帳戶。與其讓使用者送出後撞 400，不如先說清楚。 */
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
 
@@ -203,6 +289,165 @@ export function TransactionForm({
   function handleTypeChange(nextType: EntryTab) {
     setTab(nextType);
     setCategoryId('');
+    if (nextType === 'TRANSFER') setSplitEnabled(false);
+  }
+
+  const isPayerOther =
+    selectedPayer !== null || (payerName.trim() !== '' && payerName.trim() !== '我');
+  const payerDisplayName = selectedPayer?.name ?? payerName.trim();
+  const previewPayerId =
+    selectedPayer?.counterpartyId ??
+    (isPayerOther ? `new:${selectedPayer?.name ?? payerName.trim()}` : null);
+  const splitPeople = splitEnabled
+    ? participants.filter((person) => person.included)
+    : [makeMeParticipant()];
+  const filledCustomValues =
+    splitMethod === 'EQUAL'
+      ? null
+      : fillRemainingShares({
+          total: amountCents ?? 0,
+          method: splitMethod,
+          precision: splitPrecision,
+          payerCounterpartyId: previewPayerId,
+          participants: splitPeople.map((person) => ({
+            counterpartyId: splitPreviewCounterpartyId(person),
+            value:
+              splitMethod === 'AMOUNT'
+                ? person.amountFixed
+                  ? person.amountValue
+                  : undefined
+                : person.ratioFixed
+                  ? person.ratioValue
+                  : undefined,
+          })),
+        });
+  const splitPreviewInput: SplitParticipantInput[] = splitPeople.map((person, index) => ({
+    counterpartyId: splitPreviewCounterpartyId(person),
+    ...(splitMethod === 'AMOUNT' && filledCustomValues
+      ? { amount: filledCustomValues.values[index]! }
+      : {}),
+    ...(splitMethod === 'RATIO' && filledCustomValues
+      ? { ratio: filledCustomValues.values[index]! }
+      : {}),
+  }));
+  const splitPreview =
+    type !== 'TRANSFER' && amountCents !== null && amountCents > 0
+      ? computeSplitShares({
+          total: amountCents,
+          method: splitMethod,
+          precision: splitPrecision,
+          payerCounterpartyId: previewPayerId,
+          participants: splitPreviewInput,
+        })
+      : null;
+  const previewShares =
+    splitEnabled && splitPreview?.ok
+      ? new Map(splitPeople.map((person, index) => [person.key, splitPreview.shares[index]!]))
+      : null;
+  const myShareIndex = splitPeople.findIndex((person) => person.isMe);
+  const myShare = splitEnabled
+    ? splitPreview?.ok && myShareIndex >= 0
+      ? splitPreview.shares[myShareIndex]!
+      : undefined
+    : (amountCents ?? undefined);
+  const paymentPreview =
+    isPayerOther && myShare !== undefined
+      ? {
+          from: type === 'EXPENSE' ? '我' : payerDisplayName,
+          to: type === 'EXPENSE' ? payerDisplayName : '我',
+          amount: myShare,
+          srText:
+            type === 'EXPENSE'
+              ? `你欠${payerDisplayName} ${formatMoney(myShare)}`
+              : `${payerDisplayName}欠你 ${formatMoney(myShare)}`,
+        }
+      : null;
+  const needsAccount =
+    showAccountField && (type === 'TRANSFER' || (!isPayerOther && paymentMode !== 'self'));
+
+  function clearFixedValues(people: SplitParticipantDraft[]) {
+    return people.map((person) => ({
+      ...person,
+      amountFixed: false,
+      amountInput: '',
+      amountValue: 0,
+      ratioFixed: false,
+      ratioInput: '',
+      ratioValue: 0,
+    }));
+  }
+
+  function newParticipant(counterpartyId: string | null, name: string): SplitParticipantDraft {
+    participantSequence.current += 1;
+    return {
+      key: `participant-new-${participantSequence.current}`,
+      counterpartyId,
+      name,
+      isMe: false,
+      included: true,
+      amountFixed: false,
+      amountInput: '',
+      amountValue: 0,
+      ratioFixed: false,
+      ratioInput: '',
+      ratioValue: 0,
+    };
+  }
+
+  function addSelectedPayer(counterparty: { counterpartyId: string; name: string }) {
+    if (!splitEnabled) return;
+    setParticipants((current) => {
+      if (current.some((person) => person.counterpartyId === counterparty.counterpartyId)) {
+        return current;
+      }
+      return clearFixedValues([
+        ...current,
+        newParticipant(counterparty.counterpartyId, counterparty.name),
+      ]);
+    });
+  }
+
+  function handlePayerSelect(counterparty: Counterparty | null) {
+    setSelectedPayer(
+      counterparty ? { counterpartyId: counterparty.id, name: counterparty.displayName } : null,
+    );
+    if (counterparty) {
+      setPayerName(counterparty.displayName);
+      addSelectedPayer({ counterpartyId: counterparty.id, name: counterparty.displayName });
+    }
+  }
+
+  function handlePayerModeChange(nextMode: 'account' | 'counterparty' | 'self') {
+    setPaymentMode(nextMode);
+    if (nextMode !== 'counterparty') {
+      setSelectedPayer(null);
+      setPayerName('我');
+    } else if (!isPayerOther) {
+      setPayerName('我');
+    }
+  }
+
+  function toggleSplit(enabled: boolean) {
+    setSplitEnabled(enabled);
+    if (!enabled) {
+      setSplitOptionsOpen(false);
+      return;
+    }
+    setParticipants((current) => {
+      let next = current.filter((person) => person.included);
+      if (next.length === 0) next = [makeMeParticipant()];
+      if (
+        isPayerOther &&
+        !next.some((person) =>
+          selectedPayer
+            ? person.counterpartyId === selectedPayer.counterpartyId
+            : !person.isMe && person.name === payerName.trim(),
+        )
+      ) {
+        next = [...next, newParticipant(selectedPayer?.counterpartyId ?? null, payerDisplayName)];
+      }
+      return clearFixedValues(next);
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -210,46 +455,146 @@ export function TransactionForm({
     if (amountCents === null || amountCents <= 0) {
       return;
     }
-    // <input type="date"> 給的是 YYYY-MM-DD，補成後端要的 ISO 8601。
-    const isoDate = new Date(date).toISOString();
+    if (type !== 'TRANSFER' && categoryId === '') return;
+    if (needsAccount && selectedAccountId === '') return;
+    if (type === 'TRANSFER' && selectedToAccountId === '') return;
 
-    if (isEdit) {
-      const input: UpdateTransactionRequest = {
-        type,
-        amount: amountCents,
-        date: isoDate,
-        // 備註要清空只能送空字串——PATCH 的 undefined 代表「不動」（D8）。
-        note,
-        ...(type === 'TRANSFER' ? {} : { categoryId }),
-        ...(showAccountField ? { accountId: selectedAccountId } : {}),
-        ...(showAccountField && type === 'TRANSFER' ? { toAccountId: selectedToAccountId } : {}),
-      };
-      updateTransaction.mutate(
-        { transactionId: transaction.id, input },
-        { onSuccess: () => onSaved?.() },
-      );
+    void submitTransactionOrSplit();
+  }
+
+  async function submitTransactionOrSplit(confirmedSyncedEdit = false) {
+    if (split && hasSyncedSplitEntries && !confirmedSyncedEdit) {
+      setSplitEditWarningOpen(true);
       return;
     }
+    setSubmissionError(null);
+    setResolvingNames(true);
+    const resolvedNames = new Map<string, string>();
 
-    createTransaction.mutate(
-      {
+    async function resolveName(name: string): Promise<string> {
+      const normalized = name.trim();
+      const cached = resolvedNames.get(normalized);
+      if (cached) return cached;
+      const created = await createCounterparty.mutateAsync({ name: normalized });
+      resolvedNames.set(normalized, created.id);
+      return created.id;
+    }
+
+    try {
+      const isoDate = new Date(date).toISOString();
+      const requiresSplit = split !== undefined || splitEnabled || isPayerOther;
+
+      if (requiresSplit) {
+        const splitType: SplitType = type === 'INCOME' ? 'INCOME' : 'EXPENSE';
+        const splitPeople = splitEnabled
+          ? participants.filter((person) => person.included)
+          : [makeMeParticipant()];
+        const filled =
+          splitMethod === 'EQUAL'
+            ? null
+            : fillRemainingShares({
+                total: amountCents!,
+                method: splitMethod,
+                precision: splitPrecision,
+                payerCounterpartyId: previewPayerId,
+                participants: splitPeople.map((person) => ({
+                  counterpartyId: splitPreviewCounterpartyId(person),
+                  value:
+                    splitMethod === 'AMOUNT'
+                      ? person.amountFixed
+                        ? person.amountValue
+                        : undefined
+                      : person.ratioFixed
+                        ? person.ratioValue
+                        : undefined,
+                })),
+              });
+        const requestParticipants: SplitParticipantInput[] = [];
+        for (let index = 0; index < splitPeople.length; index += 1) {
+          const person = splitPeople[index]!;
+          const counterpartyId = person.isMe
+            ? null
+            : (person.counterpartyId ?? (await resolveName(person.name)));
+          requestParticipants.push({
+            counterpartyId,
+            ...(splitMethod === 'AMOUNT' && filled ? { amount: filled.values[index]! } : {}),
+            ...(splitMethod === 'RATIO' && filled ? { ratio: filled.values[index]! } : {}),
+          });
+        }
+        const payerId = isPayerOther
+          ? (selectedPayer?.counterpartyId ?? (await resolveName(payerDisplayName)))
+          : null;
+        const input: UpdateSplitRequest = {
+          type: splitType,
+          ledgerId,
+          categoryId,
+          total: amountCents!,
+          date: isoDate,
+          title,
+          note,
+          payer: payerId === null ? null : { counterpartyId: payerId },
+          ...(payerId === null && showAccountField ? { accountId: selectedAccountId } : {}),
+          method: splitMethod,
+          ...(splitMethod === 'AMOUNT' ? {} : { precision: splitPrecision }),
+          participants: requestParticipants,
+        };
+
+        if (split) {
+          await updateSplit.mutateAsync({ splitId: split.id, input });
+          onSaved?.();
+        } else {
+          const createInput: CreateSplitRequest = {
+            ...input,
+            ...(title === '' ? { title: undefined } : {}),
+            ...(note === '' ? { note: undefined } : {}),
+            ...(transaction ? { fromTransactionId: transaction.id } : {}),
+          };
+          await createSplit.mutateAsync(createInput);
+          if (isEdit) onSaved?.();
+          else {
+            setAmount('');
+            setTitle('');
+            setNote('');
+          }
+        }
+        return;
+      }
+
+      if (isEdit && transaction) {
+        const input: UpdateTransactionRequest = {
+          type,
+          amount: amountCents!,
+          date: isoDate,
+          title,
+          note,
+          ...(type === 'TRANSFER' ? {} : { categoryId }),
+          ...(showAccountField ? { accountId: selectedAccountId } : {}),
+          ...(showAccountField && type === 'TRANSFER' ? { toAccountId: selectedToAccountId } : {}),
+        };
+        await updateTransaction.mutateAsync({ transactionId: transaction.id, input });
+        onSaved?.();
+        return;
+      }
+
+      await createTransaction.mutateAsync({
         type,
-        amount: amountCents,
+        amount: amountCents!,
         date: isoDate,
         categoryId: type === 'TRANSFER' ? undefined : categoryId,
         accountId: selectedAccountId === '' ? undefined : selectedAccountId,
         toAccountId:
           type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
+        title: title === '' ? undefined : title,
         note: note === '' ? undefined : note,
-      },
-      {
-        onSuccess: () => {
-          // 保留型別與日期，方便連續記帳；只清掉每筆都不同的欄位。
-          setAmount('');
-          setNote('');
-        },
-      },
-    );
+      });
+      setAmount('');
+      setTitle('');
+      setNote('');
+    } catch (error) {
+      setSubmissionError(error);
+    } finally {
+      setResolvingNames(false);
+    }
   }
 
   /**
@@ -259,7 +604,12 @@ export function TransactionForm({
    *
    * 編輯別人的交易時不受影響：那時根本不需要自己的帳戶。
    */
-  if (showAccountField && !accounts.isLoading && (accounts.data?.length ?? 0) === 0) {
+  if (
+    showAccountField &&
+    !isPayerOther &&
+    !accounts.isLoading &&
+    (accounts.data?.length ?? 0) === 0
+  ) {
     return (
       <section>
         <p className={styles.legend}>新增一筆交易</p>
@@ -349,10 +699,10 @@ export function TransactionForm({
       {/* 非連動帳本沒有帳戶欄位。停用而非移除是不夠的——後端連「帶著空值」都會
           擋下（400 ACCOUNT_NOT_ALLOWED），而且一個停用的欄位會讓人以為
           「應該要能選，只是現在不行」。 */}
-      {showAccountField ? (
+      {type === 'TRANSFER' ? (
         <>
           <Select
-            label={type === 'TRANSFER' ? '轉出帳戶' : '帳戶'}
+            label="轉出帳戶"
             value={selectedAccountId}
             required
             onChange={(event) => setAccountId(event.target.value)}
@@ -363,48 +713,119 @@ export function TransactionForm({
               </option>
             ))}
           </Select>
-          {type === 'TRANSFER' &&
-            (transferBlocked ? (
-              <p className={styles.notice}>
-                轉帳需要兩個帳戶，目前只有一個。<Link to="/accounts">前往新增帳戶</Link>
-              </p>
-            ) : (
-              <Select
-                label="轉入帳戶"
-                value={selectedToAccountId}
-                required
-                onChange={(event) => setToAccountId(event.target.value)}
-              >
-                {otherAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </Select>
-            ))}
+          {transferBlocked ? (
+            <p className={styles.notice}>
+              轉帳需要兩個帳戶，目前只有一個。<Link to="/accounts">前往新增帳戶</Link>
+            </p>
+          ) : (
+            <Select
+              label="轉入帳戶"
+              value={selectedToAccountId}
+              required
+              onChange={(event) => setToAccountId(event.target.value)}
+            >
+              {otherAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </>
-      ) : accountLocked ? (
-        // 別人的帳戶對我是遮蔽的，改不了也顯示不了（D2）。這裡說出原因，
-        // 而不是放一個永遠停用的下拉——那會讓人以為只是暫時不能選。
-        <p className={styles.notice}>這筆記在其他成員的帳戶，帳戶無法變更。</p>
       ) : (
-        // 記完帳餘額不會變，那是正常的。不講清楚的話，看起來像是壞了。
-        <p className={styles.notice}>這本帳本不影響你的帳戶餘額，因此不需要選擇帳戶。</p>
+        <PaymentRow
+          type={type}
+          accounts={accounts.data ?? []}
+          accountId={selectedAccountId}
+          showAccountField={showAccountField}
+          accountLocked={accountLocked}
+          mode={paymentMode}
+          payerName={payerDisplayName}
+          isPayerOther={isPayerOther}
+          preview={paymentPreview}
+          onAccountChange={setAccountId}
+          onModeChange={handlePayerModeChange}
+          onPayerNameChange={setPayerName}
+          onPayerNameAdded={(name) => {
+            if (!splitEnabled) return;
+            setParticipants((current) => {
+              if (current.some((person) => person.name === name)) return current;
+              return clearFixedValues([...current, newParticipant(null, name)]);
+            });
+          }}
+          onPayerSelect={handlePayerSelect}
+          onSelectSelf={() => {
+            setSelectedPayer(null);
+            setPayerName('我');
+            setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+          }}
+        />
       )}
 
       <TextField
-        label="備註（選填）"
+        label="名稱"
+        value={title}
+        maxLength={200}
+        onChange={(event) => setTitle(event.target.value)}
+      />
+
+      <TextField
+        label="備註"
         value={note}
         maxLength={500}
         onChange={(event) => setNote(event.target.value)}
       />
+
+      {type !== 'TRANSFER' && (
+        <SplitSection
+          enabled={splitEnabled}
+          pending={pending}
+          type={type}
+          payerName={payerDisplayName}
+          isPayerOther={isPayerOther}
+          participants={participants}
+          previewShares={previewShares}
+          onToggle={toggleSplit}
+          onAddCounterparty={(counterparty) => {
+            setParticipants((current) => {
+              if (current.some((person) => person.counterpartyId === counterparty.id))
+                return current;
+              return clearFixedValues([
+                ...current,
+                newParticipant(counterparty.id, counterparty.displayName),
+              ]);
+            });
+          }}
+          onAddName={(name) => {
+            setParticipants((current) => {
+              if (current.some((person) => person.name === name.trim())) return current;
+              return clearFixedValues([...current, newParticipant(null, name.trim())]);
+            });
+          }}
+          onRemoveParticipant={(key) =>
+            setParticipants((current) =>
+              clearFixedValues(current.filter((person) => person.key !== key)),
+            )
+          }
+          onOpenOptions={() => setSplitOptionsOpen(true)}
+        />
+      )}
 
       {/* 編輯模式才有「取消」。新增表單常駐在面板裡，沒有東西可以取消。 */}
       <div className={styles.actions}>
         <Button
           type="submit"
           block
-          disabled={pending || transferBlocked || amountCents === null || amountCents <= 0}
+          disabled={
+            pending ||
+            transferBlocked ||
+            amountCents === null ||
+            amountCents <= 0 ||
+            (type !== 'TRANSFER' && categoryId === '') ||
+            ((splitEnabled || isPayerOther) && !splitPreview?.ok) ||
+            (needsAccount && selectedAccountId === '') ||
+            (type === 'TRANSFER' && selectedToAccountId === '')
+          }
         >
           {pending ? (isEdit ? '儲存中…' : '新增中…') : isEdit ? '儲存' : '新增'}
         </Button>
@@ -413,8 +834,44 @@ export function TransactionForm({
             取消
           </Button>
         )}
+        {split && (
+          <Button type="button" variant="secondary" onClick={() => setDeleteSplitOpen(true)}>
+            刪除分帳
+          </Button>
+        )}
       </div>
     </>
+  );
+
+  const editorPages = (
+    <div className={styles.pages}>
+      <div
+        className={`${styles.mainPage} ${splitOptionsOpen ? styles.mainPageHidden : ''}`}
+        aria-hidden={splitOptionsOpen}
+        inert={splitOptionsOpen}
+      >
+        {segmented}
+        {transactionFields}
+      </div>
+      {splitEnabled && splitOptionsOpen && type !== 'TRANSFER' && (
+        <SplitOptionsView
+          total={amountCents}
+          type={type}
+          payerCounterpartyId={previewPayerId}
+          payerName={payerDisplayName}
+          method={splitMethod}
+          precision={splitPrecision}
+          participants={participants}
+          onBack={() => setSplitOptionsOpen(false)}
+          onSave={(value) => {
+            setSplitMethod(value.method);
+            setSplitPrecision(value.precision);
+            setParticipants(value.participants);
+            setSplitOptionsOpen(false);
+          }}
+        />
+      )}
+    </div>
   );
 
   /*
@@ -425,13 +882,45 @@ export function TransactionForm({
    */
   if (isEdit) {
     return (
-      <form onSubmit={handleSubmit} noValidate>
-        <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
-          <FormError error={error} />
-          {segmented}
-          {transactionFields}
-        </fieldset>
-      </form>
+      <>
+        <form onSubmit={handleSubmit} noValidate>
+          <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
+            <FormError error={error} />
+            {editorPages}
+          </fieldset>
+        </form>
+        {split && (
+          <ConfirmDialog
+            open={deleteSplitOpen}
+            title="刪除分帳"
+            message={hasSyncedSplitEntries ? '刪除後會送給對方確認。' : '刪除分帳？'}
+            confirmLabel="刪除"
+            error={deleteSplit.error}
+            isPending={deleteSplit.isPending}
+            onCancel={() => setDeleteSplitOpen(false)}
+            onConfirm={() => {
+              void deleteSplit
+                .mutateAsync(split.id)
+                .then(() => onSaved?.())
+                .catch(setSubmissionError);
+            }}
+          />
+        )}
+        {split && (
+          <ConfirmDialog
+            open={splitEditWarningOpen}
+            title="修改分帳"
+            message="修改後會送給對方確認。"
+            confirmLabel="繼續修改"
+            isPending={pending}
+            onCancel={() => setSplitEditWarningOpen(false)}
+            onConfirm={() => {
+              setSplitEditWarningOpen(false);
+              void submitTransactionOrSplit(true);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -439,21 +928,48 @@ export function TransactionForm({
     // 外框由放它的地方給（右側面板，或窄螢幕的卡片），表單自己不畫框。
     <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
       <legend className={styles.legend}>新增一筆交易</legend>
-      {segmented}
       {isDebtTab ? (
-        <DebtEntryForm
-          ledger={ledger}
-          amountFieldId={amountFieldId}
-          initialCounterpartyName={initialDebtCounterparty}
-        />
+        <>
+          {segmented}
+          <DebtEntryForm
+            ledger={ledger}
+            amountFieldId={amountFieldId}
+            initialCounterpartyName={initialDebtCounterparty}
+          />
+        </>
       ) : (
         <>
           <FormError error={error} />
           <form onSubmit={handleSubmit} noValidate>
-            {transactionFields}
+            {editorPages}
           </form>
         </>
       )}
     </fieldset>
   );
+}
+
+function makeMeParticipant(): SplitParticipantDraft {
+  return makeSplitParticipant('me', null, '我', true);
+}
+
+function makeSplitParticipant(
+  key: string,
+  counterpartyId: string | null,
+  name: string,
+  isMe: boolean,
+): SplitParticipantDraft {
+  return {
+    key,
+    counterpartyId,
+    name,
+    isMe,
+    included: true,
+    amountFixed: false,
+    amountInput: '',
+    amountValue: 0,
+    ratioFixed: false,
+    ratioInput: '',
+    ratioValue: 0,
+  };
 }

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type {
   Counterparty,
   CreateDebtEntryKind,
@@ -7,6 +7,7 @@ import type {
 } from '@ledger/shared';
 import { parseMoneyInput } from '@ledger/shared';
 import { Button } from '../../components/Button';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
@@ -84,15 +85,36 @@ export function DebtEntryForm({
     repaymentExceedsBalance ||
     createEntry.isPending;
 
-  let repaymentHint: string | null = null;
+  let repaymentHint: ReactNode = null;
   if (normalizedName !== '') {
     if (kind === 'REPAYMENT') {
-      repaymentHint =
-        counterparty && counterparty.balance > 0
-          ? `${counterparty.displayName}還你`
-          : counterparty && counterparty.balance < 0
-            ? `你還${counterparty.displayName}`
-            : '目前沒有欠款';
+      if (counterparty && counterparty.balance > 0) {
+        repaymentHint = (
+          <>
+            <span aria-hidden="true">目前</span>
+            <DebtArrow
+              from={counterparty.displayName}
+              to="我"
+              amount={counterparty.balance}
+              srText={`目前${counterparty.displayName}欠你 ${formatMoney(counterparty.balance)}`}
+            />
+          </>
+        );
+      } else if (counterparty && counterparty.balance < 0) {
+        repaymentHint = (
+          <>
+            <span aria-hidden="true">目前</span>
+            <DebtArrow
+              from="我"
+              to={counterparty.displayName}
+              amount={Math.abs(counterparty.balance)}
+              srText={`目前你欠${counterparty.displayName} ${formatMoney(Math.abs(counterparty.balance))}`}
+            />
+          </>
+        );
+      } else {
+        repaymentHint = '目前沒有欠款';
+      }
     } else if (!repaymentAvailable) {
       repaymentHint = '目前沒有欠款';
     }
@@ -108,7 +130,7 @@ export function DebtEntryForm({
   );
 
   /** W16 唯一允許在前端加減往來金額的地方；實際餘額仍由 API 回應提供。 */
-  let preview: string | null = null;
+  let preview: ReactNode = null;
   if (normalizedName !== '' && amount !== '' && amountCents !== null) {
     const before = counterparty?.balance ?? 0;
     const delta = kind === 'LEND' ? amountCents : -amountCents;
@@ -131,9 +153,31 @@ export function DebtEntryForm({
     } else if (after === 0) {
       preview = '記完後：兩清';
     } else if (after > 0) {
-      preview = `記完後：${counterparty?.displayName ?? normalizedName}欠你 ${formatMoney(after)}`;
+      const name = counterparty?.displayName ?? normalizedName;
+      preview = (
+        <>
+          <span aria-hidden="true">記完後：</span>
+          <DebtArrow
+            from={name}
+            to="我"
+            amount={after}
+            srText={`記完後：${name}欠你 ${formatMoney(after)}`}
+          />
+        </>
+      );
     } else {
-      preview = `記完後：你欠${counterparty?.displayName ?? normalizedName} ${formatMoney(Math.abs(after))}`;
+      const name = counterparty?.displayName ?? normalizedName;
+      preview = (
+        <>
+          <span aria-hidden="true">記完後：</span>
+          <DebtArrow
+            from="我"
+            to={name}
+            amount={Math.abs(after)}
+            srText={`記完後：你欠${name} ${formatMoney(Math.abs(after))}`}
+          />
+        </>
+      );
     }
   }
 
@@ -277,7 +321,7 @@ export function DebtEntryForm({
       )}
 
       <TextField
-        label="備註（選填）"
+        label="備註"
         value={note}
         maxLength={500}
         onChange={(event) => setNote(event.target.value)}

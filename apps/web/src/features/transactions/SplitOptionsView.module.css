@@ -1,0 +1,131 @@
+.view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 100%;
+  padding: var(--space-md);
+  overflow-y: auto;
+  background-color: var(--color-surface);
+  animation: slideIn var(--motion-panel) var(--motion-ease) both;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.header h3 {
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-base);
+}
+
+.back {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xl);
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+.tabs button {
+  flex: 1;
+  min-height: 2.25rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected='true'] {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem);
+  align-items: center;
+  gap: var(--space-md);
+  min-height: 3.75rem;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.include {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.include span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.custom {
+  min-width: 0;
+}
+
+.percent {
+  display: block;
+  margin-top: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.arrows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.remainder {
+  margin: 0;
+  color: var(--color-danger);
+}

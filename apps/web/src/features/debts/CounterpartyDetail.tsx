@@ -3,6 +3,7 @@ import type { DebtEntry, DebtEntryKind } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, formatMoney } from '../../lib/format';
@@ -19,6 +20,7 @@ interface CounterpartyDetailProps {
   counterpartyId: string;
   /** 記往來仍由新增表單負責；這裡只提供對象名字給交易頁。 */
   onRecordEntry: (name: string) => void;
+  onEditSplit?: (splitId: string) => void;
 }
 
 /**
@@ -27,7 +29,11 @@ interface CounterpartyDetailProps {
  * 「對象」面板（`CounterpartyProfile`），這裡不再出現。餘額與逐筆紀錄全部來自 API，
  * 寫入交給資料層 hooks。
  */
-export function CounterpartyDetail({ counterpartyId, onRecordEntry }: CounterpartyDetailProps) {
+export function CounterpartyDetail({
+  counterpartyId,
+  onRecordEntry,
+  onEditSplit,
+}: CounterpartyDetailProps) {
   const [page, setPage] = useState(1);
   const counterparty = useCounterparty(counterpartyId);
   const entries = useCounterpartyEntries(counterpartyId, { page, limit: 20 });
@@ -108,7 +114,7 @@ export function CounterpartyDetail({ counterpartyId, onRecordEntry }: Counterpar
             <ul className={styles.entryList}>
               {entries.data?.items.map((entry) => {
                 const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
-                const canEdit = !isAdjustment;
+                const canEdit = !isAdjustment && entry.splitId === null;
                 const isUnrecorded = entry.transactionId === null && !isAdjustment;
                 return (
                   <li key={entry.id} className={styles.entry}>
@@ -136,22 +142,34 @@ export function CounterpartyDetail({ counterpartyId, onRecordEntry }: Counterpar
                       {entry.note && <p className={styles.note}>{entry.note}</p>}
                     </div>
                     <div className={styles.entryActions}>
-                      {canEdit && (
+                      {entry.splitId !== null ? (
                         <Button
                           type="button"
                           variant="secondary"
-                          onClick={() => setEntryToEdit(entry)}
+                          onClick={() => onEditSplit?.(entry.splitId!)}
                         >
-                          修改
+                          分帳
+                        </Button>
+                      ) : (
+                        canEdit && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setEntryToEdit(entry)}
+                          >
+                            修改
+                          </Button>
+                        )
+                      )}
+                      {entry.splitId === null && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setEntryToDelete(entry)}
+                        >
+                          刪除
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setEntryToDelete(entry)}
-                      >
-                        刪除
-                      </Button>
                     </div>
                   </li>
                 );
@@ -237,19 +255,36 @@ const ENTRY_KIND_LABELS: Record<DebtEntryKind, string> = {
   COLLECT: '對方還我',
   REPAY: '我還對方',
   PAID_FOR_ME: '幫我付',
+  PAID_FOR_THEM: '我幫對方付',
+  RECEIVED_FOR_THEM: '我幫對方代收',
+  RECEIVED_FOR_ME: '對方幫我代收',
   SETTLEMENT: '結清差額',
   FORGIVE: '免除',
   // 3b-2：接受對方的免除時寫入。畫面在 3b-2 的畫面步驟才會出現這種紀錄。
   FORGIVEN: '被免除',
 };
 
-/** 往來餘額語句只讀 API 的數字，正負號代表誰欠誰。 */
-function formatCounterpartyBalance(displayName: string, balance: number): string {
+/** 往來餘額方向來自 API 的正負號，視覺呈現統一交給 DebtArrow。 */
+function formatCounterpartyBalance(displayName: string, balance: number) {
   if (balance > 0) {
-    return `${displayName}欠你 ${formatMoney(balance)}`;
+    return (
+      <DebtArrow
+        from={displayName}
+        to="我"
+        amount={balance}
+        srText={`${displayName}欠你 ${formatMoney(balance)}`}
+      />
+    );
   }
   if (balance < 0) {
-    return `你欠${displayName} ${formatMoney(Math.abs(balance))}`;
+    return (
+      <DebtArrow
+        from="我"
+        to={displayName}
+        amount={Math.abs(balance)}
+        srText={`你欠${displayName} ${formatMoney(Math.abs(balance))}`}
+      />
+    );
   }
   return '兩清';
 }

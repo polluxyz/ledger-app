@@ -163,11 +163,14 @@ describe('PendingCard', () => {
       if (url.includes('/accounts')) {
         return response([account]);
       }
+      if (url.includes('/categories')) {
+        return response([
+          { id: 'category-expense', name: '餐飲', type: 'EXPENSE' },
+          { id: 'category-income', name: '薪資', type: 'INCOME' },
+        ]);
+      }
       if (url.includes('/ledgers')) {
         return response([ledger]);
-      }
-      if (url.includes('/categories')) {
-        return response([]);
       }
       return response([]);
     });
@@ -207,6 +210,7 @@ describe('PendingCard', () => {
       amount: 20000,
       date: '2026-09-25T00:00:00.000Z',
       settle: false,
+      title: null,
       previous: null,
       createdAt: '2026-09-25T00:00:00.000Z',
       respondedAt: null,
@@ -279,6 +283,63 @@ describe('PendingCard', () => {
     expect(card).toHaveTextContent('王小明 把 09/20 的借入 $120 → $150 · 09/20 → 09/22');
     expect(card).toHaveTextContent('王小明 把一筆借入改成 $150 · 09/22');
     expect(card).toHaveTextContent('王小明 刪了 09/20 的借入 $120');
+  });
+
+  it('renders a split proposal as an arrow and accepts it with ledger, category, and title only', async () => {
+    proposals = [
+      proposal({ id: 'proposal-split', entryKind: 'PAID_FOR_ME', title: '晚餐', amount: 12000 }),
+    ];
+    proposalTotal = 1;
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+    const row = within(card).getByRole('listitem');
+
+    expect(within(row).getByText(/晚餐/)).toBeInTheDocument();
+    expect(within(row).getByText('王小明幫你付 $120；你欠王小明 $120')).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: '接受' }));
+
+    const expandedRow = within(card).getByRole('listitem');
+    expect(within(expandedRow).getByLabelText('名稱')).toHaveValue('晚餐');
+    expect(within(expandedRow).queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(within(expandedRow).queryByLabelText('不記入帳本（只記往來）')).not.toBeInTheDocument();
+    await user.selectOptions(within(expandedRow).getByLabelText('記在哪本帳本'), 'ledger-1');
+    const category = await within(expandedRow).findByRole('combobox', { name: '分類' });
+    await user.selectOptions(category, 'category-expense');
+    await user.click(within(expandedRow).getByRole('button', { name: '接受' }));
+
+    await waitFor(() =>
+      expect(postedBody('/debt-proposals/proposal-split/accept')).toMatchObject({
+        record: { ledgerId: 'ledger-1' },
+        categoryId: 'category-expense',
+        title: '晚餐',
+      }),
+    );
+    expect(postedBody('/debt-proposals/proposal-split/accept')).not.toHaveProperty('accountId');
+  });
+
+  it('prefills the title and allows a no-record response for a payer-side split proposal', async () => {
+    proposals = [proposal({ id: 'proposal-paid', entryKind: 'PAID_FOR_THEM', title: '咖啡' })];
+    proposalTotal = 1;
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+    const row = within(card).getByRole('listitem');
+    await user.click(within(row).getByRole('button', { name: '接受' }));
+
+    expect(within(row).getByLabelText('名稱')).toHaveValue('咖啡');
+    expect(within(row).getByLabelText('付款帳戶')).toBeRequired();
+    await user.clear(within(row).getByLabelText('名稱'));
+    await user.type(within(row).getByLabelText('名稱'), '手沖');
+    await user.click(within(row).getByLabelText('不記入帳本（只記往來）'));
+    await user.click(within(row).getByRole('button', { name: '接受' }));
+
+    await waitFor(() =>
+      expect(postedBody('/debt-proposals/proposal-paid/accept')).toMatchObject({
+        record: null,
+        title: '手沖',
+      }),
+    );
   });
 
   it('does not render when there are no pending items', async () => {
