@@ -304,10 +304,8 @@ export class TransactionsService {
     if (existing.splitId != null)
       throw new AppException(
         HttpStatus.CONFLICT,
-        existing.creatorId === viewerUserId
-          ? ErrorCode.SPLIT_TRANSACTION_READ_ONLY
-          : ErrorCode.DEBT_TRANSACTION_READ_ONLY,
-        'This transaction is read-only.',
+        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+        'Change this transaction through its split.',
       );
     await this.assertNotDebtTransaction(existing.id, existing.type);
 
@@ -352,15 +350,13 @@ export class TransactionsService {
   }
 
   /** 軟刪除一筆交易（設 deletedAt）；資料列保留以利稽核。 */
-  async remove(ledgerId: string, transactionId: string, viewerUserId?: string): Promise<void> {
+  async remove(ledgerId: string, transactionId: string): Promise<void> {
     const existing = await this.findActive(ledgerId, transactionId);
     if (existing.splitId != null)
       throw new AppException(
         HttpStatus.CONFLICT,
-        existing.creatorId === viewerUserId
-          ? ErrorCode.SPLIT_TRANSACTION_READ_ONLY
-          : ErrorCode.DEBT_TRANSACTION_READ_ONLY,
-        'This transaction is read-only.',
+        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+        'Change this transaction through its split.',
       );
     await this.assertNotDebtTransaction(existing.id, existing.type);
     await this.prisma.transaction.update({

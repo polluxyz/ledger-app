@@ -269,7 +269,9 @@ describe('Debt ledger isolation (e2e)', () => {
           .set(auth(carol.token))
           .send({ amount: 1 });
         expect(patch.status).toBe(409);
-        expect((patch.body as { errorCode: string }).errorCode).toBe('DEBT_TRANSACTION_READ_ONLY');
+        expect((patch.body as { errorCode: string }).errorCode).toBe(
+          txn.type === 'EXPENSE' ? 'SPLIT_TRANSACTION_READ_ONLY' : 'DEBT_TRANSACTION_READ_ONLY',
+        );
       }
     });
   });
