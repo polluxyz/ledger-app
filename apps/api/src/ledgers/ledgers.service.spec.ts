@@ -22,6 +22,7 @@ describe('LedgersService (members)', () => {
     };
     transaction: { count: jest.Mock };
     debtEntry: { count: jest.Mock };
+    split: { count: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -56,6 +57,7 @@ describe('LedgersService (members)', () => {
       },
       transaction: { count: jest.fn().mockResolvedValue(0) },
       debtEntry: { count: jest.fn().mockResolvedValue(0) },
+      split: { count: jest.fn().mockResolvedValue(0) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     service = new LedgersService(prisma as unknown as PrismaService);

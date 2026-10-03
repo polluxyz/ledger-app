@@ -26,6 +26,11 @@ import type { CreateTransactionRequest, ManualTransactionType } from '@ledger/sh
  * Swagger／OpenAPI 文件使用。
  */
 export class CreateTransactionDto implements CreateTransactionRequest {
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
   @ApiProperty({ enum: MANUAL_TRANSACTION_TYPES, example: 'EXPENSE' })
   @IsIn(MANUAL_TRANSACTION_TYPES)
   type!: ManualTransactionType;

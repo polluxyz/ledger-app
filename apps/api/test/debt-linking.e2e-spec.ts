@@ -810,7 +810,7 @@ describe('Debt linking (e2e)', () => {
       expect(await balance(bob, bobSide)).toBe(-60);
     });
 
-    it('SC-K17: paid-for-me is recorded but never proposed', async () => {
+    it('SC-K17 revised by 3c: paid-for-me sends a mirrored proposal', async () => {
       await linkAliceAndBob();
       const categories = await request(server())
         .get(`/api/ledgers/${alice.ledgerId}/categories`)
@@ -818,16 +818,22 @@ describe('Debt linking (e2e)', () => {
         .set(auth(alice.token));
       const categoryId = (categories.body as Array<{ id: string }>)[0]!.id;
 
-      const res = await post(alice, {
-        counterparty: { id: aliceSide },
-        kind: 'PAID_FOR_ME',
-        amount: 300,
-        record: { ledgerId: alice.ledgerId },
-        categoryId,
-      });
+      const res = await request(server())
+        .post('/api/splits')
+        .set(auth(alice.token))
+        .send({
+          type: 'EXPENSE',
+          ledgerId: alice.ledgerId,
+          total: 300,
+          date: DAY,
+          payer: { counterpartyId: aliceSide },
+          method: 'EQUAL',
+          participants: [{ counterpartyId: null }],
+          categoryId,
+        });
       expect(res.status).toBe(201);
-      expect(await proposals(app, bob, 'incoming')).toHaveLength(0);
-      expect((await entries(alice, aliceSide))[0]!.sync).toBe('NONE');
+      expect((await proposals(app, bob, 'incoming'))[0]?.entryKind).toBe('PAID_FOR_THEM');
+      expect((await entries(alice, aliceSide))[0]!.sync).toBe('PENDING');
     });
   });
 });

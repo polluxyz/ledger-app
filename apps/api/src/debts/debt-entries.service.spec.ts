@@ -180,25 +180,9 @@ describe('DebtEntriesService', () => {
       expect(createdData()).toMatchObject({ transactionId: null });
     });
 
-    it('records PAID_FOR_ME as an expense with the category and no account', async () => {
-      await service.create(
-        USER,
-        input({
-          kind: 'PAID_FOR_ME',
-          amount: 400,
-          categoryId: 'cat-1',
-          record: { ledgerId: LEDGER },
-        }),
-      );
-
-      expect(transactions.createPaidForMeExpense).toHaveBeenCalledWith(
-        prisma,
-        expect.objectContaining({ ledgerId: LEDGER, amount: 400, categoryId: 'cat-1' }),
-      );
-      expect(createdData()).toMatchObject({
-        kind: 'PAID_FOR_ME',
-        delta: -400,
-        transactionId: 'txn-expense',
+    it('rejects a category on the old debt endpoint', async () => {
+      await expect(service.create(USER, input({ categoryId: 'cat-1' }))).rejects.toMatchObject({
+        status: 400,
       });
     });
 

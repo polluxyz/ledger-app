@@ -14,6 +14,7 @@ describe('TransactionsService', () => {
     category: { findUnique: jest.Mock };
     account: { findUnique: jest.Mock };
     debtEntry: { findUnique: jest.Mock };
+    $queryRaw: jest.Mock;
     transaction: {
       create: jest.Mock;
       findFirst: jest.Mock;
@@ -44,6 +45,8 @@ describe('TransactionsService', () => {
     amount: 120,
     date: new Date(input.date),
     note: 'Lunch',
+    title: null,
+    splitId: null,
     createdAt: new Date('2026-08-08T12:00:00.000Z'),
     category: { id: 'cat-1', name: '餐飲' },
     account: { id: accountId, name: '現金', userId: creatorId },
@@ -65,6 +68,7 @@ describe('TransactionsService', () => {
       category: { findUnique: jest.fn() },
       account: { findUnique: jest.fn() },
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -85,11 +89,13 @@ describe('TransactionsService', () => {
       amount: 120,
       date: joined.date.toISOString(),
       note: 'Lunch',
+      title: null,
       category: { id: 'cat-1', name: '餐飲' },
       account: { id: accountId, name: '現金' },
       toAccount: null,
       creator: { id: creatorId, name: 'Alice' },
       debt: null,
+      split: null,
       createdAt: joined.createdAt.toISOString(),
     });
   });
@@ -265,54 +271,34 @@ describe('TransactionsService', () => {
   });
 
   describe('list', () => {
-    it('applies defaults (page 1, limit 20), filters soft-deleted, sorts newest first', async () => {
-      await service.list(ledgerId, creatorId, {});
-
-      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { ledgerId, deletedAt: null },
-          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-          skip: 0,
-          take: 20,
-        }),
-      );
+    it('runs grouping and pagination in SQL', async () => {
+      const result = await service.list(ledgerId, creatorId, { page: 3, limit: 500 });
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(result).toMatchObject({ page: 3, limit: 100, total: 0 });
     });
 
-    it('caps limit at 100 and paginates with skip', async () => {
-      await service.list(ledgerId, creatorId, { page: 3, limit: 500 });
-
-      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 200, take: 100 }),
-      );
-    });
-
-    it('builds a where clause from type, category and date range', async () => {
+    it('passes filters into the SQL query before pagination', async () => {
       await service.list(ledgerId, creatorId, {
         type: 'EXPENSE',
         categoryId: 'cat-1',
         from: '2026-08-01T00:00:00.000Z',
         to: '2026-08-31T23:59:59.999Z',
       });
-
-      expect(prisma.transaction.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            ledgerId,
-            deletedAt: null,
-            type: 'EXPENSE',
-            categoryId: 'cat-1',
-            date: {
-              gte: new Date('2026-08-01T00:00:00.000Z'),
-              lte: new Date('2026-08-31T23:59:59.999Z'),
-            },
-          },
-        }),
+      const calls = prisma.$queryRaw.mock.calls as Array<[{ values: unknown[] }]>;
+      const sql = calls[0]![0];
+      expect(sql.values).toEqual(
+        expect.arrayContaining([
+          'EXPENSE',
+          'cat-1',
+          new Date('2026-08-01T00:00:00.000Z'),
+          new Date('2026-08-31T23:59:59.999Z'),
+        ]),
       );
     });
 
     it('returns items with the pagination envelope', async () => {
       prisma.transaction.findMany.mockResolvedValue([joined]);
-      prisma.transaction.count.mockResolvedValue(1);
+      prisma.$queryRaw.mockResolvedValueOnce([{ id: 'txn-1', total: 1n }]);
 
       const result = await service.list(ledgerId, creatorId, { page: 1, limit: 20 });
 

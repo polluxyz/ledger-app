@@ -29,6 +29,10 @@ export const SYNCED_ENTRY_KINDS: ReadonlySet<DebtEntryKind> = new Set([
   'COLLECT',
   'REPAY',
   'FORGIVE',
+  'PAID_FOR_THEM',
+  'PAID_FOR_ME',
+  'RECEIVED_FOR_THEM',
+  'RECEIVED_FOR_ME',
 ]);
 
 /**
@@ -49,6 +53,14 @@ export function mirrorKind(kind: DebtEntryKind): DebtEntryKind {
       return 'FORGIVEN';
     case 'FORGIVEN':
       return 'FORGIVE';
+    case 'PAID_FOR_THEM':
+      return 'PAID_FOR_ME';
+    case 'PAID_FOR_ME':
+      return 'PAID_FOR_THEM';
+    case 'RECEIVED_FOR_THEM':
+      return 'RECEIVED_FOR_ME';
+    case 'RECEIVED_FOR_ME':
+      return 'RECEIVED_FOR_THEM';
     default:
       return kind;
   }
@@ -139,6 +151,7 @@ export function toDebtProposal(
     entryKind: incoming ? mirrorKind(row.entryKind) : row.entryKind,
     amount: row.amount,
     date: row.date.toISOString(),
+    title: row.title,
     settle: row.settle,
     ...(incoming ? {} : { sourceEntryId: row.sourceEntryId }),
     previous: previousOf(row, incoming),
@@ -168,7 +181,13 @@ async function recipientOf(client: ProposalClient, counterpartyId: string): Prom
  */
 export async function proposeCreate(
   tx: ProposalClient,
-  input: { fromUserId: string; entry: DebtEntryRow; amount: number; settle: boolean },
+  input: {
+    fromUserId: string;
+    entry: DebtEntryRow;
+    amount: number;
+    settle: boolean;
+    title?: string | null;
+  },
 ): Promise<void> {
   if (!SYNCED_ENTRY_KINDS.has(input.entry.kind)) {
     return;
@@ -186,6 +205,7 @@ export async function proposeCreate(
       entryKind: input.entry.kind,
       amount: input.amount,
       date: input.entry.date,
+      title: input.title ?? null,
       settle: input.settle,
     },
   });
@@ -200,14 +220,18 @@ export async function proposeCreate(
  */
 export async function proposeAmend(
   tx: ProposalClient,
-  input: { fromUserId: string; entry: DebtEntryRow; now: Date },
+  input: { fromUserId: string; entry: DebtEntryRow; now: Date; title?: string | null },
 ): Promise<void> {
   const { entry } = input;
   const amount = Math.abs(entry.delta);
 
   const pendingCreate = await tx.debtProposal.updateMany({
     where: { sourceEntryId: entry.id, status: 'PENDING', type: 'CREATE' },
-    data: { amount, date: entry.date },
+    data: {
+      amount,
+      date: entry.date,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+    },
   });
   if (pendingCreate.count > 0 || entry.pairedEntryId === null) {
     return;
@@ -228,6 +252,7 @@ export async function proposeAmend(
       entryKind: entry.kind,
       amount,
       date: entry.date,
+      title: input.title ?? null,
     },
   });
 }
@@ -242,7 +267,7 @@ export async function proposeAmend(
  */
 export async function proposeDelete(
   tx: ProposalClient,
-  input: { fromUserId: string; entry: DebtEntryRow; now: Date },
+  input: { fromUserId: string; entry: DebtEntryRow; now: Date; title?: string | null },
 ): Promise<void> {
   const { entry } = input;
 
@@ -273,6 +298,7 @@ export async function proposeDelete(
       entryKind: entry.kind,
       amount: Math.abs(entry.delta),
       date: entry.date,
+      title: input.title ?? null,
     },
   });
 }

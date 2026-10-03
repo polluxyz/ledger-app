@@ -46,7 +46,7 @@ export class DebtProposalsController {
     @Param('id') id: string,
     @Body() dto: AcceptDebtProposalDto,
   ): Promise<DebtProposal> {
-    return this.proposals.accept(user.sub, id, dto.record);
+    return this.proposals.accept(user.sub, id, dto.record, dto.categoryId, dto.title);
   }
 
   @Post(':id/decline')

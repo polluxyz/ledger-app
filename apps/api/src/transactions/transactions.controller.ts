@@ -95,7 +95,8 @@ export class TransactionsController {
   remove(
     @Param('ledgerId') ledgerId: string,
     @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
   ): Promise<void> {
-    return this.transactions.remove(ledgerId, transactionId);
+    return this.transactions.remove(ledgerId, transactionId, user.sub);
   }
 }

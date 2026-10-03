@@ -61,6 +61,7 @@ model User {
   counterpartyLinksAsHigh CounterpartyLink[] @relation("CounterpartyLinkHigh")
   debtProposalsSent       DebtProposal[]     @relation("DebtProposalFrom")
   debtProposalsReceived   DebtProposal[]     @relation("DebtProposalTo")
+  splits                  Split[]
 }
 
 enum FriendRequestStatus {
@@ -122,9 +123,9 @@ model FriendInviteLink {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  inviter      User          @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviter User  @relation("FriendInviteLinkCreated", fields: [inviterId], references: [id], onDelete: Cascade)
   // SetNull：使用者被刪掉，不該連帶刪掉別人產生過的連結紀錄。
-  usedBy       User?         @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
+  usedBy  User? @relation("FriendInviteLinkUsed", fields: [usedById], references: [id], onDelete: SetNull)
 
   @@index([inviterId])
 }
@@ -147,6 +148,7 @@ model Account {
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions      Transaction[] @relation("TransactionAccount")
   incomingTransfers Transaction[] @relation("TransactionToAccount")
+  splits            Split[]
 
   @@unique([userId, name]) // 同一使用者下名稱唯一
 }
@@ -171,6 +173,7 @@ model Ledger {
   members      LedgerMember[]
   categories   Category[]
   transactions Transaction[]
+  splits       Split[]
 }
 
 model LedgerMember {
@@ -203,6 +206,7 @@ model Category {
 
   ledger       Ledger        @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  splits       Split[]
 
   @@unique([ledgerId, type, name])
 }
@@ -222,6 +226,8 @@ model Transaction {
   amount      Int // 單位：分（0.01 元）的正整數
   date        DateTime // 消費日期（含時間，查詢以日期區間篩選）
   note        String?
+  title       String?
+  splitId     String?
   deletedAt   DateTime? // 軟刪除標記
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -238,11 +244,13 @@ model Transaction {
 
   // 借還帳（3b）：這筆交易若是某筆債務的本金或還款，由債務那一側持有外鍵（spec §4.4）。
   debtEntry DebtEntry?
+  split     Split?     @relation(fields: [splitId], references: [id], onDelete: Restrict)
 
   @@index([ledgerId, date])
   @@index([ledgerId, categoryId])
   @@index([accountId])
   @@index([toAccountId])
+  @@index([splitId])
 }
 
 /// 往來紀錄的種類（spec 3b §3.2）。前 5 種由使用者記；SETTLEMENT、FORGIVE 是系統算出的調整紀錄。
@@ -255,6 +263,9 @@ enum DebtEntryKind {
   SETTLEMENT // 以此結清的差額，讓往來餘額歸零；不產生交易
   FORGIVE // 免除對方欠我的剩餘金額（delta < 0）；不產生交易
   FORGIVEN // 被對方免除（3b-2）：接受對方的免除時寫入，讓我欠的歸零（delta > 0）；不產生交易
+  PAID_FOR_THEM
+  RECEIVED_FOR_THEM
+  RECEIVED_FOR_ME
 }
 
 /// 記帳者的一個往來對象，只存名字（spec 3b 決策 33）。一個對象一本往來帳。
@@ -268,12 +279,14 @@ model Counterparty {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner   User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  entries DebtEntry[]
+  owner             User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  entries           DebtEntry[]
+  splitsAsPayer     Split[]            @relation("SplitPayer")
+  splitParticipants SplitParticipant[]
 
   // 連動（3b-2）：一個對象最多出現在一筆 CounterpartyLink 的其中一側。
-  linkAsLow         CounterpartyLink?  @relation("CounterpartyLinkLowCounterparty")
-  linkAsHigh        CounterpartyLink?  @relation("CounterpartyLinkHighCounterparty")
+  linkAsLow  CounterpartyLink? @relation("CounterpartyLinkLowCounterparty")
+  linkAsHigh CounterpartyLink? @relation("CounterpartyLinkHighCounterparty")
 
   @@unique([ownerId, name])
 }
@@ -293,6 +306,7 @@ model DebtEntry {
   note           String?
   /// 產生的交易。調整紀錄與「不記入帳本」為 null。
   transactionId  String?       @unique
+  splitId        String?
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -301,6 +315,7 @@ model DebtEntry {
   // Restrict：仍被往來紀錄引用的交易不可被真刪。帳本真刪會 cascade 刪交易，所以帳本那一側
   // 另外先擋（LEDGER_HAS_DEBT_TRANSACTIONS，spec 決策 21），這裡是最後防線。
   transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  split        Split?       @relation(fields: [splitId], references: [id], onDelete: Restrict)
 
   /// 對方那邊配對的紀錄（3b-2）。雙向各存一次，在同一個資料庫交易裡寫入與清空。
   /// SetNull：對方刪帳號時他的紀錄跟著刪，我的紀錄自動變回未配對。
@@ -312,6 +327,7 @@ model DebtEntry {
   proposalsAsTarget DebtProposal[] @relation("DebtProposalTarget")
 
   @@index([counterpartyId, deletedAt])
+  @@index([splitId])
 }
 
 enum DebtProposalType {
@@ -368,6 +384,7 @@ model DebtProposal {
   /// 單位：分（0.01 元）的正整數。CREATE、AMEND 是提議的值；DELETE 是刪除當下那筆的值。
   amount        Int
   date          DateTime
+  title         String?
   /// 還款帶了以此結清：接受者那邊依自己的餘額補結清差額。
   settle        Boolean            @default(false)
   status        DebtProposalStatus @default(PENDING)
@@ -383,4 +400,67 @@ model DebtProposal {
   @@index([toUserId, status])
   @@index([fromUserId, status])
   @@index([sourceEntryId, status])
+}
+
+/// 分帳保存完整名單；往來與交易只記錄與擁有者相關的份額。
+model Split {
+  id                  String         @id @default(uuid())
+  ownerId             String
+  ledgerId            String
+  type                SplitType
+  categoryId          String
+  total               Int
+  date                DateTime
+  title               String?
+  note                String?
+  payerCounterpartyId String?
+  accountId           String?
+  method              SplitMethod
+  precision           SplitPrecision @default(CENT)
+  deletedAt           DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  owner        User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ledger       Ledger             @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  category     Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  payer        Counterparty?      @relation("SplitPayer", fields: [payerCounterpartyId], references: [id], onDelete: Restrict)
+  account      Account?           @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  participants SplitParticipant[]
+  transactions Transaction[]
+  entries      DebtEntry[]
+
+  @@index([ownerId, deletedAt])
+  @@index([ledgerId])
+}
+
+/// 名單按輸入順序保存，份額由 shared 的純函式計算。
+model SplitParticipant {
+  id             String  @id @default(uuid())
+  splitId        String
+  counterpartyId String?
+  share          Int
+  ratio          Int?
+  sortOrder      Int
+
+  split        Split         @relation(fields: [splitId], references: [id], onDelete: Cascade)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+
+  @@unique([splitId, counterpartyId])
+}
+
+enum SplitType {
+  EXPENSE
+  INCOME
+}
+
+enum SplitMethod {
+  EQUAL
+  AMOUNT
+  RATIO
+}
+
+enum SplitPrecision {
+  CENT
+  YUAN
 }

@@ -227,7 +227,8 @@ export class LedgersService {
     const debtTransactions = await this.prisma.debtEntry.count({
       where: { transaction: { ledgerId } },
     });
-    if (debtTransactions > 0) {
+    const splits = await this.prisma.split.count({ where: { ledgerId } });
+    if (debtTransactions > 0 || splits > 0) {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS,
