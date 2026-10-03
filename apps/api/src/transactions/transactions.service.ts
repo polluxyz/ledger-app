@@ -53,7 +53,7 @@ interface TransactionRow {
   title: string | null;
   splitId: string | null;
   createdAt: Date;
-  category: { id: string; name: string } | null;
+  category: { id: string; name: string; icon: string | null } | null;
   account: AccountRef | null;
   toAccount: AccountRef | null;
   creator: { id: string; name: string };
@@ -104,7 +104,7 @@ interface TransactionRow {
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
 // `userId`——遮蔽他人帳戶時需要它來比對檢視者，其他欄位一概不取。
 const TRANSACTION_INCLUDE = {
-  category: { select: { id: true, name: true } },
+  category: { select: { id: true, name: true, icon: true } },
   account: { select: { id: true, name: true, userId: true } },
   toAccount: { select: { id: true, name: true, userId: true } },
   creator: { select: { id: true, name: true } },
@@ -740,7 +740,13 @@ export class TransactionsService {
       date: row.date.toISOString(),
       note: row.note,
       title: row.title,
-      category: row.category ? { id: row.category.id, name: row.category.name } : null,
+      category: row.category
+        ? {
+            id: row.category.id,
+            name: row.category.name,
+            icon: row.category.icon as import('@ledger/shared').CategoryIcon | null,
+          }
+        : null,
       account: this.visibleAccount(row.account, viewerUserId),
       toAccount: this.visibleAccount(row.toAccount, viewerUserId),
       creator: { id: row.creator.id, name: row.creator.name },

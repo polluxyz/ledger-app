@@ -91,6 +91,14 @@ describe('Splits (e2e)', () => {
       txs.filter((tx) => tx.accountId === alice.cashId).reduce((sum, tx) => sum + tx.amount, 0),
     ).toBe(300000);
     expect((await list(alice)).items[0]?.split?.counterparts).toHaveLength(3);
+    const listed = (await list(alice)).items;
+    expect(listed.find((tx) => tx.type === 'EXPENSE')?.category).toMatchObject({
+      id: input.categoryId,
+      icon: 'food',
+    });
+    expect(listed.filter((tx) => tx.type === 'LEND').every((tx) => tx.category === null)).toBe(
+      true,
+    );
   });
 
   it('SC-S2: another payer records only my expense and debt', async () => {

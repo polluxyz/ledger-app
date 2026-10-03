@@ -68,6 +68,7 @@ describe('Transactions (e2e)', () => {
     expect(created.status).toBe(201);
     const txn = created.body as Transaction;
     expect(txn.category?.id).toBe(expenseCat);
+    expect(txn.category?.icon).toBe('food');
     expect(txn.account).toEqual({ id: accountId, name: '現金' });
     expect(txn.creator.name).toBe('Alice');
 

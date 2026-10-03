@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
-import { CATEGORY_TYPES } from '@ledger/shared';
-import type { CategoryType, CreateCategoryRequest } from '@ledger/shared';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { CATEGORY_ICONS, CATEGORY_TYPES } from '@ledger/shared';
+import type { CategoryIcon, CategoryType, CreateCategoryRequest } from '@ledger/shared';
 
 /**
  * 新增分類的請求形狀：名稱＋型別（型別決定它適用於收入或支出）。
@@ -19,4 +19,9 @@ export class CreateCategoryDto implements CreateCategoryRequest {
   @ApiProperty({ enum: CATEGORY_TYPES, example: 'EXPENSE' })
   @IsIn(CATEGORY_TYPES)
   type!: CategoryType;
+
+  @ApiProperty({ enum: CATEGORY_ICONS, required: false, nullable: true, example: 'food' })
+  @IsOptional()
+  @IsIn(CATEGORY_ICONS)
+  icon?: CategoryIcon | null;
 }

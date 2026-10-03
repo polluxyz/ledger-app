@@ -411,7 +411,7 @@ describe('Debt ledger (e2e)', () => {
         type: 'EXPENSE',
         amount: 400,
         account: null,
-        category: { id: categoryId },
+        category: { id: categoryId, icon: 'food' },
         debt: { counterpartyName: '小明' },
       });
     });

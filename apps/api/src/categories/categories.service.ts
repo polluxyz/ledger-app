@@ -1,5 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Category, CategoryType, ErrorCode, TransactionType } from '@ledger/shared';
+import {
+  Category,
+  CategoryIcon,
+  CategoryType,
+  ErrorCode,
+  TransactionType,
+  UpdateCategoryRequest,
+} from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +22,7 @@ interface CategoryRow {
   id: string;
   ledgerId: string;
   name: string;
+  icon: string | null;
   type: TransactionType;
   sortOrder: number;
   createdAt: Date;
@@ -36,7 +44,12 @@ export class CategoriesService {
   }
 
   /** 新增分類。名稱在（帳本, 型別）範圍內必須唯一（靠 DB 唯一索引擋重複）。 */
-  async create(ledgerId: string, name: string, type: CategoryType): Promise<Category> {
+  async create(
+    ledgerId: string,
+    name: string,
+    type: CategoryType,
+    icon?: CategoryIcon | null,
+  ): Promise<Category> {
     // 排到同型別的最後。少了這一步，新分類會拿到 `sortOrder` 的預設值 0，
     // 於是和「餐飲」並列第一，靠名稱插進預設分類中間——使用者剛加的東西
     // 出現在清單中央，看起來像亂跳。
@@ -44,7 +57,7 @@ export class CategoriesService {
 
     try {
       const category = await this.prisma.category.create({
-        data: { ledgerId, name, type, sortOrder },
+        data: { ledgerId, name, type, sortOrder, icon: icon ?? null },
       });
       return this.toCategory(category);
     } catch (error) {
@@ -55,13 +68,27 @@ export class CategoriesService {
     }
   }
 
-  /** 分類改名（型別不可變——避免既有交易的型別對應被打亂）。 */
-  async rename(ledgerId: string, categoryId: string, name: string): Promise<Category> {
+  /** 僅更新有送出的欄位；空請求沒有可執行的變更，因此回 400。 */
+  async update(
+    ledgerId: string,
+    categoryId: string,
+    input: UpdateCategoryRequest,
+  ): Promise<Category> {
+    if (input.name === undefined && input.icon === undefined) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.VALIDATION_FAILED,
+        'At least one of name or icon is required.',
+      );
+    }
     await this.getOwned(ledgerId, categoryId);
     try {
       const category = await this.prisma.category.update({
         where: { id: categoryId },
-        data: { name },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+        },
       });
       return this.toCategory(category);
     } catch (error) {
@@ -133,6 +160,7 @@ export class CategoriesService {
     return {
       id: category.id,
       name: category.name,
+      icon: category.icon as CategoryIcon | null,
       // DB 的欄位與交易共用同一個 enum（含 TRANSFER），但分類永遠不會是轉帳：
       // 唯二的寫入路徑——DTO 與預設種子——都只接受 EXPENSE / INCOME。
       type: category.type as CategoryType,
