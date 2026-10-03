@@ -5,21 +5,18 @@
 
 ---
 
-## 最新交接（2026-10-01，3b-2 修訂 2、3 與右側欄修正）
+## 最新交接（2026-10-03，3c-0 金額改成分、3c 代墊與分帳）
 
 ### 現況
 
-- 3b-2 已做到修訂 3，全部合併。spec：`docs/specs/phase-3b2-web.md` §11（修訂 2）、§12（修訂 3）；實作紀錄在 `tasks/archive/phase-3b2-revision{2,3}-plan.md`。
-  - #80：總覽「待確認」卡片每 30 秒輪詢（原本的已知問題，已解）。
-  - #82（修訂 2）：對象頁只管人，右側欄「對象」只有資料與管理按鈕；交易頁往來帳只留帳。
-  - #83（修訂 3）：交易頁與總覽右側欄關閉／取消／儲存都直接收起；明細點借還交易直接編輯那一筆。API：`Transaction.debt` 加 `paired`、`note`（只增欄位）。
-  - #84：收起時內容保留到滑出動畫結束；`RightPanelProvider.close()` 把焦點還給打開它的元素。
-- 開發者已確認畫面。沒有進行中的 PR、worker 或 worktree（Orca run `run_3caaf6182415` 已全部結清，不需接手）。
+- **3c-0**（#87）：全系統金額改用「分」（0.01 元）存放與傳遞。spec：`docs/specs/phase-3c0-money-cents.md`；紀錄：`tasks/archive/phase-3c0-plan.md`。前端只透過 `@ledger/shared` 的 `formatMoney`／`parseMoneyInput`／`centsToInput` 換算。
+- **3c 代墊與分帳**（後端與畫面同一個 PR）：spec `docs/specs/phase-3c-split.md`（決策 82～107）、`phase-3c-web.md`（W62～W88）；紀錄 `tasks/archive/phase-3c{,-web}-plan.md` §6。份額計算只在 `packages/shared/src/split-shares.ts`（後端以它為準，前端只預覽）。
+- 開發者指示「平行進行、等完成再叫我」，3c 的後端 plan 與畫面 spec 由協調者自行核可。**開發者還沒操作過 3c 的畫面**，下一步是收回饋。
 
 ### 下一步
 
-1. 等開發者操作後的回饋；照 `CLAUDE.md` §5 先改 spec 再動工。
-2. 更後面：代墊／多人分帳（要改資料模型），或收尾階段三進入階段四。開發者還沒決定。
+1. 開發者操作 3c 畫面後的回饋；照 `CLAUDE.md` §5 先改 spec 再動工。
+2. 延後項目（spec 3c §9）：共享帳本的分帳畫面與成員結清、訊息功能、多人一起付款、份數分帳。之後也可能收尾階段三進入階段四。
 
 ### 開發者的偏好與約束（不在 spec 裡的）
 
@@ -32,6 +29,10 @@
 - 開發者的 dev 伺服器在 `web-redesign` worktree（detached HEAD，跟 `origin/main`）跑：API 用 `node dist/main`、不是 watch。後端或 `packages/shared` 有改：替他 `git checkout --detach origin/main`、`pnpm --filter @ledger/shared build`、`apps/api` 的 `pnpm build`（有 migration 再 `prisma migrate deploy`），然後請他重開 API 與 Vite。只改前端時 Vite 會自動更新，請他按 `Ctrl + Shift + R`。
 
 ### 已知問題與踩過的坑
+
+- **改了 `packages/shared` 之後，本機 Vite 的預先打包快取（`apps/web/node_modules/.vite`）要刪掉**，否則 dev 與 Web e2e 會出現「xxx is not a function」。替開發者部署時也要刪 `web-redesign` 的。
+- shared 的測試用 Node 內建 test runner 直接跑 `.ts`（型別剝除）：被測檔只能 `import type`，不帶副檔名的值匯入會解析不到（`split-shares.ts` 因此自己定義 `SPLIT_RATIO_TOTAL`）。
+- 共享帳本的其他成員看到分帳時是一筆一筆的交易（`split` 為 `null`，spec 3c SC-S16）；合併顯示只給擁有者。
 
 - **借還交易本身的 `note` 一律是 `null`**，備註存在往來紀錄上（`Transaction.debt.note`）。顯示或編輯借還交易的備註要用後者。
 - **右側欄收起時內容不卸載**（#84）。新增打開右側欄的入口時，一定要先設定面板目標；列表的選取標示要配合 `isOpen`。

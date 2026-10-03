@@ -1,6 +1,6 @@
 # Spec：階段三 (3c) — 代墊與分帳的 Web 畫面
 
-> 狀態：**協調者依已核可的方向自行核可**（2026-10-03）。開發者指示「平行進行、等完成再叫我」，畫面方向已在 `phase-3c-split.md` §7、§12 定案，本檔只把它展開成可以實作與驗收的規格；細節等開發者操作後再調整（spec 是活文件）。
+> 狀態：**已實作**（2026-10-03，實作紀錄：`tasks/archive/phase-3c-web-plan.md` §6）。畫面方向已在 `phase-3c-split.md` §7、§12 定案；開發者指示「平行進行、等完成再叫我」，本檔由協調者展開成規格，細節等開發者操作後再調整（spec 是活文件）。
 > 依據：`phase-3c-split.md`（決策 82～107、§5、§7、§12）；三輪提案頁（`docs/artifacts/step-3c-split-*.html`，不進版控）。
 > 前置：3c-0（#87）已合併。與 3c 後端平行開發，共用 `packages/shared` 的契約（`types/split.ts`、`split-shares.ts`）。
 > 定位：只動 Web。做畫面時發現後端規則或 API 要改，先停下來改 `phase-3c-split.md`。
