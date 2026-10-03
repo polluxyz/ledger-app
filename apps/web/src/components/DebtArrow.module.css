@@ -1,18 +1,25 @@
+/*
+ * 箭頭：`[欠錢的人] ──金額──▶ [被欠的人]`（3c W82）。
+ *
+ * 名字與箭頭線都不縮（flex: none）：在窄的右側欄裡被擠成「小.」比換行更難讀。
+ * 名字太長時才在 8 個字左右截斷。金額放在線的上方，線的寬度跟著金額長短走。
+ */
 .arrow {
   display: inline-flex;
-  min-width: 0;
+  max-width: 100%;
   vertical-align: middle;
 }
 
 .visual {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-xs);
-  min-width: 0;
   max-width: 100%;
 }
 
 .person {
+  flex: none;
+  max-width: 8em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -20,16 +27,19 @@
 
 .track {
   position: relative;
-  flex: 0 1 5.5rem;
-  min-width: 2.25rem;
-  height: 1.75rem;
+  flex: none;
+  min-width: 3rem;
+  /* 右邊留空間給箭頭頭；底部對齊名字的基線附近。 */
+  padding: 0 0.75rem 0.1rem 0.25rem;
+  margin-bottom: 0.55em;
   border-bottom: 1px solid var(--color-text-muted);
+  text-align: center;
 }
 
 .track::after {
   position: absolute;
   right: 0;
-  bottom: -0.28rem;
+  bottom: -0.25rem;
   width: 0.45rem;
   height: 0.45rem;
   border-top: 1px solid var(--color-text-muted);
@@ -39,16 +49,10 @@
 }
 
 .amount {
-  position: absolute;
-  right: 0;
-  bottom: 0.2rem;
-  left: 0;
-  overflow: hidden;
+  display: block;
   color: var(--color-text);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  text-align: center;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

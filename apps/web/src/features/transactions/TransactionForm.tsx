@@ -555,6 +555,14 @@ export function TransactionForm({
             setAmount('');
             setTitle('');
             setNote('');
+            // 下一筆回到預設的「我付、不分」（W66）：分帳的人與付款人每筆都不同，留著反而容易記錯。
+            setSplitEnabled(false);
+            setSplitMethod('EQUAL');
+            setSplitPrecision('CENT');
+            setParticipants([makeMeParticipant()]);
+            setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+            setSelectedPayer(null);
+            setPayerName('我');
           }
         }
         return;
@@ -781,7 +789,6 @@ export function TransactionForm({
           enabled={splitEnabled}
           pending={pending}
           type={type}
-          payerName={payerDisplayName}
           isPayerOther={isPayerOther}
           participants={participants}
           previewShares={previewShares}

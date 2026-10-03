@@ -10,7 +10,6 @@ interface SplitSectionProps {
   enabled: boolean;
   pending: boolean;
   type: Extract<ManualTransactionType, 'EXPENSE' | 'INCOME'>;
-  payerName: string;
   isPayerOther: boolean;
   participants: SplitParticipantDraft[];
   previewShares: Map<string, number> | null;
@@ -26,7 +25,6 @@ export function SplitSection({
   enabled,
   pending,
   type,
-  payerName,
   isPayerOther,
   participants,
   previewShares,
@@ -99,25 +97,33 @@ export function SplitSection({
             })}
           </ul>
 
-          {included.map((person) => {
-            const share = previewShares?.get(person.key);
-            if (person.isMe || person.name === payerName || share === undefined) return null;
-            const from = type === 'EXPENSE' ? person.name : isPayerOther ? payerName : '我';
-            const to = type === 'EXPENSE' ? (isPayerOther ? payerName : '我') : person.name;
-            const srText =
-              from === '我'
-                ? `你欠${to} ${formatMoney(share)}`
-                : `${from}欠你 ${formatMoney(share)}`;
-            return (
-              <DebtArrow
-                key={`arrow-${person.key}`}
-                from={from}
-                to={to}
-                amount={share}
-                srText={srText}
-              />
-            );
-          })}
+          {/*
+           * 只有我付（收）時才列出每個人的箭頭。別人付時，其他人欠付款人多少不關我的事
+           * （3c 決策 87、W67），我欠付款人的那一行已經在帳戶列下方（W65），這裡不重複。
+           */}
+          {!isPayerOther && (
+            <div className={styles.arrows}>
+              {included.map((person) => {
+                const share = previewShares?.get(person.key);
+                if (person.isMe || share === undefined) return null;
+                const from = type === 'EXPENSE' ? person.name : '我';
+                const to = type === 'EXPENSE' ? '我' : person.name;
+                const srText =
+                  from === '我'
+                    ? `你欠${to} ${formatMoney(share)}`
+                    : `${from}欠你 ${formatMoney(share)}`;
+                return (
+                  <DebtArrow
+                    key={`arrow-${person.key}`}
+                    from={from}
+                    to={to}
+                    amount={share}
+                    srText={srText}
+                  />
+                );
+              })}
+            </div>
+          )}
 
           <div className={styles.add}>
             <CounterpartyPicker
