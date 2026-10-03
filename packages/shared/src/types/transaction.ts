@@ -1,4 +1,5 @@
 import type { Cents } from '../money';
+import type { CategoryIcon } from '../constants/category-icons';
 import type { DebtEntryKind } from './debt';
 import type { TransactionSplitRef } from './split';
 
@@ -56,6 +57,13 @@ export function isDebtTransactionType(type: TransactionType): type is DebtTransa
 export const CATEGORY_TYPES = ['EXPENSE', 'INCOME'] as const;
 export type CategoryType = (typeof CATEGORY_TYPES)[number];
 
+/** 交易回應中的分類：多帶圖示代號（3d），交易列直接顯示，不必另查分類。 */
+export interface TransactionCategoryRef {
+  id: string;
+  name: string;
+  icon: CategoryIcon | null;
+}
+
 /** 交易回應中，被引用資源的精簡形狀（只有顯示所需的 id 與名稱）。 */
 export interface TransactionRef {
   id: string;
@@ -77,7 +85,7 @@ export interface Transaction {
   title: string | null;
   note: string | null;
   /** 分類；`TRANSFER` 交易為 `null`。 */
-  category: TransactionRef | null;
+  category: TransactionCategoryRef | null;
   /**
    * 錢從哪個帳戶出去（`INCOME` 則是進到哪個帳戶）。以下兩種情況為 `null`：
    *
