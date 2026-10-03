@@ -35,21 +35,21 @@
   list-style: none;
 }
 
-/* 每列固定 44px；只有分帳展開時才額外長出明細列。 */
+/* 每列固定兩行 52px（3d 修訂 1；52px 讓 1440×900 首屏仍放得下 10 筆，SC-24.3）；只有分帳展開時才額外長出明細列。 */
 .row {
   display: grid;
   grid-template-columns: 1.5rem minmax(0, 1fr) 7rem 1.75rem;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-  height: 2.75rem;
+  height: 3.25rem;
   padding: 0 var(--space-md);
   border-bottom: 1px solid var(--color-border);
 }
 
 .rowExpanded {
   height: auto;
-  grid-template-rows: 2.75rem auto;
+  grid-template-rows: 3.25rem auto;
 }
 
 .clickable {
@@ -75,20 +75,42 @@
   color: var(--color-text-muted);
 }
 
+/* 兩行：上面分類、下面名稱。兩行都在自己的寬度裡截斷（T11）。 */
 .main {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
   height: 100%;
 }
 
 .title {
-  /* 分帳膠囊緊跟在名稱後面（3d T1），名稱太長時才截斷。 */
-  flex: 0 1 auto;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 第二行：名稱＋分帳膠囊。沒有名稱時仍佔一行高度，列高才不會跳。 */
+.subtitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  min-width: 0;
+  min-height: 1.1rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
