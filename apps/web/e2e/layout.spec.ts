@@ -158,7 +158,8 @@ test('SC-T2：有名稱、無名稱、借還、分帳與轉帳列等高', async 
     payer: null,
     accountId: cash!.id,
     method: 'EQUAL',
-    participants: [{ counterpartyId: null }],
+    // 我付的分帳名單一定要有別人，否則後端回 SPLIT_NOT_NEEDED。
+    participants: [{ counterpartyId: null }, { counterpartyId: counterparty.id }],
   });
   await createTransaction(request, userA.token, ledger.id, {
     type: 'TRANSFER',

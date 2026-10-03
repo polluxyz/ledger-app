@@ -84,7 +84,8 @@
 }
 
 .title {
-  flex: 1 1 0;
+  /* 分帳膠囊緊跟在名稱後面（3d T1），名稱太長時才截斷。 */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   font-weight: 600;

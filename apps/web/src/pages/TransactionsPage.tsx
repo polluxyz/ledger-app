@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
@@ -13,7 +13,10 @@ import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
-import { TransactionFilterBar } from '../features/transactions/TransactionFilters';
+import {
+  TransactionFilterPanel,
+  TransactionFilterToggle,
+} from '../features/transactions/TransactionFilters';
 import { TransactionList } from '../features/transactions/TransactionList';
 import {
   TransactionWorkbench,
@@ -84,6 +87,8 @@ type TransactionsView = 'details' | 'debts';
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterPanelId = useId();
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -189,23 +194,34 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
           「明細／借還」的檢視切換（spec 4.2）。狀態在網址上，這裡只反映目前值。
           借還也是交易（錢進出帳戶），所以它住在交易頁，側欄不加項目（決策 W1）。
         */}
-        <div className={styles.viewSwitch} role="group" aria-label="檢視">
-          <button
-            type="button"
-            className={styles.viewSwitchButton}
-            aria-pressed={view === 'details'}
-            onClick={() => switchView('details')}
-          >
-            明細
-          </button>
-          <button
-            type="button"
-            className={styles.viewSwitchButton}
-            aria-pressed={view === 'debts'}
-            onClick={() => switchView('debts')}
-          >
-            借還
-          </button>
+        {/* 檢視切換與漏斗同一列（3d T6）：漏斗只在明細時出現，借還沒有這組篩選。 */}
+        <div className={styles.toolbarRow}>
+          <div className={styles.viewSwitch} role="group" aria-label="檢視">
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={view === 'details'}
+              onClick={() => switchView('details')}
+            >
+              明細
+            </button>
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={view === 'debts'}
+              onClick={() => switchView('debts')}
+            >
+              借還
+            </button>
+          </div>
+          {view !== 'debts' && (
+            <TransactionFilterToggle
+              filters={filters}
+              expanded={filtersOpen}
+              controlsId={filterPanelId}
+              onToggle={() => setFiltersOpen((current) => !current)}
+            />
+          )}
         </div>
 
         {view === 'debts' ? (
@@ -214,11 +230,14 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         ) : (
           // 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。
           <section className={styles.listCard}>
-            <TransactionFilterBar
-              ledgerId={ledger.id}
-              filters={filters}
-              onChange={handleFiltersChange}
-            />
+            {filtersOpen && (
+              <TransactionFilterPanel
+                id={filterPanelId}
+                ledgerId={ledger.id}
+                filters={filters}
+                onChange={handleFiltersChange}
+              />
+            )}
 
             <TransactionList
               transactions={transactions.data?.items ?? []}

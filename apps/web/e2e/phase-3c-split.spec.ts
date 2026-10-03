@@ -91,7 +91,8 @@ test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份',
   await expect(proposal.getByLabel('分類')).toBeVisible();
   await expect(proposal.getByLabel('帳戶')).toHaveCount(0);
   await proposal.getByLabel('記在哪本帳本').selectOption(bPersonal.id);
-  await selectCategory(proposal, bCategory.name);
+  // 待確認卡片的分類仍是原生下拉（3d 只把記帳表單換成圖示選單）。
+  await proposal.getByLabel('分類').selectOption(bCategory.id);
   await proposal.getByRole('button', { name: '接受' }).click();
 
   await switchLedger(pageB, bPersonal.name);

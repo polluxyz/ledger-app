@@ -35,8 +35,10 @@ test('新增的分類與圖示立刻出現在記帳表單的選單裡', async ({
   // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
   await openNewTransaction(page);
 
-  // 關鍵斷言：不重整頁面，分類選單就該顯示新名字。
-  await expect(newTransactionForm(page).getByLabel('分類')).toContainText('寵物');
+  // 關鍵斷言：不重整頁面，分類選單就該顯示新名字。分類選單是自訂的圖示選單（3d），要先打開。
+  const form = newTransactionForm(page);
+  await form.getByRole('combobox', { name: '分類' }).click();
+  await expect(form.getByRole('listbox', { name: '分類' })).toContainText('寵物');
 });
 
 test('更新後的分類在記帳表單的選單裡顯示新名字', async ({ signedInPage: page, userA, request }) => {
@@ -57,8 +59,10 @@ test('更新後的分類在記帳表單的選單裡顯示新名字', async ({ si
   await page.getByRole('link', { name: '首頁' }).click();
   await openNewTransaction(page);
 
-  const categorySelect = newTransactionForm(page).getByLabel('分類');
-  await expect(categorySelect).toContainText('外食');
+  const form = newTransactionForm(page);
+  await form.getByRole('combobox', { name: '分類' }).click();
+  const categoryOptions = form.getByRole('listbox', { name: '分類' });
+  await expect(categoryOptions).toContainText('外食');
   // 舊名字必須真的消失，不是多出一個選項。
-  await expect(categorySelect).not.toContainText(expense.name);
+  await expect(categoryOptions).not.toContainText(expense.name);
 });

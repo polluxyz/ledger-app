@@ -78,7 +78,8 @@ test('在 CSP 之下登入並讀得到資料，過程沒有任何 CSP 違規', a
   // 「登出」收在使用者選單裡（spec 2i SC-32）。
   await openUserMenu(page);
   await expect(page.getByRole('button', { name: '登出' })).toBeVisible();
-  await expect(transactionRow(page, '-$120')).toContainText('CSP 探針');
+  // 交易列不顯示備註（3d T1），所以只確認那一列有畫出來——資料拉得到就代表 connect-src 沒擋。
+  await expect(transactionRow(page, '-$120')).toBeVisible();
 
   const violations = consoleTexts.filter((text) => text.includes('Content Security Policy'));
   expect(violations, `出現 CSP 違規：${violations.join('｜')}`).toEqual([]);
