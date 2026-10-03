@@ -24,9 +24,7 @@ interface PaymentRowProps {
   onAccountChange: (accountId: string) => void;
   onModeChange: (mode: 'account' | 'counterparty' | 'self') => void;
   onPayerNameChange: (name: string) => void;
-  onPayerNameAdded: (name: string) => void;
   onPayerSelect: (counterparty: Counterparty | null) => void;
-  onSelectSelf: () => void;
 }
 
 /** 帳戶與付款人共用一列，切換時保留各自的選擇並預覽我的往來方向。 */
@@ -43,9 +41,7 @@ export function PaymentRow({
   onAccountChange,
   onModeChange,
   onPayerNameChange,
-  onPayerNameAdded,
   onPayerSelect,
-  onSelectSelf,
 }: PaymentRowProps) {
   const personLabel = type === 'INCOME' ? '收款人' : '付款人';
   const nextMode =
@@ -82,11 +78,8 @@ export function PaymentRow({
           <CounterpartyPicker
             label={personLabel}
             value={payerName}
-            includeSelf
             onChange={onPayerNameChange}
             onSelect={onPayerSelect}
-            onSelectSelf={onSelectSelf}
-            onAddName={onPayerNameAdded}
           />
         ) : (
           <p className={styles.self}>{personLabel}：我</p>

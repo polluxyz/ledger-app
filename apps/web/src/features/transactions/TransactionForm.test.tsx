@@ -3,17 +3,15 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LedgerSummary } from '@ledger/shared';
+import type { LedgerSummary, Split } from '@ledger/shared';
 import App from '../../App';
 import { TransactionForm } from './TransactionForm';
 
 /**
- * 新增交易表單上方的「支出／收入／轉帳／借還」分段控制（spec 2i SC-43.2、3b-1 W2）。
+ * 交易表單驗證型別切換、帳戶與付款人切換、分帳送出及舊分帳編輯。
  *
- * 第三輪把選中的底色從按鈕身上抽出來，改成一個會滑動的方塊。**滑動本身在 jsdom
- * 看不到**（沒有版面，量不到 transform 的實際位置），所以這一檔驗的是改寫之後
- * 沒有弄丟的東西：按鈕的無障礙名稱、`aria-pressed` 跟著選擇變、方塊是裝飾
- * （`aria-hidden`）而且格數與按鈕數一致。
+ * 測試從真實 `TransactionForm` 出發，只把 API fetch 換成 mock；因此能同時驗證
+ * 欄位狀態與送出的 request body，而不用啟動後端。
  *
  * 3b-1 加了第 4 格「借還」：新增模式固定多一格，方塊的寬度與位移照實際格數
  * 算（下面兩條釘住這件事）；編輯模式沒有那一格（借還交易不能編輯）。
@@ -21,7 +19,7 @@ import { TransactionForm } from './TransactionForm';
  * 策略：從真實的 `App` 出發，只把 `fetch` 換成 mock。表單住在右側欄，要先按
  * 「＋ 新增交易」才會出現，而且是 portal 進外殼的，所以一律用 `findBy*`。
  */
-describe('Transaction type segmented control', () => {
+describe('TransactionForm', () => {
   const fetchMock = vi.fn();
 
   /** 連動帳本才畫得出轉帳鈕（見 TransactionForm 的 `canTransfer`）。 */
@@ -140,6 +138,20 @@ describe('Transaction type segmented control', () => {
       const call = fetchMock.mock.calls.find(
         ([url, init]) =>
           String(url).includes(pathPart) && (init as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(call).toBeDefined();
+      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
+    });
+    return body;
+  }
+
+  async function patchedBody(pathPart: string): Promise<Record<string, unknown>> {
+    let body: Record<string, unknown> = {};
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes(pathPart) && (init as RequestInit | undefined)?.method === 'PATCH',
       );
       expect(call).toBeDefined();
       const raw = (call?.[1] as RequestInit | undefined)?.body;
@@ -366,7 +378,17 @@ describe('Transaction type segmented control', () => {
     await user.type(payer, '小明');
     await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
 
+    expect(screen.queryByRole('region', { name: '分帳' })).not.toBeInTheDocument();
     expect(screen.getByText('你欠小明 $750')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '改為選帳戶' }));
+    expect(
+      within(screen.getByRole('region', { name: '分帳' })).getByRole('checkbox', { name: '分帳' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const secondPayer = screen.getByRole('combobox', { name: '付款人' });
+    await user.type(secondPayer, '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
     await user.click(screen.getByRole('button', { name: /^新增$/ }));
 
     const body = await postedBody('/splits');
@@ -376,9 +398,175 @@ describe('Transaction type segmented control', () => {
       title: '晚餐',
       total: 75000,
       payer: { counterpartyId: 'cp-1' },
+      method: 'EQUAL',
       participants: [{ counterpartyId: null }],
     });
     expect(body).not.toHaveProperty('accountId');
+  });
+
+  it('starts the payer picker blank and never offers me', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    expect(payer).toHaveValue('');
+    await user.click(payer);
+
+    expect(await screen.findByRole('option', { name: '小明' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '我' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the split list when choosing another payer and restores the toggle on account mode', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.type(screen.getByLabelText('金額'), '3000');
+    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await user.click(screen.getByRole('checkbox', { name: '分帳' }));
+    const addPerson = screen.getByRole('combobox', { name: '＋ 新增分帳對象' });
+    await user.type(addPerson, '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    await user.type(payer, '小華');
+    await user.click(await screen.findByRole('option', { name: '＋ 新增「小華」' }, WAIT));
+    expect(screen.queryByRole('region', { name: '分帳' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '改為選帳戶' }));
+    const splitSection = screen.getByRole('region', { name: '分帳' });
+    expect(within(splitSection).getByRole('checkbox', { name: '分帳' })).toBeChecked();
+    expect(within(splitSection).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(splitSection).getAllByRole('listitem')[1]).toHaveTextContent('小明');
+    expect(within(splitSection).queryByText('小華')).not.toBeInTheDocument();
+  });
+
+  it('applies the blank recipient picker and one-person request to income', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.click(screen.getByRole('button', { name: '收入' }));
+    await user.type(screen.getByLabelText('金額'), '750');
+    await user.selectOptions(screen.getByRole('combobox', { name: '分類' }), 'cat-1');
+    await user.click(screen.getByRole('button', { name: '改為選收款人' }));
+    const payee = screen.getByRole('combobox', { name: '收款人' });
+    expect(payee).toHaveValue('');
+    await user.click(payee);
+    expect(await screen.findByRole('option', { name: '小明' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '我' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: '小明' }));
+
+    expect(screen.queryByRole('region', { name: '分帳' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    expect(await postedBody('/splits')).toMatchObject({
+      type: 'INCOME',
+      total: 75000,
+      payer: { counterpartyId: 'cp-1' },
+      method: 'EQUAL',
+      participants: [{ counterpartyId: null }],
+    });
+  });
+
+  it('edits an older payer split using my share and saves it as one-person equal', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const legacySplit: Split = {
+      id: 'split-legacy',
+      type: 'EXPENSE',
+      ledgerId: 'ledger-1',
+      category: { id: 'cat-1', name: '餐飲' },
+      total: 320000,
+      date: '2026-08-12T04:00:00.000Z',
+      title: '晚餐',
+      note: null,
+      payer: { counterpartyId: 'cp-1', name: '小明' },
+      payerEntryId: null,
+      account: null,
+      method: 'EQUAL',
+      precision: 'CENT',
+      participants: [
+        {
+          counterpartyId: 'cp-1',
+          name: '小明',
+          share: 80000,
+          ratio: null,
+          entryId: null,
+          sync: null,
+        },
+        {
+          counterpartyId: 'cp-2',
+          name: '小華',
+          share: 80000,
+          ratio: null,
+          entryId: null,
+          sync: null,
+        },
+        { counterpartyId: null, name: null, share: 80000, ratio: null, entryId: null, sync: null },
+        {
+          counterpartyId: 'cp-3',
+          name: '阿美',
+          share: 80000,
+          ratio: null,
+          entryId: null,
+          sync: null,
+        },
+      ],
+      createdAt: '2026-08-12T04:00:00.000Z',
+      updatedAt: '2026-08-12T04:00:00.000Z',
+    };
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} split={legacySplit} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByLabelText('分類', {}, WAIT);
+    expect(screen.getByLabelText('金額')).toHaveValue(800);
+    expect(screen.queryByRole('region', { name: '分帳' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    expect(await patchedBody('/splits/split-legacy')).toMatchObject({
+      total: 80000,
+      payer: { counterpartyId: 'cp-1' },
+      method: 'EQUAL',
+      participants: [{ counterpartyId: null }],
+    });
   });
 
   it('submits an equal split with the selected account and all four participants', async () => {
