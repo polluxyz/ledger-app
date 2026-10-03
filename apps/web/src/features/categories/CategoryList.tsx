@@ -51,7 +51,10 @@ export function CategoryList({
     <ul className={styles.list}>
       {categories.map((category) => (
         <li className={styles.item} key={category.id}>
-          <CategoryIcon className={styles.icon} icon={category.icon} />
+          {/* 與交易列同一種圓形底的圖示（3d 修訂 2）。 */}
+          <span className={styles.iconBadge} aria-hidden="true">
+            <CategoryIcon className={styles.icon} icon={category.icon} />
+          </span>
           <span className={styles.name}>{category.name}</span>
           {canEdit && (
             <div className={styles.actions}>

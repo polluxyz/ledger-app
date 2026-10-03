@@ -38,7 +38,7 @@
 /* 每列固定兩行 52px（3d 修訂 1；52px 讓 1440×900 首屏仍放得下 10 筆，SC-24.3）；只有分帳展開時才額外長出明細列。 */
 .row {
   display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr) 7rem 1.75rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 7rem 1.75rem;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
@@ -67,12 +67,22 @@
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
+/* 圖示的圓形底（3d 修訂 2）：淡金底、金色線條，跟樣板一樣。尺寸固定，不被文字推動。 */
+.iconBadge {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background-color: var(--color-primary-soft);
+  color: var(--color-accent);
+}
+
 .categoryIcon {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.15rem;
+  height: 1.15rem;
   justify-self: center;
   flex: 0 0 auto;
-  color: var(--color-text-muted);
 }
 
 /* 兩行：上面分類、下面名稱。兩行都在自己的寬度裡截斷（T11）。 */
