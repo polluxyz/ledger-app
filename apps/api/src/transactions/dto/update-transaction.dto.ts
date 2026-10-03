@@ -22,6 +22,11 @@ import type { ManualTransactionType, UpdateTransactionRequest } from '@ledger/sh
  * 毋須理解 `undefined` 與 `null` 的差別，也做不出「轉帳卻帶分類」的非法狀態。
  */
 export class UpdateTransactionDto implements UpdateTransactionRequest {
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
   @ApiPropertyOptional({ enum: MANUAL_TRANSACTION_TYPES })
   @IsOptional()
   @IsIn(MANUAL_TRANSACTION_TYPES)

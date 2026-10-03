@@ -1,6 +1,6 @@
 # Spec：階段三 (3c) — 代墊與分帳
 
-> 狀態：**已核可**（2026-10-03）。§12 的兩點照建議定案；開發者：細節等看到實際成果再調整。
+> 狀態：**已實作**（2026-10-03，實作紀錄：`tasks/archive/phase-3c-plan.md` §6）。§12 的兩點照建議定案；開發者：細節等看到實際成果再調整。
 > 依據：2026-10-02 三輪假設確認（提案頁第 1～3 版，`docs/artifacts/step-3c-split-*.html`，不進版控）。開發者的選擇與備註已整理進 §2，本檔是唯一真相來源。
 > 前置：**3c-0 金額單位改成分**（`phase-3c0-money-cents.md`）先合併。本檔的金額規則都以「分」計算，例子為了好讀寫成元。
 > 執行順序：3c-0 → **本 spec** → 後端（一個 PR）→ 畫面（先寫 `phase-3c-web.md`，再一個 PR）。
@@ -384,6 +384,14 @@ interface TransactionSplitRef {
 
 新增：`SPLIT_SUM_MISMATCH`、`SPLIT_SHARE_NOT_POSITIVE`、`SPLIT_WITHOUT_ME`、`SPLIT_NOT_NEEDED`（皆 400）；`SPLIT_TRANSACTION_READ_ONLY`、`SPLIT_ENTRY_READ_ONLY`、`TRANSACTION_NOT_CONVERTIBLE`（皆 409）。
 沿用：`LEDGER_ARCHIVED`、`COUNTERPARTY_HAS_ENTRIES`、`LEDGER_HAS_DEBT_TRANSACTIONS`、3b-2 的提議錯誤碼。
+
+### 5.5 寫 shared 契約時的補充（2026-10-03）
+
+以下三點在寫 `packages/shared` 契約時補上，都只增加欄位或錯誤碼，不改既有形狀：
+
+1. **`SPLIT_PARTICIPANTS_INVALID`（400）**：§3.4 第 1 步（名單為空、重複、我出現兩次，或分法需要的值缺了）原本沒有對應的錯誤碼。
+2. **`Split.payerEntryId`**：別人先付時，付款人不一定在名單裡，那筆「我欠付款人」的往來紀錄掛不到任何一列名單上，所以單獨列出。
+3. **`TransactionDebtRef.kind`**：交易型別只管資金方向，「我幫對方付」是 `LEND`（決策 89）。沒有往來種類，畫面只能寫成「借出」。
 
 ---
 

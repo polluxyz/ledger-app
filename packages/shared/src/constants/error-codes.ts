@@ -97,6 +97,22 @@ export const ErrorCode = {
    * 而且不能是同一個。
    */
   MERGE_NOT_ALLOWED: 'MERGE_NOT_ALLOWED',
+  /** 分帳的名單不合法：空的、同一人出現兩次，或「我」出現兩次（3c §3.4 第 1 步）。400。 */
+  SPLIT_PARTICIPANTS_INVALID: 'SPLIT_PARTICIPANTS_INVALID',
+  /** 自訂金額加總不等於總額，或自訂比例加總不是 100%（3c §3.4）。400。 */
+  SPLIT_SUM_MISMATCH: 'SPLIT_SUM_MISMATCH',
+  /** 算出來有人的份額 ≤ 0（3c 決策 93）。400。 */
+  SPLIT_SHARE_NOT_POSITIVE: 'SPLIT_SHARE_NOT_POSITIVE',
+  /** 別人先付（代收）的分帳，名單裡沒有我（3c 決策 97）。400。 */
+  SPLIT_WITHOUT_ME: 'SPLIT_WITHOUT_ME',
+  /** 我付（收）且名單只有我：這是一般交易，不是分帳（3c §3.5）。400。 */
+  SPLIT_NOT_NEEDED: 'SPLIT_NOT_NEEDED',
+  /** 分帳產生的交易只能從分帳端點修改或刪除（3c 決策 106）。409。 */
+  SPLIT_TRANSACTION_READ_ONLY: 'SPLIT_TRANSACTION_READ_ONLY',
+  /** 分帳產生的往來紀錄只能從分帳端點修改或刪除（3c §5.3）。409。 */
+  SPLIT_ENTRY_READ_ONLY: 'SPLIT_ENTRY_READ_ONLY',
+  /** 這筆交易不能轉成分帳：不是自己記的一般支出或收入，或已屬於分帳、往來（3c §5.1）。409。 */
+  TRANSACTION_NOT_CONVERTIBLE: 'TRANSACTION_NOT_CONVERTIBLE',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

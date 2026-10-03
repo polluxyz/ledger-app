@@ -6,6 +6,7 @@ import type {
   DebtEntry,
   Paginated,
   Transaction,
+  Split,
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -98,6 +99,43 @@ describe('Debt ledger (e2e)', () => {
     });
     expect(res.status).toBe(201);
     return res.body as CreateDebtEntryResponse;
+  }
+
+  /** 新增的代墊從分帳端點建立；往來端點只用來驗證既有資料。 */
+  async function paidForMe(
+    user: Me,
+    amount: number,
+    ledgerId = user.ledgerId,
+    categoryId?: string,
+  ): Promise<{ split: Split; counterparty: Counterparty }> {
+    let counterparty = (await counterparties(user)).find((row) => row.name === '小明');
+    if (!counterparty) {
+      const created = await request(server())
+        .post('/api/counterparties')
+        .set(auth(user.token))
+        .send({ name: '小明' })
+        .expect(201);
+      counterparty = created.body as Counterparty;
+    }
+    const response = await request(server())
+      .post('/api/splits')
+      .set(auth(user.token))
+      .send({
+        type: 'EXPENSE',
+        ledgerId,
+        categoryId: categoryId ?? (await expenseCategoryId(user)),
+        total: amount,
+        date: DAY,
+        payer: { counterpartyId: counterparty.id },
+        method: 'EQUAL',
+        participants: [{ counterpartyId: null }],
+      })
+      .expect(201);
+    const updated = await request(server())
+      .get(`/api/counterparties/${counterparty.id}`)
+      .set(auth(user.token))
+      .expect(200);
+    return { split: response.body as Split, counterparty: updated.body as Counterparty };
   }
 
   async function counterparties(user: Me): Promise<Counterparty[]> {
@@ -364,10 +402,7 @@ describe('Debt ledger (e2e)', () => {
       const before = await cash(user);
       const categoryId = await expenseCategoryId(user);
 
-      const res = await entry(user, 'PAID_FOR_ME', 400, {
-        record: { ledgerId: user.ledgerId },
-        categoryId,
-      });
+      const res = await paidForMe(user, 400, user.ledgerId, categoryId);
 
       expect(res.counterparty.balance).toBe(-400);
       expect(await cash(user)).toBe(before);
@@ -404,6 +439,52 @@ describe('Debt ledger (e2e)', () => {
       });
       expect(res.status).toBe(400);
       expect(await prisma.debtEntry.count()).toBe(0);
+    });
+
+    it('keeps a legacy PAID_FOR_ME entry editable after the new endpoint takes over', async () => {
+      const user = await me();
+      const ownerId = (await prisma.account.findUniqueOrThrow({ where: { id: user.cashId } }))
+        .userId;
+      const counterparty = await prisma.counterparty.create({ data: { ownerId, name: '小明' } });
+      const transaction = await prisma.transaction.create({
+        data: {
+          ledgerId: user.ledgerId,
+          creatorId: ownerId,
+          type: 'EXPENSE',
+          amount: 400,
+          date: new Date(DAY),
+          categoryId: await expenseCategoryId(user),
+          accountId: null,
+        },
+      });
+      const legacy = await prisma.debtEntry.create({
+        data: {
+          counterpartyId: counterparty.id,
+          kind: 'PAID_FOR_ME',
+          delta: -400,
+          date: new Date(DAY),
+          transactionId: transaction.id,
+        },
+      });
+      expect((await entriesOf(user, counterparty.id))[0]).toMatchObject({
+        id: legacy.id,
+        splitId: null,
+      });
+      await request(server())
+        .patch(`/api/debt-entries/${legacy.id}`)
+        .set(auth(user.token))
+        .send({ amount: 500 })
+        .expect(200);
+      expect(
+        (await prisma.transaction.findUniqueOrThrow({ where: { id: transaction.id } })).amount,
+      ).toBe(500);
+      await request(server())
+        .delete(`/api/debt-entries/${legacy.id}`)
+        .set(auth(user.token))
+        .expect(204);
+      expect(
+        (await prisma.debtEntry.findUniqueOrThrow({ where: { id: legacy.id } })).deletedAt,
+      ).not.toBeNull();
     });
   });
 
@@ -476,10 +557,7 @@ describe('Debt ledger (e2e)', () => {
   it('keeps debt transactions and paid-for-me expenses read-only on /transactions', async () => {
     const user = await me();
     await entry(user, 'LEND', 120);
-    await entry(user, 'PAID_FOR_ME', 400, {
-      record: { ledgerId: user.ledgerId },
-      categoryId: await expenseCategoryId(user),
-    });
+    await paidForMe(user, 400);
 
     for (const txn of await ledgerTransactions(user)) {
       const patch = await request(server())
@@ -487,7 +565,9 @@ describe('Debt ledger (e2e)', () => {
         .set(auth(user.token))
         .send({ amount: 1 });
       expect(patch.status).toBe(409);
-      expect(errorCode(patch)).toBe('DEBT_TRANSACTION_READ_ONLY');
+      expect(errorCode(patch)).toBe(
+        txn.split ? 'SPLIT_TRANSACTION_READ_ONLY' : 'DEBT_TRANSACTION_READ_ONLY',
+      );
 
       const del = await request(server())
         .delete(`/api/ledgers/${user.ledgerId}/transactions/${txn.id}`)
@@ -517,10 +597,7 @@ describe('Debt ledger (e2e)', () => {
       .set(auth(user.token))
       .expect(200);
 
-    await entry(user, 'PAID_FOR_ME', 400, {
-      record: { ledgerId },
-      categoryId: (categories.body as Array<{ id: string }>)[0]!.id,
-    });
+    await paidForMe(user, 400, ledgerId, (categories.body as Array<{ id: string }>)[0]!.id);
 
     const res = await request(server())
       .delete(`/api/ledgers/${ledgerId}`)

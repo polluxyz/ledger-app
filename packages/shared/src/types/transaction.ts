@@ -1,4 +1,6 @@
 import type { Cents } from '../money';
+import type { DebtEntryKind } from './debt';
+import type { TransactionSplitRef } from './split';
 
 /**
  * 一筆交易的型別：支出、收入、轉帳，以及借還帳的 4 種（見 `DEBT_TRANSACTION_TYPES`）。
@@ -68,6 +70,11 @@ export interface Transaction {
   amount: Cents;
   /** 這筆錢發生的時間（ISO 8601）。 */
   date: string;
+  /**
+   * 名稱（3c 決策 84）：選填，最多 100 字。列表有名稱就顯示名稱，沒有就顯示分類。
+   * 帳本的其他成員也看得到（同金額與分類）。
+   */
+  title: string | null;
   note: string | null;
   /** 分類；`TRANSFER` 交易為 `null`。 */
   category: TransactionRef | null;
@@ -89,6 +96,11 @@ export interface Transaction {
    * 的往來，對他們一律是 `null`。一般交易也是 `null`（spec 3b 決策 43）。
    */
   debt: TransactionDebtRef | null;
+  /**
+   * 這筆交易屬於哪一筆分帳（3c §5.2）。**只有分帳的擁有者看得到**，其他帳本成員一律 `null`。
+   * 交易列表對擁有者會把同一筆分帳合併成一列，這一列帶著展開明細需要的資料。
+   */
+  split: TransactionSplitRef | null;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }
@@ -96,6 +108,11 @@ export interface Transaction {
 /** 交易背後的往來紀錄與對象。只回給往來紀錄的擁有者。 */
 export interface TransactionDebtRef {
   entryId: string;
+  /**
+   * 往來紀錄的種類（3c）。交易型別只管資金方向：「我幫對方付」的交易型別是 `LEND`、
+   * 「我幫對方收」是 `BORROW`（決策 89），畫面要用這個欄位才寫得出「代墊」而不是「借出」。
+   */
+  kind: DebtEntryKind;
   counterpartyId: string;
   /** 顯示用的名字（同 `Counterparty.displayName` 的規則，3b-2 修訂 1）。 */
   counterpartyName: string;
@@ -138,6 +155,8 @@ export interface CreateTransactionRequest {
   accountId?: string;
   /** 僅轉帳使用：轉入的帳戶。須屬於本人，且不得與 `accountId` 相同。 */
   toAccountId?: string;
+  /** 名稱，最多 100 字（3c 決策 84）。 */
+  title?: string;
   note?: string;
 }
 
@@ -153,6 +172,8 @@ export interface UpdateTransactionRequest {
   categoryId?: string;
   accountId?: string;
   toAccountId?: string;
+  /** 名稱；送空字串清除（同 `note`）。 */
+  title?: string;
   note?: string;
 }
 

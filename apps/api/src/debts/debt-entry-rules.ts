@@ -28,7 +28,15 @@ type DebtClient = Pick<Prisma.TransactionClient, 'counterparty' | 'debtEntry'>;
  * 使用者記的往來**存下來**的 5 種（不含調整紀錄）。還款在請求裡是 `REPAYMENT`，
  * 由 `resolveRepayment` 依餘額換成 `COLLECT` 或 `REPAY` 之後才存（決策 46）。
  */
-export type RecordedDebtEntryKind = 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY' | 'PAID_FOR_ME';
+export type RecordedDebtEntryKind =
+  | 'LEND'
+  | 'BORROW'
+  | 'COLLECT'
+  | 'REPAY'
+  | 'PAID_FOR_ME'
+  | 'PAID_FOR_THEM'
+  | 'RECEIVED_FOR_THEM'
+  | 'RECEIVED_FOR_ME';
 
 /**
  * 這 5 種的 `delta` 正負號（spec §3.2）。正數＝這筆讓對方多欠我。
@@ -42,6 +50,9 @@ const DELTA_SIGN: Record<RecordedDebtEntryKind, 1 | -1> = {
   BORROW: -1,
   COLLECT: -1,
   PAID_FOR_ME: -1,
+  PAID_FOR_THEM: 1,
+  RECEIVED_FOR_THEM: -1,
+  RECEIVED_FOR_ME: 1,
 };
 
 export function deltaFor(kind: RecordedDebtEntryKind, amount: number): number {
@@ -86,9 +97,9 @@ export function resolveRepayment(
  * 交易型別由種類決定，呼叫者指定不了（沿用決策 3 的精神）。
  */
 export function transactionTypeFor(
-  kind: Exclude<RecordedDebtEntryKind, 'PAID_FOR_ME'>,
+  kind: Exclude<RecordedDebtEntryKind, 'PAID_FOR_ME' | 'RECEIVED_FOR_ME'>,
 ): DebtTransactionType {
-  return kind;
+  return kind === 'PAID_FOR_THEM' ? 'LEND' : kind === 'RECEIVED_FOR_THEM' ? 'BORROW' : kind;
 }
 
 /** 調整紀錄（結清差額、免除、被免除）：系統算出來的，不產生交易，不能改金額（決策 40）。 */
@@ -159,6 +170,7 @@ export function toDebtEntry(
     date: row.date.toISOString(),
     note: row.note,
     transactionId: row.transactionId,
+    splitId: row.splitId,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

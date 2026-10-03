@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { formatMoney } from '../../lib/format';
@@ -40,7 +41,7 @@ export function CounterpartyList({ onSelectCounterparty }: CounterpartyListProps
                 {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
               </span>
               <span className={styles.balance}>
-                {formatCounterpartyBalance(counterparty.balance)}
+                {formatCounterpartyBalance(counterparty.displayName, counterparty.balance)}
               </span>
             </button>
           </li>
@@ -56,13 +57,27 @@ export function CounterpartyList({ onSelectCounterparty }: CounterpartyListProps
   );
 }
 
-/** 對象清單用第一人稱短句呈現 API 的餘額方向。 */
-function formatCounterpartyBalance(balance: number): string {
+/** 清單用箭頭呈現 API 回傳的往來方向；零餘額維持簡短的「兩清」。 */
+function formatCounterpartyBalance(displayName: string, balance: number) {
   if (balance > 0) {
-    return `欠我 ${formatMoney(balance)}`;
+    return (
+      <DebtArrow
+        from={displayName}
+        to="我"
+        amount={balance}
+        srText={`${displayName}欠你 ${formatMoney(balance)}`}
+      />
+    );
   }
   if (balance < 0) {
-    return `我欠 ${formatMoney(Math.abs(balance))}`;
+    return (
+      <DebtArrow
+        from="我"
+        to={displayName}
+        amount={Math.abs(balance)}
+        srText={`你欠${displayName} ${formatMoney(Math.abs(balance))}`}
+      />
+    );
   }
   return '兩清';
 }

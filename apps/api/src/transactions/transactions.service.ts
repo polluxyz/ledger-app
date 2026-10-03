@@ -10,10 +10,12 @@ import {
   TransactionDebtRef,
   TransactionRef,
   TransactionType,
+  TransactionSplitRef,
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { deriveSync } from '../debts/debt-proposal-rules';
 
 /**
  * 交易的業務邏輯——整個記帳系統的核心。呼叫進來之前，controller 已完成身分驗證
@@ -48,6 +50,8 @@ interface TransactionRow {
   amount: number;
   date: Date;
   note: string | null;
+  title: string | null;
+  splitId: string | null;
   createdAt: Date;
   category: { id: string; name: string } | null;
   account: AccountRef | null;
@@ -58,6 +62,7 @@ interface TransactionRow {
   debtEntry: {
     id: string;
     pairedEntryId: string | null;
+    kind: import('@ledger/shared').DebtEntryKind;
     note: string | null;
     counterparty: {
       id: string;
@@ -66,6 +71,33 @@ interface TransactionRow {
       linkAsLow?: { userHigh: { name: string } } | null;
       linkAsHigh?: { userLow: { name: string } } | null;
     };
+  } | null;
+  split?: {
+    id: string;
+    ownerId: string;
+    type: 'EXPENSE' | 'INCOME';
+    total: number;
+    payerCounterpartyId: string | null;
+    payer: {
+      id: string;
+      name: string | null;
+      linkAsLow?: { userHigh: { name: string } } | null;
+      linkAsHigh?: { userLow: { name: string } } | null;
+    } | null;
+    participants: Array<{ counterpartyId: string | null; share: number }>;
+    entries: Array<{
+      counterpartyId: string;
+      delta: number;
+      pairedEntryId: string | null;
+      id: string;
+      deletedAt: Date | null;
+      counterparty: {
+        name: string | null;
+        linkAsLow?: { userHigh: { name: string } } | null;
+        linkAsHigh?: { userLow: { name: string } } | null;
+      };
+      proposalsAsSource?: Array<{ status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED' }>;
+    }>;
   } | null;
 }
 
@@ -80,6 +112,7 @@ const TRANSACTION_INCLUDE = {
     select: {
       id: true,
       pairedEntryId: true,
+      kind: true,
       note: true,
       counterparty: {
         select: {
@@ -88,6 +121,41 @@ const TRANSACTION_INCLUDE = {
           ownerId: true,
           linkAsLow: { select: { userHigh: { select: { name: true } } } },
           linkAsHigh: { select: { userLow: { select: { name: true } } } },
+        },
+      },
+    },
+  },
+  split: {
+    include: {
+      payer: {
+        select: {
+          id: true,
+          name: true,
+          linkAsLow: { select: { userHigh: { select: { name: true } } } },
+          linkAsHigh: { select: { userLow: { select: { name: true } } } },
+        },
+      },
+      participants: { select: { counterpartyId: true, share: true } },
+      entries: {
+        select: {
+          id: true,
+          counterpartyId: true,
+          delta: true,
+          pairedEntryId: true,
+          deletedAt: true,
+          counterparty: {
+            select: {
+              name: true,
+              linkAsLow: { select: { userHigh: { select: { name: true } } } },
+              linkAsHigh: { select: { userLow: { select: { name: true } } } },
+            },
+          },
+          proposalsAsSource: {
+            where: { status: { not: 'CANCELLED' } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { status: true },
+          },
         },
       },
     },
@@ -102,6 +170,7 @@ interface CreateTransactionInput {
   accountId?: string;
   toAccountId?: string;
   note?: string;
+  title?: string;
 }
 
 interface UpdateTransactionInput {
@@ -112,6 +181,7 @@ interface UpdateTransactionInput {
   accountId?: string;
   toAccountId?: string;
   note?: string;
+  title?: string;
 }
 
 @Injectable()
@@ -142,6 +212,7 @@ export class TransactionsService {
         amount: input.amount,
         date: new Date(input.date),
         note: input.note ?? null,
+        title: input.title ?? null,
       },
       include: TRANSACTION_INCLUDE,
     });
@@ -160,43 +231,57 @@ export class TransactionsService {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
-    const where: Prisma.TransactionWhereInput = {
-      ledgerId,
-      deletedAt: null,
-      ...(query.type ? { type: query.type } : {}),
-      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
-      ...this.dateRange(query.from, query.to),
-    };
-
-    const [rows, total] = await Promise.all([
-      this.prisma.transaction.findMany({
-        where,
-        include: TRANSACTION_INCLUDE,
-        // 穩定排序：先依日期，再用建立時間打破同一天的並列。
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.transaction.count({ where }),
-    ]);
+    // SQL 先依分帳擁有者合併，再篩選、分頁與計數；先取交易再在記憶體合併會讓
+    // 第 2 頁筆數和 total 都錯。其他帳本成員的 s 為 null，因此逐筆看見原交易。
+    const selected = await this.prisma.$queryRaw<Array<{ id: string; total: bigint }>>(Prisma.sql`
+      WITH ranked AS (
+        SELECT t."id", COALESCE(s."date", t."date") AS "sortDate", t."createdAt",
+          ROW_NUMBER() OVER (
+            PARTITION BY CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END
+            ORDER BY CASE WHEN t."type"::text IN ('EXPENSE', 'INCOME') THEN 0 ELSE 1 END, t."createdAt", t."id"
+          ) AS rn
+        FROM "Transaction" t
+        LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
+        WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+          ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
+          ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
+          ${query.from ? Prisma.sql`AND COALESCE(s."date", t."date") >= ${new Date(query.from)}` : Prisma.empty}
+          ${query.to ? Prisma.sql`AND COALESCE(s."date", t."date") <= ${new Date(query.to)}` : Prisma.empty}
+      ), visible AS (
+        SELECT "id", "sortDate", "createdAt" FROM ranked WHERE rn = 1
+      )
+      SELECT "id", COUNT(*) OVER() AS total FROM visible
+      ORDER BY "sortDate" DESC, "createdAt" DESC, "id" DESC
+      OFFSET ${(page - 1) * limit} LIMIT ${limit}
+    `);
+    const rows = selected.length
+      ? await this.prisma.transaction.findMany({
+          where: { id: { in: selected.map((item) => item.id) } },
+          include: TRANSACTION_INCLUDE,
+        })
+      : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const total = selected.length
+      ? Number(selected[0]!.total)
+      : Number(
+          (
+            await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+      SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
+      FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
+      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
+        ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
+        ${query.from ? Prisma.sql`AND COALESCE(s."date", t."date") >= ${new Date(query.from)}` : Prisma.empty}
+        ${query.to ? Prisma.sql`AND COALESCE(s."date", t."date") <= ${new Date(query.to)}` : Prisma.empty}
+    `)
+          )[0]?.count ?? 0n,
+        );
 
     return {
-      items: rows.map((row) => this.toTransaction(row, viewerUserId)),
+      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId)),
       page,
       limit,
       total,
-    };
-  }
-
-  private dateRange(from?: string, to?: string): Prisma.TransactionWhereInput {
-    if (!from && !to) {
-      return {};
-    }
-    return {
-      date: {
-        ...(from ? { gte: new Date(from) } : {}),
-        ...(to ? { lte: new Date(to) } : {}),
-      },
     };
   }
 
@@ -216,6 +301,12 @@ export class TransactionsService {
     input: UpdateTransactionInput,
   ): Promise<Transaction> {
     const existing = await this.findActive(ledgerId, transactionId);
+    if (existing.splitId != null)
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+        'Change this transaction through its split.',
+      );
     await this.assertNotDebtTransaction(existing.id, existing.type);
 
     const finalType = input.type ?? existing.type;
@@ -248,6 +339,7 @@ export class TransactionsService {
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
         ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
         ...(input.note !== undefined ? { note: input.note } : {}),
+        ...(input.title !== undefined ? { title: input.title } : {}),
         categoryId: finalCategoryId ?? null,
         accountId: finalAccountId ?? null,
         toAccountId: finalToAccountId ?? null,
@@ -260,6 +352,12 @@ export class TransactionsService {
   /** 軟刪除一筆交易（設 deletedAt）；資料列保留以利稽核。 */
   async remove(ledgerId: string, transactionId: string): Promise<void> {
     const existing = await this.findActive(ledgerId, transactionId);
+    if (existing.splitId != null)
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+        'Change this transaction through its split.',
+      );
     await this.assertNotDebtTransaction(existing.id, existing.type);
     await this.prisma.transaction.update({
       where: { id: transactionId },
@@ -312,6 +410,8 @@ export class TransactionsService {
       amount: number;
       date: Date;
       accountId?: string;
+      title?: string | null;
+      splitId?: string;
     },
   ): Promise<string> {
     const accounts = { accountId: input.accountId };
@@ -328,6 +428,8 @@ export class TransactionsService {
         // 備註屬於擁有者的私人記錄（spec §3.5）。擁有者要看備註，從交易的 debt 回到往來帳即可。
         note: null,
         accountId: input.accountId ?? null,
+        title: input.title ?? null,
+        splitId: input.splitId ?? null,
         categoryId: null,
         toAccountId: null,
       },
@@ -346,26 +448,79 @@ export class TransactionsService {
    */
   async createPaidForMeExpense(
     client: Prisma.TransactionClient,
-    input: { ledgerId: string; creatorId: string; amount: number; date: Date; categoryId: string },
+    input: {
+      ledgerId: string;
+      creatorId: string;
+      amount: number;
+      date: Date;
+      categoryId: string;
+      type?: 'EXPENSE' | 'INCOME';
+      title?: string | null;
+      splitId?: string;
+    },
   ): Promise<string> {
-    await this.assertCategoryRules(input.ledgerId, 'EXPENSE', input.categoryId);
+    await this.assertCategoryRules(input.ledgerId, input.type ?? 'EXPENSE', input.categoryId);
 
     const created = await client.transaction.create({
       data: {
         ledgerId: input.ledgerId,
         creatorId: input.creatorId,
-        type: 'EXPENSE',
+        type: input.type ?? 'EXPENSE',
         amount: input.amount,
         date: input.date,
         // 與借還交易同理：往來紀錄的備註是私人的，不帶進共享帳本看得到的交易。
         note: null,
         accountId: null,
+        title: input.title ?? null,
+        splitId: input.splitId ?? null,
         categoryId: input.categoryId,
         toAccountId: null,
       },
       select: { id: true },
     });
     return created.id;
+  }
+
+  /** 分帳中我那份仍是一般收支；在呼叫端交易內沿用同一組帳戶與分類驗證。 */
+  async createSplitShareTransaction(
+    client: Prisma.TransactionClient,
+    input: {
+      ledgerId: string;
+      creatorId: string;
+      type: 'EXPENSE' | 'INCOME';
+      amount: number;
+      date: Date;
+      categoryId: string;
+      accountId?: string;
+      title?: string | null;
+      splitId: string;
+    },
+  ): Promise<string> {
+    await this.assertCategoryRules(input.ledgerId, input.type, input.categoryId);
+    await this.assertAccountRules(
+      input.ledgerId,
+      input.creatorId,
+      input.type,
+      { accountId: input.accountId },
+      { accountId: input.accountId },
+    );
+    const row = await client.transaction.create({
+      data: {
+        ledgerId: input.ledgerId,
+        creatorId: input.creatorId,
+        type: input.type,
+        amount: input.amount,
+        date: input.date,
+        categoryId: input.categoryId,
+        accountId: input.accountId ?? null,
+        toAccountId: null,
+        note: null,
+        title: input.title ?? null,
+        splitId: input.splitId,
+      },
+      select: { id: true },
+    });
+    return row.id;
   }
 
   /** 往來紀錄的金額或日期改了，對應的交易一起改。只動金額與日期，帳本、帳戶、分類不變。 */
@@ -584,11 +739,13 @@ export class TransactionsService {
       amount: row.amount,
       date: row.date.toISOString(),
       note: row.note,
+      title: row.title,
       category: row.category ? { id: row.category.id, name: row.category.name } : null,
       account: this.visibleAccount(row.account, viewerUserId),
       toAccount: this.visibleAccount(row.toAccount, viewerUserId),
       creator: { id: row.creator.id, name: row.creator.name },
       debt: this.visibleDebt(row, viewerUserId),
+      split: this.visibleSplit(row, viewerUserId),
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -607,6 +764,7 @@ export class TransactionsService {
     }
     return {
       entryId: entry.id,
+      kind: entry.kind,
       counterpartyId: entry.counterparty.id,
       counterpartyName:
         entry.counterparty.name ??
@@ -616,6 +774,38 @@ export class TransactionsService {
       paired: entry.pairedEntryId !== null,
       note: entry.note,
     };
+  }
+
+  /** 分帳明細只給建立者；共享帳本的其他成員仍可讀每一筆交易。 */
+  private visibleSplit(row: TransactionRow, viewerUserId: string): TransactionSplitRef | null {
+    const split = row.split;
+    if (!split || split.ownerId !== viewerUserId) return null;
+    const myShare = split.participants.find((person) => person.counterpartyId === null)?.share ?? 0;
+    const entries = split.entries.filter((entry) => entry.deletedAt === null);
+    return {
+      id: split.id,
+      type: split.type,
+      total: split.total,
+      myShare,
+      payer: split.payer
+        ? { counterpartyId: split.payer.id, name: this.counterpartyName(split.payer) }
+        : null,
+      counterparts: entries.map((entry) => ({
+        counterpartyId: entry.counterpartyId,
+        name: this.counterpartyName(entry.counterparty),
+        amount: Math.abs(entry.delta),
+        direction: entry.delta > 0 ? ('THEY_OWE_ME' as const) : ('I_OWE_THEM' as const),
+        sync: deriveSync(entry.pairedEntryId !== null, entry.proposalsAsSource?.[0]?.status),
+      })),
+    };
+  }
+
+  private counterpartyName(row: {
+    name: string | null;
+    linkAsLow?: { userHigh: { name: string } } | null;
+    linkAsHigh?: { userLow: { name: string } } | null;
+  }): string {
+    return row.name ?? row.linkAsLow?.userHigh.name ?? row.linkAsHigh?.userLow.name ?? '';
   }
 
   /**

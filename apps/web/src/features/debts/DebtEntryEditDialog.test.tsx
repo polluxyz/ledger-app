@@ -16,6 +16,7 @@ describe('DebtEntryEditDialog', () => {
     date: '2026-09-01T00:00:00.000Z',
     note: '原備註',
     transactionId: 'txn-1',
+    splitId: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
@@ -78,7 +79,7 @@ describe('DebtEntryEditDialog', () => {
     renderDialog();
     const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
 
-    const note = within(dialog).getByLabelText('備註（選填）');
+    const note = within(dialog).getByLabelText('備註');
     await user.clear(note);
     await user.click(within(dialog).getByRole('button', { name: '儲存' }));
 

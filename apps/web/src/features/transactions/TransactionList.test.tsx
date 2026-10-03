@@ -40,12 +40,14 @@ describe('TransactionList', () => {
       type: 'EXPENSE',
       amount: 12000,
       date: '2026-08-16T12:00:00',
+      title: null,
       note: null,
       category: { id: 'cat-1', name: '餐飲' },
       account,
       toAccount: null,
       creator,
       debt: null,
+      split: null,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };
@@ -179,11 +181,67 @@ describe('TransactionList', () => {
     expect(onEdit).toHaveBeenCalledWith(transactions[0]);
   });
 
+  it('shows split title, payer, personal amount, and expandable counterpart arrows', async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    const splitTransaction = makeTransaction({
+      id: 'split-1',
+      title: '晚餐',
+      amount: 300000,
+      split: {
+        id: 'split-1',
+        type: 'EXPENSE',
+        total: 300000,
+        myShare: 75000,
+        payer: null,
+        counterparts: [
+          {
+            counterpartyId: 'cp-1',
+            name: '小明',
+            amount: 75000,
+            direction: 'THEY_OWE_ME',
+            sync: 'NONE',
+          },
+          {
+            counterpartyId: 'cp-2',
+            name: '小華',
+            amount: 75000,
+            direction: 'THEY_OWE_ME',
+            sync: 'NONE',
+          },
+          {
+            counterpartyId: 'cp-3',
+            name: '阿美',
+            amount: 75000,
+            direction: 'THEY_OWE_ME',
+            sync: 'NONE',
+          },
+        ],
+      },
+    });
+    renderList({ transactions: [splitTransaction], onEdit });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText('晚餐')).toBeInTheDocument();
+    expect(within(listRow).getByText('分帳')).toBeInTheDocument();
+    expect(within(listRow).getByText('-$3,000')).toBeInTheDocument();
+    expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
+
+    await user.click(within(listRow).getByRole('button', { name: '展開分帳明細' }));
+    expect(within(listRow).getByText('小明欠你 $750')).toBeInTheDocument();
+    expect(within(listRow).getByText('小華欠你 $750')).toBeInTheDocument();
+    expect(within(listRow).getByText('阿美欠你 $750')).toBeInTheDocument();
+    expect(within(listRow).getByText('我 $750')).toBeInTheDocument();
+    await user.click(within(listRow).getByRole('button', { name: /^編輯/ }));
+    expect(onEdit).toHaveBeenCalledWith(splitTransaction);
+  });
+
   describe('entries linked to a counterparty', () => {
     const debt = {
       entryId: 'entry-1',
       counterpartyId: 'person-1',
       counterpartyName: '小明',
+      kind: 'LEND' as const,
       paired: false,
       note: null,
     };
@@ -215,18 +273,57 @@ describe('TransactionList', () => {
       const onEditDebtTransaction = vi.fn();
       renderList({
         transactions: [
-          makeTransaction({ id: 'txn-paid', category: { id: 'cat-1', name: '餐飲' }, debt }),
+          makeTransaction({
+            id: 'txn-paid',
+            category: { id: 'cat-1', name: '餐飲' },
+            debt: { ...debt, kind: 'PAID_FOR_ME' },
+          }),
         ],
         onEditDebtTransaction,
       });
 
       const listRow = row(0);
-      expect(screen.getByText('餐飲 · 小明代付')).toBeInTheDocument();
+      expect(screen.getByText('餐飲 · 幫我付 · 小明')).toBeInTheDocument();
       expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
       await user.click(within(listRow).getByRole('button', { name: /^編輯/ }));
       expect(onEditDebtTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'txn-paid' }),
       );
+    });
+
+    it('uses debt.kind for the four advance and collection labels', () => {
+      renderList({
+        transactions: [
+          makeTransaction({
+            id: 'paid-for-them',
+            type: 'LEND',
+            category: null,
+            debt: { ...debt, kind: 'PAID_FOR_THEM' },
+          }),
+          makeTransaction({
+            id: 'paid-for-me',
+            category: { id: 'cat-1', name: '餐飲' },
+            debt: { ...debt, kind: 'PAID_FOR_ME' },
+          }),
+          makeTransaction({
+            id: 'received-for-them',
+            type: 'BORROW',
+            category: null,
+            debt: { ...debt, kind: 'RECEIVED_FOR_THEM' },
+          }),
+          makeTransaction({
+            id: 'received-for-me',
+            type: 'INCOME',
+            category: { id: 'cat-2', name: '薪資' },
+            debt: { ...debt, kind: 'RECEIVED_FOR_ME' },
+          }),
+        ],
+      });
+
+      expect(screen.getByText('代墊 · 小明')).toBeInTheDocument();
+      expect(screen.getByText('餐飲 · 幫我付 · 小明')).toBeInTheDocument();
+      expect(screen.getByText('代收 · 小明')).toBeInTheDocument();
+      expect(screen.getByText('薪資 · 幫我收 · 小明')).toBeInTheDocument();
     });
 
     it('keeps an unlinked debt transaction unclickable and without a delete action', async () => {

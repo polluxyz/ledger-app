@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type {
   Counterparty,
   CreateDebtEntryKind,
@@ -7,6 +7,7 @@ import type {
 } from '@ledger/shared';
 import { parseMoneyInput } from '@ledger/shared';
 import { Button } from '../../components/Button';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
@@ -84,7 +85,11 @@ export function DebtEntryForm({
     repaymentExceedsBalance ||
     createEntry.isPending;
 
-  let repaymentHint: string | null = null;
+  /**
+   * 還款的方向（誰付給誰）。這是「這一筆是什麼動作」，不是餘額，所以不換成箭頭（3c W84
+   * 只換「目前…」「記完後…」）：目前的餘額已經由對象欄下方的箭頭顯示，這裡再畫一次就重複了。
+   */
+  let repaymentHint: ReactNode = null;
   if (normalizedName !== '') {
     if (kind === 'REPAYMENT') {
       repaymentHint =
@@ -108,7 +113,7 @@ export function DebtEntryForm({
   );
 
   /** W16 唯一允許在前端加減往來金額的地方；實際餘額仍由 API 回應提供。 */
-  let preview: string | null = null;
+  let preview: ReactNode = null;
   if (normalizedName !== '' && amount !== '' && amountCents !== null) {
     const before = counterparty?.balance ?? 0;
     const delta = kind === 'LEND' ? amountCents : -amountCents;
@@ -131,9 +136,31 @@ export function DebtEntryForm({
     } else if (after === 0) {
       preview = '記完後：兩清';
     } else if (after > 0) {
-      preview = `記完後：${counterparty?.displayName ?? normalizedName}欠你 ${formatMoney(after)}`;
+      const name = counterparty?.displayName ?? normalizedName;
+      preview = (
+        <>
+          <span aria-hidden="true">記完後：</span>
+          <DebtArrow
+            from={name}
+            to="我"
+            amount={after}
+            srText={`記完後：${name}欠你 ${formatMoney(after)}`}
+          />
+        </>
+      );
     } else {
-      preview = `記完後：你欠${counterparty?.displayName ?? normalizedName} ${formatMoney(Math.abs(after))}`;
+      const name = counterparty?.displayName ?? normalizedName;
+      preview = (
+        <>
+          <span aria-hidden="true">記完後：</span>
+          <DebtArrow
+            from="我"
+            to={name}
+            amount={Math.abs(after)}
+            srText={`記完後：你欠${name} ${formatMoney(Math.abs(after))}`}
+          />
+        </>
+      );
     }
   }
 
@@ -277,7 +304,7 @@ export function DebtEntryForm({
       )}
 
       <TextField
-        label="備註（選填）"
+        label="備註"
         value={note}
         maxLength={500}
         onChange={(event) => setNote(event.target.value)}

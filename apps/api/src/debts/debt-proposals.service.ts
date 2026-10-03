@@ -21,6 +21,7 @@ import {
 } from './debt-entry-rules';
 import { PROPOSAL_INCLUDE, mirrorKind, toDebtProposal } from './debt-proposal-rules';
 import { recordDebtTransaction, writeSettlement } from './debt-recording';
+import { assertLedgerWritable } from './debt-ledger-access';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -29,7 +30,16 @@ const MAX_LIMIT = 100;
 type ProposalRow = Prisma.DebtProposalGetPayload<{ include: typeof PROPOSAL_INCLUDE }>;
 
 /** 接受「新增」時需要帳本與帳戶的種類：會產生交易的四種。免除只改往來餘額。 */
-const RECORDABLE_KINDS = new Set(['LEND', 'BORROW', 'COLLECT', 'REPAY']);
+const RECORDABLE_KINDS = new Set([
+  'LEND',
+  'BORROW',
+  'COLLECT',
+  'REPAY',
+  'PAID_FOR_THEM',
+  'PAID_FOR_ME',
+  'RECEIVED_FOR_THEM',
+  'RECEIVED_FOR_ME',
+]);
 
 /**
  * 提議：列出、接受、拒絕。規格見 `docs/specs/phase-3b2-linking.md` §3.2、§3.3、§5.3。
@@ -87,15 +97,32 @@ export class DebtProposalsService {
     userId: string,
     proposalId: string,
     record: DebtEntryRecordTarget | null | undefined,
+    categoryId?: string,
+    title?: string,
   ): Promise<DebtProposal> {
     const row = await this.loadForAction(userId, proposalId);
-    const needsRecord = row.type === 'CREATE' && RECORDABLE_KINDS.has(row.entryKind);
+    const mirror = mirrorKind(row.entryKind);
+    const needsRecord = row.type === 'CREATE' && RECORDABLE_KINDS.has(mirror);
+    const needsCategory =
+      row.type === 'CREATE' && (mirror === 'PAID_FOR_ME' || mirror === 'RECEIVED_FOR_ME');
     if (needsRecord && record === undefined) {
       throw badRequest('record is required: an object to record a transaction, or null for none.');
     }
     if (!needsRecord && record !== undefined) {
       throw badRequest('record is only valid when accepting a new loan or repayment.');
     }
+    if (needsCategory) {
+      if (!record || record.accountId !== undefined || !categoryId)
+        throw badRequest('This proposal requires a ledger and category, without an account.');
+    } else if (categoryId !== undefined)
+      throw badRequest('categoryId is only valid for a paid-for-me proposal.');
+    if (title !== undefined && row.type !== 'CREATE')
+      throw badRequest('title is only valid for CREATE proposals.');
+    if (
+      title !== undefined &&
+      !['PAID_FOR_ME', 'RECEIVED_FOR_ME', 'PAID_FOR_THEM', 'RECEIVED_FOR_THEM'].includes(mirror)
+    )
+      throw badRequest('title is only valid for split proposals.');
 
     return this.prisma.$transaction(async (tx) => {
       const respondedAt = new Date();
@@ -111,7 +138,7 @@ export class DebtProposalsService {
       await lockCounterparty(tx, counterpartyId);
 
       if (row.type === 'CREATE') {
-        await this.acceptCreate(tx, row, userId, counterpartyId, record ?? null);
+        await this.acceptCreate(tx, row, userId, counterpartyId, record ?? null, categoryId, title);
       } else if (row.type === 'AMEND') {
         await this.acceptAmend(tx, row, counterpartyId);
       } else {
@@ -147,6 +174,8 @@ export class DebtProposalsService {
     userId: string,
     counterpartyId: string,
     record: DebtEntryRecordTarget | null,
+    categoryId?: string,
+    title?: string,
   ): Promise<void> {
     const kind = mirrorKind(row.entryKind);
 
@@ -169,7 +198,18 @@ export class DebtProposalsService {
       return;
     }
 
-    if (kind !== 'LEND' && kind !== 'BORROW' && kind !== 'COLLECT' && kind !== 'REPAY') {
+    if (
+      ![
+        'LEND',
+        'BORROW',
+        'COLLECT',
+        'REPAY',
+        'PAID_FOR_THEM',
+        'RECEIVED_FOR_THEM',
+        'PAID_FOR_ME',
+        'RECEIVED_FOR_ME',
+      ].includes(kind)
+    ) {
       // 送出端只會對上面這幾種建立提議（SYNCED_ENTRY_KINDS），走到這裡是資料不一致。
       throw notPending();
     }
@@ -189,18 +229,43 @@ export class DebtProposalsService {
       }
     }
 
-    const transactionId = await recordDebtTransaction(tx, this.transactions, {
-      userId,
-      record,
-      kind,
-      amount: row.amount,
-      date: row.date,
-    });
+    const transactionId =
+      kind === 'PAID_FOR_ME' || kind === 'RECEIVED_FOR_ME'
+        ? await this.createReceivedSplitTransaction(
+            tx,
+            userId,
+            record!,
+            kind,
+            row.amount,
+            row.date,
+            categoryId!,
+            title ?? row.title,
+          )
+        : await recordDebtTransaction(tx, this.transactions, {
+            userId,
+            record,
+            kind: kind as
+              'LEND' | 'BORROW' | 'COLLECT' | 'REPAY' | 'PAID_FOR_THEM' | 'RECEIVED_FOR_THEM',
+            amount: row.amount,
+            date: row.date,
+            title: title ?? row.title,
+          });
     const entry = await tx.debtEntry.create({
       data: {
         counterpartyId,
         kind,
-        delta: deltaFor(kind, row.amount),
+        delta: deltaFor(
+          kind as
+            | 'LEND'
+            | 'BORROW'
+            | 'COLLECT'
+            | 'REPAY'
+            | 'PAID_FOR_ME'
+            | 'PAID_FOR_THEM'
+            | 'RECEIVED_FOR_THEM'
+            | 'RECEIVED_FOR_ME',
+          row.amount,
+        ),
         date: row.date,
         note: null,
         transactionId,
@@ -211,6 +276,28 @@ export class DebtProposalsService {
     if (row.settle && (kind === 'COLLECT' || kind === 'REPAY')) {
       await writeSettlement(tx, counterpartyId, entry);
     }
+  }
+
+  private async createReceivedSplitTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    record: DebtEntryRecordTarget,
+    kind: 'PAID_FOR_ME' | 'RECEIVED_FOR_ME',
+    amount: number,
+    date: Date,
+    categoryId: string,
+    title: string | null,
+  ): Promise<string> {
+    await assertLedgerWritable(tx, userId, record.ledgerId);
+    return this.transactions.createPaidForMeExpense(tx, {
+      ledgerId: record.ledgerId,
+      creatorId: userId,
+      type: kind === 'PAID_FOR_ME' ? 'EXPENSE' : 'INCOME',
+      amount,
+      date,
+      categoryId,
+      title,
+    });
   }
 
   /**

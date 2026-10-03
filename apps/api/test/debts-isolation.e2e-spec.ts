@@ -170,15 +170,17 @@ describe('Debt ledger isolation (e2e)', () => {
         })
         .expect(201);
       await request(server())
-        .post('/api/debt-entries')
+        .post('/api/splits')
         .set(auth(bob.token))
         .send({
-          counterparty: { name: '小明' },
-          kind: 'PAID_FOR_ME',
-          amount: 400,
+          type: 'EXPENSE',
+          ledgerId: shared,
+          total: 400,
           date: DAY,
-          record: { ledgerId: shared },
           categoryId: await expenseCategoryId(bob, shared),
+          payer: { counterpartyId: (lend.body as CreateDebtEntryResponse).counterparty.id },
+          method: 'EQUAL',
+          participants: [{ counterpartyId: null }],
         })
         .expect(201);
 
@@ -267,7 +269,9 @@ describe('Debt ledger isolation (e2e)', () => {
           .set(auth(carol.token))
           .send({ amount: 1 });
         expect(patch.status).toBe(409);
-        expect((patch.body as { errorCode: string }).errorCode).toBe('DEBT_TRANSACTION_READ_ONLY');
+        expect((patch.body as { errorCode: string }).errorCode).toBe(
+          txn.type === 'EXPENSE' ? 'SPLIT_TRANSACTION_READ_ONLY' : 'DEBT_TRANSACTION_READ_ONLY',
+        );
       }
     });
   });

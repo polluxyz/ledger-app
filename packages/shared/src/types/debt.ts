@@ -11,10 +11,15 @@ import type { Cents } from '../money';
  */
 
 /**
- * 8 種往來紀錄（spec §3.2）。前 5 種由使用者記；`SETTLEMENT`、`FORGIVE`、`FORGIVEN` 是
- * 系統算出的調整紀錄，不產生交易、不能改金額（決策 38～40）。
+ * 11 種往來紀錄（spec §3.2）。`SETTLEMENT`、`FORGIVE`、`FORGIVEN` 是系統算出的調整紀錄，
+ * 不產生交易、不能改金額（決策 38～40）。
  *
  * `FORGIVEN`（被免除）只會在連動後出現：對方免除我的欠款、我接受時寫入（3b-2 §3.2）。
+ *
+ * 代墊與代收（3c §3.2）的 4 種：`PAID_FOR_THEM` 我幫對方付（delta > 0，交易型別 `LEND`）、
+ * `PAID_FOR_ME` 對方幫我付（delta < 0，沒有帳戶的支出）、`RECEIVED_FOR_THEM` 我幫對方收
+ * （delta < 0，交易型別 `BORROW`）、`RECEIVED_FOR_ME` 對方幫我收（delta > 0，沒有帳戶的收入）。
+ * 它們只能從分帳端點產生，或由接受對方的提議產生；連動的鏡像兩兩相對。
  */
 export const DEBT_ENTRY_KINDS = [
   'LEND',
@@ -25,6 +30,9 @@ export const DEBT_ENTRY_KINDS = [
   'SETTLEMENT',
   'FORGIVE',
   'FORGIVEN',
+  'PAID_FOR_THEM',
+  'RECEIVED_FOR_THEM',
+  'RECEIVED_FOR_ME',
 ] as const;
 export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
 
@@ -33,9 +41,11 @@ export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
  *
  * 還款只有一種 `REPAYMENT`：後端依寫入當下的往來餘額，存成 `COLLECT`（對方還我）或
  * `REPAY`（我還對方）。方向是業務規則，所以前端不能直接送 `COLLECT`／`REPAY`。
- * `PAID_FOR_ME` 畫面上暫時拿掉，之後與代墊一起設計；API 先保留。
+ *
+ * `PAID_FOR_ME` 在 3c 移除（決策 107）：「對方幫我付」一律走分帳端點（`POST /splits`）。
+ * 既有的 `PAID_FOR_ME` 紀錄照常顯示、修改、刪除。
  */
-export const CREATE_DEBT_ENTRY_KINDS = ['LEND', 'BORROW', 'REPAYMENT', 'PAID_FOR_ME'] as const;
+export const CREATE_DEBT_ENTRY_KINDS = ['LEND', 'BORROW', 'REPAYMENT'] as const;
 export type CreateDebtEntryKind = (typeof CREATE_DEBT_ENTRY_KINDS)[number];
 
 /** 可以帶 `settle: true`（以此結清）的種類：只有還款。 */
@@ -93,6 +103,11 @@ export interface DebtEntry {
   note: string | null;
   /** 產生的交易；調整紀錄與「不記入帳本」為 `null`。 */
   transactionId: string | null;
+  /**
+   * 分帳產生的紀錄（3c）指向那筆分帳；接受提議產生的與一般往來為 `null`。
+   * 有值時這筆只能從分帳端點修改或刪除（`409 SPLIT_ENTRY_READ_ONLY`）。
+   */
+  splitId: string | null;
   /**
    * 寫入這筆之後的累計往來餘額，單位：分（依日期、再依建立時間由舊到新累加）。
    * 只在 `GET /counterparties/{id}/entries` 回傳。
@@ -246,6 +261,11 @@ export interface DebtProposal {
   date: string;
   /** 還款是否帶了以此結清。 */
   settle: boolean;
+  /**
+   * 名稱（3c 決策 101）：分帳產生的紀錄帶上分帳的名稱，接受者那邊的交易預設同名。
+   * 其他提議為 `null`。之後改名稱不送變更。
+   */
+  title: string | null;
   /** 只有送出的提議才有：我自己那筆紀錄。 */
   sourceEntryId?: string;
   /**
@@ -270,9 +290,18 @@ export interface ListDebtProposalsQuery {
 /**
  * `POST /debt-proposals/{id}/accept` 的 body。
  *
- * 只有 `CREATE` 且種類是借出、借入、還款時需要 `record`（物件或 `null`，規則同
- * `POST /debt-entries`）；其他提議不可帶。
+ * 只有 `CREATE` 需要 `record`；其他提議不可帶。依接受者那邊寫入的種類（3c 決策 102）：
+ *
+ * | 接受者寫入                                   | `record`                               | `categoryId`                 | `title` |
+ * | -------------------------------------------- | -------------------------------------- | ---------------------------- | ------- |
+ * | 借入、借出、還款（3b-2）                     | 物件或 `null`（規則同 `POST /debt-entries`） | 不可帶                       | 不可帶  |
+ * | `PAID_FOR_THEM`、`RECEIVED_FOR_THEM`         | 物件或 `null`，同借出                   | 不可帶                       | 可帶    |
+ * | `PAID_FOR_ME`、`RECEIVED_FOR_ME`             | **物件**，只有 `ledgerId`、不可帶帳戶    | **必填**，該帳本的支出／收入分類 | 可帶    |
+ *
+ * `title` 省略時沿用提議的 `title`；送空字串代表不要名稱。
  */
 export interface AcceptDebtProposalRequest {
   record?: DebtEntryRecordTarget | null;
+  categoryId?: string;
+  title?: string;
 }

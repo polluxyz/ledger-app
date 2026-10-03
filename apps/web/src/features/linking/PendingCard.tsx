@@ -7,12 +7,16 @@ import type {
   FriendRequest,
   LedgerSummary,
   Account,
+  CategoryType,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
+import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
+import { TextField } from '../../components/TextField';
 import { MergePromptDialog, MergePromptForm } from '../debts/MergePrompt';
 import { useAccounts } from '../accounts/use-accounts';
+import { useCategories } from '../categories/use-categories';
 import { useCounterparty } from '../debts/use-debts';
 import { useActiveLedger } from '../ledgers/use-active-ledger';
 import { useLedgers } from '../ledgers/use-ledgers';
@@ -339,6 +343,8 @@ function ProposalRow({
   );
   const [ledgerChoice, setLedgerChoice] = useState<string | null>(null);
   const [accountId, setAccountId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [title, setTitle] = useState(proposal.title ?? '');
   const [doNotRecord, setDoNotRecord] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [conflictCode, setConflictCode] = useState<string | null>(null);
@@ -353,11 +359,22 @@ function ProposalRow({
     availableLedgers[0] ??
     null;
   const selectedLedgerId = selectedLedger?.id ?? '';
-  const requiresAccount = selectedLedger?.tracksBalance === true;
+  const isSplitProposal = isSplitEntryKind(proposal.entryKind);
+  const requiresCategory =
+    proposal.entryKind === 'PAID_FOR_ME' || proposal.entryKind === 'RECEIVED_FOR_ME';
+  const categoryType: CategoryType =
+    proposal.entryKind === 'RECEIVED_FOR_ME' ? 'INCOME' : 'EXPENSE';
+  const categoriesQuery = useCategories(
+    requiresCategory && selectedLedgerId !== '' ? selectedLedgerId : null,
+    requiresCategory ? categoryType : undefined,
+  );
+  const requiresAccount = selectedLedger?.tracksBalance === true && !requiresCategory;
   const acceptDisabled =
     isSubmitting ||
     (!doNotRecord &&
-      (selectedLedgerId === '' || (requiresAccount && (accountsLoading || accountId === ''))));
+      (selectedLedgerId === '' ||
+        (requiresAccount && (accountsLoading || accountId === '')) ||
+        (requiresCategory && (categoriesQuery.isLoading || categoryId === ''))));
   const conflictMessage =
     conflictCode === 'NOTHING_TO_REPAY'
       ? '你帳上目前兩清'
@@ -400,11 +417,15 @@ function ProposalRow({
   }
 
   function acceptRecordProposal() {
-    if (doNotRecord) {
-      void handleAccept({ record: null });
+    if (doNotRecord && !requiresCategory) {
+      void handleAccept({ record: null, ...(isSplitProposal ? { title } : {}) });
       return;
     }
-    if (selectedLedgerId === '' || (requiresAccount && accountId === '')) {
+    if (
+      selectedLedgerId === '' ||
+      (requiresAccount && accountId === '') ||
+      (requiresCategory && categoryId === '')
+    ) {
       return;
     }
     void handleAccept({
@@ -412,6 +433,8 @@ function ProposalRow({
         ledgerId: selectedLedgerId,
         ...(requiresAccount ? { accountId } : {}),
       },
+      ...(requiresCategory ? { categoryId } : {}),
+      ...(isSplitProposal ? { title } : {}),
     });
   }
 
@@ -465,6 +488,7 @@ function ProposalRow({
             onChange={(event) => {
               setLedgerChoice(event.target.value);
               setAccountId('');
+              setCategoryId('');
             }}
           >
             {availableLedgers.length === 0 ? (
@@ -499,14 +523,44 @@ function ProposalRow({
           )}
           {requiresAccount && Boolean(accountsError) && <FormError error={accountsError} />}
 
-          <label className={styles.checkbox}>
-            <input
-              type="checkbox"
-              checked={doNotRecord}
-              onChange={(event) => setDoNotRecord(event.target.checked)}
+          {requiresCategory && (
+            <>
+              <Select
+                label="分類"
+                value={categoryId}
+                required
+                onChange={(event) => setCategoryId(event.target.value)}
+              >
+                <option value="">請選擇</option>
+                {categoriesQuery.data?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
+              {categoriesQuery.error && <FormError error={categoriesQuery.error} />}
+            </>
+          )}
+
+          {isSplitProposal && (
+            <TextField
+              label="名稱"
+              value={title}
+              maxLength={100}
+              onChange={(event) => setTitle(event.target.value)}
             />
-            <span>不記入帳本（只記往來）</span>
-          </label>
+          )}
+
+          {!requiresCategory && (
+            <label className={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={doNotRecord}
+                onChange={(event) => setDoNotRecord(event.target.checked)}
+              />
+              <span>不記入帳本（只記往來）</span>
+            </label>
+          )}
           {conflictMessage && (
             <div className={styles.conflictError} role="alert">
               {conflictMessage}
@@ -556,12 +610,52 @@ function isRecordProposal(proposal: DebtProposal): boolean {
     (proposal.entryKind === 'LEND' ||
       proposal.entryKind === 'BORROW' ||
       proposal.entryKind === 'COLLECT' ||
-      proposal.entryKind === 'REPAY')
+      proposal.entryKind === 'REPAY' ||
+      isSplitEntryKind(proposal.entryKind))
+  );
+}
+
+function isSplitEntryKind(kind: DebtEntryKind): boolean {
+  return (
+    kind === 'PAID_FOR_ME' ||
+    kind === 'PAID_FOR_THEM' ||
+    kind === 'RECEIVED_FOR_ME' ||
+    kind === 'RECEIVED_FOR_THEM'
   );
 }
 
 function renderProposalSentence(proposal: DebtProposal): ReactNode {
   const name = proposal.otherUser.name;
+
+  if (proposal.type === 'CREATE' && isSplitEntryKind(proposal.entryKind)) {
+    const theyOweMe =
+      proposal.entryKind === 'RECEIVED_FOR_ME' || proposal.entryKind === 'PAID_FOR_THEM';
+    const action =
+      proposal.entryKind === 'PAID_FOR_ME'
+        ? '幫你付'
+        : proposal.entryKind === 'PAID_FOR_THEM'
+          ? '幫對方付'
+          : proposal.entryKind === 'RECEIVED_FOR_ME'
+            ? '替你代收'
+            : '替對方代收';
+    const from = theyOweMe ? name : '我';
+    const to = theyOweMe ? '我' : name;
+    const directionText = theyOweMe
+      ? `${name}欠你 ${formatMoney(proposal.amount)}`
+      : `你欠${name} ${formatMoney(proposal.amount)}`;
+    return (
+      <>
+        {proposal.title && <strong>{proposal.title} · </strong>}
+        <span>{action} · </span>
+        <DebtArrow
+          from={from}
+          to={to}
+          amount={proposal.amount}
+          srText={`${name}${action} ${formatMoney(proposal.amount)}；${directionText}`}
+        />
+      </>
+    );
+  }
 
   if (proposal.type === 'CREATE' && proposal.entryKind === 'FORGIVEN') {
     return (
@@ -572,11 +666,26 @@ function renderProposalSentence(proposal: DebtProposal): ReactNode {
   }
 
   if (proposal.type === 'CREATE') {
+    const direction = proposalDebtDirection(proposal.entryKind, name, proposal.amount);
+    if (direction) {
+      const settle = proposal.settle ? '，並以此結清' : '';
+      return (
+        <>
+          <strong>{name}</strong> 記了一筆：
+          <DebtArrow
+            from={direction.from}
+            to={direction.to}
+            amount={proposal.amount}
+            srText={direction.srText}
+          />
+          {' · '}
+          {shortDate(proposal.date)}
+          {settle}
+        </>
+      );
+    }
+
     const description: Record<string, string> = {
-      LEND: '你借給他',
-      BORROW: '你向他借入',
-      COLLECT: '他還你',
-      REPAY: '你還他',
       FORGIVEN: '記下一筆免除',
       SETTLEMENT: '記下一筆結清差額',
       FORGIVE: '免除他欠你的錢',
@@ -627,6 +736,33 @@ function renderProposalSentence(proposal: DebtProposal): ReactNode {
   );
 }
 
+/** W84 將待確認新增提議中的欠款方向交給箭頭，讀屏文字保留欠款關係句。 */
+function proposalDebtDirection(
+  kind: DebtEntryKind,
+  name: string,
+  amount: number,
+): { from: string; to: string; srText: string } | null {
+  const formattedAmount = formatMoney(amount);
+  switch (kind) {
+    case 'LEND':
+    case 'COLLECT':
+      return {
+        from: name,
+        to: '我',
+        srText: `${name}欠你 ${formattedAmount}`,
+      };
+    case 'BORROW':
+    case 'REPAY':
+      return {
+        from: '我',
+        to: name,
+        srText: `你欠${name} ${formattedAmount}`,
+      };
+    default:
+      return null;
+  }
+}
+
 function entryKindLabel(kind: DebtEntryKind): string {
   const labels: Record<DebtEntryKind, string> = {
     LEND: '借出',
@@ -637,6 +773,9 @@ function entryKindLabel(kind: DebtEntryKind): string {
     SETTLEMENT: '結清差額',
     FORGIVE: '免除',
     PAID_FOR_ME: '代墊',
+    PAID_FOR_THEM: '幫對方付',
+    RECEIVED_FOR_THEM: '替對方代收',
+    RECEIVED_FOR_ME: '對方代收',
   };
   return labels[kind];
 }
@@ -652,6 +791,8 @@ function accountLabel(kind: DebtEntryKind): string {
     LEND: '從哪個帳戶借出',
     COLLECT: '收進哪個帳戶',
     REPAY: '從哪個帳戶付出',
+    PAID_FOR_THEM: '付款帳戶',
+    RECEIVED_FOR_THEM: '收款帳戶',
   };
   return labels[kind] ?? '選擇帳戶';
 }
@@ -659,7 +800,7 @@ function accountLabel(kind: DebtEntryKind): string {
 function getPreview(
   proposal: DebtProposal,
   counterparty: Pick<Counterparty, 'displayName' | 'balance'> | undefined,
-): string | null {
+): ReactNode {
   if (!isRecordProposal(proposal) || counterparty === undefined) {
     return null;
   }
@@ -677,7 +818,27 @@ function getPreview(
     return '記完後：兩清';
   }
   if (resultingBalance > 0) {
-    return '記完後：' + counterparty.displayName + '欠你 ' + formatMoney(resultingBalance);
+    return (
+      <>
+        <span aria-hidden="true">記完後：</span>
+        <DebtArrow
+          from={counterparty.displayName}
+          to="我"
+          amount={resultingBalance}
+          srText={`記完後：${counterparty.displayName}欠你 ${formatMoney(resultingBalance)}`}
+        />
+      </>
+    );
   }
-  return '記完後：你欠' + counterparty.displayName + ' ' + formatMoney(Math.abs(resultingBalance));
+  return (
+    <>
+      <span aria-hidden="true">記完後：</span>
+      <DebtArrow
+        from="我"
+        to={counterparty.displayName}
+        amount={Math.abs(resultingBalance)}
+        srText={`記完後：你欠${counterparty.displayName} ${formatMoney(Math.abs(resultingBalance))}`}
+      />
+    </>
+  );
 }

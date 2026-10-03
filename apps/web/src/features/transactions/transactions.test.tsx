@@ -253,7 +253,7 @@ describe('Transactions on the transactions page', () => {
     // 欄位必須整個不存在，不能只是停用：後端連帶著空值都會回 400
     // ACCOUNT_NOT_ALLOWED，而停用的欄位會讓人以為「應該要能選，只是現在不行」。
     expect(screen.queryByLabelText('帳戶')).not.toBeInTheDocument();
-    expect(screen.getByText(/這本帳本不影響你的帳戶餘額/)).toBeInTheDocument();
+    expect(screen.queryByText(/這本帳本不影響你的帳戶餘額/)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText('金額'), '123');
     await user.selectOptions(within(newTransactionForm()).getByLabelText('分類'), 'cat-1');

@@ -272,7 +272,6 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   await row.click();
 
   const dialog = page.getByRole('dialog', { name: '編輯交易' });
-  await expect(dialog.getByText('這筆記在其他成員的帳戶')).toBeVisible();
   await expect(dialog.getByLabel('帳戶')).toHaveCount(0);
   // 轉出沿用他的帳戶、轉入是我的——後端會接受，但沒有人是那個意思。
   await expect(dialog.getByRole('button', { name: '轉帳' })).toHaveCount(0);

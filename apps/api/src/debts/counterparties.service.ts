@@ -26,7 +26,7 @@ import {
   toCounterparty,
   toDebtEntry,
 } from './debt-entry-rules';
-import { proposeCreate, syncStatuses } from './debt-proposal-rules';
+import { proposeAmend, proposeCreate, syncStatuses } from './debt-proposal-rules';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -176,6 +176,26 @@ export class CounterpartiesService {
           'This counterparty still has entries; delete them first.',
         );
       }
+      const usedBySplit = await tx.split.count({
+        where: { deletedAt: null, payerCounterpartyId: row.id },
+      });
+      const usedInSplit = await tx.splitParticipant.count({
+        where: { counterpartyId: row.id, split: { deletedAt: null } },
+      });
+      if (usedBySplit > 0 || usedInSplit > 0)
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.COUNTERPARTY_HAS_ENTRIES,
+          'This counterparty still has entries; delete them first.',
+        );
+      // 已軟刪的分帳不再阻止刪除對象；先清掉歷史外鍵，保留分帳本身供稽核。
+      await tx.splitParticipant.deleteMany({
+        where: { counterpartyId: row.id, split: { deletedAt: { not: null } } },
+      });
+      await tx.split.updateMany({
+        where: { payerCounterpartyId: row.id, deletedAt: { not: null } },
+        data: { payerCounterpartyId: null },
+      });
       await tx.counterparty.delete({ where: { id: row.id } });
     });
   }
@@ -296,6 +316,70 @@ export class CounterpartiesService {
         where: { counterpartyId: source.id },
         data: { counterpartyId: target.id, pairedEntryId: null },
       });
+      const sourceParticipants = await tx.splitParticipant.findMany({
+        where: { counterpartyId: source.id },
+      });
+      for (const participant of sourceParticipants) {
+        const duplicate = await tx.splitParticipant.findFirst({
+          where: { splitId: participant.splitId, counterpartyId: target.id },
+        });
+        if (duplicate) {
+          await tx.splitParticipant.update({
+            where: { id: duplicate.id },
+            data: {
+              share: duplicate.share + participant.share,
+              ratio:
+                duplicate.ratio === null || participant.ratio === null
+                  ? null
+                  : duplicate.ratio + participant.ratio,
+            },
+          });
+          await tx.splitParticipant.delete({ where: { id: participant.id } });
+        } else
+          await tx.splitParticipant.update({
+            where: { id: participant.id },
+            data: { counterpartyId: target.id },
+          });
+      }
+      await tx.split.updateMany({
+        where: { payerCounterpartyId: source.id },
+        data: { payerCounterpartyId: target.id },
+      });
+      // 同一分帳的兩筆往來若合成同一人，保留目標的身分／配對，金額相加；
+      // 另一筆連交易一起軟刪，帳戶總額因而不變。
+      const movedIds = new Set(oldEntries.map((entry) => entry.id));
+      const splitEntries = await tx.debtEntry.findMany({
+        where: { counterpartyId: target.id, splitId: { not: null }, deletedAt: null },
+      });
+      const groups = new Map<string, typeof splitEntries>();
+      for (const entry of splitEntries) {
+        const key = `${entry.splitId}:${entry.kind}`;
+        groups.set(key, [...(groups.get(key) ?? []), entry]);
+      }
+      for (const group of groups.values()) {
+        if (group.length < 2) continue;
+        const keeper = group.find((entry) => !movedIds.has(entry.id)) ?? group[0]!;
+        const total = group.reduce((sum, entry) => sum + entry.delta, 0);
+        const changed = await tx.debtEntry.update({
+          where: { id: keeper.id },
+          data: { delta: total },
+        });
+        if (keeper.transactionId)
+          await tx.transaction.update({
+            where: { id: keeper.transactionId },
+            data: { amount: Math.abs(total) },
+          });
+        for (const duplicate of group.filter((entry) => entry.id !== keeper.id)) {
+          const deletedAt = new Date();
+          await tx.debtEntry.update({ where: { id: duplicate.id }, data: { deletedAt } });
+          if (duplicate.transactionId)
+            await tx.transaction.update({
+              where: { id: duplicate.transactionId },
+              data: { deletedAt },
+            });
+        }
+        await proposeAmend(tx, { fromUserId: userId, entry: changed, now: new Date() });
+      }
       await tx.counterparty.delete({ where: { id: source.id } });
       const updated = await tx.counterparty.update({
         where: { id: target.id },

@@ -5,7 +5,6 @@ import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
-import { assertLedgerWritable } from './debt-ledger-access';
 import { proposeAmend, proposeCreate, proposeDelete, syncStatuses } from './debt-proposal-rules';
 import { recordDebtTransaction, writeSettlement } from './debt-recording';
 import {
@@ -117,6 +116,12 @@ export class DebtEntriesService {
   update(userId: string, entryId: string, input: UpdateDebtEntryRequest): Promise<DebtEntry> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedEntry(tx, userId, entryId);
+      if (existing.splitId != null)
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.SPLIT_ENTRY_READ_ONLY,
+          'Change this entry through its split.',
+        );
       await lockCounterparty(tx, existing.counterpartyId);
       if (isAdjustment(existing.kind)) {
         throw new AppException(
@@ -165,6 +170,12 @@ export class DebtEntriesService {
   remove(userId: string, entryId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedEntry(tx, userId, entryId);
+      if (existing.splitId != null)
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.SPLIT_ENTRY_READ_ONLY,
+          'Change this entry through its split.',
+        );
       await lockCounterparty(tx, existing.counterpartyId);
       const deletedAt = new Date();
       await tx.debtEntry.update({ where: { id: existing.id }, data: { deletedAt } });
@@ -209,29 +220,15 @@ export class DebtEntriesService {
     tx: Prisma.TransactionClient,
     userId: string,
     input: CreateDebtEntryDto,
-    kind: RecordedDebtEntryKind,
+    kind: 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY',
     date: Date,
   ): Promise<string | null> {
-    if (kind !== 'PAID_FOR_ME') {
-      return recordDebtTransaction(tx, this.transactions, {
-        userId,
-        record: input.record,
-        kind,
-        amount: input.amount,
-        date,
-      });
-    }
-    // 代付的 record 不可能是 null（assertEntryShape 已擋），這裡只是讓型別收斂。
-    if (input.record === null) {
-      return null;
-    }
-    await assertLedgerWritable(tx, userId, input.record.ledgerId);
-    return this.transactions.createPaidForMeExpense(tx, {
-      ledgerId: input.record.ledgerId,
-      creatorId: userId,
+    return recordDebtTransaction(tx, this.transactions, {
+      userId,
+      record: input.record,
+      kind,
       amount: input.amount,
       date,
-      categoryId: input.categoryId!,
     });
   }
 }
@@ -241,6 +238,8 @@ export class DebtEntriesService {
  * 違反一律 400，而且發生在碰資料庫之前。
  */
 function assertEntryShape(input: CreateDebtEntryDto): void {
+  if ((input.kind as string) === 'PAID_FOR_ME')
+    throw badRequest('PAID_FOR_ME must be created through /splits.');
   const hasId = input.counterparty.id !== undefined;
   const hasName = input.counterparty.name !== undefined;
   if (hasId === hasName) {
@@ -251,19 +250,8 @@ function assertEntryShape(input: CreateDebtEntryDto): void {
     throw badRequest('record is required: an object to record a transaction, or null for none.');
   }
 
-  if (input.kind === 'PAID_FOR_ME') {
-    if (input.record === null) {
-      throw badRequest('PAID_FOR_ME always records an expense, so record cannot be null.');
-    }
-    if (input.record.accountId !== undefined) {
-      throw badRequest('PAID_FOR_ME is paid by the other person, so it cannot name an account.');
-    }
-    if (input.categoryId === undefined) {
-      throw badRequest('categoryId is required for PAID_FOR_ME.');
-    }
-  } else if (input.categoryId !== undefined) {
-    throw badRequest('categoryId is only valid for PAID_FOR_ME.');
-  }
+  if (input.categoryId !== undefined)
+    throw badRequest('categoryId is only valid for split entries.');
 
   if (
     input.settle !== undefined &&

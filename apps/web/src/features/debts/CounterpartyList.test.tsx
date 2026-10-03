@@ -78,11 +78,10 @@ describe('CounterpartyList', () => {
   it('uses API balances and marks linked people in the list', async () => {
     renderList();
 
-    expect(await screen.findByText('欠我 $9')).toBeInTheDocument();
-    expect(screen.getByText('我欠 $11')).toBeInTheDocument();
+    expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
+    expect(screen.getByText('你欠阿華 $11')).toBeInTheDocument();
     expect(screen.getByText('兩清')).toBeInTheDocument();
     expect(screen.getByText('連動')).toBeInTheDocument();
-    expect(screen.getByText('小明的暱稱')).toBeInTheDocument();
     expect(screen.queryByText('舊暱稱')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/counterparties\?page=1&limit=20$/);
   });

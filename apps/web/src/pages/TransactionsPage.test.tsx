@@ -207,7 +207,7 @@ describe('Transactions page', () => {
     render(<App />);
 
     expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
-    expect(await screen.findByText('欠我 $5,000', undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText('小明欠你 $5,000', undefined, WAIT)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /小明/ }, WAIT)).toBeInTheDocument();
     expect(page().getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
 
@@ -368,7 +368,7 @@ describe('Transactions page', () => {
     expect(within(dialog).getByText('借出 · 小明')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('金額')).toHaveValue(5000);
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-09-01');
-    expect(within(dialog).getByLabelText('備註（選填）')).toHaveValue('借出款項');
+    expect(within(dialog).getByLabelText('備註')).toHaveValue('借出款項');
     expect(within(dialog).queryByText('會送給小明確認')).not.toBeInTheDocument();
 
     const rightPanel = dialog.closest('[data-registered]');
@@ -451,7 +451,7 @@ describe('Transactions page', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(dialog).getByText('會送給小明確認')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('備註（選填）')).toHaveValue('晚餐錢');
+    expect(within(dialog).getByLabelText('備註')).toHaveValue('晚餐錢');
   });
 
   it('keeps an open add panel open while switching between details and debts', async () => {

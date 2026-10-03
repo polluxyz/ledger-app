@@ -44,7 +44,8 @@ test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ sig
 
   // SC-16：欄位必須整個不存在，不是停用——後端連「帶著空值」都會擋下。
   await expect(page.getByLabel('帳戶', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('這本帳本不影響你的帳戶餘額')).toBeVisible();
+  // 3c W64：不連動帳本的這一列是「付款人：我」，原本的說明文字拿掉了（介面文字極簡）。
+  await expect(newTransactionForm(page).getByText('付款人：我')).toBeVisible();
 
   await page.getByLabel('金額').fill('1200');
   await newTransactionForm(page).getByLabel('分類').selectOption({ label: '餐飲' });

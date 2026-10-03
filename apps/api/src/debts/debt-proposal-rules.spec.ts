@@ -58,6 +58,7 @@ describe('debt proposal rules', () => {
       entryKind: 'LEND' as const,
       amount: 120,
       date: new Date('2026-09-25T00:00:00.000Z'),
+      title: null,
       settle: false,
       status: 'PENDING' as const,
       respondedAt: null,
@@ -125,6 +126,7 @@ describe('debt proposal rules', () => {
       date: new Date('2026-09-25T00:00:00.000Z'),
       note: null,
       transactionId: null,
+      splitId: null,
       pairedEntryId: null as string | null,
       deletedAt: null,
       createdAt: new Date('2026-09-25T00:00:00.000Z'),
@@ -181,7 +183,7 @@ describe('debt proposal rules', () => {
       });
     });
 
-    it('sends nothing for paid-for-me or when not linked', async () => {
+    it('sends paid-for-me after 3c and sends nothing when not linked', async () => {
       const paidForMe = buildTx();
       await proposeCreate(paidForMe as never, {
         fromUserId: 'alice',
@@ -189,7 +191,7 @@ describe('debt proposal rules', () => {
         amount: 150,
         settle: false,
       });
-      expect(paidForMe.debtProposal.create).not.toHaveBeenCalled();
+      expect(paidForMe.debtProposal.create).toHaveBeenCalledTimes(1);
 
       const unlinked = buildTx({ linked: false });
       await proposeCreate(unlinked as never, {

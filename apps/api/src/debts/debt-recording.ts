@@ -27,9 +27,11 @@ export async function recordDebtTransaction(
   input: {
     userId: string;
     record: DebtEntryRecordTarget | null;
-    kind: 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY';
+    kind: 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY' | 'PAID_FOR_THEM' | 'RECEIVED_FOR_THEM';
     amount: number;
     date: Date;
+    title?: string | null;
+    splitId?: string;
   },
 ): Promise<string | null> {
   if (input.record === null) {
@@ -43,6 +45,8 @@ export async function recordDebtTransaction(
     amount: input.amount,
     date: input.date,
     accountId: input.record.accountId,
+    title: input.title,
+    splitId: input.splitId,
   });
 }
 

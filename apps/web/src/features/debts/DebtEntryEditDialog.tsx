@@ -118,7 +118,7 @@ export function DebtEntryEditForm({
         onChange={(event) => setDate(event.target.value)}
       />
       <TextField
-        label="備註（選填）"
+        label="備註"
         value={note}
         maxLength={500}
         disabled={updateEntry.isPending}
