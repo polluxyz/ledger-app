@@ -85,36 +85,19 @@ export function DebtEntryForm({
     repaymentExceedsBalance ||
     createEntry.isPending;
 
+  /**
+   * 還款的方向（誰付給誰）。這是「這一筆是什麼動作」，不是餘額，所以不換成箭頭（3c W84
+   * 只換「目前…」「記完後…」）：目前的餘額已經由對象欄下方的箭頭顯示，這裡再畫一次就重複了。
+   */
   let repaymentHint: ReactNode = null;
   if (normalizedName !== '') {
     if (kind === 'REPAYMENT') {
-      if (counterparty && counterparty.balance > 0) {
-        repaymentHint = (
-          <>
-            <span aria-hidden="true">目前</span>
-            <DebtArrow
-              from={counterparty.displayName}
-              to="我"
-              amount={counterparty.balance}
-              srText={`目前${counterparty.displayName}欠你 ${formatMoney(counterparty.balance)}`}
-            />
-          </>
-        );
-      } else if (counterparty && counterparty.balance < 0) {
-        repaymentHint = (
-          <>
-            <span aria-hidden="true">目前</span>
-            <DebtArrow
-              from="我"
-              to={counterparty.displayName}
-              amount={Math.abs(counterparty.balance)}
-              srText={`目前你欠${counterparty.displayName} ${formatMoney(Math.abs(counterparty.balance))}`}
-            />
-          </>
-        );
-      } else {
-        repaymentHint = '目前沒有欠款';
-      }
+      repaymentHint =
+        counterparty && counterparty.balance > 0
+          ? `${counterparty.displayName}還你`
+          : counterparty && counterparty.balance < 0
+            ? `你還${counterparty.displayName}`
+            : '目前沒有欠款';
     } else if (!repaymentAvailable) {
       repaymentHint = '目前沒有欠款';
     }

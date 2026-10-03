@@ -56,4 +56,9 @@ spec：`docs/specs/phase-3c-split.md`（決策 82～107、SC-S1～SC-S19、§5.5
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+1. **派工**：Run `run_ebdf55427f50`；後端 `ctx_7903ea3712bc`（worktree `split-api`，Codex `gpt-6-sol` xhigh）、畫面 `ctx_17b7a5017559`（worktree `split-web`，Codex `gpt-6-luna` max）。
+2. **後端 worker 回報**：commit `cddf1a2`、`1320242`；API 單元測試 326、API e2e 168（含 8 個隔離測試）全綠；migration `20261003010000_add_splits`。
+3. **驗收時協調者修正**（commit 見 `feature/split`）：
+   - **授權缺口**：`fromTransactionId` 只檢查「是我記的」，沒檢查原交易所在的帳本仍可寫入；被移出共享帳本的人能藉這條路軟刪除以前記的交易。補隔離測試（先看到 201 紅燈）再加 `assertLedgerWritable`。
+   - `update` 用交易外讀的資料做逐人比對。改成交易內先 `SELECT … FOR UPDATE` 鎖住分帳再讀；`remove` 同樣先鎖。
+   - 解散成一般交易時備註會消失。改成搬到交易上，SC-S11 的 e2e 補斷言。
