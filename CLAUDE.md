@@ -231,7 +231,7 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 1. **一個任務 = 一個 worktree = 一個分支。** 同一個分支不能同時簽出在兩個 worktree。
 2. **新 worktree 第一件事跑 `pnpm install`。** 未版控的檔案不會跟過來，`node_modules` 是空的。這個指令會連帶執行 `postinstall: prisma generate`，把 Prisma Client 產到該 worktree 自己的 `node_modules`。**不要跨 worktree 共用 `node_modules`**——不同分支的 lock 檔與 Prisma schema 可能不同。
 3. **`.worktreeinclude`** 列出新 worktree 要複製的未版控檔案（`apps/api/.env`、`apps/api/.env.test`、`.claude/settings.local.json`）。新增這類檔案時同步更新它。
-4. **同時只有一個 worktree 跑 e2e。** 兩套 e2e 共用 `ledger_test` 資料庫且每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。
+4. **同時只有一個 worktree 跑 e2e。** 兩套 e2e 共用 `ledger_test` 資料庫且每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。例外：API e2e 不佔 port，worktree 的 `.env.test` 改指向自己的資料庫就能平行（見 `docs/orca-multi-agent.md` §3）。
 5. **多個 PR 同時開著是常態。** 處理方式見 §10「PR 落後 `main` 時」。
 6. **Orca 不是專案相依。** hook 在 `~/.claude/settings.json` 與 `~/.orca/`，skill 在 `~/.agents/skills/`，都在 repo 之外。CI 用不到，**不可讓任何建置或測試流程依賴它**。
 
@@ -241,10 +241,10 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 
-- 實作預設派給 worker，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
+- 實作預設派給 worker，能拆就拆，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它指定不了 Codex、Pi 等其他 agent。
 - 要用哪個模型，看 `docs/orca-multi-agent.md` §0 的角色表。這是唯一記錄模型 id 的地方，其他文件只寫角色名（`default`、`backend`、`fallback-1`～`3`）。
-- Prisma schema、migration、API 介面、授權與資料隔離的工作只派給 `backend` 角色。驗收時逐行看 diff，自己重跑隔離測試與 e2e。
+- 難或要求高準確的工作（migration SQL、授權與資料隔離、鎖、金額與帳戶規則）派 `backend` 角色；其餘，包括單純的 API 端點與補測試，派 `default`。schema、API、授權的產出不管哪個角色做，驗收時都逐行看 diff，自己重跑隔離測試與 e2e。
 - 額度用完由協調者主動查（`orca account list` 的用量與 worker 畫面），自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。
