@@ -231,7 +231,7 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 1. **一個任務 = 一個 worktree = 一個分支。** 同一個分支不能同時簽出在兩個 worktree。
 2. **新 worktree 第一件事跑 `pnpm install`。** 未版控的檔案不會跟過來，`node_modules` 是空的。這個指令會連帶執行 `postinstall: prisma generate`，把 Prisma Client 產到該 worktree 自己的 `node_modules`。**不要跨 worktree 共用 `node_modules`**——不同分支的 lock 檔與 Prisma schema 可能不同。
 3. **`.worktreeinclude`** 列出新 worktree 要複製的未版控檔案（`apps/api/.env`、`apps/api/.env.test`、`.claude/settings.local.json`）。新增這類檔案時同步更新它。
-4. **同時只有一個 worktree 跑 e2e。** 兩套 e2e 共用 `ledger_test` 資料庫且每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。
+4. **同時只有一個 worktree 跑 e2e。** 兩套 e2e 共用 `ledger_test` 資料庫且每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。例外：API e2e 不佔 port，worktree 的 `.env.test` 改指向自己的資料庫就能平行（見 `docs/orca-multi-agent.md` §3）。
 5. **多個 PR 同時開著是常態。** 處理方式見 §10「PR 落後 `main` 時」。
 6. **Orca 不是專案相依。** hook 在 `~/.claude/settings.json` 與 `~/.orca/`，skill 在 `~/.agents/skills/`，都在 repo 之外。CI 用不到，**不可讓任何建置或測試流程依賴它**。
 

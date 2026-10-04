@@ -65,8 +65,14 @@ worker 只拿得到你寫的 Task spec，所以 spec 要自足。五欄：**Targ
 Constraints 每次都寫這六條：
 
 - 不准動 Prisma schema 與 API 介面，需要動就回報（Task spec 明確指派的除外）。
-- 不要跑 e2e，除非 spec 指定。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
-- Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑。`.worktreeinclude` 會把指向開發者 `ledger_dev` 的 `apps/api/.env` 複製進 worktree，3c 的 migration 曾因此在合併前被套用到 dev 資料庫。
+- 不要跑 e2e，除非 spec 指定。預設多個 worktree 共用 `ledger_test` 資料庫與固定 port（例外見下一條之後的說明）。
+- Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑。`.worktreeinclude` 會把指向開發者 `ledger_dev` 的 `apps/api/.env` 複製進 worktree，3c 與 3e 的 migration 都曾因此在合併前被套用到 dev 資料庫。
+
+協調者在派工前做兩件事，不靠 worker 記得：
+
+1. 會碰 Prisma 的 worker，它 worktree 裡的 `apps/api/.env` 與 `apps/api/.env.test` 都改成指向它專屬的測試資料庫（`ledger_test_<名稱>`，先 `create database`）。這樣 worker 弄錯環境變數也碰不到 `ledger_dev`。
+2. API e2e 用 supertest 在行程內跑、不佔 port，所以各用各的資料庫就能同時跑。Web 的 Playwright 仍然一次只能一個。
+
 - 只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`，不要跑根目錄的 `pnpm format`。平行時會改到別人的檔案。
 - 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
 - 遇到 provider 錯誤時，把錯誤訊息原文用 escalation 或 `worker_done --outcome failed` 帶回來。不要自己重試，也不要只寫「失敗」。（額度完全用完時 worker 發不出回報，所以協調者還要自己查，見 §4。）
