@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { computeSplitShares, fillRemainingShares } from './split-shares.ts';
+import { computeSharesByKey, computeSplitShares, fillRemainingShares } from './split-shares.ts';
 
 const ME = null;
 const MING = 'ming';
@@ -18,6 +18,44 @@ const MEI = 'mei';
 function people(...ids: Array<string | null>) {
   return ids.map((counterpartyId) => ({ counterpartyId }));
 }
+
+describe('computeSharesByKey：以 key 表示參與者與吸收者', () => {
+  const base = { total: 1000, method: 'EQUAL' as const, precision: 'YUAN' as const };
+
+  it('付款人在名單時由付款人吸收零頭', () => {
+    assert.deepEqual(
+      computeSharesByKey({
+        ...base,
+        payerKey: 'ming',
+        participants: [{ key: 'hua' }, { key: 'ming' }, { key: 'mei' }],
+      }),
+      { ok: true, shares: [300, 400, 300] },
+    );
+  });
+
+  it('付款人不在名單且沒有 fallback 時由第一位吸收（3e）', () => {
+    assert.deepEqual(
+      computeSharesByKey({
+        ...base,
+        payerKey: 'payer-outside',
+        participants: [{ key: 'hua' }, { key: 'ming' }, { key: 'mei' }],
+      }),
+      { ok: true, shares: [400, 300, 300] },
+    );
+  });
+
+  it('付款人不在名單時，名單中的 fallback 優先吸收', () => {
+    assert.deepEqual(
+      computeSharesByKey({
+        ...base,
+        payerKey: 'payer-outside',
+        fallbackKey: 'ming',
+        participants: [{ key: 'hua' }, { key: 'ming' }, { key: 'mei' }],
+      }),
+      { ok: true, shares: [300, 400, 300] },
+    );
+  });
+});
 
 describe('computeSplitShares：spec §3.4 的表格', () => {
   it('1,000 元、我付、3 人均分、精度分 → 333.33、333.33、我 333.34', () => {
