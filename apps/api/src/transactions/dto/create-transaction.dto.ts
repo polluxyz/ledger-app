@@ -9,9 +9,13 @@ import {
   IsUUID,
   Max,
   MaxLength,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { MANUAL_TRANSACTION_TYPES, MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { CreateTransactionRequest, ManualTransactionType } from '@ledger/shared';
+import { LedgerSplitDto } from './ledger-split.dto';
 
 /**
  * 建立交易時 POST body 的驗證形狀。
@@ -83,4 +87,15 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsUUID()
+  payerPersonId?: string;
+
+  @ApiPropertyOptional({ type: LedgerSplitDto, nullable: true })
+  @ValidateIf((_, value: unknown) => value !== null && value !== undefined)
+  @ValidateNested()
+  @Type(() => LedgerSplitDto)
+  ledgerSplit?: LedgerSplitDto | null;
 }
