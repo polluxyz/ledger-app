@@ -1,9 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import {
-  ErrorCode,
-  type LedgerPerson,
-  type LedgerPerson as LedgerPersonView,
-} from '@ledger/shared';
+import { ErrorCode, type LedgerPerson } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -109,7 +105,7 @@ export class LedgerPeopleService {
     return [...records.values()];
   }
 
-  toView(record: LedgerPersonRecord): LedgerPersonView {
+  toView(record: LedgerPersonRecord): LedgerPerson {
     const { id, name, userId, status } = record;
     return { id, name, userId, status };
   }
