@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3e-shared-split.md`（決策 111～140、SC-E1～SC-E20）。一個 PR。畫面另寫 `phase-3e-web.md`，等後端合併後再做。
 
-> 核可：待開發者核可（2026-10-04 寫成）。實作交給新 session（main 的 Claude Code）當協調者，見 `docs/handoff.md`。
+> 核可：2026-10-04 開發者核可。同時改了派工：`backend`（sol）只給難或要求高準確的工作，其他給 `default`（luna）；多派 worker 平行。§5 依此改寫。spec 已補 §5.5 並改 SC-E3、E5、E17。
 
 ## 1. 元件與相依
 
@@ -60,10 +60,25 @@ spec：`docs/specs/phase-3e-shared-split.md`（決策 111～140、SC-E1～SC-E20
 - 協調者：逐行看 migration SQL、授權條件（尤其補帳戶端點與 `LedgerPerson` 的帳本歸屬）、交易邊界與鎖的順序；自己重跑 `ledger-splits-isolation.e2e-spec.ts` 與兩套 e2e；`pnpm lint / typecheck / test / build / format:check`。
 - 合併後：替開發者的 dev 環境備份並 `migrate deploy`（`docs/handoff.md`「替開發者部署」）。
 
-## 5. 派工
+## 5. 派工（2026-10-04 依開發者指示改成多 worker 平行）
 
-- **一個 `backend` worker**（角色表見 `docs/orca-multi-agent.md` §0），worktree `ledger-split-api`，從 `feature/ledger-split` 的契約 commit 開出。依 `CLAUDE.md` §11，schema、API、授權只派這一層。
-- worker 不改 `packages/shared`（要改先問協調者）；只有它跑 API e2e。
+依開發者 2026-10-04 的指示：`backend`（sol）只派會動到錢、授權、鎖、migration 的部分，其餘派 `default`（luna）。能平行就平行。
+
+每個 worker 一個 worktree、一個分支，從 `feature/ledger-split` 開出；協調者驗收後 merge 回 `feature/ledger-split`，最後整條一個 PR。API e2e 用 supertest 在行程內跑、不佔 port，所以每個 worktree 的 `apps/api/.env.test` 改指向自己的資料庫（`ledger_test_<名稱>`，協調者先建好），可以同時跑 API e2e。Web 的 Playwright 一律不跑。
+
+| 波次 | worker         | 角色      | 範圍                                                                                                                                                                                                       |
+| ---- | -------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `split-shared` | `default` | `packages/shared`：`computeSharesByKey` 與 3c 包裝、`computeLedgerNets`、`suggestSettlements`、單元測試（SC-E16）                                                                                          |
+| 1    | `split-schema` | `backend` | §1 第 1 項 schema＋migration；`ledger-people` 模組的核心（建立／沿用成員的 `LedgerPerson`、鎖住並驗證人、狀態判斷）；帳戶規則純函式（決策 123～125、129）與單元測試；交易回應新欄位先回預設值；Web fixture |
+| 1    | 協調者         | —         | `ledger-splits-isolation.e2e-spec.ts`（SC-E17、E18），先看到紅燈                                                                                                                                           |
+| 2    | `split-people` | `default` | §1 第 2 項的 4 個端點＋`ledger-people.e2e-spec.ts`（SC-E1、E10、離開再加入）                                                                                                                               |
+| 2    | `split-tx`     | `backend` | §1 第 3、4 項的交易部分（付款人、名單、帳戶規則、唯讀、篩選、交易補帳戶端點、`settlement` 回應欄位）＋`ledger-splits.e2e-spec.ts`（SC-E2、E3、E7、E8、E11～E13、E15）                                      |
+| 2    | `split-settle` | `default` | §1 第 5 項的結清 4 個端點、summary、結清補帳戶端點＋`ledger-settlements.e2e-spec.ts`（以 Prisma 直接寫名單資料當前置）                                                                                     |
+| 3    | `split-e2e`    | `default` | 跨模組情境 e2e（SC-E4、E5、E6、E9、E14）與既有 e2e 的回歸（SC-E19）                                                                                                                                        |
+
+- 第 2 波的三個 worker 檔案不重疊：`transactions/` 只歸 `split-tx`，`settlements/` 只歸 `split-settle`，`ledger-people/` 的端點只歸 `split-people`。`app.module.ts` 的匯入由協調者 merge 時處理。
+- worker 不改 `packages/shared`（要改先問協調者）。
+- 協調者驗收 `backend` worker 的產出時逐行看 diff；`default` worker 的授權與金額部分同樣逐行看。
 
 ## 6. 實作紀錄
 

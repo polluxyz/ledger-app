@@ -1,6 +1,12 @@
 import type { Cents } from '../money';
 import type { CategoryIcon } from '../constants/category-icons';
 import type { DebtEntryKind } from './debt';
+import type {
+  LedgerPerson,
+  LedgerSplitInput,
+  LedgerSplitView,
+  TransactionSettlementRef,
+} from './ledger-split';
 import type { TransactionSplitRef } from './split';
 
 /**
@@ -109,6 +115,20 @@ export interface Transaction {
    * 交易列表對擁有者會把同一筆分帳合併成一列，這一列帶著展開明細需要的資料。
    */
   split: TransactionSplitRef | null;
+  /**
+   * 付款人（收入時是收款人，3e 決策 117）。只有共享帳本的 `EXPENSE`／`INCOME` 有值，
+   * 帳本全部成員都看得到；舊資料沒存付款人時是記帳的人（決策 121）。其他情況為 `null`。
+   */
+  payer: LedgerPerson | null;
+  /** 共享帳本的分帳名單（3e §5.2），帳本全部成員都看得到；不分帳為 `null`。 */
+  ledgerSplit: LedgerSplitView | null;
+  /** 這筆 `TRANSFER` 是共享帳本的一筆結清（3e 決策 128）；其他交易為 `null`。 */
+  settlement: TransactionSettlementRef | null;
+  /**
+   * 帳戶待補（3e 決策 124），而且要由**目前的檢視者**補：付款人（結清時是付錢或收錢的那一位）
+   * 是檢視者本人、帳本連動、那一邊的帳戶還空著。其他人看同一筆一律是 `false`。
+   */
+  accountPending: boolean;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }
@@ -166,6 +186,16 @@ export interface CreateTransactionRequest {
   /** 名稱，最多 100 字（3c 決策 84）。 */
   title?: string;
   note?: string;
+  /**
+   * 付款人（收款人），這本帳本的 `LedgerPerson.id`；省略＝我（3e 決策 117）。
+   * 只有共享帳本的支出／收入能帶，否則 `400 LEDGER_SPLIT_NOT_ALLOWED`。
+   *
+   * 帳戶規則（決策 123）：付款人是我時照上表；付款人是別的成員或非成員時 `accountId` 不可帶
+   * （`400 ACCOUNT_NOT_PAYERS`），帳戶由付款人自己補。
+   */
+  payerPersonId?: string;
+  /** 共享帳本的分帳名單；省略或 `null`＝不分帳。同樣只有共享帳本的支出／收入能帶。 */
+  ledgerSplit?: LedgerSplitInput | null;
 }
 
 /**
@@ -183,6 +213,10 @@ export interface UpdateTransactionRequest {
   /** 名稱；送空字串清除（同 `note`）。 */
   title?: string;
   note?: string;
+  /** 改付款人時帳戶一律清空；新付款人是我時要在同一次帶 `accountId`（3e 決策 125）。 */
+  payerPersonId?: string;
+  /** 整份取代名單；`null`＝拿掉名單；省略＝不變。 */
+  ledgerSplit?: LedgerSplitInput | null;
 }
 
 /** GET /ledgers/{ledgerId}/transactions 的查詢參數。 */
@@ -197,4 +231,6 @@ export interface ListTransactionsQuery {
   to?: string;
   categoryId?: string;
   type?: TransactionType;
+  /** 只看某個人付（收）的（3e §5.2）；舊資料以記帳的人為付款人。 */
+  payerPersonId?: string;
 }

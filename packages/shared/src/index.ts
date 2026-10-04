@@ -20,3 +20,4 @@ export * from './types/debt';
 export * from './money';
 export * from './types/split';
 export * from './split-shares';
+export * from './types/ledger-split';
