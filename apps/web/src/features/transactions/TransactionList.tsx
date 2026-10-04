@@ -27,6 +27,8 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
   onEditDebtTransaction?: (transaction: Transaction) => void;
+  /** 點「待補」（`accountPending: true`）時，打開補帳戶表單（3e W125）。 */
+  onFillAccount?: (transaction: Transaction) => void;
 }
 
 /**

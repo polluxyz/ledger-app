@@ -755,7 +755,7 @@ describe('Ledger split cross-module scenario (e2e)', () => {
       hua: -90000,
     });
 
-    // SC-E14：離開者保留淨額；新交易不可再選他，但仍可代他結清並改動舊名單。
+    // SC-E14：離開者保留淨額；新交易仍可選他（修訂 2），也可代他結清並改動舊名單。
     await request(server())
       .delete(`/api/ledgers/${s.ledgerId}/members/${s.ming.userId}`)
       .set(auth(s.ming.token))
@@ -777,24 +777,24 @@ describe('Ledger split cross-module scenario (e2e)', () => {
       type: 'EXPENSE',
       amount: 10000,
       payerPersonId: s.people.ming.id,
-    }).expect(400);
-    expect((leftPayerResponse.body as ApiErrorResponse).errorCode).toBe(
-      'LEDGER_PERSON_NOT_SELECTABLE',
-    );
-    await expectState(s, afterLeavePeople, afterPayerChangeSuggestions, {
-      me: -750000,
-      ming: -50000,
-      hua: -90000,
-    });
+    }).expect(201);
+    const leftPaid = leftPayerResponse.body as Transaction;
+    expect(leftPaid.payer?.status).toBe('LEFT');
+    expect(leftPaid.account).toBeNull();
     const leftShareResponse = await createTransaction(s, s.me, {
       type: 'EXPENSE',
       amount: 10000,
       accountId: s.me.cashId,
       ledgerSplit: equalSplit([s.people.me.id, s.people.ming.id]),
-    }).expect(400);
-    expect((leftShareResponse.body as ApiErrorResponse).errorCode).toBe(
-      'LEDGER_PERSON_NOT_SELECTABLE',
-    );
+    }).expect(201);
+    const leftShared = leftShareResponse.body as Transaction;
+    // 刪掉這兩筆，讓後面的情境沿用離開當下的淨額與餘額。
+    for (const id of [leftPaid.id, leftShared.id]) {
+      await request(server())
+        .delete(`/api/ledgers/${s.ledgerId}/transactions/${id}`)
+        .set(auth(s.me.token))
+        .expect(204);
+    }
     expect((await transactionList(s, s.me)).total).toBe(beforeInvalidTransactions.total);
     await expectState(s, afterLeavePeople, afterPayerChangeSuggestions, {
       me: -750000,

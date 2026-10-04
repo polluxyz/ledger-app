@@ -383,7 +383,7 @@ describe('Ledger split transactions (e2e)', () => {
     ).toBeNull();
   });
 
-  it('SC-E14、E15：離開者保留於既有名單，錯誤份額不寫入', async () => {
+  it('SC-E14、E15：離開者保留於既有名單、仍可被選，錯誤份額不寫入', async () => {
     const s = await scene();
     const transaction = (
       await create(s, { payerPersonId: s.ids[1], ledgerSplit: equal(s.ids) }).expect(201)
@@ -391,13 +391,19 @@ describe('Ledger split transactions (e2e)', () => {
     await prisma.ledgerMember.delete({
       where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.ming.userId } },
     });
-    expect((await create(s, { payerPersonId: s.ids[1] }).expect(400)).body.errorCode).toBe(
-      'LEDGER_PERSON_NOT_SELECTABLE',
-    );
-    expect(
-      (await create(s, { accountId: s.me.cashId, ledgerSplit: equal(s.ids) }).expect(400)).body
-        .errorCode,
-    ).toBe('LEDGER_PERSON_NOT_SELECTABLE');
+    // 修訂 2（決策 134）：已離開的人跟非成員一樣能當付款人、進名單；付款人是他時沒有帳戶。
+    const leftPaid = (await create(s, { payerPersonId: s.ids[1] }).expect(201)).body as Transaction;
+    expect(leftPaid.payer?.status).toBe('LEFT');
+    expect(leftPaid.account).toBeNull();
+    expect(leftPaid.accountPending).toBe(false);
+    const leftShared = (
+      await create(s, { accountId: s.me.cashId, ledgerSplit: equal(s.ids) }).expect(201)
+    ).body as Transaction;
+    expect(leftShared.ledgerSplit?.shares.map((share) => share.person.status)).toEqual([
+      'MEMBER',
+      'LEFT',
+      'MEMBER',
+    ]);
     const changed = (await patch(s, transaction.id, { amount: 180000 }).expect(200))
       .body as Transaction;
     expect(changed.ledgerSplit?.shares.map((share) => share.share)).toEqual([60000, 60000, 60000]);

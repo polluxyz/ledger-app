@@ -33,7 +33,7 @@ export class ApiError extends Error {
 const FALLBACK_MESSAGE = '發生未預期的錯誤，請稍後再試。';
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** 設 true 可略過附帶 token（供登入／註冊等公開端點使用）。 */
   anonymous?: boolean;
