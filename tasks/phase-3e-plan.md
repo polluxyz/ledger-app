@@ -82,4 +82,20 @@ spec：`docs/specs/phase-3e-shared-split.md`（決策 111～140、SC-E1～SC-E20
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+2026-10-04，一個 Orca Run（`run_4b955d94925d`），三波共 6 個 worker。
+
+| worker         | 角色      | 結果                                                                  |
+| -------------- | --------- | --------------------------------------------------------------------- |
+| `split-shared` | `default` | 一次通過；shared 測試 80 → 92                                         |
+| `split-schema` | `backend` | 通過；驗證回填時誤把 migration 套到 `ledger_dev`（下方第 1 點）       |
+| `split-people` | `default` | 一次通過                                                              |
+| `split-tx`     | `backend` | 退回 1 次（下方第 2 點），修正後通過                                  |
+| `split-settle` | `default` | 一次通過；合併後隔離測試 18/18 綠                                     |
+| `split-e2e`    | `default` | 一條情境走完 SC-E2～E19；卡在等一個已結束的背景程序，協調者催促後收尾 |
+
+偏離與事故：
+
+1. **migration 誤套到 `ledger_dev`**：worker 在 PowerShell 沒把測試資料庫的連線設進環境變數，`prisma migrate deploy` 讀了 `apps/api/.env`。worker 立刻回報。協調者經開發者同意，先 `pg_dump` 備份到 `D:\Projects\ledger-app-backups\`，再刪掉新表、新欄位與 migration 紀錄，回到 main 的 schema。對策寫進 `docs/orca-multi-agent.md` §3（#103）：派工前把 worker worktree 的 `.env` 與 `.env.test` 都改指向它專屬的測試資料庫。
+2. **省略 `ledgerSplit` 被當成「全部均分」**：契約是「省略＝不分帳」，決策 118 的預設均分是表單的預設。照原寫法，現行 Web 記的每筆共享帳本支出都會自動進結清。退回修正；同時要求 3c 分帳與借還產生的交易 `payer` 回 `null`，避免「對方幫我付」被標成我付。
+3. **spec 補充**：§5.5 補帳戶端點（核可時定）；結清路徑的 id 是 `LedgerSettlement.id`；成員那一筆的 `PATCH`／`DELETE` 回 `400 VALIDATION_FAILED`。
+4. **派工改成多 worker 平行**：開發者核可時指示「sol 只給難或要求高準確的工作、多用 worker」，§5 依此改寫，角色表見 #103。API e2e 各用各的資料庫，所以能平行跑。
