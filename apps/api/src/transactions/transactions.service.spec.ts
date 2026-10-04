@@ -1,6 +1,7 @@
 import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from './transactions.service';
+import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 
 /**
  * TransactionsService 的單元測試（Prisma 全程 mock）：分類一致性、列表的預設值／
@@ -14,10 +15,13 @@ describe('TransactionsService', () => {
     category: { findUnique: jest.Mock };
     account: { findUnique: jest.Mock };
     debtEntry: { findUnique: jest.Mock };
+    ledgerSettlement: { findUnique: jest.Mock };
+    $transaction: jest.Mock;
     $queryRaw: jest.Mock;
     transaction: {
       create: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
@@ -64,20 +68,35 @@ describe('TransactionsService', () => {
 
   beforeEach(() => {
     prisma = {
-      ledger: { findUnique: jest.fn() },
+      ledger: {
+        findUnique: jest.fn().mockResolvedValue({ kind: 'PERSONAL', tracksBalance: true }),
+      },
       category: { findUnique: jest.fn() },
       account: { findUnique: jest.fn() },
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
+      ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn((callback: (client: unknown) => unknown) => callback(prisma)),
       $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
         create: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
         update: jest.fn().mockResolvedValue(joined),
       },
     };
-    service = new TransactionsService(prisma as unknown as PrismaService);
+    prisma.$queryRaw.mockImplementation(async () => {
+      const row = (await prisma.transaction.findFirst()) as { id: string } | null;
+      return row ? [{ id: row.id }] : [];
+    });
+    prisma.transaction.findUnique.mockImplementation(
+      () => prisma.transaction.findFirst() as Promise<unknown>,
+    );
+    service = new TransactionsService(
+      prisma as unknown as PrismaService,
+      {} as LedgerPeopleService,
+    );
   });
 
   it('creates a transaction with its category, account and creator', async () => {
@@ -384,7 +403,10 @@ describe('TransactionsService', () => {
 
   describe('remove (soft delete)', () => {
     it('sets deletedAt for an active transaction', async () => {
-      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId });
+      prisma.$queryRaw.mockResolvedValue([{ id: 'txn-1' }]);
+      prisma.transaction.findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 'txn-1', ledgerId, type: 'EXPENSE', splitId: null });
 
       await service.remove(ledgerId, 'txn-1');
 
@@ -436,7 +458,10 @@ describe('TransactionsService', () => {
     });
 
     it.each(debtTypes)('refuses to delete a %s transaction', async (type) => {
-      prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId, type });
+      prisma.$queryRaw.mockResolvedValue([{ id: 'txn-1' }]);
+      prisma.transaction.findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 'txn-1', ledgerId, type, splitId: null });
 
       await expect(service.remove(ledgerId, 'txn-1')).rejects.toMatchObject({
         errorCode: 'DEBT_TRANSACTION_READ_ONLY',
@@ -448,6 +473,10 @@ describe('TransactionsService', () => {
     it('refuses to touch an EXPENSE that a debt entry points at (paid for me)', async () => {
       prisma.transaction.findFirst.mockResolvedValue({ id: 'txn-1', ledgerId, type: 'EXPENSE' });
       prisma.debtEntry.findUnique.mockResolvedValue({ id: 'entry-1' });
+      prisma.$queryRaw.mockResolvedValue([{ id: 'txn-1' }]);
+      prisma.transaction.findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 'txn-1', ledgerId, type: 'EXPENSE', splitId: null });
 
       await expect(
         service.update(ledgerId, 'txn-1', creatorId, { amount: 1 }),

@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   DebtTransactionType,
   ErrorCode,
+  computeSharesByKey,
   isDebtTransactionType,
   ListTransactionsQuery,
   ManualTransactionType,
@@ -11,11 +12,15 @@ import {
   TransactionRef,
   TransactionType,
   TransactionSplitRef,
+  LedgerSplitInput,
+  LedgerPerson as LedgerPersonView,
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { deriveSync } from '../debts/debt-proposal-rules';
+import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
+import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
 
 /**
  * 交易的業務邏輯——整個記帳系統的核心。呼叫進來之前，controller 已完成身分驗證
@@ -27,7 +32,7 @@ import { deriveSync } from '../debts/debt-proposal-rules';
  *   - 刪除採軟刪除（設 `deletedAt`）；每個讀取都以 `deletedAt: null` 過濾。
  *   - 分類與帳戶是**條件必填**：該不該填取決於交易型別與帳本的 `tracksBalance`，
  *     完整規則見 `assertAccountRules`。
- *   - 帳戶屬於使用者（不是帳本），因此永遠只接受**呼叫者本人**的帳戶，
+ *   - 帳戶屬於使用者（不是帳本）；共享帳本的收支依付款人決定帳戶，
  *     而回應中別人的帳戶一律遮成 `null`（見 `toTransaction`）。
  */
 
@@ -52,6 +57,14 @@ interface TransactionRow {
   note: string | null;
   title: string | null;
   splitId: string | null;
+  payerPersonId?: string | null;
+  ledgerSplit?: {
+    id: string;
+    method: 'EQUAL' | 'AMOUNT' | 'RATIO';
+    precision: 'CENT' | 'YUAN';
+    shares: Array<{ personId: string; share: number; ratio: number | null; sortOrder: number }>;
+  } | null;
+  settlement?: { id: string; fromPersonId: string; toPersonId: string } | null;
   createdAt: Date;
   category: { id: string; name: string; icon: string | null } | null;
   account: AccountRef | null;
@@ -104,6 +117,8 @@ interface TransactionRow {
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
 // `userId`——遮蔽他人帳戶時需要它來比對檢視者，其他欄位一概不取。
 const TRANSACTION_INCLUDE = {
+  ledgerSplit: { include: { shares: { orderBy: { sortOrder: 'asc' } } } },
+  settlement: true,
   category: { select: { id: true, name: true, icon: true } },
   account: { select: { id: true, name: true, userId: true } },
   toAccount: { select: { id: true, name: true, userId: true } },
@@ -171,6 +186,8 @@ interface CreateTransactionInput {
   toAccountId?: string;
   note?: string;
   title?: string;
+  payerPersonId?: string;
+  ledgerSplit?: LedgerSplitInput | null;
 }
 
 interface UpdateTransactionInput {
@@ -182,11 +199,23 @@ interface UpdateTransactionInput {
   toAccountId?: string;
   note?: string;
   title?: string;
+  payerPersonId?: string;
+  ledgerSplit?: LedgerSplitInput | null;
+}
+
+interface ViewContext {
+  shared: boolean;
+  tracksBalance: boolean;
+  people: Map<string, LedgerPersonView>;
+  byUser: Map<string, LedgerPersonView>;
 }
 
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly people: LedgerPeopleService,
+  ) {}
 
   /**
    * 在帳本中記下一筆交易。分類與帳戶各自的必填與否，取決於交易型別與帳本設定；
@@ -197,6 +226,61 @@ export class TransactionsService {
     creatorId: string,
     input: CreateTransactionInput,
   ): Promise<Transaction> {
+    const ledger = await this.getLedger(ledgerId);
+    this.assertSplitAllowed(input, ledger.kind, input.type);
+    if (ledger.kind === 'SHARED' && this.isIncomeExpense(input.type)) {
+      if (input.toAccountId !== undefined) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          'toAccountId is only valid for a transfer.',
+        );
+      }
+      const createdId = await this.prisma.$transaction(async (tx) => {
+        const caller = await this.people.findCallerPerson(tx, ledgerId, creatorId);
+        if (!caller) throw this.notFound('Person');
+        const payerId = input.payerPersonId ?? caller.id;
+        // 表單可預設勾選全部人；API 省略名單仍表示不分帳。
+        const split = input.ledgerSplit ?? null;
+        const records = await this.people.lockPeople(
+          tx,
+          ledgerId,
+          [payerId, ...(split?.shares.map((share) => share.personId) ?? [])],
+          { allowLeft: false },
+        );
+        const payer = records.get(payerId)!;
+        const accountId = await this.resolveAccount({
+          tracksBalance: ledger.tracksBalance,
+          payer,
+          callerUserId: creatorId,
+          requestedAccountId: input.accountId,
+          mode: 'CREATE',
+          payerChanged: true,
+          currentAccountId: null,
+        });
+        await this.assertCategoryRules(ledgerId, input.type, input.categoryId);
+        const shares = split ? this.computeShares(split, input.amount, payerId) : null;
+        const created = await tx.transaction.create({
+          data: {
+            ledgerId,
+            creatorId,
+            payerPersonId: payerId,
+            categoryId: input.categoryId!,
+            accountId,
+            toAccountId: null,
+            type: input.type,
+            amount: input.amount,
+            date: new Date(input.date),
+            note: input.note ?? null,
+            title: input.title ?? null,
+          },
+          select: { id: true },
+        });
+        if (split && shares) await this.writeLedgerSplit(tx, created.id, split, shares);
+        return created.id;
+      });
+      return this.getById(ledgerId, createdId, creatorId);
+    }
     // 建立時，「最終值」與「這次指定的值」是同一組。
     await this.assertAccountRules(ledgerId, creatorId, input.type, input, input);
     await this.assertCategoryRules(ledgerId, input.type, input.categoryId);
@@ -243,6 +327,7 @@ export class TransactionsService {
         FROM "Transaction" t
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
         WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+          ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
           ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
           ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
           ${query.from ? Prisma.sql`AND COALESCE(s."date", t."date") >= ${new Date(query.from)}` : Prisma.empty}
@@ -269,6 +354,7 @@ export class TransactionsService {
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
       WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
         ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
         ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
         ${query.from ? Prisma.sql`AND COALESCE(s."date", t."date") >= ${new Date(query.from)}` : Prisma.empty}
@@ -277,8 +363,9 @@ export class TransactionsService {
           )[0]?.count ?? 0n,
         );
 
+    const context = await this.viewContext(ledgerId);
     return {
-      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId)),
+      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
       page,
       limit,
       total,
@@ -300,69 +387,207 @@ export class TransactionsService {
     viewerUserId: string,
     input: UpdateTransactionInput,
   ): Promise<Transaction> {
-    const existing = await this.findActive(ledgerId, transactionId);
-    if (existing.splitId != null)
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
-        'Change this transaction through its split.',
+    const ledger = await this.getLedger(ledgerId);
+    if (ledger.kind === 'SHARED') {
+      return this.updateShared(ledgerId, transactionId, viewerUserId, input, ledger.tracksBalance);
+    }
+    this.assertSplitAllowed(input, ledger.kind, input.type ?? 'EXPENSE');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      await this.assertNotSettlement(existing.id, tx);
+      if (existing.splitId != null)
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+          'Change this transaction through its split.',
+        );
+      await this.assertNotDebtTransaction(existing.id, existing.type, tx);
+
+      const finalType = input.type ?? existing.type;
+      const becomesTransfer = finalType === 'TRANSFER';
+      // 轉成 TRANSFER 時分類一律清空；否則沿用送來的值，沒送就維持原值。
+      const finalCategoryId = becomesTransfer
+        ? undefined
+        : (input.categoryId ?? existing.categoryId ?? undefined);
+      const finalAccountId = input.accountId ?? existing.accountId ?? undefined;
+      const finalToAccountId = becomesTransfer
+        ? (input.toAccountId ?? existing.toAccountId ?? undefined)
+        : undefined;
+
+      // 所有權只檢查「這次指定的」帳戶。共享帳本裡任何 editor 都可編輯任何一筆
+      // （決策 8），若連沿用不動的既有帳戶也要求屬於編輯者，就等於沒有人能改別人
+      // 記的帳——那是我們刻意允許的行為。
+      await this.assertAccountRules(
+        ledgerId,
+        viewerUserId,
+        finalType,
+        { accountId: finalAccountId, toAccountId: finalToAccountId },
+        { accountId: input.accountId, toAccountId: input.toAccountId },
       );
-    await this.assertNotDebtTransaction(existing.id, existing.type);
+      await this.assertCategoryRules(ledgerId, finalType, finalCategoryId);
 
-    const finalType = input.type ?? existing.type;
-    const becomesTransfer = finalType === 'TRANSFER';
-    // 轉成 TRANSFER 時分類一律清空；否則沿用送來的值，沒送就維持原值。
-    const finalCategoryId = becomesTransfer
-      ? undefined
-      : (input.categoryId ?? existing.categoryId ?? undefined);
-    const finalAccountId = input.accountId ?? existing.accountId ?? undefined;
-    const finalToAccountId = becomesTransfer
-      ? (input.toAccountId ?? existing.toAccountId ?? undefined)
-      : undefined;
-
-    // 所有權只檢查「這次指定的」帳戶。共享帳本裡任何 editor 都可編輯任何一筆
-    // （決策 8），若連沿用不動的既有帳戶也要求屬於編輯者，就等於沒有人能改別人
-    // 記的帳——那是我們刻意允許的行為。
-    await this.assertAccountRules(
-      ledgerId,
-      viewerUserId,
-      finalType,
-      { accountId: finalAccountId, toAccountId: finalToAccountId },
-      { accountId: input.accountId, toAccountId: input.toAccountId },
-    );
-    await this.assertCategoryRules(ledgerId, finalType, finalCategoryId);
-
-    const updated = await this.prisma.transaction.update({
-      where: { id: transactionId },
-      data: {
-        ...(input.type !== undefined ? { type: input.type } : {}),
-        ...(input.amount !== undefined ? { amount: input.amount } : {}),
-        ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
-        ...(input.note !== undefined ? { note: input.note } : {}),
-        ...(input.title !== undefined ? { title: input.title } : {}),
-        categoryId: finalCategoryId ?? null,
-        accountId: finalAccountId ?? null,
-        toAccountId: finalToAccountId ?? null,
-      },
-      include: TRANSACTION_INCLUDE,
+      return tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          ...(input.type !== undefined ? { type: input.type } : {}),
+          ...(input.amount !== undefined ? { amount: input.amount } : {}),
+          ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          categoryId: finalCategoryId ?? null,
+          accountId: finalAccountId ?? null,
+          toAccountId: finalToAccountId ?? null,
+        },
+        include: TRANSACTION_INCLUDE,
+      });
     });
     return this.toTransaction(updated, viewerUserId);
   }
 
   /** 軟刪除一筆交易（設 deletedAt）；資料列保留以利稽核。 */
   async remove(ledgerId: string, transactionId: string): Promise<void> {
-    const existing = await this.findActive(ledgerId, transactionId);
-    if (existing.splitId != null)
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
-        'Change this transaction through its split.',
-      );
-    await this.assertNotDebtTransaction(existing.id, existing.type);
-    await this.prisma.transaction.update({
-      where: { id: transactionId },
-      data: { deletedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      await this.assertNotSettlement(existing.id, tx);
+      if (existing.splitId != null)
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.SPLIT_TRANSACTION_READ_ONLY,
+          'Change this transaction through its split.',
+        );
+      await this.assertNotDebtTransaction(existing.id, existing.type);
+      await tx.transaction.update({
+        where: { id: transactionId },
+        data: { deletedAt: new Date() },
+      });
     });
+  }
+
+  private async updateShared(
+    ledgerId: string,
+    transactionId: string,
+    callerUserId: string,
+    input: UpdateTransactionInput,
+    tracksBalance: boolean,
+  ): Promise<Transaction> {
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      const finalType = input.type ?? existing.type;
+      await this.assertNotSettlement(existing.id, tx);
+      const debt = await tx.debtEntry.findUnique({
+        where: { transactionId },
+        select: { id: true },
+      });
+      this.assertSplitAllowed(input, 'SHARED', finalType, existing, debt !== null);
+      if (existing.splitId) throw this.readOnly(ErrorCode.SPLIT_TRANSACTION_READ_ONLY);
+      await this.assertNotDebtTransaction(existing.id, existing.type, tx);
+
+      if (!this.isIncomeExpense(finalType)) {
+        const finalAccountId = input.accountId ?? existing.accountId ?? undefined;
+        const finalToAccountId = input.toAccountId ?? existing.toAccountId ?? undefined;
+        await this.assertAccountRules(
+          ledgerId,
+          callerUserId,
+          finalType,
+          { accountId: finalAccountId, toAccountId: finalToAccountId },
+          { accountId: input.accountId, toAccountId: input.toAccountId },
+        );
+        await tx.ledgerSplit.deleteMany({ where: { transactionId } });
+        await tx.transaction.update({
+          where: { id: transactionId },
+          data: {
+            ...(input.type !== undefined ? { type: input.type } : {}),
+            ...(input.amount !== undefined ? { amount: input.amount } : {}),
+            ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+            ...(input.note !== undefined ? { note: input.note } : {}),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            categoryId: null,
+            payerPersonId: null,
+            accountId: finalAccountId ?? null,
+            toAccountId: finalToAccountId ?? null,
+          },
+        });
+        return;
+      }
+
+      const caller = await this.people.findCallerPerson(tx, ledgerId, callerUserId);
+      if (!caller) throw this.notFound('Person');
+      const creatorPerson = await this.people.findCallerPerson(tx, ledgerId, existing.creatorId);
+      const currentPayerId = existing.payerPersonId ?? creatorPerson?.id;
+      if (!currentPayerId && existing.type !== 'TRANSFER') throw this.notFound('Person');
+      const payerId =
+        input.payerPersonId ?? (existing.type === 'TRANSFER' ? caller.id : currentPayerId!);
+      const payerChanged = existing.type === 'TRANSFER' || payerId !== currentPayerId;
+      const saved = await tx.ledgerSplit.findUnique({
+        where: { transactionId },
+        include: { shares: { orderBy: { sortOrder: 'asc' } } },
+      });
+      const split: LedgerSplitInput | null =
+        input.ledgerSplit !== undefined
+          ? input.ledgerSplit
+          : saved
+            ? {
+                method: saved.method,
+                precision: saved.method === 'AMOUNT' ? undefined : saved.precision,
+                shares: saved.shares.map((share) => ({
+                  personId: share.personId,
+                  ...(saved.method === 'AMOUNT' ? { amount: share.share } : {}),
+                  ...(saved.method === 'RATIO' ? { ratio: share.ratio! } : {}),
+                })),
+              }
+            : null;
+      const allowLeft = new Set<string>([
+        ...(saved?.shares.map((share) => share.personId) ?? []),
+        ...(!payerChanged && currentPayerId ? [currentPayerId] : []),
+      ]);
+      const records = await this.people.lockPeople(
+        tx,
+        ledgerId,
+        [payerId, ...(split?.shares.map((share) => share.personId) ?? [])],
+        { allowLeft },
+      );
+      const accountId = await this.resolveAccount({
+        tracksBalance,
+        payer: records.get(payerId)!,
+        callerUserId,
+        requestedAccountId: input.accountId,
+        mode: 'UPDATE',
+        payerChanged,
+        currentAccountId: existing.accountId,
+      });
+      const categoryId = input.categoryId ?? existing.categoryId ?? undefined;
+      await this.assertCategoryRules(ledgerId, finalType, categoryId);
+      if (input.toAccountId !== undefined) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          'toAccountId is only valid for a transfer.',
+        );
+      }
+      const shares = split
+        ? this.computeShares(split, input.amount ?? existing.amount, payerId)
+        : null;
+      await tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          ...(input.type !== undefined ? { type: input.type } : {}),
+          ...(input.amount !== undefined ? { amount: input.amount } : {}),
+          ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
+          ...(input.note !== undefined ? { note: input.note } : {}),
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          categoryId: categoryId!,
+          payerPersonId: payerId,
+          accountId,
+          toAccountId: null,
+        },
+      });
+      if (saved) {
+        await tx.ledgerShare.deleteMany({ where: { ledgerSplitId: saved.id } });
+        await tx.ledgerSplit.delete({ where: { id: saved.id } });
+      }
+      if (split && shares) await this.writeLedgerSplit(tx, transactionId, split, shares);
+    });
+    return this.getById(ledgerId, transactionId, callerUserId);
   }
 
   /**
@@ -378,8 +603,9 @@ export class TransactionsService {
   private async assertNotDebtTransaction(
     transactionId: string,
     type: TransactionType,
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    const entry = await this.prisma.debtEntry.findUnique({
+    const entry = await client.debtEntry.findUnique({
       where: { transactionId },
       select: { id: true },
     });
@@ -390,6 +616,207 @@ export class TransactionsService {
         'This transaction comes from a debt entry; change it through the entry instead.',
       );
     }
+  }
+
+  private async getLedger(ledgerId: string) {
+    const ledger = await this.prisma.ledger.findUnique({
+      where: { id: ledgerId },
+      select: { kind: true, tracksBalance: true },
+    });
+    if (!ledger) throw this.notFound('Ledger');
+    return ledger;
+  }
+
+  private isIncomeExpense(type: TransactionType): type is 'EXPENSE' | 'INCOME' {
+    return type === 'EXPENSE' || type === 'INCOME';
+  }
+
+  private assertSplitAllowed(
+    input: { payerPersonId?: string; ledgerSplit?: LedgerSplitInput | null },
+    kind: 'PERSONAL' | 'SHARED',
+    type: TransactionType,
+    existing?: { splitId: string | null; type: TransactionType },
+    hasDebt = false,
+  ): void {
+    if (input.payerPersonId === undefined && input.ledgerSplit === undefined) return;
+    if (
+      kind !== 'SHARED' ||
+      !this.isIncomeExpense(type) ||
+      existing?.splitId != null ||
+      hasDebt ||
+      (existing && isDebtTransactionType(existing.type))
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.LEDGER_SPLIT_NOT_ALLOWED,
+        'Payer and ledger split are not allowed for this transaction.',
+      );
+    }
+  }
+
+  private computeShares(split: LedgerSplitInput, total: number, payerId: string): number[] {
+    if (
+      (split.method === 'AMOUNT' && split.precision !== undefined) ||
+      split.shares.some((share) =>
+        split.method === 'AMOUNT'
+          ? share.amount === undefined || share.ratio !== undefined
+          : split.method === 'RATIO'
+            ? share.ratio === undefined || share.amount !== undefined
+            : share.amount !== undefined || share.ratio !== undefined,
+      )
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.SPLIT_PARTICIPANTS_INVALID,
+        'Invalid ledger split fields.',
+      );
+    }
+    const result = computeSharesByKey({
+      total,
+      method: split.method,
+      precision: split.precision,
+      payerKey: payerId,
+      participants: split.shares.map((share) => ({
+        key: share.personId,
+        amount: share.amount,
+        ratio: share.ratio,
+      })),
+    });
+    if (!result.ok) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode[result.error],
+        'Invalid ledger split.',
+      );
+    }
+    return result.shares;
+  }
+
+  private async writeLedgerSplit(
+    tx: Prisma.TransactionClient,
+    transactionId: string,
+    split: LedgerSplitInput,
+    shares: number[],
+  ): Promise<void> {
+    await tx.ledgerSplit.create({
+      data: {
+        transactionId,
+        method: split.method,
+        precision: split.precision ?? 'CENT',
+        shares: {
+          create: split.shares.map((person, index) => ({
+            personId: person.personId,
+            share: shares[index]!,
+            ratio: split.method === 'RATIO' ? person.ratio! : null,
+            sortOrder: index,
+          })),
+        },
+      },
+    });
+  }
+
+  private async resolveAccount(
+    input: Parameters<typeof resolvePayerAccount>[0],
+  ): Promise<string | null> {
+    const result = resolvePayerAccount(input);
+    if (!result.ok) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode[result.error],
+        'Invalid payer account.',
+      );
+    }
+    if (result.needsOwnershipCheck)
+      await this.assertAccountOwned(input.callerUserId, result.accountId!);
+    return result.accountId;
+  }
+
+  private async findActiveForUpdate(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    transactionId: string,
+  ) {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "Transaction"
+      WHERE "id" = ${transactionId} AND "ledgerId" = ${ledgerId} AND "deletedAt" IS NULL
+      FOR UPDATE
+    `;
+    if (rows.length !== 1) throw this.notFound('Transaction');
+    const existing = await tx.transaction.findUnique({ where: { id: transactionId } });
+    return existing!;
+  }
+
+  private async assertNotSettlement(
+    transactionId: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const row = await client.ledgerSettlement.findUnique({
+      where: { transactionId },
+      select: { id: true },
+    });
+    if (row) throw this.readOnly(ErrorCode.SETTLEMENT_TRANSACTION_READ_ONLY);
+  }
+
+  private readOnly(code: ErrorCode): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      code,
+      'Change this transaction through its source.',
+    );
+  }
+
+  private notFound(resource: string): AppException {
+    return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, `${resource} not found.`);
+  }
+
+  async setAccount(
+    ledgerId: string,
+    transactionId: string,
+    callerUserId: string,
+    accountId: string,
+  ): Promise<Transaction> {
+    const ledger = await this.getLedger(ledgerId);
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      await this.assertNotSettlement(transactionId, tx);
+      const debt = await tx.debtEntry.findUnique({
+        where: { transactionId },
+        select: { id: true },
+      });
+      if (
+        ledger.kind !== 'SHARED' ||
+        !this.isIncomeExpense(existing.type) ||
+        existing.splitId ||
+        debt
+      ) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.LEDGER_SPLIT_NOT_ALLOWED,
+          'Account cannot be set here.',
+        );
+      }
+      if (!ledger.tracksBalance) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.ACCOUNT_NOT_ALLOWED,
+          'This ledger does not track accounts.',
+        );
+      }
+      const creator = await this.people.findCallerPerson(tx, ledgerId, existing.creatorId);
+      const payerId = existing.payerPersonId ?? creator?.id;
+      if (!payerId) throw this.notFound('Person');
+      const people = await this.people.lockPeople(tx, ledgerId, [payerId], { allowLeft: true });
+      if (people.get(payerId)!.userId !== callerUserId) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.ACCOUNT_NOT_PAYERS,
+          'Only the payer can set this account.',
+        );
+      }
+      await this.assertAccountOwned(callerUserId, accountId);
+      await tx.transaction.update({ where: { id: transactionId }, data: { accountId } });
+    });
+    return this.getById(ledgerId, transactionId, callerUserId);
   }
 
   // ── 借還帳（3b）專用。只給 DebtsModule 呼叫，沒有對應的 HTTP 端點。 ──────────
@@ -554,20 +981,6 @@ export class TransactionsService {
   }
 
   /**
-   * 載入帳本中某筆未刪除的交易，找不到就丟 404。由 update／remove 共用，讓
-   * 「不存在」「已軟刪除」「屬於別的帳本」這三種 id 一律同樣不可見。
-   */
-  private async findActive(ledgerId: string, transactionId: string) {
-    const existing = await this.prisma.transaction.findFirst({
-      where: { id: transactionId, ledgerId, deletedAt: null },
-    });
-    if (!existing) {
-      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
-    }
-    return existing;
-  }
-
-  /**
    * 分類的條件必填規則：
    *   - `EXPENSE` / `INCOME`：必填，且須屬同帳本、型別一致；
    *   - `TRANSFER`：不可填——「從銀行領錢到皮夾」不屬於任何消費類別，
@@ -722,7 +1135,27 @@ export class TransactionsService {
     if (!transaction) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
     }
-    return this.toTransaction(transaction, viewerUserId);
+    const context = await this.viewContext(ledgerId);
+    return this.toTransaction(transaction, viewerUserId, context);
+  }
+
+  private async viewContext(ledgerId: string): Promise<ViewContext> {
+    const ledger = await this.getLedger(ledgerId);
+    const context: ViewContext = {
+      shared: ledger.kind === 'SHARED',
+      tracksBalance: ledger.tracksBalance,
+      people: new Map(),
+      byUser: new Map(),
+    };
+    if (context.shared) {
+      const records = await this.people.listPeople(this.prisma, ledgerId);
+      for (const record of records) {
+        const view = this.people.toView(record);
+        context.people.set(record.id, view);
+        if (record.userId) context.byUser.set(record.userId, view);
+      }
+    }
+    return context;
   }
 
   /**
@@ -732,7 +1165,59 @@ export class TransactionsService {
    * 若給了預設值，日後有人新增讀取路徑卻忘了傳，程式仍能編譯，而遮蔽會靜悄悄
    * 失效、洩漏他人的帳戶名稱。沒有預設值，型別系統就會強迫每個呼叫點交代清楚。
    */
-  private toTransaction(row: TransactionRow, viewerUserId: string): Transaction {
+  private toTransaction(
+    row: TransactionRow,
+    viewerUserId: string,
+    context?: ViewContext,
+  ): Transaction {
+    const payer =
+      context?.shared && this.isIncomeExpense(row.type) && !row.splitId && !row.debtEntry
+        ? (context.people.get(row.payerPersonId ?? '') ??
+          context.byUser.get(row.creator.id) ??
+          null)
+        : null;
+    const settlement =
+      row.settlement && context?.shared
+        ? {
+            id: row.settlement.id,
+            from: context.people.get(row.settlement.fromPersonId)!,
+            to: context.people.get(row.settlement.toPersonId)!,
+          }
+        : null;
+    const ledgerSplit =
+      row.ledgerSplit && context?.shared
+        ? {
+            method: row.ledgerSplit.method,
+            precision: row.ledgerSplit.precision,
+            shares: row.ledgerSplit.shares.map((share) => ({
+              person: context.people.get(share.personId)!,
+              share: share.share,
+              ratio: share.ratio,
+            })),
+          }
+        : null;
+    const accountPending =
+      settlement && context
+        ? isAccountPending({
+            tracksBalance: context.tracksBalance,
+            payerUserId: settlement.from.userId,
+            accountId: row.account?.id ?? null,
+            viewerUserId,
+          }) ||
+          isAccountPending({
+            tracksBalance: context.tracksBalance,
+            payerUserId: settlement.to.userId,
+            accountId: row.toAccount?.id ?? null,
+            viewerUserId,
+          })
+        : payer && context && !row.splitId && !row.debtEntry
+          ? isAccountPending({
+              tracksBalance: context.tracksBalance,
+              payerUserId: payer.userId,
+              accountId: row.account?.id ?? null,
+              viewerUserId,
+            })
+          : false;
     return {
       id: row.id,
       type: row.type,
@@ -752,10 +1237,10 @@ export class TransactionsService {
       creator: { id: row.creator.id, name: row.creator.name },
       debt: this.visibleDebt(row, viewerUserId),
       split: this.visibleSplit(row, viewerUserId),
-      payer: null,
-      ledgerSplit: null,
-      settlement: null,
-      accountPending: false,
+      payer,
+      ledgerSplit,
+      settlement,
+      accountPending,
       createdAt: row.createdAt.toISOString(),
     };
   }
