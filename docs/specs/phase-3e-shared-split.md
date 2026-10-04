@@ -290,7 +290,7 @@ interface LedgerPerson {
 }
 ```
 
-只有共享帳本有這組端點；個人帳本回 `404`。成員那一筆不能用 `PATCH`／`DELETE` 改（`400`）。
+只有共享帳本有這組端點；個人帳本回 `404`。成員那一筆不能用 `PATCH`／`DELETE` 改（`400 VALIDATION_FAILED`）。
 
 ### 5.2 交易端點的變更（`/ledgers/{ledgerId}/transactions`）
 
@@ -346,6 +346,8 @@ interface CreateSettlementBody {
   toAccountId?: string; // 只有收錢的人是我時能帶；連動帳本裡這時必填
 }
 ```
+
+路徑裡的 `{id}` 是 `LedgerSettlement.id`（交易回應的 `settlement.id`），不是交易 id。個人帳本打這組端點回 `404`。
 
 結清在交易列表裡是一筆 `TRANSFER`，回應多一個欄位：
 
