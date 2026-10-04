@@ -240,15 +240,8 @@ export class TransactionsService {
         const caller = await this.people.findCallerPerson(tx, ledgerId, creatorId);
         if (!caller) throw this.notFound('Person');
         const payerId = input.payerPersonId ?? caller.id;
-        const split =
-          input.ledgerSplit === undefined
-            ? {
-                method: 'EQUAL' as const,
-                shares: (await this.people.listPeople(tx, ledgerId))
-                  .filter((person) => person.status !== 'LEFT')
-                  .map((person) => ({ personId: person.id })),
-              }
-            : input.ledgerSplit;
+        // 表單可預設勾選全部人；API 省略名單仍表示不分帳。
+        const split = input.ledgerSplit ?? null;
         const records = await this.people.lockPeople(
           tx,
           ledgerId,
@@ -1178,7 +1171,7 @@ export class TransactionsService {
     context?: ViewContext,
   ): Transaction {
     const payer =
-      context?.shared && this.isIncomeExpense(row.type)
+      context?.shared && this.isIncomeExpense(row.type) && !row.splitId && !row.debtEntry
         ? (context.people.get(row.payerPersonId ?? '') ??
           context.byUser.get(row.creator.id) ??
           null)

@@ -88,9 +88,22 @@ describe('Ledger split transactions (e2e)', () => {
       (await prisma.transaction.findUnique({ where: { id: transaction.id } }))?.payerPersonId,
     ).toBe(s.ids[0]);
     expect(await balance(s.me)).toBe(before - 600000);
-    const auto = (await create(s, { amount: 300000, accountId: s.me.cashId }).expect(201))
-      .body as Transaction;
-    expect(auto.ledgerSplit?.shares.map((share) => share.share)).toEqual([100000, 100000, 100000]);
+  });
+
+  it('省略或傳 null 的名單都不分帳，資料庫沒有 LedgerSplit', async () => {
+    const s = await scene();
+    for (const body of [
+      { accountId: s.me.cashId },
+      { accountId: s.me.cashId, ledgerSplit: null },
+    ]) {
+      const transaction = (await create(s, body).expect(201)).body as Transaction;
+      expect(transaction.payer?.id).toBe(s.ids[0]);
+      expect(transaction.ledgerSplit).toBeNull();
+      expect(
+        await prisma.ledgerSplit.findUnique({ where: { transactionId: transaction.id } }),
+      ).toBeNull();
+    }
+    expect(await prisma.ledgerSplit.count()).toBe(0);
   });
 
   it('SC-E3、E7、E8：別人付款待補，改付款人需選帳戶，關閉名單', async () => {
@@ -283,6 +296,13 @@ describe('Ledger split transactions (e2e)', () => {
     const splitTx = await prisma.transaction.findFirstOrThrow({
       where: { splitId: split.body.id as string, type: 'EXPENSE' },
     });
+    const splitDetail = (
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/transactions/${splitTx.id}`)
+        .set(auth(s.me.token))
+        .expect(200)
+    ).body as Transaction;
+    expect(splitDetail.payer).toBeNull();
     expect(
       (await patch(s, splitTx.id, { ledgerSplit: equal(s.ids) }).expect(400)).body.errorCode,
     ).toBe('LEDGER_SPLIT_NOT_ALLOWED');
@@ -310,6 +330,34 @@ describe('Ledger split transactions (e2e)', () => {
     expect((await patch(s, debtTx.id, { amount: 20000 }).expect(409)).body.errorCode).toBe(
       'DEBT_TRANSACTION_READ_ONLY',
     );
+
+    const paidTx = await prisma.transaction.create({
+      data: {
+        ledgerId: s.ledgerId,
+        creatorId: s.me.userId,
+        type: 'EXPENSE',
+        amount: 10000,
+        date: new Date(date),
+        categoryId: s.categoryId,
+      },
+    });
+    await prisma.debtEntry.create({
+      data: {
+        counterpartyId: friend.id,
+        kind: 'PAID_FOR_ME',
+        delta: -10000,
+        date: new Date(date),
+        transactionId: paidTx.id,
+      },
+    });
+    const paidDetail = (
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/transactions/${paidTx.id}`)
+        .set(auth(s.me.token))
+        .expect(200)
+    ).body as Transaction;
+    expect(paidDetail.type).toBe('EXPENSE');
+    expect(paidDetail.payer).toBeNull();
   });
 
   it('改付款人時舊帳戶一律清空，非成員也不能留帳戶', async () => {
