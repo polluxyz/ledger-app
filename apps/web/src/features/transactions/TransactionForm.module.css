@@ -205,15 +205,16 @@
 }
 
 /*
- * 分帳選項頁從右邊滑進來，所以要 `overflow: hidden` 裁掉滑出去的部分。
- * 但焦點框（2px outline + 2px offset）畫在欄位外 4px，貼邊的欄位會被裁一半。
- * 用 4px 內距撐出空間、再用負外距抵銷，版面位置不變，焦點框完整露出。
+ * 分帳選項頁從右邊滑進來，所以要裁掉滑出去的部分。
+ * 但焦點框（2px outline + 2px offset）畫在欄位外 4px，裁在邊上會切掉一半。
+ * 用 `overflow: clip` 搭 `overflow-clip-margin` 把裁切線往外放 4px：
+ * 元素寬度不變（不能用負外距撐，會讓編輯面板多出 4px 橫向溢出），
+ * 也不會像 `hidden` 一樣變成捲動容器。不支援 clip-margin 的瀏覽器退回原本貼邊裁切。
  */
 .pages {
   position: relative;
-  overflow: hidden;
-  margin: -4px;
-  padding: 4px;
+  overflow: clip;
+  overflow-clip-margin: 4px;
 }
 
 .mainPage {
