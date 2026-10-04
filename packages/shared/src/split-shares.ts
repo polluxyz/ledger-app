@@ -169,10 +169,7 @@ export function computeSplitShares(input: SplitShareInput): SplitShareResult {
     total: input.total,
     method: input.method,
     precision: input.precision,
-    payerKey:
-      input.payerCounterpartyId === null
-        ? keyForCounterpartyId(null)
-        : keyForCounterpartyId(input.payerCounterpartyId),
+    payerKey: keyForCounterpartyId(input.payerCounterpartyId),
     fallbackKey: keyForCounterpartyId(null),
     participants: input.participants.map((participant) => ({
       key: keyForCounterpartyId(participant.counterpartyId),
