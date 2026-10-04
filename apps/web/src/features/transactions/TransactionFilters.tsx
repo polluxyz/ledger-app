@@ -85,6 +85,55 @@ interface TransactionFilterPanelProps extends TransactionFiltersProps {
   id: string;
 }
 
+interface TransactionFilterDrawerProps extends TransactionFilterPanelProps {
+  open: boolean;
+}
+
+/**
+ * 交易頁上的篩選卡片外殼：展開時高度從 0 長到全高，把下面的列表一路推下去；
+ * 收起時反過來。直接掛上 / 拿掉面板的話，列表會一下子跳到新位置。
+ *
+ * 面板第一次展開才掛上（分類清單到那時才抓），之後收起只是隱藏：留在 DOM 裡，
+ * 收起的動畫才有東西可以收。隱藏時加 `inert` 與 `aria-hidden`，鍵盤與
+ * 螢幕閱讀器都碰不到它，和沒渲染一樣。
+ *
+ * 裁切只在動畫進行與收起時開著：全開後還裁的話，卡片陰影與欄位焦點框會被切掉。
+ * 動畫關閉（duration 0s）時不會有 transitionend，那個情況交給 CSS 處理（見 module.css）。
+ */
+export function TransactionFilterDrawer({ open, ...panelProps }: TransactionFilterDrawerProps) {
+  const [hasOpened, setHasOpened] = useState(open);
+  const [settled, setSettled] = useState(true);
+  // open 一變就進入「動畫中」，等 transitionend 才算到定位。在 render 裡調整
+  // state 是 React 建議的「依 prop 變化重設 state」寫法，不必繞一圈 effect。
+  const [previousOpen, setPreviousOpen] = useState(open);
+  if (open !== previousOpen) {
+    setPreviousOpen(open);
+    setSettled(false);
+    if (open) {
+      setHasOpened(true);
+    }
+  }
+
+  return (
+    <div
+      className={styles.drawer}
+      data-open={open || undefined}
+      data-settled={settled || undefined}
+      aria-hidden={!open}
+      inert={!open}
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget) {
+          setSettled(true);
+        }
+      }}
+    >
+      <div className={styles.drawerInner}>
+        {hasOpened && <TransactionFilterPanel {...panelProps} />}
+      </div>
+    </div>
+  );
+}
+
 /** 展開後的四個欄位與「清除」。 */
 export function TransactionFilterPanel({
   id,

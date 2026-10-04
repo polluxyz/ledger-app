@@ -204,9 +204,16 @@
   font-size: var(--text-sm);
 }
 
+/*
+ * 分帳選項頁從右邊滑進來，所以要 `overflow: hidden` 裁掉滑出去的部分。
+ * 但焦點框（2px outline + 2px offset）畫在欄位外 4px，貼邊的欄位會被裁一半。
+ * 用 4px 內距撐出空間、再用負外距抵銷，版面位置不變，焦點框完整露出。
+ */
 .pages {
   position: relative;
   overflow: hidden;
+  margin: -4px;
+  padding: 4px;
 }
 
 .mainPage {

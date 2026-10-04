@@ -14,7 +14,7 @@ import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
 import {
-  TransactionFilterPanel,
+  TransactionFilterDrawer,
   TransactionFilterToggle,
 } from '../features/transactions/TransactionFilters';
 import { TransactionList } from '../features/transactions/TransactionList';
@@ -228,41 +228,42 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
           // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
           <DebtsView onSelectCounterparty={openCounterparty} />
         ) : (
-          // 篩選、列表、分頁是同一份資料的三個面，收進同一張卡片才看得出來。
-          <section className={styles.listCard}>
-            {filtersOpen && (
-              <TransactionFilterPanel
-                id={filterPanelId}
-                ledgerId={ledger.id}
-                filters={filters}
-                onChange={handleFiltersChange}
+          // 篩選是獨立的一張卡片，列表與分頁收在下面那一張。
+          <>
+            <TransactionFilterDrawer
+              open={filtersOpen}
+              id={filterPanelId}
+              ledgerId={ledger.id}
+              filters={filters}
+              onChange={handleFiltersChange}
+            />
+
+            <section className={styles.listCard}>
+              <TransactionList
+                transactions={transactions.data?.items ?? []}
+                isLoading={transactions.isLoading}
+                error={transactions.error}
+                isFiltered={hasAnyFilter(filters)}
+                onEdit={startEditing}
+                onEditDebtTransaction={startEditingDebtTransaction}
+                // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
+                // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
+                selectedId={
+                  isOpen &&
+                  (panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction')
+                    ? panelTarget.transaction.id
+                    : null
+                }
               />
-            )}
 
-            <TransactionList
-              transactions={transactions.data?.items ?? []}
-              isLoading={transactions.isLoading}
-              error={transactions.error}
-              isFiltered={hasAnyFilter(filters)}
-              onEdit={startEditing}
-              onEditDebtTransaction={startEditingDebtTransaction}
-              // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
-              // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
-              selectedId={
-                isOpen &&
-                (panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction')
-                  ? panelTarget.transaction.id
-                  : null
-              }
-            />
-
-            <Pagination
-              page={transactions.data?.page ?? page}
-              limit={transactions.data?.limit ?? 20}
-              total={transactions.data?.total ?? 0}
-              onChange={setPage}
-            />
-          </section>
+              <Pagination
+                page={transactions.data?.page ?? page}
+                limit={transactions.data?.limit ?? 20}
+                total={transactions.data?.total ?? 0}
+                onChange={setPage}
+              />
+            </section>
+          </>
         )}
       </PageContent>
 
