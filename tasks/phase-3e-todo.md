@@ -14,6 +14,6 @@ plan：`tasks/phase-3e-plan.md`；spec：`docs/specs/phase-3e-shared-split.md`�
       驗收：SC-E4、E5、E6、E9、E14；隔離測試全綠（SC-E17、E18）。
 - [x] **E5 e2e 與回歸**（依賴 E2～E4；`split-e2e`）：plan §1 第 6 項。
       驗收：`ledger-splits.e2e-spec.ts` 全綠；SC-E19 的既有 e2e 全綠；`pnpm --filter @ledger/web typecheck` 通過。
-- [ ] **E6 驗收與合併**（依賴 E5；協調者）：逐行看 diff；plan §4 全部通過；開 PR、盯 CI、合併；替開發者更新 dev 環境；實作紀錄寫進 plan §6。
+- [x] **E6 驗收與合併**（依賴 E5；協調者）：逐行看 diff；plan §4 全部通過；開 PR、盯 CI、合併；替開發者更新 dev 環境；實作紀錄寫進 plan §6。
       驗收：SC-E20；PR 合併；dev 資料庫 migrate 完成。
 - [ ] **E7 畫面 spec**（依賴 E6；協調者）：寫 `docs/specs/phase-3e-web.md` 送開發者審。
