@@ -6,18 +6,25 @@
 
 ---
 
-## 最新交接（2026-10-03，3c-0 金額改成分、3c 代墊與分帳）
+## 最新交接（2026-10-04，3d 交易頁整理與分類圖示）
 
 ### 現況
 
-- **3c-0**（#87）：全系統金額改用「分」（0.01 元）。spec `docs/specs/phase-3c0-money-cents.md`。前端只透過 `@ledger/shared` 的 `formatMoney`／`parseMoneyInput`／`centsToInput` 換算。
-- **3c 代墊與分帳**（#88，之後 #90、#91 修畫面）：spec `docs/specs/phase-3c-split.md`（決策 82～107）、`phase-3c-web.md`（W62～W88）。份額計算只在 `packages/shared/src/split-shares.ts`，後端以它為準，前端只預覽。
-- 開發者還沒完整操作過 3c 的畫面。
+- **3c-0**（#87）：全系統金額改用「分」（0.01 元）。前端只透過 `@ledger/shared` 的 `formatMoney`／`parseMoneyInput`／`centsToInput` 換算。
+- **3c 代墊與分帳**（#88～#92）：spec `docs/specs/phase-3c-split.md`（決策 82～110）、`phase-3c-web.md`（W62～W92）。份額計算只在 `packages/shared/src/split-shares.ts`。
+- **3d 交易頁整理與分類圖示**（#96，修訂 #97、#98）：spec `docs/specs/phase-3d-tx-list.md`（T1～T14）。`Category.icon` 存 `CATEGORY_ICONS` 的代號，代號對圖示只在 `apps/web/src/components/CategoryIcon.tsx`。交易列固定兩行：上分類、下名稱；圖示放淡金圓底。
+- Orca Run `run_e2035b727bd0`（3d）的兩個 Task 都完成、沒有未處理訊息，新 session 不必接。
+- 開發者還沒完整操作過 3c 分帳的畫面。
 
 ### 下一步
 
-1. 收開發者操作 3c 畫面後的回饋，照 `CLAUDE.md` §5 先改 spec 再動工。
-2. 延後項目（spec 3c §9）：共享帳本的分帳畫面與成員結清、訊息功能、多人一起付款、份數分帳。之後也可能收尾階段三、進入階段四。
+1. 建議開發者先操作 3c 分帳畫面，收回饋，照 `CLAUDE.md` §5 先改 spec 再動工。
+2. 之後的方向已提給開發者，**還沒選**：
+   - A（協調者建議）共享帳本的分帳畫面與成員結清（3c 決策 87）。
+   - B 統計報表（3b §9、3c §9 都在等它）。
+   - C 收尾階段三，進入階段四 AI 文字記帳。
+   - D 零碎項目：每日小計、i18n 實作、份數分帳、多人一起付款。
+3. 待開發者回覆：改 Vite 設定，讓 `packages/shared` 變更後預先打包快取自動失效，免得開發者每次都要勾「Disable cache」。
 
 ### 開發者的偏好（不在 spec 裡的）
 
