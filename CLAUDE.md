@@ -241,10 +241,10 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 
-- 實作預設派給 worker，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
+- 實作預設派給 worker，能拆就拆，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它指定不了 Codex、Pi 等其他 agent。
 - 要用哪個模型，看 `docs/orca-multi-agent.md` §0 的角色表。這是唯一記錄模型 id 的地方，其他文件只寫角色名（`default`、`backend`、`fallback-1`～`3`）。
-- Prisma schema、migration、API 介面、授權與資料隔離的工作只派給 `backend` 角色。驗收時逐行看 diff，自己重跑隔離測試與 e2e。
+- 難或要求高準確的工作（migration SQL、授權與資料隔離、鎖、金額與帳戶規則）派 `backend` 角色；其餘，包括單純的 API 端點與補測試，派 `default`。schema、API、授權的產出不管哪個角色做，驗收時都逐行看 diff，自己重跑隔離測試與 e2e。
 - 額度用完由協調者主動查（`orca account list` 的用量與 worker 畫面），自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
 - worker 的產出一律由協調者驗收後才進 PR。

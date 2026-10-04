@@ -6,15 +6,15 @@
 
 其他文件、`CLAUDE.md`、Task spec 一律只寫**角色名**，不寫模型 id。換模型時改這張表，再依「啟動方式」那一欄派工。
 
-| 角色         | 什麼時候用                                         | 啟動方式                                                                                                           |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `default`    | 一般實作：前端、測試、重構、補文件                 | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"` |
-| `backend`    | Prisma schema、migration、API 介面、授權與資料隔離 | 一行，`--agent codex --model gpt-6-sol --effort high`                                                              |
-| `fallback-1` | `default` 額度用完                                 | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
-| `fallback-2` | `fallback-1` 也用完                                | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
-| `fallback-3` | 前三層都不能用                                     | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                     |
+| 角色         | 什麼時候用                                                      | 啟動方式                                                                                                           |
+| ------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `default`    | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"` |
+| `backend`    | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6-sol --effort high`                                                              |
+| `fallback-1` | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
+| `fallback-2` | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
+| `fallback-3` | 前三層都不能用                                                  | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                     |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
 
 兩種啟動方式：
 
@@ -39,7 +39,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 - Claude Code 是 coordinator（協調者），負責規劃、拆工、派工、驗收、開 PR。實作預設派給 worker，能平行的一次全部派出去。
 - 協調者自己做的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
-- `backend` 角色的工作，協調者驗收時要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
+- 動到 schema、API、授權的產出，不管哪個角色做，協調者驗收時都要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
 
@@ -64,7 +64,7 @@ worker 只拿得到你寫的 Task spec，所以 spec 要自足。五欄：**Targ
 
 Constraints 每次都寫這六條：
 
-- 不准動 Prisma schema 與 API 介面，需要動就回報（`backend` 任務除外）。
+- 不准動 Prisma schema 與 API 介面，需要動就回報（Task spec 明確指派的除外）。
 - 不要跑 e2e，除非 spec 指定。多個 worktree 共用 `ledger_test` 資料庫與固定 port。
 - Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑。`.worktreeinclude` 會把指向開發者 `ledger_dev` 的 `apps/api/.env` 複製進 worktree，3c 的 migration 曾因此在合併前被套用到 dev 資料庫。
 - 只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`，不要跑根目錄的 `pnpm format`。平行時會改到別人的檔案。
