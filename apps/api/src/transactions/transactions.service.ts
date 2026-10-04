@@ -752,6 +752,10 @@ export class TransactionsService {
       creator: { id: row.creator.id, name: row.creator.name },
       debt: this.visibleDebt(row, viewerUserId),
       split: this.visibleSplit(row, viewerUserId),
+      payer: null,
+      ledgerSplit: null,
+      settlement: null,
+      accountPending: false,
       createdAt: row.createdAt.toISOString(),
     };
   }

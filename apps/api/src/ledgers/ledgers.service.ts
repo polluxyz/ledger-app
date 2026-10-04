@@ -11,6 +11,7 @@ import {
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 
 /**
  * 帳本與成員的業務邏輯——授權與資料隔離的重心。個人模式與家庭模式共用同一套
@@ -54,7 +55,10 @@ interface MemberRow {
 
 @Injectable()
 export class LedgersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledgerPeople: LedgerPeopleService,
+  ) {}
 
   /**
    * 建立一個由指定使用者擁有的帳本，並灌入預設分類。它跑在「呼叫端傳入的」交易
@@ -73,6 +77,10 @@ export class LedgersService {
     await tx.ledgerMember.create({
       data: { ledgerId: ledger.id, userId, role: 'OWNER' },
     });
+
+    if (kind === 'SHARED') {
+      await this.ledgerPeople.ensureMemberPerson(tx, ledger.id, userId);
+    }
 
     // `sortOrder` 取自陣列索引，讓畫面上的順序等於 `DEFAULT_CATEGORIES` 的定義順序
     // （「餐飲」排第一）。不能靠 `createdAt`——這裡是一次寫入，12 筆的時間戳相同，
@@ -294,9 +302,13 @@ export class LedgersService {
       );
     }
 
-    const member = await this.prisma.ledgerMember.create({
-      data: { ledgerId, userId: user.id, role },
-      include: { user: true },
+    const member = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.ledgerMember.create({
+        data: { ledgerId, userId: user.id, role },
+        include: { user: true },
+      });
+      await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, user.id);
+      return created;
     });
     return this.toMemberInfo(member);
   }
