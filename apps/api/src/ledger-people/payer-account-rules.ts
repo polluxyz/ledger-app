@@ -1,3 +1,10 @@
+/**
+ * 「帳戶屬於付款人」的規則（3e 決策 123～126、129），寫成純函式讓交易與結清共用同一份。
+ *
+ * 帳戶屬於使用者且彼此看不到，所以只有付款人本人能選帳戶：別人付時留空（帳戶待補），
+ * 非成員付時永遠空。改付款人時舊帳戶一律清掉，否則會扣到舊付款人的錢（決策 125）。
+ * 帳戶是否真的屬於呼叫者由呼叫端查（`needsOwnershipCheck`），這裡不碰資料庫。
+ */
 export interface PayerAccountInput {
   tracksBalance: boolean;
   payer: { userId: string | null };

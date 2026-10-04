@@ -3,6 +3,14 @@ import { ErrorCode, type LedgerPerson as LedgerPersonView } from '@ledger/shared
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 
+/**
+ * 共享帳本裡「可以分帳的人」的核心（3e 決策 136～140）：成員與非成員都是一筆 `LedgerPerson`。
+ *
+ * 所有方法都收呼叫端的交易 client，交易邊界由呼叫端決定。寫入名單、付款人、結清之前一律先
+ * `lockPeople`：依 id 排序後 `FOR KEY SHARE`，跟刪除非成員的 `FOR UPDATE` 互斥，避免「剛確認
+ * 沒被用到就被寫進名單」的競態；固定順序則避免 3c 遇過的死結。別本帳本的 id 一律 404，不透露存在。
+ */
+
 export interface LedgerPersonRecord {
   id: string;
   ledgerId: string;
