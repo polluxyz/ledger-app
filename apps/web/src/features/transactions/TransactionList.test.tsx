@@ -48,6 +48,10 @@ describe('TransactionList', () => {
       creator,
       debt: null,
       split: null,
+      payer: null,
+      ledgerSplit: null,
+      settlement: null,
+      accountPending: false,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };

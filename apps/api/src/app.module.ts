@@ -13,6 +13,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { FriendsModule } from './friends/friends.module';
 import { DebtsModule } from './debts/debts.module';
 import { SplitsModule } from './splits/splits.module';
+import { LedgerPeopleModule } from './ledger-people/ledger-people.module';
 
 /**
  * 根模組：組裝整個應用程式。載入全域設定（環境變數驗證）、全站流量限制、
@@ -42,6 +43,7 @@ import { SplitsModule } from './splits/splits.module';
     FriendsModule,
     DebtsModule,
     SplitsModule,
+    LedgerPeopleModule,
   ],
   // 以 APP_GUARD 全域套用限流；JWT 認證 guard 則在 AuthModule 內註冊。
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -48,7 +48,7 @@ describe('TransactionsService', () => {
     title: null,
     splitId: null,
     createdAt: new Date('2026-08-08T12:00:00.000Z'),
-    category: { id: 'cat-1', name: '餐飲' },
+    category: { id: 'cat-1', name: '餐飲', icon: null },
     account: { id: accountId, name: '現金', userId: creatorId },
     toAccount: null,
     creator: { id: creatorId, name: 'Alice' },
@@ -90,12 +90,16 @@ describe('TransactionsService', () => {
       date: joined.date.toISOString(),
       note: 'Lunch',
       title: null,
-      category: { id: 'cat-1', name: '餐飲' },
+      category: { id: 'cat-1', name: '餐飲', icon: null },
       account: { id: accountId, name: '現金' },
       toAccount: null,
       creator: { id: creatorId, name: 'Alice' },
       debt: null,
       split: null,
+      payer: null,
+      ledgerSplit: null,
+      settlement: null,
+      accountPending: false,
       createdAt: joined.createdAt.toISOString(),
     });
   });
@@ -253,7 +257,7 @@ describe('TransactionsService', () => {
 
       expect(result.account).toBeNull();
       expect(result.amount).toBe(120);
-      expect(result.category).toEqual({ id: 'cat-1', name: '餐飲' });
+      expect(result.category).toEqual({ id: 'cat-1', name: '餐飲', icon: null });
       expect(result.creator).toEqual({ id: otherUserId, name: 'Bob' });
     });
 

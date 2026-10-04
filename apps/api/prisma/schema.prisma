@@ -42,6 +42,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   memberships  LedgerMember[]
+  ledgerPeople LedgerPerson[]
   transactions Transaction[]  @relation("TransactionCreator")
   accounts     Account[]
 
@@ -171,6 +172,7 @@ model Ledger {
   updatedAt     DateTime   @updatedAt
 
   members      LedgerMember[]
+  people       LedgerPerson[]
   categories   Category[]
   transactions Transaction[]
   splits       Split[]
@@ -187,6 +189,28 @@ model LedgerMember {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([ledgerId, userId])
+}
+
+/// A person who can participate in a shared ledger's splits and settlements.
+model LedgerPerson {
+  id        String    @id @default(uuid())
+  ledgerId  String
+  userId    String?
+  name      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  paidTransactions Transaction[]      @relation("TransactionPayer")
+  shares           LedgerShare[]
+  settlementsFrom  LedgerSettlement[] @relation("SettlementFrom")
+  settlementsTo    LedgerSettlement[] @relation("SettlementTo")
+
+  @@unique([ledgerId, userId])
+  @@index([ledgerId])
 }
 
 model Category {
@@ -214,35 +238,39 @@ model Category {
 }
 
 model Transaction {
-  id          String          @id @default(uuid())
-  ledgerId    String
+  id            String          @id @default(uuid())
+  ledgerId      String
   /// 可空：TRANSFER 沒有分類。EXPENSE / INCOME 則由 service 強制必填。
-  categoryId  String?
+  categoryId    String?
   /// 錢從哪個帳戶出去（INCOME 則是進到哪個帳戶）。
   /// 連動帳本必填、非連動帳本必為 null——條件必填由 service 把關。
-  accountId   String?
+  accountId     String?
   /// 僅 TRANSFER 使用：轉入的帳戶。
-  toAccountId String?
-  creatorId   String
-  type        TransactionType
-  amount      Int // 單位：分（0.01 元）的正整數
-  date        DateTime // 消費日期（含時間，查詢以日期區間篩選）
-  note        String?
-  title       String?
-  splitId     String?
-  deletedAt   DateTime? // 軟刪除標記
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  toAccountId   String?
+  creatorId     String
+  type          TransactionType
+  amount        Int // 單位：分（0.01 元）的正整數
+  date          DateTime // 消費日期（含時間，查詢以日期區間篩選）
+  note          String?
+  title         String?
+  splitId       String?
+  payerPersonId String?
+  deletedAt     DateTime? // 軟刪除標記
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   // Cascade：刪除帳本會一併刪掉它的交易。
   // Category / Account 明確指定 Restrict——**選填關聯的 Prisma 預設是 SetNull**，
   // 那會讓「刪掉仍被引用的分類／帳戶」悄悄把交易的欄位清成 null，而不是報錯。
   // app 層本來就會先擋下並回 409，這裡的 Restrict 是最後一道防線。
-  ledger    Ledger    @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
-  category  Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  account   Account?  @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: Restrict)
-  toAccount Account?  @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
-  creator   User      @relation("TransactionCreator", fields: [creatorId], references: [id])
+  ledger      Ledger            @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  category    Category?         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  account     Account?          @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccount   Account?          @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  creator     User              @relation("TransactionCreator", fields: [creatorId], references: [id])
+  payerPerson LedgerPerson?     @relation("TransactionPayer", fields: [payerPersonId], references: [id], onDelete: Restrict)
+  ledgerSplit LedgerSplit?
+  settlement  LedgerSettlement?
 
   // 借還帳（3b）：這筆交易若是某筆債務的本金或還款，由債務那一側持有外鍵（spec §4.4）。
   debtEntry DebtEntry?
@@ -253,6 +281,48 @@ model Transaction {
   @@index([accountId])
   @@index([toAccountId])
   @@index([splitId])
+  @@index([payerPersonId])
+}
+
+model LedgerSplit {
+  id            String         @id @default(uuid())
+  transactionId String         @unique
+  method        SplitMethod
+  precision     SplitPrecision @default(CENT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  transaction Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  shares      LedgerShare[]
+}
+
+model LedgerShare {
+  id            String @id @default(uuid())
+  ledgerSplitId String
+  personId      String
+  share         Int
+  ratio         Int?
+  sortOrder     Int
+
+  ledgerSplit LedgerSplit  @relation(fields: [ledgerSplitId], references: [id], onDelete: Cascade)
+  person      LedgerPerson @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@unique([ledgerSplitId, personId])
+  @@index([personId])
+}
+
+model LedgerSettlement {
+  id            String @id @default(uuid())
+  transactionId String @unique
+  fromPersonId  String
+  toPersonId    String
+
+  transaction Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  fromPerson  LedgerPerson @relation("SettlementFrom", fields: [fromPersonId], references: [id], onDelete: Restrict)
+  toPerson    LedgerPerson @relation("SettlementTo", fields: [toPersonId], references: [id], onDelete: Restrict)
+
+  @@index([fromPersonId])
+  @@index([toPersonId])
 }
 
 /// 往來紀錄的種類（spec 3b §3.2）。前 5 種由使用者記；SETTLEMENT、FORGIVE 是系統算出的調整紀錄。

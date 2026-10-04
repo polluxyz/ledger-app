@@ -1,6 +1,7 @@
 import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgersService } from './ledgers.service';
+import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 
 /**
  * 聚焦成員管理的不變量（最具安全性關鍵的邏輯）：加入成員的查無／重複、最後一位
@@ -11,7 +12,8 @@ describe('LedgersService (members)', () => {
   let service: LedgersService;
   let prisma: {
     user: { findUnique: jest.Mock };
-    ledger: { findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
+    ledger: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock };
+    category: { createMany: jest.Mock };
     ledgerMember: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
@@ -25,6 +27,7 @@ describe('LedgersService (members)', () => {
     split: { count: jest.Mock };
     $transaction: jest.Mock;
   };
+  const ledgerPeople = { ensureMemberPerson: jest.fn() };
 
   const ledgerId = 'ledger-1';
   const ledgerRow = {
@@ -44,9 +47,11 @@ describe('LedgersService (members)', () => {
       user: { findUnique: jest.fn() },
       ledger: {
         findUnique: jest.fn().mockResolvedValue(ledgerRow),
+        create: jest.fn().mockResolvedValue(ledgerRow),
         update: jest.fn().mockResolvedValue(ledgerRow),
         delete: jest.fn(),
       },
+      category: { createMany: jest.fn() },
       ledgerMember: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -60,7 +65,28 @@ describe('LedgersService (members)', () => {
       split: { count: jest.fn().mockResolvedValue(0) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
-    service = new LedgersService(prisma as unknown as PrismaService);
+    ledgerPeople.ensureMemberPerson.mockReset();
+    service = new LedgersService(
+      prisma as unknown as PrismaService,
+      ledgerPeople as unknown as LedgerPeopleService,
+    );
+  });
+
+  describe('createLedgerForUser', () => {
+    it('creates one person for the shared ledger owner', async () => {
+      await service.createLedgerForUser(prisma as never, 'owner-1', {
+        name: 'Shared',
+        kind: 'SHARED',
+      });
+      expect(ledgerPeople.ensureMemberPerson).toHaveBeenCalledWith(prisma, ledgerId, 'owner-1');
+      expect(prisma.ledgerMember.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('creates no person for a personal ledger', async () => {
+      await service.createLedgerForUser(prisma as never, 'owner-1', { name: 'Personal' });
+      expect(ledgerPeople.ensureMemberPerson).not.toHaveBeenCalled();
+      expect(prisma.ledgerMember.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('tracksBalance', () => {
@@ -272,6 +298,8 @@ describe('LedgersService (members)', () => {
         name: 'Bob',
         role: 'EDITOR',
       });
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(ledgerPeople.ensureMemberPerson).toHaveBeenCalledWith(prisma, ledgerId, 'user-2');
     });
   });
 
