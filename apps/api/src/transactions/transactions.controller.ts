@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { SetTransactionAccountDto } from './dto/set-transaction-account.dto';
 import { TransactionsService } from './transactions.service';
 
 /**
@@ -85,6 +87,17 @@ export class TransactionsController {
     @Body() dto: UpdateTransactionDto,
   ): Promise<Transaction> {
     return this.transactions.update(ledgerId, transactionId, user.sub, dto);
+  }
+
+  @Put(':transactionId/account')
+  @RequireLedgerRole('VIEWER')
+  setAccount(
+    @Param('ledgerId') ledgerId: string,
+    @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SetTransactionAccountDto,
+  ): Promise<Transaction> {
+    return this.transactions.setAccount(ledgerId, transactionId, user.sub, dto.accountId);
   }
 
   // 軟刪除：成功時回 204 No Content（空 body）。資料列仍保留在資料庫，只是被

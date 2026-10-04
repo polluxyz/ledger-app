@@ -1,6 +1,7 @@
 # Spec：階段三 (3e) — 共享帳本的分帳與結清
 
 > 狀態：**已核可**（2026-10-04；§12 的 7 點照建議定案）
+> 修訂：2026-10-04 plan 核可時補上 §5.5「補帳戶端點」，SC-E3、E5、E17 同步改寫（plan §3 第 1 列）。
 > 依據：2026-10-04 假設清單（11 題）與兩輪補充。開發者改了第 4 題（付款人可以從帳本裡的人選，預設自己）；第二輪選了「帳本內加非成員」；其餘照建議同意。
 > 前置：3c（#88～#91）、3d（#96～#100）已合併。本檔延續 3c 決策 87、108 的「另開一輪」。
 > 執行順序：**本 spec**（後端）→ 後端一個 PR → 畫面 spec `phase-3e-web.md` → 畫面一個 PR。
@@ -174,7 +175,7 @@
 | 沒加入帳本的人 | 無                                                                               | 任何讀寫（`404`） |
 
 - 封存帳本唯讀：結清檢視照樣能看，任何寫入回 `409 LEDGER_ARCHIVED`。
-- 「付款人本人補帳戶」是 VIEWER 唯一能做的寫入，只能改帳戶欄位。理由：錢是他付的，他要能讓自己的餘額正確。
+- 「付款人本人補帳戶」是 VIEWER 唯一能做的寫入，只能改帳戶欄位，走 §5.5 的專用端點。理由：錢是他付的，他要能讓自己的餘額正確。
 
 ---
 
@@ -289,7 +290,7 @@ interface LedgerPerson {
 }
 ```
 
-只有共享帳本有這組端點；個人帳本回 `404`。成員那一筆不能用 `PATCH`／`DELETE` 改（`400`）。
+只有共享帳本有這組端點；個人帳本回 `404`。成員那一筆不能用 `PATCH`／`DELETE` 改（`400 VALIDATION_FAILED`）。
 
 ### 5.2 交易端點的變更（`/ledgers/{ledgerId}/transactions`）
 
@@ -346,6 +347,8 @@ interface CreateSettlementBody {
 }
 ```
 
+路徑裡的 `{id}` 是 `LedgerSettlement.id`（交易回應的 `settlement.id`），不是交易 id。個人帳本打這組端點回 `404`。
+
 結清在交易列表裡是一筆 `TRANSFER`，回應多一個欄位：
 
 ```ts
@@ -364,7 +367,18 @@ settlement: { id: string; from: LedgerPerson; to: LedgerPerson } | null;
 | `SETTLEMENT_SAME_PERSON`           | `400` | 付錢的人與收錢的人相同                                              |
 | `SETTLEMENT_TRANSACTION_READ_ONLY` | `409` | 用一般交易端點改、刪結清（決策 132）                                |
 
-別本帳本的 `LedgerPerson` id 一律回 `404`（不透露存在）。份額相關沿用 3c：`SPLIT_SUM_MISMATCH`、`SPLIT_SHARE_NOT_POSITIVE`、`SPLIT_PARTICIPANTS_INVALID`。
+別本帳本的 `LedgerPerson` id 一律回 `404`（不透露存在）。
+
+### 5.5 補帳戶端點（2026-10-04 plan 核可時補上）
+
+| 方法與路徑                                          | 用途                                     | 成功  |
+| --------------------------------------------------- | ---------------------------------------- | ----- |
+| `PUT /ledgers/{ledgerId}/transactions/{id}/account` | 付款人補（或換）自己在這筆交易的帳戶     | `200` |
+| `PUT /ledgers/{ledgerId}/settlements/{id}/account`  | 付錢或收錢的人補（或換）自己那一邊的帳戶 | `200` |
+
+- body 只有 `{ accountId }`，回應是更新後的 `Transaction`。
+- `VIEWER` 以上可呼叫；服務層再檢查「呼叫者就是付款人（結清時是付錢或收錢的那一位）」，不是的話回 `400 ACCOUNT_NOT_PAYERS`。帳戶必須屬於呼叫者，否則 `404`。不連動的帳本回 `400 ACCOUNT_NOT_ALLOWED`；封存帳本回 `409 LEDGER_ARCHIVED`。
+- 為什麼不用 `PATCH`：`PATCH` 只給 `EDITOR` 以上。為了 VIEWER 放寬它，等於讓 VIEWER 有機會改到其他欄位。專用端點只收帳戶，寫入面最小。份額相關沿用 3c：`SPLIT_SUM_MISMATCH`、`SPLIT_SHARE_NOT_POSITIVE`、`SPLIT_PARTICIPANTS_INVALID`。
 
 ---
 
@@ -374,9 +388,9 @@ settlement: { id: string; from: LedgerPerson; to: LedgerPerson } | null;
 
 - **SC-E1**：既有共享帳本跑完 migration → 每個成員各有一筆 `LedgerPerson`；之後新加入的成員自動有一筆。
 - **SC-E2**：我記住宿 6,000（不帶 `payerPersonId`，名單 3 人均分）→ 一筆 `EXPENSE` 6,000，付款人是我，我的帳戶 −6,000；名單份額各 2,000。
-- **SC-E3**：我記晚餐 1,500，付款人＝小明，3 人均分 → 交易沒有帳戶；我的帳戶不動；小明讀這筆 `accountPending: true`，我與小華讀到 `false`；小明的帳戶頁沒有這筆、餘額不變。小明 `PATCH` 帶自己的帳戶 → 小明的帳戶 −1,500，`accountPending` 變 `false`。
+- **SC-E3**：我記晚餐 1,500，付款人＝小明，3 人均分 → 交易沒有帳戶；我的帳戶不動；小明讀這筆 `accountPending: true`，我與小華讀到 `false`；小明的帳戶頁沒有這筆、餘額不變。小明用 `PUT …/transactions/{id}/account` 帶自己的帳戶 → 小明的帳戶 −1,500，`accountPending` 變 `false`。
 - **SC-E4**：SC-E2～E3 加上小華記油錢 900（我、小華均分）後，`settlement-summary` 回：我 +3,050、小明 −1,000、小華 −2,050；建議 `小華→我 2,050`、`小明→我 1,000`。
-- **SC-E5**：小華記結清 `小華→我 2,050`，帶自己的帳戶 → 一筆 `TRANSFER`，小華的帳戶 −2,050；我讀到 `accountPending: true`；我補帳戶後，我的帳戶 +2,050。summary 變成我 +1,000、小明 −1,000、小華 0。
+- **SC-E5**：小華記結清 `小華→我 2,050`，帶自己的帳戶 → 一筆 `TRANSFER`，小華的帳戶 −2,050；我讀到 `accountPending: true`；我用 `PUT …/settlements/{id}/account` 補帳戶後，我的帳戶 +2,050。summary 變成我 +1,000、小明 −1,000、小華 0。
 - **SC-E6**：小明記結清 `小明→我 1,200`（多付 200）→ 我 −200、小明 +200；建議 `我→小明 200`。
 - **SC-E7**：把晚餐的付款人從小明改成我 → 帳戶清空；同一次 `PATCH` 沒帶我的帳戶 → `400`；帶了 → 我的帳戶 −1,500，小明那邊的扣款消失。
 - **SC-E8**：晚餐 `PATCH ledgerSplit: null` → 名單刪除，淨額裡晚餐的影響消失。
@@ -388,7 +402,7 @@ settlement: { id: string; from: LedgerPerson; to: LedgerPerson } | null;
 - **SC-E14**：小明離開帳本後，summary 仍列小明（`status: LEFT`）與他的淨額；新交易的名單或付款人放小明 → `400 LEDGER_PERSON_NOT_SELECTABLE`；我替小明記 `小明→我` 的結清 → 成功（決策 133）；改晚餐的金額 → 成功，名單裡的小明保留。
 - **SC-E15**：份額規則與 3c 相同：自訂金額加總不符、比例加總不是 100%、份額 ≤ 0 → 對應的 `400`，什麼都不留下。
 - **SC-E16**：`suggestSettlements` 的單元測試：§3.3 與 SC-E9 的例子；全部淨額 0 → 空陣列；同額時依建立順序；筆數 ≤ 有淨額人數 − 1。
-- **SC-E17**（隔離）：沒加入帳本的人讀 people、summary、結清、帶名單的交易 → `404`；名單、付款人、結清放別本帳本的 `LedgerPerson` id → `404`；VIEWER 記交易、記結清、改名單、加非成員 → `403`；VIEWER 是付款人時補自己的帳戶 → 成功，同一次改金額 → `403`；替別人選帳戶 → `400 ACCOUNT_NOT_PAYERS`；封存帳本寫入 → `409`。任一失敗都不留下資料。
+- **SC-E17**（隔離）：沒加入帳本的人讀 people、summary、結清、帶名單的交易 → `404`；名單、付款人、結清放別本帳本的 `LedgerPerson` id → `404`；VIEWER 記交易、記結清、改名單、加非成員 → `403`；VIEWER 是付款人時用補帳戶端點補自己的帳戶 → 成功，用 `PATCH` 改金額 → `403`；不是付款人的人打補帳戶端點、或替別人選帳戶 → `400 ACCOUNT_NOT_PAYERS`；封存帳本寫入 → `409`。任一失敗都不留下資料。
 - **SC-E18**（隔離）：成員讀別人付的交易與結清時，`account`、`toAccount` 仍是 `null`（沿用帳戶隱私規則）。帳本分帳與結清不出現在任何人的往來帳、對象頁、待確認。
 - **SC-E19**：回歸：3c 的分帳在共享帳本照舊運作，`split` 只給擁有者；3b、3b-2、3c 的 e2e 維持綠燈。
 - **SC-E20**：`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；migration 進版控且重跑無 pending。

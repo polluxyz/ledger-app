@@ -113,6 +113,23 @@ export const ErrorCode = {
   SPLIT_ENTRY_READ_ONLY: 'SPLIT_ENTRY_READ_ONLY',
   /** 這筆交易不能轉成分帳：不是自己記的一般支出或收入，或已屬於分帳、往來（3c §5.1）。409。 */
   TRANSACTION_NOT_CONVERTIBLE: 'TRANSACTION_NOT_CONVERTIBLE',
+  /**
+   * 共享帳本的付款人或名單用錯地方（3e 決策 122）：個人帳本帶了 `payerPersonId`／`ledgerSplit`，
+   * 或這種交易不能帶名單（轉帳、借還、3c 分帳產生的交易）。400。
+   */
+  LEDGER_SPLIT_NOT_ALLOWED: 'LEDGER_SPLIT_NOT_ALLOWED',
+  /** 付款人或名單放了已離開的成員、已刪除的非成員（3e 決策 134）。400。 */
+  LEDGER_PERSON_NOT_SELECTABLE: 'LEDGER_PERSON_NOT_SELECTABLE',
+  /** 同一本帳本的非成員名字重複（3e 決策 136）。409。 */
+  LEDGER_PERSON_NAME_TAKEN: 'LEDGER_PERSON_NAME_TAKEN',
+  /** 非成員還出現在交易或結清裡，不能刪除（3e 決策 139）。409。 */
+  LEDGER_PERSON_IN_USE: 'LEDGER_PERSON_IN_USE',
+  /** 帳戶不屬於付款人（收錢的人），或替別人選帳戶（3e 決策 123、129）。400。 */
+  ACCOUNT_NOT_PAYERS: 'ACCOUNT_NOT_PAYERS',
+  /** 結清的付錢的人與收錢的人是同一個（3e §5.4）。400。 */
+  SETTLEMENT_SAME_PERSON: 'SETTLEMENT_SAME_PERSON',
+  /** 結清產生的交易只能從結清端點修改或刪除（3e 決策 132）。409。 */
+  SETTLEMENT_TRANSACTION_READ_ONLY: 'SETTLEMENT_TRANSACTION_READ_ONLY',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

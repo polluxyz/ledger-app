@@ -9,9 +9,13 @@ import {
   IsUUID,
   Max,
   MaxLength,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { MANUAL_TRANSACTION_TYPES, MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { ManualTransactionType, UpdateTransactionRequest } from '@ledger/shared';
+import { LedgerSplitDto } from './ledger-split.dto';
 
 /**
  * PATCH body 的驗證形狀：每個欄位都可選，呼叫端只需送要變更的欄位。有出現的
@@ -70,4 +74,15 @@ export class UpdateTransactionDto implements UpdateTransactionRequest {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsUUID()
+  payerPersonId?: string;
+
+  @ApiPropertyOptional({ type: LedgerSplitDto, nullable: true })
+  @ValidateIf((_, value: unknown) => value !== null && value !== undefined)
+  @ValidateNested()
+  @Type(() => LedgerSplitDto)
+  ledgerSplit?: LedgerSplitDto | null;
 }

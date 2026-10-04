@@ -45,4 +45,9 @@ export class ListTransactionsQueryDto implements ListTransactionsQuery {
   @IsOptional()
   @IsIn(TRANSACTION_TYPES)
   type?: TransactionType;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  payerPersonId?: string;
 }
