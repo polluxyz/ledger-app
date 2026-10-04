@@ -23,6 +23,8 @@ import { auth, person, type Person } from './linking-utils';
  * - SC-E18：成員之間看得到彼此付的交易與結清，但看不到對方的帳戶；帳本分帳與結清不進任何人的
  *   個人往來帳。
  *
+ * 結清端點路徑裡的 id 是 `LedgerSettlement.id`（交易回應的 `settlement.id`），不是交易 id。
+ *
  * 場景：Alice（OWNER）建共享帳本「花蓮三日」，Bob 是 EDITOR、Vic 是 VIEWER；Eve 不在帳本裡，
  * 有一本自己的共享帳本。計數用 raw SQL，不依賴 Prisma Client 的 model 名稱。
  */
@@ -229,13 +231,18 @@ describe('Ledger split isolation (e2e)', () => {
         date: DAY,
       }).expect(404);
       await request(server())
-        .patch(`${base}/settlements/${settlement.id}`)
+        .patch(`${base}/settlements/${settlement.settlement!.id}`)
         .set(eve)
         .send({ amount: 1 })
         .expect(404);
-      await request(server()).delete(`${base}/settlements/${settlement.id}`).set(eve).expect(404);
+      await request(server())
+        .delete(`${base}/settlements/${settlement.settlement!.id}`)
+        .set(eve)
+        .expect(404);
       await putTransactionAccount(s.eve, s.ledgerId, tx.id, s.eve.cashId).expect(404);
-      await putSettlementAccount(s.eve, s.ledgerId, settlement.id, s.eve.cashId).expect(404);
+      await putSettlementAccount(s.eve, s.ledgerId, settlement.settlement!.id, s.eve.cashId).expect(
+        404,
+      );
 
       expect(await countRows('Transaction')).toBe(before);
       expect(await countRows('LedgerShare')).toBe(sharesBefore);
@@ -359,11 +366,14 @@ describe('Ledger split isolation (e2e)', () => {
         .send({ ledgerSplit: null })
         .expect(403);
       await request(server())
-        .patch(`${base}/settlements/${settlement.id}`)
+        .patch(`${base}/settlements/${settlement.settlement!.id}`)
         .set(vic)
         .send({ amount: 1 })
         .expect(403);
-      await request(server()).delete(`${base}/settlements/${settlement.id}`).set(vic).expect(403);
+      await request(server())
+        .delete(`${base}/settlements/${settlement.settlement!.id}`)
+        .set(vic)
+        .expect(403);
       await request(server())
         .patch(`${base}/people/${guest.id}`)
         .set(vic)
@@ -484,13 +494,21 @@ describe('Ledger split isolation (e2e)', () => {
         .then((res) => res.body as Transaction);
 
       // Vic 既不付也不收。
-      const res = await putSettlementAccount(s.vic, s.ledgerId, settlement.id, s.vic.cashId).expect(
-        400,
-      );
+      const res = await putSettlementAccount(
+        s.vic,
+        s.ledgerId,
+        settlement.settlement!.id,
+        s.vic.cashId,
+      ).expect(400);
       expect((res.body as ApiErrorResponse).errorCode).toBe('ACCOUNT_NOT_PAYERS');
 
       const aliceBefore = await balanceOf(s.alice, s.alice.cashId);
-      await putSettlementAccount(s.alice, s.ledgerId, settlement.id, s.alice.cashId).expect(200);
+      await putSettlementAccount(
+        s.alice,
+        s.ledgerId,
+        settlement.settlement!.id,
+        s.alice.cashId,
+      ).expect(200);
       expect(await balanceOf(s.alice, s.alice.cashId)).toBe(aliceBefore + 50000);
 
       const rows = await prisma.$queryRawUnsafe<
@@ -557,7 +575,12 @@ describe('Ledger split isolation (e2e)', () => {
       })
         .expect(201)
         .then((res) => res.body as Transaction);
-      await putSettlementAccount(s.alice, s.ledgerId, settlement.id, s.alice.cashId).expect(200);
+      await putSettlementAccount(
+        s.alice,
+        s.ledgerId,
+        settlement.settlement!.id,
+        s.alice.cashId,
+      ).expect(200);
 
       const asVic = await listTransactions(s.vic, s.ledgerId);
       expect(asVic).toHaveLength(2);
