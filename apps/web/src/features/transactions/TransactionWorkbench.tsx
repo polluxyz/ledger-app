@@ -10,6 +10,8 @@ import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
 import { SplitEditPanel } from './SplitEditPanel';
 import { getTransactionLabel } from './transaction-label';
+import { FillAccountForm } from '../settlements/FillAccountForm';
+import { SettlementForm } from '../settlements/SettlementForm';
 import styles from './TransactionWorkbench.module.css';
 
 /**
@@ -164,6 +166,33 @@ export function TransactionWorkbench({
             paired={activeTarget.transaction.debt.paired}
             displayName={activeTarget.transaction.debt.counterpartyName}
             onClose={handleClose}
+          />
+        </Dialog>
+      )}
+      {activeTarget.kind === 'settlement' && (
+        <Dialog open={true} title="結清" variant="panel" onClose={handleClose}>
+          <SettlementForm
+            key={
+              activeTarget.settlement?.id ??
+              (activeTarget.prefill
+                ? `${activeTarget.prefill.fromPersonId}-${activeTarget.prefill.toPersonId}-${activeTarget.prefill.amount}`
+                : 'new')
+            }
+            ledger={ledger}
+            transaction={activeTarget.settlement}
+            prefill={activeTarget.prefill}
+            onSaved={handleClose}
+            onDeleted={handleClose}
+          />
+        </Dialog>
+      )}
+      {activeTarget.kind === 'fillAccount' && (
+        <Dialog open={true} title="補帳戶" variant="panel" onClose={handleClose}>
+          <FillAccountForm
+            key={activeTarget.transaction.id}
+            ledger={ledger}
+            transaction={activeTarget.transaction}
+            onSaved={handleClose}
           />
         </Dialog>
       )}
