@@ -7,7 +7,7 @@
  *
  * 兩端是頭貼在上、名字在下；箭頭上方是關係（欠／需要支付），下方是金額。
  * 名字與箭頭都不縮（flex: none）：在窄欄裡被擠成「小.」比換行更難讀。
- * 名字太長時才截斷。label 與 amount 即使是空字串也保留高度，讓箭頭線永遠對齊頭貼中線。
+ * 名字太長時才截斷。明細列另有 compact 單行版（名字 ─▶ 名字），不放頭貼。
  */
 .arrow {
   display: inline-flex;
@@ -58,7 +58,6 @@
 
 /*
  * 線要落在頭貼中線（16px）：上方字 12px＋間距 3.5px＝線的位置。
- * label 與 amount 為空字串時仍保留高度，結清列的線才不會跑位。
  */
 .track {
   display: flex;
@@ -111,6 +110,42 @@
   width: 7px;
   height: 8px;
   background-color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  content: '';
+}
+
+/* 單行版：名字 ─▶ 名字，字級跟著所在的那一行。 */
+.compact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.compactName {
+  min-width: 0;
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactLine {
+  position: relative;
+  flex: none;
+  width: 1.25rem;
+  height: 1px;
+  margin-right: 4px;
+  background-color: currentcolor;
+}
+
+.compactLine::after {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 6px;
+  height: 7px;
+  background-color: currentcolor;
   clip-path: polygon(0 0, 100% 50%, 0 100%);
   content: '';
 }

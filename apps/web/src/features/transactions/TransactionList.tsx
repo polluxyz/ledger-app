@@ -204,6 +204,32 @@ export function TransactionList({
               const settlementTo = settlement
                 ? labelPerson(settlement.to, currentUserId)
                 : undefined;
+              // 結清列：第一行寫「結清」，第二行用不帶頭貼的小箭頭，明細列放頭貼太擠。
+              // 分帳標籤跟著第一行的分類，第二行只留名稱與付款人。
+              const rowContent = (
+                <>
+                  <span className={styles.title}>
+                    <span className={styles.titleText}>
+                      {settlement ? '結清' : rowLabel(transaction)}
+                    </span>
+                    {hasSplit && <span className={styles.splitBadge}>分帳</span>}
+                  </span>
+                  <span className={styles.subtitle}>
+                    {settlement && settlementFrom && settlementTo ? (
+                      <DebtArrow
+                        from={settlementFrom}
+                        to={settlementTo}
+                        amount={transaction.amount}
+                        compact
+                        srText={`${settlementFrom}付給${settlementTo}`}
+                      />
+                    ) : (
+                      <span className={styles.name}>{rowName(transaction)}</span>
+                    )}
+                    {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
+                  </span>
+                </>
+              );
               const rowClassNames = [
                 styles.row,
                 isClickable ? styles.clickable : '',
@@ -239,46 +265,10 @@ export function TransactionList({
                       aria-label={`編輯${describe(transaction)}`}
                       onClick={() => openRow(transaction)}
                     >
-                      <span className={styles.title}>
-                        {settlement && settlementFrom && settlementTo ? (
-                          <DebtArrow
-                            from={settlementFrom}
-                            to={settlementTo}
-                            amount={transaction.amount}
-                            hideAmount
-                            srText={`結清：${settlementFrom}付給${settlementTo}`}
-                          />
-                        ) : (
-                          rowLabel(transaction)
-                        )}
-                      </span>
-                      <span className={styles.subtitle}>
-                        <span className={styles.name}>{rowName(transaction)}</span>
-                        {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
-                        {hasSplit && <span className={styles.splitBadge}>分帳</span>}
-                      </span>
+                      {rowContent}
                     </button>
                   ) : (
-                    <span className={styles.main}>
-                      <span className={styles.title}>
-                        {settlement && settlementFrom && settlementTo ? (
-                          <DebtArrow
-                            from={settlementFrom}
-                            to={settlementTo}
-                            amount={transaction.amount}
-                            hideAmount
-                            srText={`結清：${settlementFrom}付給${settlementTo}`}
-                          />
-                        ) : (
-                          rowLabel(transaction)
-                        )}
-                      </span>
-                      <span className={styles.subtitle}>
-                        <span className={styles.name}>{rowName(transaction)}</span>
-                        {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
-                        {hasSplit && <span className={styles.splitBadge}>分帳</span>}
-                      </span>
-                    </span>
+                    <span className={styles.main}>{rowContent}</span>
                   )}
                   <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
                     {settlement

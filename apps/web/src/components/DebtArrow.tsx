@@ -12,8 +12,8 @@ interface DebtArrowProps {
   srText: string;
   /** 箭頭上方的字。借還分頁用「需要支付」，其餘沿用「欠」。 */
   label?: string;
-  /** 結清列只需要顯示方向；保留必填 amount 以免既有呼叫端改變。 */
-  hideAmount?: boolean;
+  /** 明細列用的單行小箭頭：只有名字與方向，不帶頭貼、字與金額。 */
+  compact?: boolean;
 }
 
 /** 用同一個方向呈現誰欠誰，並把原本句子保留給輔助科技。 */
@@ -23,18 +23,30 @@ export function DebtArrow({
   amount,
   srText,
   label = '欠',
-  hideAmount = false,
+  compact = false,
 }: DebtArrowProps) {
+  if (compact) {
+    return (
+      <span className={styles.arrow}>
+        <span className={styles.srOnly}>{srText}</span>
+        <span className={styles.compact} aria-hidden="true">
+          <span className={styles.compactName}>{from}</span>
+          <span className={styles.compactLine} />
+          <span className={styles.compactName}>{to}</span>
+        </span>
+      </span>
+    );
+  }
+
   return (
     <span className={styles.arrow}>
       <span className={styles.srOnly}>{srText}</span>
       <span className={styles.visual} aria-hidden="true">
         <Person name={from} />
         <span className={styles.track}>
-          {/* 只剩方向的結清紀錄不是「欠」，所以不帶字。 */}
-          <span className={styles.label}>{hideAmount ? '' : label}</span>
+          <span className={styles.label}>{label}</span>
           <span className={styles.line} />
-          <span className={styles.amount}>{hideAmount ? '' : formatMoney(amount)}</span>
+          <span className={styles.amount}>{formatMoney(amount)}</span>
         </span>
         <Person name={to} />
       </span>

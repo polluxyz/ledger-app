@@ -27,11 +27,12 @@ describe('DebtArrow', () => {
     expect(screen.queryByText('欠', { selector: visual })).not.toBeInTheDocument();
   });
 
-  it('只顯示方向時不帶字也不帶金額', () => {
-    render(<DebtArrow from="小華" to="我" amount={205000} hideAmount srText="小華付給你" />);
+  it('compact 只有名字與方向，不帶頭貼、字與金額', () => {
+    render(<DebtArrow from="小華" to="我" amount={205000} compact srText="小華付給我" />);
 
-    expect(screen.getByText('小華付給你')).toBeInTheDocument();
+    expect(screen.getByText('小華付給我')).toBeInTheDocument();
     expect(screen.getByText('小華', { selector: visual })).toBeInTheDocument();
+    expect(screen.queryByText('小', { selector: visual })).not.toBeInTheDocument();
     expect(screen.queryByText('欠', { selector: visual })).not.toBeInTheDocument();
     expect(screen.queryByText('$2,050')).not.toBeInTheDocument();
   });
