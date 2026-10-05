@@ -94,4 +94,40 @@ describe('SplitOptionsView', () => {
       expect.objectContaining({ method: 'EQUAL', precision: 'CENT', participants }),
     );
   });
+
+  it('uses generic ledger person keys for payer previews and returns them unchanged', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const ledgerPeople = [
+      person('person-me', null, '我', true),
+      person('person-ming', null, '小明'),
+      person('person-hua', null, '小華'),
+    ];
+
+    render(
+      <SplitOptionsView
+        total={100000}
+        type="EXPENSE"
+        payerKey="person-ming"
+        payerName="小明"
+        method="EQUAL"
+        precision="CENT"
+        participants={ledgerPeople}
+        onBack={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByText('你欠小明 $333.33')).toBeInTheDocument();
+    expect(screen.getByText('小華欠小明 $333.33')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'EQUAL',
+        participants: ledgerPeople,
+      }),
+    );
+  });
 });
