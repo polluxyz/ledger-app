@@ -10,17 +10,19 @@ interface DebtArrowProps {
   amount: number;
   /** 保留既有的口語描述給螢幕閱讀器。 */
   srText: string;
+  /** 結清列只需要顯示方向；保留必填 amount 以免既有呼叫端改變。 */
+  hideAmount?: boolean;
 }
 
 /** 用同一個方向呈現誰欠誰，並把原本句子保留給輔助科技。 */
-export function DebtArrow({ from, to, amount, srText }: DebtArrowProps) {
+export function DebtArrow({ from, to, amount, srText, hideAmount = false }: DebtArrowProps) {
   return (
     <span className={styles.arrow}>
       <span className={styles.srOnly}>{srText}</span>
       <span className={styles.visual} aria-hidden="true">
         <span className={styles.person}>{from}</span>
         <span className={styles.track}>
-          <span className={styles.amount}>{formatMoney(amount)}</span>
+          {!hideAmount && <span className={styles.amount}>{formatMoney(amount)}</span>}
         </span>
         <span className={styles.person}>{to}</span>
       </span>
