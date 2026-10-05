@@ -12,5 +12,5 @@ plan：`tasks/phase-3e-web-plan.md`；spec：`docs/specs/phase-3e-web.md`。
       驗收：SC-W96、SC-W97（標籤）、SC-W98 的元件測試；畫面沒有「已離開」「好友」字樣。
 - [x] **F4 Web e2e**（依賴 F1～F3 合併回整合分支；`lsw-e2e`）：SC-W100。
       驗收：`ledger-split.spec.ts` 綠；既有 Web e2e 全綠。
-- [ ] **F5 驗收與合併**（依賴 F4；協調者）：plan §4 全部通過；開 PR、盯 CI、合併；替開發者部署；實作紀錄寫進 plan §6。
+- [x] **F5 驗收與合併**（依賴 F4；協調者）：plan §4 全部通過；開 PR、盯 CI、合併；替開發者部署；實作紀錄寫進 plan §6。
       驗收：SC-W101；PR 合併；開發者的 dev 環境更新完成。
