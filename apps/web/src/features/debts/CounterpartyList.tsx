@@ -65,6 +65,7 @@ function formatCounterpartyBalance(displayName: string, balance: number) {
         from={displayName}
         to="我"
         amount={balance}
+        label="需要支付"
         srText={`${displayName}欠你 ${formatMoney(balance)}`}
       />
     );
@@ -75,6 +76,7 @@ function formatCounterpartyBalance(displayName: string, balance: number) {
         from="我"
         to={displayName}
         amount={Math.abs(balance)}
+        label="需要支付"
         srText={`你欠${displayName} ${formatMoney(Math.abs(balance))}`}
       />
     );

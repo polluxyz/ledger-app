@@ -1,8 +1,13 @@
 /*
- * 箭頭：`[欠錢的人] ──金額──▶ [被欠的人]`（3c W82）。
+ * 箭頭：
  *
- * 名字與箭頭線都不縮（flex: none）：在窄的右側欄裡被擠成「小.」比換行更難讀。
- * 名字太長時才在 8 個字左右截斷。金額放在線的上方，線的寬度跟著金額長短走。
+ *   (頭貼)    欠     (頭貼)
+ *   欠錢的人 ─────▶ 被欠的人
+ *            $120
+ *
+ * 兩端是頭貼在上、名字在下；箭頭上方是關係（欠／需要支付），下方是金額。
+ * 名字與箭頭都不縮（flex: none）：在窄欄裡被擠成「小.」比換行更難讀。
+ * 名字太長時才截斷。label 與 amount 即使是空字串也保留高度，讓箭頭線永遠對齊頭貼中線。
  */
 .arrow {
   display: inline-flex;
@@ -12,31 +17,77 @@
 
 .visual {
   display: inline-flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-xs);
   max-width: 100%;
 }
 
 .person {
+  display: inline-flex;
   flex: none;
-  max-width: 8em;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 6em;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--color-chrome-active-bg);
+  color: var(--color-chrome-active-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.name {
+  max-width: 100%;
   overflow: hidden;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 高度與頭貼一樣（28px），線在正中間。 */
 .track {
-  position: relative;
+  display: grid;
   flex: none;
-  min-width: 3rem;
-  /* 右邊留空間給箭頭頭；底部對齊名字的基線附近。 */
-  padding: 0 0.75rem 0.1rem 0.25rem;
-  margin-bottom: 0.55em;
-  border-bottom: 1px solid var(--color-text-muted);
+  grid-template-rows: 13px 2px 13px;
+  align-items: center;
+  min-width: 4.5rem;
+  padding: 0 0.25rem;
   text-align: center;
 }
 
-.track::after {
+.label,
+.amount {
+  min-height: 1em;
+  font-size: var(--text-xs);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.label {
+  align-self: end;
+  color: var(--color-text-muted);
+}
+
+.amount {
+  align-self: start;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.line {
+  position: relative;
+  height: 0;
+  border-bottom: 1px solid var(--color-text-muted);
+}
+
+.line::after {
   position: absolute;
   right: 0;
   bottom: -0.25rem;
@@ -46,14 +97,6 @@
   border-right: 1px solid var(--color-text-muted);
   content: '';
   transform: rotate(45deg);
-}
-
-.amount {
-  display: block;
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .srOnly {
