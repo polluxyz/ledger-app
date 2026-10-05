@@ -13,7 +13,10 @@ import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
-import { TransactionWorkbench } from '../features/transactions/TransactionWorkbench';
+import {
+  TransactionWorkbench,
+  type PanelTarget,
+} from '../features/transactions/TransactionWorkbench';
 import { TransactionList } from '../features/transactions/TransactionList';
 import { useTransactions } from '../features/transactions/use-transactions';
 import { PendingCard } from '../features/linking/PendingCard';
@@ -112,14 +115,25 @@ function LedgerView() {
  */
 function Dashboard({ ledger }: { ledger: LedgerSummary }) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
-  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
 
   // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
   const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
 
   function startEditing(transaction: Transaction) {
-    setEditing(transaction);
+    setPanelTarget(
+      transaction.settlement
+        ? { kind: 'settlement', settlement: transaction }
+        : transaction.debt
+          ? { kind: 'debtTransaction', transaction }
+          : { kind: 'transaction', transaction },
+    );
     // 使用者收起過右側欄時，點了一筆卻沒反應是最糟的情況。
+    open();
+  }
+
+  function fillAccount(transaction: Transaction) {
+    setPanelTarget({ kind: 'fillAccount', transaction });
     open();
   }
 
@@ -133,9 +147,19 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
   function startAdding() {
-    setEditing(null);
+    setPanelTarget({ kind: 'new' });
     requestFocus();
   }
+
+  const selectedId = !isOpen
+    ? null
+    : panelTarget.kind === 'transaction' ||
+        panelTarget.kind === 'debtTransaction' ||
+        panelTarget.kind === 'fillAccount'
+      ? panelTarget.transaction.id
+      : panelTarget.kind === 'settlement'
+        ? (panelTarget.settlement?.id ?? null)
+        : null;
 
   return (
     <>
@@ -161,24 +185,15 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
             transactions={recent.data?.items ?? []}
             isLoading={recent.isLoading}
             error={recent.error}
-            selectedId={isOpen ? (editing?.id ?? null) : null}
+            selectedId={selectedId}
             onSelect={startEditing}
+            onFillAccount={fillAccount}
           />
           <AccountBalances />
         </div>
       </PageContent>
 
-      <TransactionWorkbench
-        ledger={ledger}
-        target={
-          editing
-            ? editing.debt
-              ? { kind: 'debtTransaction', transaction: editing }
-              : { kind: 'transaction', transaction: editing }
-            : { kind: 'new' }
-        }
-        onClose={closeWorkbench}
-      />
+      <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
   );
 }
@@ -190,6 +205,7 @@ interface RecentTransactionsProps {
   /** 右側欄正在編輯的那一筆，該列標成選取中。 */
   selectedId: string | null;
   onSelect: (transaction: Transaction) => void;
+  onFillAccount: (transaction: Transaction) => void;
 }
 
 /**
@@ -204,6 +220,7 @@ function RecentTransactions({
   error,
   selectedId,
   onSelect,
+  onFillAccount,
 }: RecentTransactionsProps) {
   return (
     <section className={styles.dataCard} aria-labelledby="recent-transactions">
@@ -223,6 +240,7 @@ function RecentTransactions({
         error={error}
         selectedId={selectedId}
         onSelect={onSelect}
+        onFillAccount={onFillAccount}
       />
     </section>
   );
@@ -235,6 +253,7 @@ function RecentBody({
   error,
   selectedId,
   onSelect,
+  onFillAccount,
 }: RecentTransactionsProps) {
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
@@ -257,6 +276,7 @@ function RecentBody({
       selectedId={selectedId}
       onEdit={onSelect}
       onEditDebtTransaction={onSelect}
+      onFillAccount={onFillAccount}
     />
   );
 }
