@@ -302,6 +302,8 @@ describe('TransactionList', () => {
     const listRow = row(0);
     expect(within(listRow).getByText('晚餐')).toBeInTheDocument();
     expect(within(listRow).getByText('分帳')).toBeInTheDocument();
+    // 分帳標籤跟著第一行的分類，不在第二行。
+    expect(within(listRow).getByText('分帳').closest('[class*="title"]')).not.toBeNull();
     expect(within(listRow).getByText('-$3,000')).toBeInTheDocument();
     expect(within(listRow).queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
 
@@ -395,7 +397,7 @@ describe('TransactionList', () => {
     expect(within(listRow).queryByRole('button', { name: /展開分帳明細/ })).not.toBeInTheDocument();
   });
 
-  it('renders settlement direction without an arrow amount and uses an unsigned total', () => {
+  it('renders settlement as 結清 with a compact direction and an unsigned total', () => {
     const transaction = makeTransaction({
       id: 'settlement-1',
       type: 'TRANSFER',
@@ -413,11 +415,12 @@ describe('TransactionList', () => {
     expect(within(listRow).getByText('$2,050')).toBeInTheDocument();
     expect(within(listRow).queryByText('-$2,050')).not.toBeInTheDocument();
     expect(within(listRow).queryByText('+$2,050')).not.toBeInTheDocument();
-    expect(listRow.querySelector('[class*="title"]')).toHaveTextContent('小華');
-    expect(listRow.querySelector('[class*="title"]')).toHaveTextContent('我');
-    expect(
-      within(listRow).queryByText('$2,050', { selector: '[class*="track"] *' }),
-    ).not.toBeInTheDocument();
+    expect(listRow.querySelector('[class*="title"]')).toHaveTextContent('結清');
+    // 第二行是不帶頭貼的單行箭頭：小華 ─▶ 我。
+    const subtitle = listRow.querySelector('[class*="subtitle"]');
+    expect(subtitle).toHaveTextContent('小華');
+    expect(subtitle).toHaveTextContent('我');
+    expect(listRow.querySelector('[class*="avatar"]')).toBeNull();
   });
 
   it('calls account fill without opening edit from the pending label', async () => {
