@@ -79,16 +79,17 @@ spec：`docs/specs/phase-3e-web.md`（W93～W129、SC-W87～SC-W101）。一個 
 
 2026-10-05，Orca Run `run_74bbb80ec969`，整合分支 `feature/ledger-split-web`（worktree `ledger-split-web`，資料庫 `ledger_test_lsw_int`）。
 
-| 任務 | worker       | 結果                                                    |
-| ---- | ------------ | ------------------------------------------------------- |
-| F0   | 協調者       | 完成：hook、契約、後端兩處 `allowLeft`；API e2e 211/211 |
-| F1   | `lsw-form`   | 進行中                                                  |
-| F2   | `lsw-settle` | 一次通過，已併入；Web 測試 646/646                      |
-| F3   | `lsw-list`   | 一次通過，已併入                                        |
-| F4   | `lsw-e2e`    | 未派；Task spec 照 todo F4 與 spec SC-W100 寫           |
+| 任務 | worker       | 結果                                                               |
+| ---- | ------------ | ------------------------------------------------------------------ |
+| F0   | 協調者       | 完成：hook、契約、後端兩處 `allowLeft`；API e2e 211/211            |
+| F1   | `lsw-form`   | 退回 1 次（下方第 4 點），修正後通過；合併後 API 359、Web 657 全綠 |
+| F2   | `lsw-settle` | 一次通過，已併入；Web 測試 646/646                                 |
+| F3   | `lsw-list`   | 一次通過，已併入                                                   |
+| F4   | `lsw-e2e`    | 進行中（worktree `lsw-e2e`，資料庫 `ledger_test_lsw_e2e`）         |
 
 偏離與發現：
 
 1. **W107 改寫**：`lsw-form` 發現後端在 `PATCH` 省略 `payerPersonId` 時保留舊付款人，所以編輯時一律帶付款人 id（含我自己）。不改 API，spec W107 已補正。
 2. `lib/api-client.ts` 的 `method` 加上 `PUT`（補帳戶端點要用）。
 3. 交易寫入後也讓 `settlement-summary` 快取失效（`use-transactions.ts`）。
+4. **F1 退回**：金額、比例分法時，預覽用即時分配的值，送出卻用分帳選項儲存時的舊值；改總額或勾回一個人後會撞 `SPLIT_SUM_MISMATCH`／`SPLIT_SHARE_NOT_POSITIVE`。改成送出與預覽用同一組值，補兩條測試。
