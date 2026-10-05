@@ -18,7 +18,7 @@
 .visual {
   display: inline-flex;
   align-items: flex-start;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   max-width: 100%;
 }
 
@@ -27,76 +27,92 @@
   flex: none;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  max-width: 6em;
+  gap: 6px;
+  width: 3.5rem;
 }
 
+/* 金色細框取代實心色塊：深淺主題都只靠 token 混色，不另創配色。 */
 .avatar {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background-color: var(--color-chrome-active-bg);
-  color: var(--color-chrome-active-text);
-  font-size: var(--text-xs);
+  background-color: var(--color-fill);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 32%, transparent);
+  color: var(--color-text);
+  font-size: var(--text-sm);
   font-weight: 600;
+  line-height: 1;
 }
 
 .name {
   max-width: 100%;
   overflow: hidden;
+  color: var(--color-text-muted);
   font-size: var(--text-xs);
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 高度與頭貼一樣（28px），線在正中間。 */
+/*
+ * 線要落在頭貼中線（16px）：上方字 12px＋間距 3.5px＝線的位置。
+ * label 與 amount 為空字串時仍保留高度，結清列的線才不會跑位。
+ */
 .track {
-  display: grid;
+  display: flex;
   flex: none;
-  grid-template-rows: 13px 2px 13px;
-  align-items: center;
-  min-width: 4.5rem;
-  padding: 0 0.25rem;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 6.5rem;
+  padding: 0 2px;
   text-align: center;
 }
 
-.label,
-.amount {
-  min-height: 1em;
-  font-size: var(--text-xs);
-  line-height: 1;
+.label {
+  height: 12px;
+  margin-bottom: 3.5px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  line-height: 12px;
   white-space: nowrap;
 }
 
-.label {
-  align-self: end;
-  color: var(--color-text-muted);
-}
-
 .amount {
-  align-self: start;
+  min-height: 1.2em;
+  margin-top: 5px;
   color: var(--color-text);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
+/* 線由淡轉實，箭頭用實心三角形，方向比折線更俐落。 */
 .line {
   position: relative;
-  height: 0;
-  border-bottom: 1px solid var(--color-text-muted);
+  height: 1px;
+  margin-right: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-text-muted) 15%, transparent),
+    color-mix(in srgb, var(--color-text-muted) 80%, transparent)
+  );
 }
 
 .line::after {
   position: absolute;
-  right: 0;
-  bottom: -0.25rem;
-  width: 0.45rem;
-  height: 0.45rem;
-  border-top: 1px solid var(--color-text-muted);
-  border-right: 1px solid var(--color-text-muted);
+  top: -3.5px;
+  right: -1px;
+  width: 7px;
+  height: 8px;
+  background-color: color-mix(in srgb, var(--color-text-muted) 80%, transparent);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
   content: '';
-  transform: rotate(45deg);
 }
 
 .srOnly {
