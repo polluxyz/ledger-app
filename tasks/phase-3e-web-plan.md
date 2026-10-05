@@ -77,7 +77,7 @@ spec：`docs/specs/phase-3e-web.md`（W93～W129、SC-W87～SC-W101）。一個 
 
 ## 6. 實作紀錄
 
-2026-10-05，Orca Run `run_74bbb80ec969`，整合分支 `feature/ledger-split-web`（worktree `ledger-split-web`，資料庫 `ledger_test_lsw_int`）。
+2026-10-05，Orca Run `run_74bbb80ec969`，整合分支 `feature/ledger-split-web`（worktree `ledger-split-web`，資料庫 `ledger_lsw_int_test`）。
 
 | 任務 | worker       | 結果                                                               |
 | ---- | ------------ | ------------------------------------------------------------------ |
@@ -85,7 +85,7 @@ spec：`docs/specs/phase-3e-web.md`（W93～W129、SC-W87～SC-W101）。一個 
 | F1   | `lsw-form`   | 退回 1 次（下方第 4 點），修正後通過；合併後 API 359、Web 657 全綠 |
 | F2   | `lsw-settle` | 一次通過，已併入；Web 測試 646/646                                 |
 | F3   | `lsw-list`   | 一次通過，已併入                                                   |
-| F4   | `lsw-e2e`    | 進行中（worktree `lsw-e2e`，資料庫 `ledger_test_lsw_e2e`）         |
+| F4   | `lsw-e2e`    | 通過；範圍擴大改 2 條既有 e2e（下方第 5、6 點）；Web e2e 52/52     |
 
 偏離與發現：
 
@@ -93,3 +93,7 @@ spec：`docs/specs/phase-3e-web.md`（W93～W129、SC-W87～SC-W101）。一個 
 2. `lib/api-client.ts` 的 `method` 加上 `PUT`（補帳戶端點要用）。
 3. 交易寫入後也讓 `settlement-summary` 快取失效（`use-transactions.ts`）。
 4. **F1 退回**：金額、比例分法時，預覽用即時分配的值，送出卻用分帳選項儲存時的舊值；改總額或勾回一個人後會撞 `SPLIT_SUM_MISMATCH`／`SPLIT_SHARE_NOT_POSITIVE`。改成送出與預覽用同一組值，補兩條測試。
+5. **Web e2e 的資料庫名稱**：global setup 只肯清空名稱以 `_test` 結尾的資料庫，`ledger_test_lsw_e2e` 被拒。改成 `ledger_<名稱>_test`，規則寫進 `docs/orca-multi-agent.md` §3。
+6. **兩條既有 e2e 跟著改**：SC-W80（3c）原本在共享帳本建對象分帳，W109 拿掉了這個入口，改在甲的個人帳本做；情境 12 的 `getByLabel('帳戶')` 是部分比對，會抓到付款人列的 ⇄ 按鈕，改成只找帳戶下拉。
+7. **畫面 bug（協調者修）**：共享帳本為了畫付款人列放開了 `accountLocked`，連帶讓「編輯別人的交易」又出現轉帳按鈕（D3）。轉帳改看回應裡的帳戶是不是別人的。情境 12 驗。
+8. 第一次跑整套 Web e2e 時，API 的 log 出現一次 `deadlock detected`，沒有測試失敗；之後兩次整套重跑（worker 一次、協調者一次）都沒有再出現。沒有查到是哪個請求，列為待觀察。
