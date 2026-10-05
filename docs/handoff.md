@@ -6,22 +6,22 @@
 
 ---
 
-## 最新交接（2026-10-04，3e 後端已合併；下一步是畫面 spec）
+## 最新交接（2026-10-05，3e 畫面已合併；等開發者操作回饋）
 
 ### 現況
 
-- 3e 共享帳本的分帳與結清：spec（#101）、plan 核可、**後端已合併（#104）**。實作紀錄與事故在 `tasks/phase-3e-plan.md` §6；todo E0～E6 已完成。
-- 新端點：`/ledgers/{id}/people`、`/settlement-summary`、`/settlements`、兩個補帳戶的 `PUT …/account`（spec §5.5）。交易回應多 `payer`、`ledgerSplit`、`settlement`、`accountPending`。省略 `ledgerSplit`＝不分帳，所以現行 Web 行為不變。
-- 開發者的 `ledger_dev` 已備份（`D:\Projects\ledger-app-backups\`）並 `migrate deploy`；`web-redesign` worktree 已跟到 `origin/main`、shared 與 API 已 build。**API 與 Vite 要開發者自己重開。**
-- 派工規則改了（#103）：`backend`（sol）只給難或要求高準確的工作，其餘給 `default`（luna）；多派 worker 平行；派工前把 worker worktree 的 `.env`、`.env.test` 都改指向它專屬的測試資料庫。
-- 沒有進行中的 Orca Run 與 worker（`run_4b955d94925d` 的 6 個 worker 都已 release）。
-- 開發者還沒完整操作過 3c 分帳的畫面。
+- 3e 共享帳本的分帳與結清：後端（#104）與**畫面（#108）都已合併**。畫面 spec `docs/specs/phase-3e-web.md`（W93～W129），實作紀錄在 `tasks/phase-3e-web-plan.md` §6。
+- 開發者在假設清單時改了兩條後端決策（3e spec 修訂 2）：預設均分只勾**現任成員**；**已離開的人跟非成員一樣能被選**，畫面不標「已離開」。後端改動跟畫面同一個 PR。
+- `web-redesign` worktree 已跟到 `origin/main`（#108）、shared 與 API 已 build；這次沒有 migration。**API 與 Vite 要開發者自己重開**，瀏覽器按 `Ctrl + Shift + R`。
+- 測試資料庫名稱一定要以 `_test` 結尾（Web e2e 只肯清空這種），規則已寫進 `docs/orca-multi-agent.md` §3。
+- Orca Run `run_74bbb80ec969` 的 5 個 worker 都已 release。留下的 worktree（`ledger-split-web`、`lsw-form`、`lsw-settle`、`lsw-list`、`lsw-e2e`）與資料庫（`ledger_test_lsw_*`、`ledger_lsw_*_test`）都已合併完、可以清掉。
+- 待觀察：第一次跑整套 Web e2e 時 API log 出現一次 `deadlock detected`，沒有測試失敗，之後兩次都沒再出現（plan §6 第 8 點）。
 
 ### 下一步
 
-1. 寫 `docs/specs/phase-3e-web.md`（todo E7，方向在 3e spec §7）：動筆前先列假設清單請開發者確認，再送審。
+1. 等開發者操作 3e 畫面（記帳表單的付款人與名單、結清檢視、補帳戶、非成員）後的回饋，照 spec 活文件流程調整。
 2. 待開發者回覆：改 Vite 設定，讓 `packages/shared` 變更後預先打包快取自動失效。
-3. 其他方向（B 統計報表、C 階段四、D 零碎項目）等 3e 畫面之後再談。
+3. 其他方向（B 統計報表、C 階段四、D 零碎項目）等 3e 回饋處理完再談。
 
 ### 開發者的偏好（不在 spec 裡的）
 
