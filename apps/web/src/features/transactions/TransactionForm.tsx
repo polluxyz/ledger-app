@@ -474,8 +474,16 @@ function TransactionFormContent({
    * 轉入是我的，後端會接受，變成一筆「從他的戶頭轉到我的戶頭」的交易。
    * 反方向（他的轉帳改成支出）允許，錢還留在他的帳戶；改完之後這顆鈕就消失、
    * 回不去——這個情況罕見，而且不可逆的方向是安全的那一邊。
+   *
+   * 共享帳本的 `accountLocked` 會在付款人是別人時放開，好讓付款人列畫出來（3e W98）；
+   * 但「這筆原本的帳戶不是我的」並沒有改變，所以轉帳另外看回應裡的帳戶。
    */
-  const canTransfer = ledger.tracksBalance && !accountLocked;
+  const accountBelongsToOthers =
+    transaction !== undefined &&
+    split === undefined &&
+    ledger.tracksBalance &&
+    transaction.account === null;
+  const canTransfer = ledger.tracksBalance && !accountLocked && !accountBelongsToOthers;
   const showTransferButton = (canTransfer && split === undefined) || type === 'TRANSFER';
   /** 轉帳至少要有兩個帳戶。與其讓使用者送出後撞 400，不如先說清楚。 */
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
