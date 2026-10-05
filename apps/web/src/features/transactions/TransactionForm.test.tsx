@@ -3,8 +3,9 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LedgerSummary, Split } from '@ledger/shared';
+import type { LedgerPerson, LedgerSummary, Split, Transaction } from '@ledger/shared';
 import App from '../../App';
+import { AuthContext, type AuthContextValue } from '../auth/auth-context';
 import { TransactionForm } from './TransactionForm';
 
 /**
@@ -20,7 +21,7 @@ import { TransactionForm } from './TransactionForm';
  * 「＋ 新增交易」才會出現，而且是 portal 進外殼的，所以一律用 `findBy*`。
  */
 describe('TransactionForm', () => {
-  const fetchMock = vi.fn();
+  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 
   /** 連動帳本才畫得出轉帳鈕（見 TransactionForm 的 `canTransfer`）。 */
   const trackingLedger: LedgerSummary = {
@@ -34,15 +35,38 @@ describe('TransactionForm', () => {
     createdAt: '2026-09-01T00:00:00.000Z',
   };
   const plainLedger = { ...trackingLedger, id: 'ledger-2', tracksBalance: false };
+  const sharedLedger: LedgerSummary = {
+    ...trackingLedger,
+    id: 'ledger-shared',
+    name: '共享帳本',
+    kind: 'SHARED',
+  };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const accounts = [
     { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 },
     { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 500000 },
   ];
+  const sharedPeople: LedgerPerson[] = [
+    { id: 'person-me', name: 'Alice', userId: 'user-me', status: 'MEMBER' },
+    { id: 'person-ming', name: '小明', userId: 'user-ming', status: 'MEMBER' },
+    { id: 'person-hua', name: '小華', userId: 'user-hua', status: 'MEMBER' },
+    { id: 'person-amei', name: '阿美', userId: null, status: 'GUEST' },
+    { id: 'person-left', name: '小安', userId: 'user-left', status: 'LEFT' },
+  ];
+  const authValue: AuthContextValue = {
+    token: 'jwt-abc',
+    isAuthenticated: true,
+    login: async () => {},
+    register: async () => {},
+    logout: () => {},
+  };
 
-  function routeFetch(ledger: typeof trackingLedger, options: { items?: unknown[] } = {}) {
+  function routeFetch(
+    ledger: LedgerSummary,
+    options: { items?: unknown[]; ledgerPeople?: LedgerPerson[] } = {},
+  ) {
     const items = options.items ?? [];
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    fetchMock.mockImplementation((url, init) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -53,6 +77,25 @@ describe('TransactionForm', () => {
       if (url.includes('/debts/summary')) {
         return json({ items: [] });
       }
+      if (url.endsWith('/users/me')) {
+        return json({
+          id: 'user-me',
+          email: 'me@example.test',
+          name: 'Alice',
+          createdAt: '2026-09-01T00:00:00.000Z',
+        });
+      }
+      if (url.includes('/people') && init?.method === 'POST') {
+        const requestBody =
+          typeof init.body === 'string' ? (JSON.parse(init.body) as { name?: string }) : {};
+        return json({
+          id: `created-${requestBody.name}`,
+          name: requestBody.name,
+          userId: null,
+          status: 'GUEST',
+        });
+      }
+      if (url.includes('/people')) return json(options.ledgerPeople ?? []);
       if (url.includes('/debts')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });
       }
@@ -132,12 +175,10 @@ describe('TransactionForm', () => {
     let body: Record<string, unknown> = {};
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes('/transactions') &&
-          (init as RequestInit | undefined)?.method === 'POST',
+        ([url, init]) => url.includes('/transactions') && init?.method === 'POST',
       );
       expect(call).toBeDefined();
-      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      const raw = call?.[1]?.body;
       body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
     });
     return body;
@@ -147,11 +188,10 @@ describe('TransactionForm', () => {
     let body: Record<string, unknown> = {};
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes(pathPart) && (init as RequestInit | undefined)?.method === 'POST',
+        ([url, init]) => url.includes(pathPart) && init?.method === 'POST',
       );
       expect(call).toBeDefined();
-      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      const raw = call?.[1]?.body;
       body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
     });
     return body;
@@ -161,14 +201,80 @@ describe('TransactionForm', () => {
     let body: Record<string, unknown> = {};
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes(pathPart) && (init as RequestInit | undefined)?.method === 'PATCH',
+        ([url, init]) => url.includes(pathPart) && init?.method === 'PATCH',
       );
       expect(call).toBeDefined();
-      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      const raw = call?.[1]?.body;
       body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
     });
     return body;
+  }
+
+  async function requestDetails(method: 'POST' | 'PATCH', pathPart: string) {
+    let request: { method: string; path: string; body: Record<string, unknown> } | null = null;
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) => url.includes(pathPart) && init?.method === method,
+      );
+      expect(call).toBeDefined();
+      const [url, init] = call!;
+      const raw = init?.body;
+      request = {
+        method,
+        path: new URL(url).pathname,
+        body: JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>,
+      };
+    });
+    return request!;
+  }
+
+  function renderSharedForm(transaction?: Transaction) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue}>
+            <TransactionForm ledger={sharedLedger} transaction={transaction} />
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  async function waitForSharedPeople() {
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([url]) => url);
+      expect(urls).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('/users/me'),
+          expect.stringContaining('/ledgers/ledger-shared/people'),
+        ]),
+      );
+    }, WAIT);
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '分帳' })).toBeEnabled(), WAIT);
+  }
+
+  function sharedTransaction(overrides: Partial<Transaction> = {}): Transaction {
+    return {
+      id: 'txn-shared',
+      type: 'EXPENSE',
+      amount: 150000,
+      date: '2026-09-15T04:00:00.000Z',
+      title: '晚餐',
+      note: null,
+      category,
+      account: { id: 'acc-1', name: '現金' },
+      toAccount: null,
+      creator: { id: 'user-me', name: 'Alice' },
+      debt: null,
+      split: null,
+      payer: sharedPeople[0]!,
+      ledgerSplit: null,
+      settlement: null,
+      accountPending: false,
+      createdAt: '2026-09-15T04:00:00.000Z',
+      ...overrides,
+    };
   }
 
   it('marks the pressed type and moves the mark when another type is picked', async () => {
@@ -341,9 +447,7 @@ describe('TransactionForm', () => {
     await user.click(submit);
     expect(
       fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).includes('/transactions') &&
-          (init as RequestInit | undefined)?.method === 'POST',
+        ([url, init]) => url.includes('/transactions') && init?.method === 'POST',
       ),
     ).toBe(false);
   });
@@ -634,5 +738,281 @@ describe('TransactionForm', () => {
         { counterpartyId: 'new-阿美' },
       ]),
     );
+  });
+
+  it('SC-W87 shared expense starts with member shares and POSTs a keyed ledger split', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    expect(within(section).getByRole('checkbox', { name: '分帳' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '我' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '小明' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '小華' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '阿美' })).not.toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '小安' })).not.toBeChecked();
+
+    await user.type(screen.getByLabelText('金額'), '6000');
+    await selectFoodCategory(user);
+    const participantRows = within(section).getAllByRole('listitem');
+    for (const name of ['我', '小明', '小華']) {
+      const row = participantRows.find((item) => item.textContent?.includes(name));
+      expect(row).toBeDefined();
+      expect(within(row!).getByText('$2,000')).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    expect(request.body).toMatchObject({
+      type: 'EXPENSE',
+      amount: 600000,
+      ledgerSplit: {
+        method: 'EQUAL',
+        precision: 'CENT',
+        shares: [
+          { personId: 'person-me' },
+          { personId: 'person-ming' },
+          { personId: 'person-hua' },
+        ],
+      },
+    });
+    expect(request.body).not.toHaveProperty('payerPersonId');
+  });
+
+  it('SC-W88 selects another payer without an account and keeps the shared split active', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.type(screen.getByLabelText('金額'), '1500');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    expect(payer).toHaveValue('');
+    await user.click(payer);
+    expect(screen.queryByRole('option', { name: '我' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+
+    expect(screen.queryByLabelText('帳戶')).not.toBeInTheDocument();
+    const section = screen.getByRole('region', { name: '分帳' });
+    expect(within(section).getByRole('checkbox', { name: '分帳' })).toBeChecked();
+    expect(screen.getByText('你欠小明 $500')).toBeInTheDocument();
+    expect(screen.getByText('小華欠小明 $500')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    expect(request.body).toMatchObject({
+      payerPersonId: 'person-ming',
+      amount: 150000,
+      ledgerSplit: { method: 'EQUAL' },
+    });
+    const submittedSplit = request.body.ledgerSplit as { shares?: unknown[] };
+    expect(Array.isArray(submittedSplit.shares)).toBe(true);
+    expect(request.body).not.toHaveProperty('accountId');
+  });
+
+  it('SC-W89 keeps unchecked people visible, restores their preview, then POSTs the checked keys', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    await user.type(screen.getByLabelText('金額'), '1500');
+    await selectFoodCategory(user);
+    const huaCheckbox = within(section).getByRole('checkbox', { name: '小華' });
+    await user.click(huaCheckbox);
+    const huaRow = within(section)
+      .getAllByRole('listitem')
+      .find((item) => item.textContent?.includes('小華'))!;
+    expect(huaRow).toHaveTextContent('小華');
+    expect(huaRow).not.toHaveTextContent('$500');
+    for (const name of ['我', '小明']) {
+      const row = within(section)
+        .getAllByRole('listitem')
+        .find((item) => item.textContent?.includes(name));
+      expect(row).toBeDefined();
+      expect(within(row!).getByText('$750')).toBeInTheDocument();
+    }
+
+    await user.click(huaCheckbox);
+    for (const name of ['我', '小明', '小華']) {
+      const row = within(section)
+        .getAllByRole('listitem')
+        .find((item) => item.textContent?.includes(name));
+      expect(row).toBeDefined();
+      expect(within(row!).getByText('$500')).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    expect(request.body).toMatchObject({
+      ledgerSplit: {
+        shares: [
+          { personId: 'person-me' },
+          { personId: 'person-ming' },
+          { personId: 'person-hua' },
+        ],
+      },
+    });
+
+    await user.type(screen.getByLabelText('金額'), '100');
+    for (const name of ['我', '小明', '小華']) {
+      await user.click(within(section).getByRole('checkbox', { name }));
+    }
+    expect(screen.getByRole('button', { name: /^新增$/ })).toBeDisabled();
+  });
+
+  it('SC-W90 creates a typed payer first, then POSTs its returned id on the transaction', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    await screen.findByLabelText('帳戶', {}, WAIT);
+    await user.type(screen.getByLabelText('金額'), '500');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    await user.type(screen.getByRole('combobox', { name: '付款人' }), '新客人');
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const peopleRequest = await requestDetails('POST', '/ledgers/ledger-shared/people');
+    const transactionRequest = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(peopleRequest.path.endsWith('/ledgers/ledger-shared/people')).toBe(true);
+    expect(peopleRequest.method).toBe('POST');
+    expect(peopleRequest.body).toEqual({ name: '新客人' });
+    const peopleCallIndex = fetchMock.mock.calls.findIndex(
+      ([url, init]) => url.endsWith('/ledgers/ledger-shared/people') && init?.method === 'POST',
+    );
+    const transactionCallIndex = fetchMock.mock.calls.findIndex(
+      ([url, init]) =>
+        url.endsWith('/ledgers/ledger-shared/transactions') && init?.method === 'POST',
+    );
+    expect(peopleCallIndex).toBeGreaterThanOrEqual(0);
+    expect(transactionCallIndex).toBeGreaterThan(peopleCallIndex);
+    expect(transactionRequest.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(transactionRequest.method).toBe('POST');
+    expect(transactionRequest.body).toMatchObject({
+      payerPersonId: 'created-新客人',
+      ledgerSplit: { method: 'EQUAL' },
+    });
+    const submittedSplit = transactionRequest.body.ledgerSplit as { shares?: unknown[] };
+    expect(Array.isArray(submittedSplit.shares)).toBe(true);
+  });
+
+  it('SC-W91 opens a legacy shared transaction with no split and PATCHes current members only', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm(sharedTransaction({ ledgerSplit: null }));
+    await waitForSharedPeople();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    const toggle = within(section).getByRole('checkbox', { name: '分帳' });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    expect(within(section).getByRole('checkbox', { name: '我' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '小明' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '小華' })).toBeChecked();
+    expect(within(section).getByRole('checkbox', { name: '阿美' })).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails('PATCH', '/ledgers/ledger-shared/transactions/txn-shared');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions/txn-shared')).toBe(true);
+    expect(request.method).toBe('PATCH');
+    expect(request.body).toMatchObject({
+      payerPersonId: 'person-me',
+      ledgerSplit: {
+        method: 'EQUAL',
+        shares: [
+          { personId: 'person-me' },
+          { personId: 'person-ming' },
+          { personId: 'person-hua' },
+        ],
+      },
+    });
+  });
+
+  it('SC-W91 PATCHes ledgerSplit null when an existing shared split is switched off', async () => {
+    const existingSplit = {
+      method: 'EQUAL' as const,
+      precision: 'CENT' as const,
+      shares: sharedPeople.slice(0, 3).map((person) => ({ person, share: 50000, ratio: null })),
+    };
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({ ledgerSplit: existingSplit, payer: sharedPeople[1]!, account: null }),
+    );
+    await waitForSharedPeople();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    expect(screen.getByRole('combobox', { name: '付款人' })).toHaveValue('小明');
+    await screen.findByRole('checkbox', { name: '小明' }, WAIT);
+    const toggle = within(section).getByRole('checkbox', { name: '分帳' });
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails('PATCH', '/ledgers/ledger-shared/transactions/txn-shared');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions/txn-shared')).toBe(true);
+    expect(request.method).toBe('PATCH');
+    expect(request.body).toMatchObject({ payerPersonId: 'person-ming', ledgerSplit: null });
+  });
+
+  it('SC-W99 keeps a LEFT person unmarked in both lists and can POST them as payer and share', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    await user.type(screen.getByLabelText('金額'), '1500');
+    await selectFoodCategory(user);
+    const leftCheckbox = within(section).getByRole('checkbox', { name: '小安' });
+    expect(leftCheckbox).not.toBeChecked();
+    expect(section).not.toHaveTextContent('已離開');
+    await user.click(leftCheckbox);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    await user.click(payer);
+    await user.click(await screen.findByRole('option', { name: '小安' }, WAIT));
+    expect(screen.queryByText('已離開')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    expect(request.body).toMatchObject({
+      payerPersonId: 'person-left',
+    });
+    const submittedSplit = request.body.ledgerSplit as { shares?: { personId: string }[] };
+    expect(submittedSplit.shares?.map((share) => share.personId)).toContain('person-left');
+  });
+
+  it('PATCHes my person id and a newly selected account when another payer changes back to me', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({ payer: sharedPeople[1]!, account: null, ledgerSplit: null }),
+    );
+    await waitForSharedPeople();
+
+    await user.click(screen.getByRole('button', { name: '改為選帳戶' }));
+    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails('PATCH', '/ledgers/ledger-shared/transactions/txn-shared');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions/txn-shared')).toBe(true);
+    expect(request.method).toBe('PATCH');
+    expect(request.body).toMatchObject({ payerPersonId: 'person-me', accountId: 'acc-2' });
   });
 });
