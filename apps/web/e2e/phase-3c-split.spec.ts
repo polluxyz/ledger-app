@@ -1,20 +1,17 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import {
-  addMember,
   createCounterparty,
-  createLedger,
   linkByEmail,
   listAccounts,
   listCategories,
   personalLedger,
 } from './api';
-import { expect, test, USER_B_EMAIL } from './fixtures';
+import { expect, test } from './fixtures';
 import {
   newTransactionForm,
   openNewTransaction,
   openTransactions,
   selectCategory,
-  switchLedger,
   transactionRow,
 } from './ui';
 
@@ -44,26 +41,20 @@ test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份',
   openAs,
   request,
 }) => {
-  const ledger = await createLedger(request, userA.token, {
-    name: '晚餐分帳',
-    kind: 'SHARED',
-  });
-  await addMember(request, userA.token, ledger.id, { email: USER_B_EMAIL, role: 'EDITOR' });
+  const ledger = await personalLedger(request, userA.token);
   const linkedCounterparty = await linkByEmail(request, userA, userB);
   await createCounterparty(request, userA.token, '小華');
   const category = (await listCategories(request, userA.token, ledger.id)).find(
     (item) => item.type === 'EXPENSE',
   )!;
   const bCashBefore = await cash(request, userB.token);
-  // 乙把自己那份記進自己的個人帳本：乙也是共享帳本的成員，在那本帳本會看到甲的每一筆交易
-  // （spec 3c SC-S16），名稱都是「晚餐」，分不出哪一筆是自己的。
+  // 3e W109：共享帳本的新交易不再提供 3c 對象分帳；乙接受後仍把自己那份記進個人帳本。
   const bPersonal = await personalLedger(request, userB.token);
   const bCategory = (await listCategories(request, userB.token, bPersonal.id)).find(
     (item) => item.type === 'EXPENSE',
   )!;
 
   await pageA.reload();
-  await switchLedger(pageA, ledger.name);
   await openTransactions(pageA);
   await openNewTransaction(pageA);
   const form = newTransactionForm(pageA);
@@ -83,7 +74,6 @@ test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份',
   await expect(aRow).toContainText('分帳');
 
   const pageB = await openAs(userB);
-  await switchLedger(pageB, ledger.name);
   const proposal = pendingRow(pageB, '晚餐');
   await expect(proposal).toContainText('幫你付');
   await proposal.getByRole('button', { name: '接受' }).click();
@@ -95,7 +85,6 @@ test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份',
   await proposal.getByLabel('分類').selectOption(bCategory.id);
   await proposal.getByRole('button', { name: '接受' }).click();
 
-  await switchLedger(pageB, bPersonal.name);
   await openTransactions(pageB);
   const bRow = transactionRow(pageB, '晚餐');
   await expect(bRow).toBeVisible();
