@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { LedgerSummary, Transaction } from '@ledger/shared';
+import type { Cents, LedgerSummary, Transaction } from '@ledger/shared';
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
@@ -10,6 +10,8 @@ import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
 import { SplitEditPanel } from './SplitEditPanel';
 import { getTransactionLabel } from './transaction-label';
+import { FillAccountForm } from '../settlements/FillAccountForm';
+import { SettlementForm } from '../settlements/SettlementForm';
 import styles from './TransactionWorkbench.module.css';
 
 /**
@@ -19,12 +21,24 @@ import styles from './TransactionWorkbench.module.css';
  * - `transaction`：編輯一筆一般交易。
  * - `counterparty`：檢視對象的往來帳與紀錄。
  * - `debtTransaction`：編輯一筆往來紀錄產生的交易。
+ * - `settlement`：共享帳本的結清表單（3e W116～W121）。帶 `settlement`＝編輯那一筆結清
+ *   （`transaction.settlement` 有值的交易）；帶 `prefill`＝從結清建議打開；兩者都沒有＝空白新增。
+ * - `fillAccount`：補帳戶（3e W125），只有一個帳戶下拉。交易本身是一般交易或結清皆可。
  */
 export type PanelTarget =
   | { kind: 'new'; debtCounterparty?: string }
   | { kind: 'transaction'; transaction: Transaction }
   | { kind: 'counterparty'; counterpartyId: string }
-  | { kind: 'debtTransaction'; transaction: Transaction };
+  | { kind: 'debtTransaction'; transaction: Transaction }
+  | { kind: 'settlement'; settlement?: Transaction; prefill?: SettlementPrefill }
+  | { kind: 'fillAccount'; transaction: Transaction };
+
+/** 從結清建議打開結清表單時預填的值（W119）。金額是分。 */
+export interface SettlementPrefill {
+  fromPersonId: string;
+  toPersonId: string;
+  amount: Cents;
+}
 
 export interface TransactionWorkbenchProps {
   ledger: LedgerSummary;
@@ -152,6 +166,33 @@ export function TransactionWorkbench({
             paired={activeTarget.transaction.debt.paired}
             displayName={activeTarget.transaction.debt.counterpartyName}
             onClose={handleClose}
+          />
+        </Dialog>
+      )}
+      {activeTarget.kind === 'settlement' && (
+        <Dialog open={true} title="結清" variant="panel" onClose={handleClose}>
+          <SettlementForm
+            key={
+              activeTarget.settlement?.id ??
+              (activeTarget.prefill
+                ? `${activeTarget.prefill.fromPersonId}-${activeTarget.prefill.toPersonId}-${activeTarget.prefill.amount}`
+                : 'new')
+            }
+            ledger={ledger}
+            transaction={activeTarget.settlement}
+            prefill={activeTarget.prefill}
+            onSaved={handleClose}
+            onDeleted={handleClose}
+          />
+        </Dialog>
+      )}
+      {activeTarget.kind === 'fillAccount' && (
+        <Dialog open={true} title="補帳戶" variant="panel" onClose={handleClose}>
+          <FillAccountForm
+            key={activeTarget.transaction.id}
+            ledger={ledger}
+            transaction={activeTarget.transaction}
+            onSaved={handleClose}
           />
         </Dialog>
       )}

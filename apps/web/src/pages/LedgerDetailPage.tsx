@@ -15,6 +15,7 @@ import { MemberList } from '../features/ledgers/MemberList';
 import { ROLE_LABEL } from '../features/ledgers/role-labels';
 import { useArchiveLedger, useDeleteLedger, useLedger } from '../features/ledgers/use-ledgers';
 import { useRemoveMember, useUpdateMemberRole } from '../features/ledgers/use-members';
+import { GuestList } from '../features/ledger-people/GuestList';
 import { ApiError } from '../lib/api-client';
 import { formatDate } from '../lib/format';
 import styles from './LedgerDetailPage.module.css';
@@ -269,6 +270,13 @@ function LedgerDetailView({
         onRemove={setRemoving}
         onLeave={setRemoving}
       />
+
+      {ledger.kind === 'SHARED' && (
+        <GuestList
+          ledgerId={ledger.id}
+          canManage={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
+        />
+      )}
 
       {/* 已封存的帳本沒有東西好封存，後端也不接受刪除，整個區塊就不畫。 */}
       {isOwner && !isArchived && (

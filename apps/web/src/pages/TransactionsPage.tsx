@@ -13,6 +13,7 @@ import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
+import { SettlementView } from '../features/settlements/SettlementView';
 import {
   TransactionFilterDrawer,
   TransactionFilterToggle,
@@ -71,7 +72,7 @@ export default function TransactionsPage() {
  * 檢視切換的兩個值。狀態放在網址查詢參數（`?view=debts`）：重整後停在同一個
  * 檢視，也能直接把借還檢視的網址分享出去（spec 4.2、SC-W9）。
  */
-type TransactionsView = 'details' | 'debts';
+type TransactionsView = 'details' | 'debts' | 'settle';
 
 /**
  * 一本帳本的交易列表。
@@ -92,15 +93,28 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
   const [searchParams, setSearchParams] = useSearchParams();
-  const view: TransactionsView = searchParams.get('view') === 'debts' ? 'debts' : 'details';
+  const requestedView = searchParams.get('view');
+  const view: TransactionsView =
+    requestedView === 'debts'
+      ? 'debts'
+      : ledger.kind === 'SHARED' && requestedView === 'settle'
+        ? 'settle'
+        : 'details';
 
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
 
+  // 個人帳本沒有結清檢視；直接進入舊連結時移除無效參數，回到明細。
+  useEffect(() => {
+    if (ledger.kind === 'PERSONAL' && requestedView === 'settle') {
+      setSearchParams({}, { replace: true, state: { keepRightPanel: true } });
+    }
+  }, [ledger.kind, requestedView, setSearchParams]);
+
   /** 切換檢視寫回網址；「明細」時清掉參數，回到乾淨的 /transactions。 */
   function switchView(next: TransactionsView) {
-    setSearchParams(next === 'debts' ? { view: 'debts' } : {}, { state: { keepRightPanel: true } });
+    setSearchParams(next === 'details' ? {} : { view: next }, { state: { keepRightPanel: true } });
   }
 
   /**
@@ -113,7 +127,17 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   }
 
   function startEditing(transaction: Transaction) {
+    if (transaction.settlement) {
+      setPanelTarget({ kind: 'settlement', settlement: transaction });
+      open();
+      return;
+    }
     setPanelTarget({ kind: 'transaction', transaction });
+    open();
+  }
+
+  function fillAccount(transaction: Transaction) {
+    setPanelTarget({ kind: 'fillAccount', transaction });
     open();
   }
 
@@ -174,6 +198,30 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     requestFocus();
   }
 
+  /** 結清檢視的主按鈕開一張空白結清表單。 */
+  function startAddingSettlement() {
+    setPanelTarget({ kind: 'settlement' });
+    open();
+  }
+
+  function openSuggestedSettlement(
+    prefill: NonNullable<Extract<PanelTarget, { kind: 'settlement' }>['prefill']>,
+  ) {
+    setPanelTarget({ kind: 'settlement', prefill });
+    open();
+  }
+
+  const selectedTransactionId =
+    isOpen && panelTarget.kind === 'transaction'
+      ? panelTarget.transaction.id
+      : isOpen && panelTarget.kind === 'debtTransaction'
+        ? panelTarget.transaction.id
+        : isOpen && panelTarget.kind === 'fillAccount'
+          ? panelTarget.transaction.id
+          : isOpen && panelTarget.kind === 'settlement'
+            ? (panelTarget.settlement?.id ?? null)
+            : null;
+
   return (
     <>
       {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
@@ -181,10 +229,20 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         <LedgerSwitcher />
       </PageToolbarStart>
       <PageToolbarActions>
-        <Button onClick={startAdding}>
-          <Icon name="plus" />
-          新增交易
-        </Button>
+        {view === 'settle' ? (
+          ledger.role !== 'VIEWER' &&
+          ledger.archivedAt === null && (
+            <Button onClick={startAddingSettlement}>
+              <Icon name="plus" />
+              新增結清
+            </Button>
+          )
+        ) : (
+          <Button onClick={startAdding}>
+            <Icon name="plus" />
+            新增交易
+          </Button>
+        )}
       </PageToolbarActions>
 
       <PageContent>
@@ -194,7 +252,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
           「明細／借還」的檢視切換（spec 4.2）。狀態在網址上，這裡只反映目前值。
           借還也是交易（錢進出帳戶），所以它住在交易頁，側欄不加項目（決策 W1）。
         */}
-        {/* 檢視切換與漏斗同一列（3d T6）：漏斗只在明細時出現，借還沒有這組篩選。 */}
+        {/* 檢視切換與漏斗同一列（3d T6）：漏斗只在明細時出現。 */}
         <div className={styles.toolbarRow}>
           <div className={styles.viewSwitch} role="group" aria-label="檢視">
             <button
@@ -213,8 +271,18 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
             >
               借還
             </button>
+            {ledger.kind === 'SHARED' && (
+              <button
+                type="button"
+                className={styles.viewSwitchButton}
+                aria-pressed={view === 'settle'}
+                onClick={() => switchView('settle')}
+              >
+                結清
+              </button>
+            )}
           </div>
-          {view !== 'debts' && (
+          {view === 'details' && (
             <TransactionFilterToggle
               filters={filters}
               expanded={filtersOpen}
@@ -227,6 +295,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         {view === 'debts' ? (
           // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
           <DebtsView onSelectCounterparty={openCounterparty} />
+        ) : view === 'settle' ? (
+          <SettlementView ledger={ledger} onSettle={openSuggestedSettlement} />
         ) : (
           // 篩選是獨立的一張卡片，列表與分頁收在下面那一張。
           <>
@@ -246,14 +316,10 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
                 isFiltered={hasAnyFilter(filters)}
                 onEdit={startEditing}
                 onEditDebtTransaction={startEditingDebtTransaction}
+                onFillAccount={fillAccount}
                 // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
                 // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
-                selectedId={
-                  isOpen &&
-                  (panelTarget.kind === 'transaction' || panelTarget.kind === 'debtTransaction')
-                    ? panelTarget.transaction.id
-                    : null
-                }
+                selectedId={selectedTransactionId}
               />
 
               <Pagination

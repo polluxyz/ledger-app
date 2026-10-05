@@ -491,4 +491,105 @@ describe('Transactions page', () => {
     expect(panel).toHaveAttribute('data-open');
     expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
   });
+
+  it('shows the settle view only for a shared ledger and opens a suggested settlement', async () => {
+    const sharedLedger = { ...ledger, kind: 'SHARED', role: 'EDITOR' };
+    const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
+    const min = { id: 'person-min', name: '小明', userId: 'user-2', status: 'MEMBER' };
+    const sharedPeople = [me, min];
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
+      if (url.endsWith('/ledgers/ledger-1/people')) return json(sharedPeople);
+      if (url.endsWith('/ledgers/ledger-1/settlement-summary')) {
+        return json({
+          people: [
+            { person: me, net: 205000 },
+            { person: min, net: -205000 },
+          ],
+          suggestions: [{ fromPersonId: min.id, toPersonId: me.id, amount: 205000 }],
+        });
+      }
+      if (url.includes('/transactions')) {
+        return json({ items: [lunch], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) return json([expenseCategory]);
+      if (url.includes('/accounts')) return json([account]);
+      return json([sharedLedger]);
+    });
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const viewSwitch = await page().findByRole('group', { name: '檢視' }, WAIT);
+    expect(within(viewSwitch).getAllByRole('button')).toHaveLength(3);
+    await user.click(within(viewSwitch).getByRole('button', { name: '結清' }));
+
+    expect(window.location.search).toBe('?view=settle');
+    expect(await screen.findByRole('heading', { name: '淨額' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '篩選' })).not.toBeInTheDocument();
+    expect(page().getByRole('button', { name: '新增結清' })).toBeInTheDocument();
+
+    const suggestions = screen.getByRole('region', { name: '建議' });
+    await user.click(within(suggestions).getByRole('button', { name: '結清' }));
+    const form = await screen.findByRole('dialog', { name: '結清' }, WAIT);
+    expect(within(form).getByLabelText('付錢的人')).toHaveValue(min.id);
+    expect(within(form).getByLabelText('收錢的人')).toHaveValue(me.id);
+    expect(within(form).getByLabelText('金額')).toHaveValue(2050);
+  });
+
+  it('returns a personal ledger from ?view=settle to the two-tab details view', async () => {
+    window.history.pushState({}, '', '/transactions?view=settle');
+    render(<App />);
+
+    const viewSwitch = await page().findByRole('group', { name: '檢視' }, WAIT);
+    expect(within(viewSwitch).getAllByRole('button')).toHaveLength(2);
+    expect(await screen.findByText('午餐', undefined, WAIT)).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(''), WAIT);
+    expect(screen.getByRole('button', { name: '篩選' })).toBeInTheDocument();
+  });
+
+  it('keeps the settle view for viewers while hiding settlement actions', async () => {
+    const viewerLedger = { ...ledger, kind: 'SHARED', role: 'VIEWER' };
+    const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
+    const min = { id: 'person-min', name: '小明', userId: 'user-2', status: 'MEMBER' };
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
+      if (url.endsWith('/ledgers/ledger-1/settlement-summary')) {
+        return json({
+          people: [
+            { person: me, net: 1000 },
+            { person: min, net: -1000 },
+          ],
+          suggestions: [{ fromPersonId: min.id, toPersonId: me.id, amount: 1000 }],
+        });
+      }
+      if (url.includes('/transactions')) {
+        return json({ items: [lunch], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) return json([expenseCategory]);
+      if (url.includes('/accounts')) return json([account]);
+      return json([viewerLedger]);
+    });
+    window.history.pushState({}, '', '/transactions?view=settle');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '淨額' }, WAIT)).toBeInTheDocument();
+    expect(page().queryByRole('button', { name: '新增結清' })).not.toBeInTheDocument();
+    const suggestions = screen.getByRole('region', { name: '建議' });
+    expect(within(suggestions).queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
+  });
 });

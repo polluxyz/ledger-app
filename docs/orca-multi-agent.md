@@ -70,7 +70,7 @@ Constraints 每次都寫這六條：
 
 協調者在派工前做兩件事，不靠 worker 記得：
 
-1. 會碰 Prisma 的 worker，它 worktree 裡的 `apps/api/.env` 與 `apps/api/.env.test` 都改成指向它專屬的測試資料庫（`ledger_test_<名稱>`，先 `create database`）。這樣 worker 弄錯環境變數也碰不到 `ledger_dev`。
+1. 會碰 Prisma 的 worker，它 worktree 裡的 `apps/api/.env` 與 `apps/api/.env.test` 都改成指向它專屬的測試資料庫（`ledger_<名稱>_test`，先 `create database`）。名稱一定要以 `_test` 結尾：Web e2e 的 global setup 只肯清空這種資料庫，`ledger_test_<名稱>` 會被拒絕（3e 畫面踩過）。這樣 worker 弄錯環境變數也碰不到 `ledger_dev`。
 2. API e2e 用 supertest 在行程內跑、不佔 port，所以各用各的資料庫就能同時跑。Web 的 Playwright 仍然一次只能一個。
 
 - 只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`，不要跑根目錄的 `pnpm format`。平行時會改到別人的檔案。

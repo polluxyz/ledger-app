@@ -2,12 +2,10 @@ import { useState } from 'react';
 import {
   SPLIT_RATIO_TOTAL,
   centsToInput,
-  computeSplitShares,
-  fillRemainingShares,
+  computeSharesByKey,
   parseMoneyInput,
   type SplitMethod,
   type SplitPrecision,
-  type SplitParticipantInput,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { DebtArrow } from '../../components/DebtArrow';
@@ -15,7 +13,7 @@ import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatMoney } from '../../lib/format';
 import type { SplitParticipantDraft } from './split-form';
-import { splitPreviewCounterpartyId } from './split-form';
+import { fillRemainingSharesByKey } from './split-form';
 import styles from './SplitOptionsView.module.css';
 
 const METHODS: Array<{ value: SplitMethod; label: string }> = [
@@ -27,7 +25,11 @@ const METHODS: Array<{ value: SplitMethod; label: string }> = [
 interface SplitOptionsViewProps {
   total: number | null;
   type: 'EXPENSE' | 'INCOME';
-  payerCounterpartyId: string | null;
+  /** 3c 相容介面；新帳本表單傳入通用的 payerKey。 */
+  payerCounterpartyId?: string | null;
+  payerKey?: string | null;
+  /** 3c 付款人不在名單時的吸收者，3e 不使用這個 fallback。 */
+  fallbackKey?: string;
   payerName: string;
   method: SplitMethod;
   precision: SplitPrecision;
@@ -45,6 +47,8 @@ export function SplitOptionsView({
   total,
   type,
   payerCounterpartyId,
+  payerKey: suppliedPayerKey,
+  fallbackKey: suppliedFallbackKey,
   payerName,
   method: initialMethod,
   precision: initialPrecision,
@@ -58,17 +62,26 @@ export function SplitOptionsView({
     initialParticipants.map((person) => ({ ...person })),
   );
   const active = participants.filter((person) => person.included);
+  const me = participants.find((person) => person.isMe);
+  const payerKey =
+    suppliedPayerKey !== undefined
+      ? suppliedPayerKey
+      : payerCounterpartyId !== undefined
+        ? (payerCounterpartyId ?? me?.key ?? null)
+        : (me?.key ?? null);
+  const fallbackKey = suppliedFallbackKey ?? (suppliedPayerKey === undefined ? me?.key : undefined);
 
   const filled =
     method === 'EQUAL'
       ? null
-      : fillRemainingShares({
+      : fillRemainingSharesByKey({
           total: total ?? 0,
           method,
           precision,
-          payerCounterpartyId,
+          payerKey,
+          ...(fallbackKey === undefined ? {} : { fallbackKey }),
           participants: active.map((person) => ({
-            counterpartyId: splitPreviewCounterpartyId(person),
+            key: person.key,
             value:
               method === 'AMOUNT'
                 ? person.amountFixed
@@ -80,19 +93,19 @@ export function SplitOptionsView({
           })),
         });
 
-  const previewInput: SplitParticipantInput[] = active.map((person, index) => ({
-    counterpartyId: splitPreviewCounterpartyId(person),
-    ...(method === 'AMOUNT' && filled ? { amount: filled.values[index]! } : {}),
-    ...(method === 'RATIO' && filled ? { ratio: filled.values[index]! } : {}),
-  }));
   const preview =
     total !== null && total > 0
-      ? computeSplitShares({
+      ? computeSharesByKey({
           total,
           method,
           precision,
-          payerCounterpartyId,
-          participants: previewInput,
+          payerKey,
+          ...(fallbackKey === undefined ? {} : { fallbackKey }),
+          participants: active.map((person, index) => ({
+            key: person.key,
+            ...(method === 'AMOUNT' && filled ? { amount: filled.values[index]! } : {}),
+            ...(method === 'RATIO' && filled ? { ratio: filled.values[index]! } : {}),
+          })),
         })
       : { ok: false as const, error: 'SPLIT_PARTICIPANTS_INVALID' as const };
 
@@ -201,10 +214,7 @@ export function SplitOptionsView({
           const index = active.findIndex((candidate) => candidate.key === person.key);
           const share = preview.ok && index >= 0 ? preview.shares[index] : undefined;
           const value = filled?.values[index];
-          const isPayer =
-            payerCounterpartyId === null
-              ? person.isMe
-              : splitPreviewCounterpartyId(person) === payerCounterpartyId;
+          const isPayer = person.key === payerKey;
           return (
             <li className={styles.person} key={person.key}>
               <label className={styles.include}>
@@ -264,25 +274,29 @@ export function SplitOptionsView({
       {preview.ok && (
         <div className={styles.arrows}>
           {active.map((person, index) => {
-            const personId = splitPreviewCounterpartyId(person);
-            const isPayer = payerCounterpartyId !== null && personId === payerCounterpartyId;
-            if (isPayer || (payerCounterpartyId === null && person.isMe)) return null;
+            if (person.key === payerKey) return null;
             const amount = preview.shares[index]!;
             const personName = person.isMe ? '我' : person.name;
-            const creditor = payerCounterpartyId === null ? '我' : payerName;
+            const creditor = payerKey === null ? '我' : payerName;
             const from = type === 'EXPENSE' ? personName : creditor;
             const to = type === 'EXPENSE' ? creditor : personName;
+            const srText =
+              suppliedPayerKey === undefined
+                ? from === '我'
+                  ? `你欠${to} ${formatMoney(amount)}`
+                  : `${from}欠你 ${formatMoney(amount)}`
+                : from === '我'
+                  ? `你欠${to} ${formatMoney(amount)}`
+                  : to === '我'
+                    ? `${from}欠你 ${formatMoney(amount)}`
+                    : `${from}欠${to} ${formatMoney(amount)}`;
             return (
               <DebtArrow
                 key={`preview-${person.key}`}
                 from={from}
                 to={to}
                 amount={amount}
-                srText={
-                  from === '我'
-                    ? `你欠${to} ${formatMoney(amount)}`
-                    : `${from}欠你 ${formatMoney(amount)}`
-                }
+                srText={srText}
               />
             );
           })}

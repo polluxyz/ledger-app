@@ -8,6 +8,20 @@ import { ERROR_MESSAGES, toUserMessage } from './error-messages';
  * `components/FormError.test.tsx` 蓋住，這裡只驗純函式本身。
  */
 describe('toUserMessage', () => {
+  it('localizes every phase 3e error code with the specified wording', () => {
+    const messages = {
+      LEDGER_SPLIT_NOT_ALLOWED: '這筆交易不能分帳。',
+      LEDGER_PERSON_NOT_SELECTABLE: '這個人已經刪除，請重新選擇。',
+      LEDGER_PERSON_NAME_TAKEN: '這個名字已經有人用了。',
+      LEDGER_PERSON_IN_USE: '還有交易或結清用到這個人。',
+      ACCOUNT_NOT_PAYERS: '只能選自己的帳戶。',
+      SETTLEMENT_SAME_PERSON: '付錢和收錢的人要不同。',
+      SETTLEMENT_TRANSACTION_READ_ONLY: '請從結清修改或刪除。',
+    } as const;
+
+    expect(ERROR_MESSAGES).toMatchObject(messages);
+  });
+
   it('returns the localized message for a code the table covers', () => {
     const error = new ApiError(
       409,

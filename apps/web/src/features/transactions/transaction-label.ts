@@ -3,6 +3,7 @@ import { TRANSACTION_TYPE_LABELS } from '../../lib/format';
 
 /** 交易列與編輯面板共用的標籤，讓借還與代付名稱保持一致。 */
 export function getTransactionLabel(transaction: Transaction): string {
+  if (transaction.settlement) return '結清';
   if (transaction.debt) {
     const splitDebtLabel: Partial<Record<typeof transaction.debt.kind, string>> = {
       PAID_FOR_THEM: '代墊',

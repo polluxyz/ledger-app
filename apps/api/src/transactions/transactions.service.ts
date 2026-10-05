@@ -246,7 +246,8 @@ export class TransactionsService {
           tx,
           ledgerId,
           [payerId, ...(split?.shares.map((share) => share.personId) ?? [])],
-          { allowLeft: false },
+          // 已離開的成員跟非成員一樣可以被選（3e spec 修訂 2、決策 134）；已刪除的非成員照擋。
+          { allowLeft: true },
         );
         const payer = records.get(payerId)!;
         const accountId = await this.resolveAccount({
@@ -536,15 +537,12 @@ export class TransactionsService {
                 })),
               }
             : null;
-      const allowLeft = new Set<string>([
-        ...(saved?.shares.map((share) => share.personId) ?? []),
-        ...(!payerChanged && currentPayerId ? [currentPayerId] : []),
-      ]);
+      // 已離開的成員跟非成員一樣可以被選（3e spec 修訂 2、決策 134）；已刪除的非成員照擋。
       const records = await this.people.lockPeople(
         tx,
         ledgerId,
         [payerId, ...(split?.shares.map((share) => share.personId) ?? [])],
-        { allowLeft },
+        { allowLeft: true },
       );
       const accountId = await this.resolveAccount({
         tracksBalance,

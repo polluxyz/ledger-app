@@ -38,7 +38,7 @@
 /* 每列固定兩行 52px（3d 修訂 1；52px 讓 1440×900 首屏仍放得下 10 筆，SC-24.3）；只有分帳展開時才額外長出明細列。 */
 .row {
   display: grid;
-  grid-template-columns: 2.25rem minmax(0, 1fr) 7rem 1.75rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 7rem auto;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
@@ -135,6 +135,12 @@
   font-weight: 600;
 }
 
+.payer {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .details {
   grid-column: 1 / -1;
   display: flex;
@@ -187,9 +193,29 @@
 
 .actions {
   display: flex;
+  align-items: center;
   justify-content: center;
-  width: 1.75rem;
+  gap: var(--space-xs);
+  width: auto;
   min-width: 1.75rem;
+}
+
+.pendingButton {
+  flex: 0 0 auto;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-primary-soft);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pendingButton:hover {
+  background-color: var(--color-fill);
 }
 
 .action {

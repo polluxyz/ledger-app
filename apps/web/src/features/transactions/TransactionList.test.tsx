@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { TransactionList } from './TransactionList';
 import styles from './TransactionList.module.css';
 
+vi.mock('../auth/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'u1' } }),
+}));
+
 /**
  * 交易列的呈現契約（phase-3d T1、T5、T7、T8）。
  *
@@ -308,6 +312,125 @@ describe('TransactionList', () => {
     expect(within(listRow).getByText('我 $750')).toBeInTheDocument();
     await user.click(within(listRow).getByRole('button', { name: /^編輯/ }));
     expect(onEdit).toHaveBeenCalledWith(splitTransaction);
+  });
+
+  it('shows shared split totals, payer subtitle, and expense arrows from each other person', async () => {
+    const user = userEvent.setup();
+    const payer = { id: 'person-1', name: '小明', userId: 'u2', status: 'MEMBER' as const };
+    const transaction = makeTransaction({
+      id: 'ledger-split-expense',
+      amount: 300000,
+      payer,
+      ledgerSplit: {
+        method: 'EQUAL',
+        precision: 'CENT',
+        shares: [
+          { person: payer, share: 100000, ratio: null },
+          {
+            person: { id: 'person-2', name: 'Alice', userId: 'u1', status: 'MEMBER' },
+            share: 100000,
+            ratio: null,
+          },
+          {
+            person: { id: 'person-3', name: '小華', userId: null, status: 'GUEST' },
+            share: 100000,
+            ratio: null,
+          },
+        ],
+      },
+    });
+    renderList({ transactions: [transaction] });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText('-$3,000')).toBeInTheDocument();
+    expect(within(listRow).getByText('分帳')).toBeInTheDocument();
+    expect(within(listRow).getByText('小明付')).toBeInTheDocument();
+    await user.click(within(listRow).getByRole('button', { name: '展開分帳明細' }));
+    expect(within(listRow).getByText('我欠小明 $1,000')).toBeInTheDocument();
+    expect(within(listRow).getByText('小華欠小明 $1,000')).toBeInTheDocument();
+    expect(within(listRow).queryByText('小明欠小明 $1,000')).not.toBeInTheDocument();
+    expect(within(listRow).queryByText('我 $1,000')).not.toBeInTheDocument();
+  });
+
+  it('shows the other payer for income and reverses shared split arrows', async () => {
+    const user = userEvent.setup();
+    const payer = { id: 'person-1', name: '小明', userId: 'u2', status: 'MEMBER' as const };
+    const transaction = makeTransaction({
+      id: 'ledger-split-income',
+      type: 'INCOME',
+      amount: 200000,
+      category: { id: 'cat-salary', name: '退款', icon: null },
+      payer,
+      ledgerSplit: {
+        method: 'EQUAL',
+        precision: 'CENT',
+        shares: [
+          { person: payer, share: 100000, ratio: null },
+          {
+            person: { id: 'person-2', name: 'Alice', userId: 'u1', status: 'MEMBER' },
+            share: 100000,
+            ratio: null,
+          },
+        ],
+      },
+    });
+    renderList({ transactions: [transaction] });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText('小明收')).toBeInTheDocument();
+    await user.click(within(listRow).getByRole('button', { name: '展開分帳明細' }));
+    expect(within(listRow).getByText('小明欠我 $1,000')).toBeInTheDocument();
+  });
+
+  it('shows another payer without making a non-split row expandable', () => {
+    const transaction = makeTransaction({
+      id: 'other-payer',
+      payer: { id: 'person-1', name: '小明', userId: 'u2', status: 'MEMBER' },
+    });
+    renderList({ transactions: [transaction] });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText('小明付')).toBeInTheDocument();
+    expect(within(listRow).queryByText('分帳')).not.toBeInTheDocument();
+    expect(within(listRow).queryByRole('button', { name: /展開分帳明細/ })).not.toBeInTheDocument();
+  });
+
+  it('renders settlement direction without an arrow amount and uses an unsigned total', () => {
+    const transaction = makeTransaction({
+      id: 'settlement-1',
+      type: 'TRANSFER',
+      amount: 205000,
+      category: null,
+      settlement: {
+        id: 'settle-1',
+        from: { id: 'person-2', name: '小華', userId: 'u2', status: 'MEMBER' },
+        to: { id: 'person-1', name: 'Alice', userId: 'u1', status: 'MEMBER' },
+      },
+    });
+    renderList({ transactions: [transaction] });
+
+    const listRow = row(0);
+    expect(within(listRow).getByText('$2,050')).toBeInTheDocument();
+    expect(within(listRow).queryByText('-$2,050')).not.toBeInTheDocument();
+    expect(within(listRow).queryByText('+$2,050')).not.toBeInTheDocument();
+    expect(listRow.querySelector('[class*="title"]')).toHaveTextContent('小華');
+    expect(listRow.querySelector('[class*="title"]')).toHaveTextContent('我');
+    expect(
+      within(listRow).queryByText('$2,050', { selector: '[class*="track"] *' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('calls account fill without opening edit from the pending label', async () => {
+    const user = userEvent.setup();
+    const transaction = makeTransaction({ id: 'pending-account', accountPending: true });
+    const onEdit = vi.fn();
+    const onFillAccount = vi.fn();
+    renderList({ transactions: [transaction], onEdit, onFillAccount });
+
+    await user.click(screen.getByRole('button', { name: '待補' }));
+
+    expect(onFillAccount).toHaveBeenCalledWith(transaction);
+    expect(onEdit).not.toHaveBeenCalled();
   });
 
   describe('entries linked to a counterparty', () => {

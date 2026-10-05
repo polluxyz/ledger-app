@@ -38,6 +38,15 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   LEDGER_ARCHIVED: '這本帳本已封存，只能查看，不能再修改。',
   LEDGER_HAS_OTHERS_TRANSACTIONS: '這本帳本還有其他成員記的交易，不能刪除。請改用封存。',
 
+  // ── 共享帳本分帳與結清 ────────────────────────────────────────────────────
+  LEDGER_SPLIT_NOT_ALLOWED: '這筆交易不能分帳。',
+  LEDGER_PERSON_NOT_SELECTABLE: '這個人已經刪除，請重新選擇。',
+  LEDGER_PERSON_NAME_TAKEN: '這個名字已經有人用了。',
+  LEDGER_PERSON_IN_USE: '還有交易或結清用到這個人。',
+  ACCOUNT_NOT_PAYERS: '只能選自己的帳戶。',
+  SETTLEMENT_SAME_PERSON: '付錢和收錢的人要不同。',
+  SETTLEMENT_TRANSACTION_READ_ONLY: '請從結清修改或刪除。',
+
   // ── 分類 ──────────────────────────────────────────────────────────────────
   CATEGORY_NAME_TAKEN: '這個名稱已經有同型別的分類在用了，換一個名稱。',
   CATEGORY_IN_USE: '這個分類已經有交易在用，不能刪除。可以改名，或先改那些交易的分類。',

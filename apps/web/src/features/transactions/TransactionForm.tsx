@@ -1,16 +1,19 @@
-import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import {
   centsToInput,
   computeSplitShares,
+  computeSharesByKey,
   fillRemainingShares,
   isDebtTransactionType,
   parseMoneyInput,
   type Category,
   type CategoryType,
+  type CreateTransactionRequest,
   type CreateSplitRequest,
   type Counterparty,
+  type LedgerPerson,
   type LedgerSummary,
   type ManualTransactionType,
   type Split,
@@ -30,13 +33,26 @@ import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatMoney, toDateInputValue } from '../../lib/format';
 import { useAccounts } from '../accounts/use-accounts';
+import { useCurrentUser } from '../auth/use-current-user';
 import { useCategories } from '../categories/use-categories';
 import { DebtEntryForm } from '../debts/DebtEntryForm';
 import { useCreateCounterparty } from '../debts/use-debts';
+import { useCreateLedgerPerson, useLedgerPeople } from '../ledger-people/use-ledger-people';
+import {
+  createDefaultLedgerSplitPeople,
+  restoreLedgerSplitPeople,
+  toLedgerSplitInput,
+} from './ledger-split-form';
 import { PaymentRow } from './PaymentRow';
+import { LedgerSplitSection } from './LedgerSplitSection';
 import { SplitOptionsView } from './SplitOptionsView';
 import { SplitSection } from './SplitSection';
-import { type SplitParticipantDraft, splitPreviewCounterpartyId } from './split-form';
+import {
+  fillRemainingSharesByKey,
+  SPLIT_ME_KEY,
+  type SplitParticipantDraft,
+  splitPreviewCounterpartyId,
+} from './split-form';
 import { useCreateSplit, useDeleteSplit, useUpdateSplit } from './use-splits';
 import {
   useCreateTransaction,
@@ -174,7 +190,61 @@ interface TransactionFormProps {
  * 不能進編輯表單（後端 409 `DEBT_TRANSACTION_READ_ONLY`），所以那一格只在
  * 新增模式出現。
  */
-export function TransactionForm({
+export function TransactionForm({ ledger, transaction, split, ...props }: TransactionFormProps) {
+  const hasLegacySplit = split !== undefined || transaction?.split != null;
+  if (ledger.kind === 'SHARED' && !hasLegacySplit) {
+    return (
+      <SharedLedgerTransactionForm
+        ledger={ledger}
+        transaction={transaction}
+        split={split}
+        {...props}
+      />
+    );
+  }
+
+  return (
+    <TransactionFormContent
+      ledger={ledger}
+      transaction={transaction}
+      split={split}
+      isSharedLedger={false}
+      sharedPeople={undefined}
+      sharedCurrentUserId={null}
+      sharedLoadPending={false}
+      createLedgerPerson={undefined}
+      {...props}
+    />
+  );
+}
+
+interface TransactionFormContentProps extends TransactionFormProps {
+  isSharedLedger: boolean;
+  sharedPeople: LedgerPerson[] | undefined;
+  sharedCurrentUserId: string | null;
+  sharedLoadPending: boolean;
+  createLedgerPerson: ReturnType<typeof useCreateLedgerPerson> | undefined;
+}
+
+/** 共享帳本才查詢自己與帳本名單，讓個人帳本不新增請求也不改表單路徑。 */
+function SharedLedgerTransactionForm(props: TransactionFormProps) {
+  const currentUser = useCurrentUser();
+  const ledgerPeople = useLedgerPeople(props.ledger.id);
+  const createLedgerPerson = useCreateLedgerPerson(props.ledger.id);
+
+  return (
+    <TransactionFormContent
+      {...props}
+      isSharedLedger
+      sharedPeople={ledgerPeople.data}
+      sharedCurrentUserId={currentUser.data?.id ?? null}
+      sharedLoadPending={ledgerPeople.isLoading || currentUser.isLoading}
+      createLedgerPerson={createLedgerPerson}
+    />
+  );
+}
+
+function TransactionFormContent({
   ledger,
   transaction,
   split,
@@ -182,7 +252,12 @@ export function TransactionForm({
   onCancel,
   amountFieldId,
   initialDebtCounterparty,
-}: TransactionFormProps) {
+  isSharedLedger,
+  sharedPeople,
+  sharedCurrentUserId,
+  sharedLoadPending,
+  createLedgerPerson,
+}: TransactionFormContentProps) {
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined || split !== undefined;
 
@@ -224,25 +299,43 @@ export function TransactionForm({
     split?.category.id ?? transaction?.category?.id ?? '',
   );
   const [accountId, setAccountId] = useState(split?.account?.id ?? transaction?.account?.id ?? '');
+  const [sharedPayerPersonId, setSharedPayerPersonId] = useState<string | null>(
+    transaction?.payer?.id ?? null,
+  );
+  const [sharedPayerChanged, setSharedPayerChanged] = useState(false);
   const [toAccountId, setToAccountId] = useState(transaction?.toAccount?.id ?? '');
   const [title, setTitle] = useState(split?.title ?? transaction?.title ?? '');
   const [note, setNote] = useState(split?.note ?? transaction?.note ?? '');
   const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
-    split?.payer ? 'counterparty' : ledger.tracksBalance ? 'account' : 'self',
+    split?.payer || (isSharedLedger && transaction?.payer)
+      ? 'counterparty'
+      : ledger.tracksBalance
+        ? 'account'
+        : 'self',
   );
-  const [payerName, setPayerName] = useState(split?.payer?.name ?? '');
+  const [payerName, setPayerName] = useState(
+    split?.payer?.name ?? (isSharedLedger ? transaction?.payer?.name : undefined) ?? '',
+  );
   const [selectedPayer, setSelectedPayer] = useState<{
     counterpartyId: string;
     name: string;
   } | null>(split?.payer ?? null);
-  const [splitEnabled, setSplitEnabled] = useState(split !== undefined);
+  const [splitEnabled, setSplitEnabled] = useState(() =>
+    isSharedLedger
+      ? transaction === undefined && split === undefined
+        ? true
+        : transaction?.ledgerSplit != null
+      : split !== undefined,
+  );
   const [splitMethod, setSplitMethod] = useState<SplitMethod>(split?.method ?? 'EQUAL');
   const [splitPrecision, setSplitPrecision] = useState<SplitPrecision>(split?.precision ?? 'CENT');
   const [participants, setParticipants] = useState<SplitParticipantDraft[]>(() =>
     split
       ? withMeRow(
           split.participants.map((person, index) => ({
-            key: `participant-${index}`,
+            key:
+              person.counterpartyId ??
+              (person.name === null ? SPLIT_ME_KEY : `new:${person.name || index}`),
             counterpartyId: person.counterpartyId,
             name: person.counterpartyId === null ? '我' : (person.name ?? ''),
             isMe: person.counterpartyId === null,
@@ -257,13 +350,17 @@ export function TransactionForm({
         )
       : [makeMeParticipant()],
   );
+  const [ledgerSplitParticipants, setLedgerSplitParticipants] = useState<SplitParticipantDraft[]>(
+    [],
+  );
+  const [ledgerSplitReady, setLedgerSplitReady] = useState(!isSharedLedger);
   const [splitOptionsOpen, setSplitOptionsOpen] = useState(false);
   const [deleteSplitOpen, setDeleteSplitOpen] = useState(false);
   const [deleteTransactionOpen, setDeleteTransactionOpen] = useState(false);
   const [splitEditWarningOpen, setSplitEditWarningOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
   const [resolvingNames, setResolvingNames] = useState(false);
-  const participantSequence = useRef(0);
+  const ledgerSplitInitKey = useRef('');
 
   /**
    * 「借還」分頁選中時，交易欄位整個不渲染、改渲染 `DebtEntryForm`。對交易
@@ -287,9 +384,34 @@ export function TransactionForm({
   const createSplit = useCreateSplit();
   const updateSplit = useUpdateSplit();
   const deleteSplit = useDeleteSplit();
+  const ledgerPeople = sharedPeople ?? [];
+  const mePersonId =
+    ledgerPeople.find((person) => person.userId === sharedCurrentUserId)?.id ?? null;
+
+  useEffect(() => {
+    if (!isSharedLedger || sharedCurrentUserId === null || sharedPeople === undefined) return;
+    const nextInitKey = `${ledgerId}:${transaction?.id ?? 'new'}`;
+    if (ledgerSplitInitKey.current === nextInitKey) return;
+    ledgerSplitInitKey.current = nextInitKey;
+
+    const savedSplit = transaction?.ledgerSplit ?? null;
+    setLedgerSplitParticipants(
+      savedSplit
+        ? restoreLedgerSplitPeople(sharedPeople, mePersonId, savedSplit)
+        : createDefaultLedgerSplitPeople(sharedPeople, mePersonId),
+    );
+    setSplitEnabled(savedSplit !== null || (transaction === undefined && split === undefined));
+    setSplitMethod(savedSplit?.method ?? 'EQUAL');
+    setSplitPrecision(savedSplit?.precision ?? 'CENT');
+    setLedgerSplitReady(true);
+  }, [isSharedLedger, ledgerId, mePersonId, sharedCurrentUserId, sharedPeople, split, transaction]);
+
   const pending =
     resolvingNames ||
     createCounterparty.isPending ||
+    (createLedgerPerson?.isPending ?? false) ||
+    sharedLoadPending ||
+    !ledgerSplitReady ||
     (split
       ? updateSplit.isPending || deleteSplit.isPending
       : isEdit
@@ -297,6 +419,7 @@ export function TransactionForm({
         : createTransaction.isPending || createSplit.isPending);
   const error =
     submissionError ??
+    createLedgerPerson?.error ??
     (split
       ? (updateSplit.error ?? deleteSplit.error)
       : isEdit
@@ -321,7 +444,8 @@ export function TransactionForm({
     transaction !== undefined &&
     split === undefined &&
     ledger.tracksBalance &&
-    transaction.account === null;
+    transaction.account === null &&
+    !(isSharedLedger && (sharedPayerChanged || sharedPayerPersonId !== mePersonId));
   const showAccountField = ledger.tracksBalance && !accountLocked;
 
   /**
@@ -331,7 +455,9 @@ export function TransactionForm({
    * 刻意用「推導顯示值」而非 useEffect 去 setState：後者會多觸發一輪渲染
    * （cascading render），而 state 只需要保存使用者的明確選擇。
    */
-  const selectedAccountId = showAccountField ? accountId || (accounts.data?.[0]?.id ?? '') : '';
+  const selectedAccountId = showAccountField
+    ? accountId || (isSharedLedger && sharedPayerChanged ? '' : (accounts.data?.[0]?.id ?? ''))
+    : '';
   /** 轉入帳戶不能與轉出帳戶相同（後端回 400 TRANSFER_SAME_ACCOUNT），預設挑第一個不同的。 */
   const otherAccounts = (accounts.data ?? []).filter((account) => account.id !== selectedAccountId);
   const selectedToAccountId = showAccountField
@@ -348,8 +474,16 @@ export function TransactionForm({
    * 轉入是我的，後端會接受，變成一筆「從他的戶頭轉到我的戶頭」的交易。
    * 反方向（他的轉帳改成支出）允許，錢還留在他的帳戶；改完之後這顆鈕就消失、
    * 回不去——這個情況罕見，而且不可逆的方向是安全的那一邊。
+   *
+   * 共享帳本的 `accountLocked` 會在付款人是別人時放開，好讓付款人列畫出來（3e W98）；
+   * 但「這筆原本的帳戶不是我的」並沒有改變，所以轉帳另外看回應裡的帳戶。
    */
-  const canTransfer = ledger.tracksBalance && !accountLocked;
+  const accountBelongsToOthers =
+    transaction !== undefined &&
+    split === undefined &&
+    ledger.tracksBalance &&
+    transaction.account === null;
+  const canTransfer = ledger.tracksBalance && !accountLocked && !accountBelongsToOthers;
   const showTransferButton = (canTransfer && split === undefined) || type === 'TRANSFER';
   /** 轉帳至少要有兩個帳戶。與其讓使用者送出後撞 400，不如先說清楚。 */
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
@@ -380,15 +514,49 @@ export function TransactionForm({
   function handleTypeChange(nextType: EntryTab) {
     setTab(nextType);
     setCategoryId('');
-    if (nextType === 'TRANSFER') setSplitEnabled(false);
+    if (nextType === 'TRANSFER') {
+      setSplitEnabled(false);
+      if (isSharedLedger) {
+        setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+        setSharedPayerPersonId(mePersonId);
+        setSharedPayerChanged(false);
+        setPayerName('');
+      }
+    }
   }
 
-  const isPayerOther =
-    selectedPayer !== null || (payerName.trim() !== '' && payerName.trim() !== '我');
-  const payerDisplayName = selectedPayer?.name ?? payerName.trim();
+  const exactSharedPayer = ledgerPeople.find(
+    (person) => person.id !== mePersonId && person.name === payerName.trim(),
+  );
+  const selectedSharedPayer = ledgerPeople.find((person) => person.id === sharedPayerPersonId);
+  const sharedPayerIsOther =
+    isSharedLedger &&
+    paymentMode === 'counterparty' &&
+    (sharedPayerPersonId !== null ? sharedPayerPersonId !== mePersonId : payerName.trim() !== '');
+  const isPayerOther = isSharedLedger
+    ? sharedPayerIsOther
+    : selectedPayer !== null || (payerName.trim() !== '' && payerName.trim() !== '我');
+  const payerDisplayName = isSharedLedger
+    ? (selectedSharedPayer?.name ?? payerName.trim())
+    : (selectedPayer?.name ?? payerName.trim());
+  const paymentRowMode =
+    isSharedLedger &&
+    paymentMode === 'counterparty' &&
+    sharedPayerPersonId !== null &&
+    sharedPayerPersonId === mePersonId
+      ? ledger.tracksBalance
+        ? 'account'
+        : 'self'
+      : paymentMode;
   const previewPayerId =
     selectedPayer?.counterpartyId ??
-    (isPayerOther ? `new:${selectedPayer?.name ?? payerName.trim()}` : null);
+    (isPayerOther && !isSharedLedger ? `new:${selectedPayer?.name ?? payerName.trim()}` : null);
+  const sharedPayerKey = isPayerOther
+    ? (sharedPayerPersonId ?? exactSharedPayer?.id ?? `new:${payerDisplayName.trim()}`)
+    : mePersonId;
+  const sharedPayerPersonIdForSection = isPayerOther
+    ? (sharedPayerPersonId ?? exactSharedPayer?.id ?? null)
+    : mePersonId;
   const splitPeople =
     splitEnabled && !isPayerOther
       ? participants.filter((person) => person.included)
@@ -460,8 +628,68 @@ export function TransactionForm({
               : `${payerDisplayName}欠你 ${formatMoney(myShare)}`,
         }
       : null;
-  const needsAccount =
-    showAccountField && (type === 'TRANSFER' || (!isPayerOther && paymentMode !== 'self'));
+  const activeLedgerSplitPeople = ledgerSplitParticipants.filter((person) => person.included);
+  const ledgerFilledCustomValues =
+    splitMethod === 'EQUAL'
+      ? null
+      : fillRemainingSharesByKey({
+          total: amountCents ?? 0,
+          method: splitMethod,
+          precision: splitPrecision,
+          payerKey: sharedPayerKey,
+          participants: activeLedgerSplitPeople.map((person) => ({
+            key: person.key,
+            value:
+              splitMethod === 'AMOUNT'
+                ? person.amountFixed
+                  ? person.amountValue
+                  : undefined
+                : person.ratioFixed
+                  ? person.ratioValue
+                  : undefined,
+          })),
+        });
+  const ledgerFilledCustomValuesByKey = ledgerFilledCustomValues
+    ? new Map(
+        activeLedgerSplitPeople.map((person, index) => [
+          person.key,
+          ledgerFilledCustomValues.values[index]!,
+        ]),
+      )
+    : undefined;
+  const ledgerSplitPreview =
+    type !== 'TRANSFER' && amountCents !== null && amountCents > 0
+      ? computeSharesByKey({
+          total: amountCents,
+          method: splitMethod,
+          precision: splitPrecision,
+          payerKey: sharedPayerKey,
+          participants: activeLedgerSplitPeople.map((person, index) => ({
+            key: person.key,
+            ...(splitMethod === 'AMOUNT' && ledgerFilledCustomValues
+              ? { amount: ledgerFilledCustomValues.values[index]! }
+              : {}),
+            ...(splitMethod === 'RATIO' && ledgerFilledCustomValues
+              ? { ratio: ledgerFilledCustomValues.values[index]! }
+              : {}),
+          })),
+        })
+      : null;
+  const ledgerPreviewShares = ledgerSplitPreview?.ok
+    ? new Map(
+        activeLedgerSplitPeople.map((person, index) => [
+          person.key,
+          ledgerSplitPreview.shares[index]!,
+        ]),
+      )
+    : null;
+  const needsAccount = isSharedLedger
+    ? showAccountField &&
+      (type === 'TRANSFER' ||
+        (!isPayerOther && paymentRowMode !== 'self' && paymentRowMode !== 'counterparty'))
+    : showAccountField && (type === 'TRANSFER' || (!isPayerOther && paymentMode !== 'self'));
+  const needsSharedPayer =
+    isSharedLedger && type !== 'TRANSFER' && paymentRowMode === 'counterparty' && !isPayerOther;
 
   function clearFixedValues(people: SplitParticipantDraft[]) {
     return people.map((person) => ({
@@ -476,9 +704,8 @@ export function TransactionForm({
   }
 
   function newParticipant(counterpartyId: string | null, name: string): SplitParticipantDraft {
-    participantSequence.current += 1;
     return {
-      key: `participant-new-${participantSequence.current}`,
+      key: counterpartyId ?? `new:${name.trim()}`,
       counterpartyId,
       name,
       isMe: false,
@@ -502,6 +729,18 @@ export function TransactionForm({
   }
 
   function handlePayerModeChange(nextMode: 'account' | 'counterparty' | 'self') {
+    if (isSharedLedger) {
+      const payerWasOther = isPayerOther;
+      setPaymentMode(nextMode);
+      if (nextMode !== 'counterparty' || !payerWasOther) {
+        setSharedPayerPersonId(null);
+        setPayerName('');
+        setAccountId('');
+        setSharedPayerChanged(true);
+      }
+      return;
+    }
+
     setPaymentMode(nextMode);
     if (nextMode !== 'counterparty') {
       setSelectedPayer(null);
@@ -509,6 +748,22 @@ export function TransactionForm({
     } else if (!isPayerOther) {
       setPayerName('');
     }
+  }
+
+  function handlePayerNameChange(name: string) {
+    setPayerName(name);
+    if (isSharedLedger) {
+      setSharedPayerPersonId(null);
+      setAccountId('');
+      setSharedPayerChanged(true);
+    }
+  }
+
+  function handleLedgerPayerSelect(person: LedgerPerson | null) {
+    setSharedPayerPersonId(person?.id ?? null);
+    if (person) setPayerName(person.name);
+    setAccountId('');
+    setSharedPayerChanged(true);
   }
 
   function toggleSplit(enabled: boolean) {
@@ -524,6 +779,11 @@ export function TransactionForm({
     });
   }
 
+  function toggleLedgerSplit(enabled: boolean) {
+    setSplitEnabled(enabled);
+    if (!enabled) setSplitOptionsOpen(false);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (amountCents === null || amountCents <= 0) {
@@ -531,6 +791,12 @@ export function TransactionForm({
     }
     if (type !== 'TRANSFER' && categoryId === '') return;
     if (needsAccount && selectedAccountId === '') return;
+    if (isSharedLedger && splitEnabled && type !== 'TRANSFER' && !ledgerSplitPreview?.ok) return;
+    if (
+      needsSharedPayer ||
+      (isSharedLedger && splitEnabled && activeLedgerSplitPeople.length === 0)
+    )
+      return;
     if (type === 'TRANSFER' && selectedToAccountId === '') return;
 
     void submitTransactionOrSplit();
@@ -541,6 +807,7 @@ export function TransactionForm({
       setSplitEditWarningOpen(true);
       return;
     }
+    if (isSharedLedger && splitEnabled && type !== 'TRANSFER' && !ledgerSplitPreview?.ok) return;
     setSubmissionError(null);
     setResolvingNames(true);
     const resolvedNames = new Map<string, string>();
@@ -556,6 +823,90 @@ export function TransactionForm({
 
     try {
       const isoDate = new Date(date).toISOString();
+
+      if (isSharedLedger && type !== 'TRANSFER') {
+        let createdPayerPerson: LedgerPerson | null = null;
+        let payerPersonId: string;
+        if (paymentRowMode !== 'counterparty') {
+          if (!mePersonId) return;
+          payerPersonId = mePersonId;
+        } else if (sharedPayerPersonId && sharedPayerPersonId !== mePersonId) {
+          payerPersonId = sharedPayerPersonId;
+        } else {
+          const normalizedName = payerName.trim();
+          if (normalizedName === '') return;
+          const existing = ledgerPeople.find(
+            (person) => person.id !== mePersonId && person.name === normalizedName,
+          );
+          if (existing) {
+            payerPersonId = existing.id;
+          } else {
+            const created = await createLedgerPerson!.mutateAsync({ name: normalizedName });
+            createdPayerPerson = created;
+            payerPersonId = created.id;
+          }
+        }
+
+        const payerIsMe = payerPersonId === mePersonId;
+        const ledgerSplitInput = splitEnabled
+          ? toLedgerSplitInput(
+              ledgerSplitParticipants,
+              splitMethod,
+              splitPrecision,
+              ledgerFilledCustomValuesByKey,
+            )
+          : null;
+
+        if (isEdit && transaction) {
+          const input: UpdateTransactionRequest = {
+            type,
+            amount: amountCents!,
+            date: isoDate,
+            title,
+            note,
+            categoryId,
+            // PATCH 省略付款人代表維持舊值，切回「我」時也必須明確帶自己的 id。
+            payerPersonId,
+            ...(payerIsMe && showAccountField ? { accountId: selectedAccountId } : {}),
+            ledgerSplit: ledgerSplitInput,
+          };
+          await updateTransaction.mutateAsync({ transactionId: transaction.id, input });
+          onSaved?.();
+          return;
+        }
+
+        const input: CreateTransactionRequest = {
+          type,
+          amount: amountCents!,
+          date: isoDate,
+          categoryId,
+          ...(payerIsMe ? {} : { payerPersonId }),
+          ...(payerIsMe && showAccountField ? { accountId: selectedAccountId } : {}),
+          ...(title === '' ? {} : { title }),
+          ...(note === '' ? {} : { note }),
+          ...(ledgerSplitInput === null ? {} : { ledgerSplit: ledgerSplitInput }),
+        };
+        await createTransaction.mutateAsync(input);
+
+        const nextPeople = createdPayerPerson
+          ? [...ledgerPeople, createdPayerPerson]
+          : ledgerPeople;
+        setLedgerSplitParticipants(createDefaultLedgerSplitPeople(nextPeople, mePersonId));
+        setLedgerSplitReady(true);
+        setSplitEnabled(true);
+        setSplitMethod('EQUAL');
+        setSplitPrecision('CENT');
+        setSharedPayerPersonId(mePersonId);
+        setSharedPayerChanged(false);
+        setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+        setAccountId('');
+        setPayerName('');
+        setAmount('');
+        setTitle('');
+        setNote('');
+        return;
+      }
+
       const requiresSplit = split !== undefined || splitEnabled || isPayerOther;
 
       if (requiresSplit) {
@@ -694,6 +1045,7 @@ export function TransactionForm({
   if (
     showAccountField &&
     !isPayerOther &&
+    !(isSharedLedger && paymentRowMode === 'counterparty') &&
     !accounts.isLoading &&
     (accounts.data?.length ?? 0) === 0
   ) {
@@ -818,14 +1170,18 @@ export function TransactionForm({
           accountId={selectedAccountId}
           showAccountField={showAccountField}
           accountLocked={accountLocked}
-          mode={paymentMode}
+          mode={paymentRowMode}
           payerName={payerDisplayName}
           isPayerOther={isPayerOther}
-          preview={paymentPreview}
+          preview={isSharedLedger ? null : paymentPreview}
+          ledgerPeople={isSharedLedger ? ledgerPeople : undefined}
+          mePersonId={mePersonId}
+          selectedLedgerPersonId={sharedPayerPersonId}
           onAccountChange={setAccountId}
           onModeChange={handlePayerModeChange}
-          onPayerNameChange={setPayerName}
+          onPayerNameChange={handlePayerNameChange}
           onPayerSelect={handlePayerSelect}
+          onLedgerPersonSelect={isSharedLedger ? handleLedgerPayerSelect : undefined}
         />
       )}
 
@@ -843,7 +1199,29 @@ export function TransactionForm({
         onChange={(event) => setNote(event.target.value)}
       />
 
-      {type !== 'TRANSFER' && !isPayerOther && (
+      {type !== 'TRANSFER' && isSharedLedger && (
+        <LedgerSplitSection
+          enabled={splitEnabled}
+          pending={pending || !ledgerSplitReady}
+          type={type}
+          participants={ledgerSplitParticipants}
+          payerPersonId={sharedPayerPersonIdForSection}
+          payerName={isPayerOther ? payerDisplayName : '我'}
+          previewShares={ledgerPreviewShares}
+          onToggle={toggleLedgerSplit}
+          onTogglePerson={(personId, included) =>
+            setLedgerSplitParticipants((current) =>
+              clearFixedValues(
+                current.map((person) =>
+                  person.key === personId ? { ...person, included } : person,
+                ),
+              ),
+            )
+          }
+          onOpenOptions={() => setSplitOptionsOpen(true)}
+        />
+      )}
+      {type !== 'TRANSFER' && !isSharedLedger && !isPayerOther && (
         <SplitSection
           enabled={splitEnabled}
           pending={pending}
@@ -895,7 +1273,11 @@ export function TransactionForm({
             amountCents === null ||
             amountCents <= 0 ||
             (type !== 'TRANSFER' && categoryId === '') ||
-            ((splitEnabled || isPayerOther) && !splitPreview?.ok) ||
+            (isSharedLedger && type !== 'TRANSFER'
+              ? splitEnabled && (activeLedgerSplitPeople.length === 0 || !ledgerSplitPreview?.ok)
+              : (splitEnabled || isPayerOther) && !splitPreview?.ok) ||
+            needsSharedPayer ||
+            (isSharedLedger && type !== 'TRANSFER' && mePersonId === null) ||
             (needsAccount && selectedAccountId === '') ||
             (type === 'TRANSFER' && selectedToAccountId === '')
           }
@@ -939,24 +1321,41 @@ export function TransactionForm({
         {segmented}
         {transactionFields}
       </div>
-      {splitEnabled && splitOptionsOpen && type !== 'TRANSFER' && !isPayerOther && (
-        <SplitOptionsView
-          total={amountCents}
-          type={type}
-          payerCounterpartyId={previewPayerId}
-          payerName={payerDisplayName}
-          method={splitMethod}
-          precision={splitPrecision}
-          participants={participants}
-          onBack={() => setSplitOptionsOpen(false)}
-          onSave={(value) => {
-            setSplitMethod(value.method);
-            setSplitPrecision(value.precision);
-            setParticipants(value.participants);
-            setSplitOptionsOpen(false);
-          }}
-        />
-      )}
+      {splitEnabled &&
+        splitOptionsOpen &&
+        type !== 'TRANSFER' &&
+        (isSharedLedger || !isPayerOther) && (
+          <SplitOptionsView
+            total={amountCents}
+            type={type}
+            payerCounterpartyId={isSharedLedger ? undefined : previewPayerId}
+            payerKey={isSharedLedger ? sharedPayerKey : undefined}
+            fallbackKey={isSharedLedger ? undefined : SPLIT_ME_KEY}
+            payerName={payerDisplayName}
+            method={splitMethod}
+            precision={splitPrecision}
+            participants={isSharedLedger ? activeLedgerSplitPeople : participants}
+            onBack={() => setSplitOptionsOpen(false)}
+            onSave={(value) => {
+              setSplitMethod(value.method);
+              setSplitPrecision(value.precision);
+              if (isSharedLedger) {
+                const saved = new Map(value.participants.map((person) => [person.key, person]));
+                setLedgerSplitParticipants((current) =>
+                  clearFixedValues(current).map((person) => {
+                    const selected = saved.get(person.key);
+                    return selected
+                      ? { ...person, ...selected, included: true }
+                      : { ...person, included: false };
+                  }),
+                );
+              } else {
+                setParticipants(value.participants);
+              }
+              setSplitOptionsOpen(false);
+            }}
+          />
+        )}
     </div>
   );
 
@@ -1067,7 +1466,7 @@ function withMeRow(people: SplitParticipantDraft[]): SplitParticipantDraft[] {
 }
 
 function makeMeParticipant(): SplitParticipantDraft {
-  return makeSplitParticipant('me', null, '我', true);
+  return makeSplitParticipant(SPLIT_ME_KEY, null, '我', true);
 }
 
 function makeSplitParticipant(
