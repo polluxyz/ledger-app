@@ -1015,4 +1015,66 @@ describe('TransactionForm', () => {
     expect(request.method).toBe('PATCH');
     expect(request.body).toMatchObject({ payerPersonId: 'person-me', accountId: 'acc-2' });
   });
+
+  it('submits filled custom amounts that match the preview after the total changes', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    await user.type(screen.getByLabelText('金額'), '3000');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '分帳選項' }));
+    await user.click(screen.getByRole('tab', { name: '金額' }));
+    await user.clear(screen.getByLabelText('我 金額'));
+    await user.type(screen.getByLabelText('我 金額'), '1000');
+    expect(screen.getByLabelText('小明 金額')).toHaveValue(1000);
+    expect(screen.getByLabelText('小華 金額')).toHaveValue(1000);
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const total = screen.getByLabelText('金額');
+    await user.clear(total);
+    await user.type(total, '6000');
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    const splitInput = request.body.ledgerSplit as {
+      shares: Array<{ personId: string; amount?: number }>;
+    };
+    expect(splitInput.shares.reduce((sum, share) => sum + (share.amount ?? 0), 0)).toBe(600000);
+    expect(splitInput.shares.find((share) => share.personId === 'person-me')?.amount).toBe(100000);
+  });
+
+  it('submits positive ratios adding to 10000 after rechecking a previously excluded person', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+
+    const section = await screen.findByRole('region', { name: '分帳' }, WAIT);
+    await user.type(screen.getByLabelText('金額'), '3000');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '分帳選項' }));
+    await user.click(screen.getByRole('tab', { name: '比例' }));
+    await user.clear(screen.getByLabelText('我 比例'));
+    await user.type(screen.getByLabelText('我 比例'), '20');
+    expect(screen.getByLabelText('小明 比例')).toHaveValue(40);
+    expect(screen.getByLabelText('小華 比例')).toHaveValue(40);
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    await user.click(within(section).getByRole('checkbox', { name: '阿美' }));
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const request = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
+    expect(request.path.endsWith('/ledgers/ledger-shared/transactions')).toBe(true);
+    expect(request.method).toBe('POST');
+    const splitInput = request.body.ledgerSplit as {
+      shares: Array<{ personId: string; ratio?: number }>;
+    };
+    const ratios = splitInput.shares.map((share) => share.ratio ?? 0);
+    expect(ratios.every((ratio) => ratio > 0)).toBe(true);
+    expect(ratios.reduce((sum, ratio) => sum + ratio, 0)).toBe(10000);
+  });
 });

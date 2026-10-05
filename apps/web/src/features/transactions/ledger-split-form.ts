@@ -41,6 +41,7 @@ export function toLedgerSplitInput(
   people: LedgerSplitPersonDraft[],
   method: SplitMethod,
   precision: SplitPrecision,
+  filledValuesByKey?: ReadonlyMap<string, number>,
 ): LedgerSplitInput {
   return {
     method,
@@ -49,8 +50,12 @@ export function toLedgerSplitInput(
       .filter((person) => person.included)
       .map((person) => ({
         personId: person.key,
-        ...(method === 'AMOUNT' ? { amount: person.amountValue } : {}),
-        ...(method === 'RATIO' ? { ratio: person.ratioValue } : {}),
+        ...(method === 'AMOUNT'
+          ? { amount: filledValuesByKey?.get(person.key) ?? person.amountValue }
+          : {}),
+        ...(method === 'RATIO'
+          ? { ratio: filledValuesByKey?.get(person.key) ?? person.ratioValue }
+          : {}),
       })),
   };
 }

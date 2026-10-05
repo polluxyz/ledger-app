@@ -641,6 +641,14 @@ function TransactionFormContent({
                   : undefined,
           })),
         });
+  const ledgerFilledCustomValuesByKey = ledgerFilledCustomValues
+    ? new Map(
+        activeLedgerSplitPeople.map((person, index) => [
+          person.key,
+          ledgerFilledCustomValues.values[index]!,
+        ]),
+      )
+    : undefined;
   const ledgerSplitPreview =
     type !== 'TRANSFER' && amountCents !== null && amountCents > 0
       ? computeSharesByKey({
@@ -775,6 +783,7 @@ function TransactionFormContent({
     }
     if (type !== 'TRANSFER' && categoryId === '') return;
     if (needsAccount && selectedAccountId === '') return;
+    if (isSharedLedger && splitEnabled && type !== 'TRANSFER' && !ledgerSplitPreview?.ok) return;
     if (
       needsSharedPayer ||
       (isSharedLedger && splitEnabled && activeLedgerSplitPeople.length === 0)
@@ -790,6 +799,7 @@ function TransactionFormContent({
       setSplitEditWarningOpen(true);
       return;
     }
+    if (isSharedLedger && splitEnabled && type !== 'TRANSFER' && !ledgerSplitPreview?.ok) return;
     setSubmissionError(null);
     setResolvingNames(true);
     const resolvedNames = new Map<string, string>();
@@ -831,7 +841,12 @@ function TransactionFormContent({
 
         const payerIsMe = payerPersonId === mePersonId;
         const ledgerSplitInput = splitEnabled
-          ? toLedgerSplitInput(ledgerSplitParticipants, splitMethod, splitPrecision)
+          ? toLedgerSplitInput(
+              ledgerSplitParticipants,
+              splitMethod,
+              splitPrecision,
+              ledgerFilledCustomValuesByKey,
+            )
           : null;
 
         if (isEdit && transaction) {
