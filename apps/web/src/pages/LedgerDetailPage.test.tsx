@@ -94,6 +94,42 @@ describe('Ledger detail page', () => {
     expect(screen.getByRole('heading', { name: '成員（2）' })).toBeInTheDocument();
   });
 
+  it('places the guest list below members and lets an editor manage it', async () => {
+    routeFetch({ me: { id: 'u2', email: 'bob@example.com', name: 'Bob' } });
+
+    render(<App />);
+
+    const members = await screen.findByRole('heading', { name: '成員（2）' });
+    const guests = await screen.findByRole('heading', { name: '非成員' });
+    expect(members.compareDocumentPosition(guests) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.getByRole('button', { name: '新增' })).toBeInTheDocument();
+  });
+
+  it('keeps an archived shared ledger readable while hiding guest management', async () => {
+    routeFetch({
+      detail: () => Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archivedOn })),
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '非成員' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增' })).not.toBeInTheDocument();
+  });
+
+  it('does not request or show a guest list for a personal ledger', async () => {
+    routeFetch({
+      detail: () => Promise.resolve(jsonResponse(200, { ...detail, kind: 'PERSONAL' })),
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '家庭帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '非成員' })).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledgers/led-2/people')),
+    ).toBe(false);
+  });
+
   it('says only that the ledger was not found, never that access was denied', async () => {
     routeFetch({
       detail: () =>
