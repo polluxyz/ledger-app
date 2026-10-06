@@ -52,7 +52,9 @@
 | [`phase-3c-split.md`](specs/phase-3c-split.md)                 | 階段三：3c 代墊與分帳（後端）             | 已完成    |
 | [`phase-3c-web.md`](specs/phase-3c-web.md)                     | 階段三：3c 代墊與分帳的畫面               | 已完成    |
 | [`phase-3d-tx-list.md`](specs/phase-3d-tx-list.md)             | 階段三：3d 交易頁版面整理與分類圖示       | 已完成    |
-| [`phase-3e-shared-split.md`](specs/phase-3e-shared-split.md)   | 階段三：3e 共享帳本的分帳與結清（後端）   | 已核可    |
+| [`phase-3e-shared-split.md`](specs/phase-3e-shared-split.md)   | 階段三：3e 共享帳本的分帳與結清（後端）   | 已完成    |
+| [`phase-3e-web.md`](specs/phase-3e-web.md)                     | 階段三：3e 共享帳本分帳與結清的畫面       | 已完成    |
+| [`phase-3f-unified-debts.md`](specs/phase-3f-unified-debts.md) | 階段三：3f 共享帳本的人併入對象頁與借還   | 已核可    |
 | [`security-baseline.md`](specs/security-baseline.md)           | 跨階段的安全基準                          | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
