@@ -2,13 +2,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsIn } from 'class-validator';
 import { LEDGER_ROLES } from '@ledger/shared';
 import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
-import type { AddMemberRequest, LedgerRole } from '@ledger/shared';
+import type { AddMemberByEmailRequest, LedgerRole } from '@ledger/shared';
 
 /**
  * 加入成員的請求形狀：以 email 指名「已註冊」的使用者，並指定其角色。
  * 只認 email、不吃 userId——邀請未註冊者屬未來功能（見 spec §9）。
+ * 3f 的 `{ counterpartyId, role }` 由 uf-members-api 接上（tasks/phase-3f-plan.md §1.2 第 5 項）。
  */
-export class AddMemberDto implements AddMemberRequest {
+export class AddMemberDto implements AddMemberByEmailRequest {
   @ApiProperty({ example: 'bob@example.com', format: 'email' })
   @NormalizeEmail()
   @IsEmail()

@@ -82,13 +82,33 @@ export interface Counterparty {
    * 回答「沒有」或完成合併後變 `false`。
    */
   askMerge: boolean;
-  /** 往來餘額，單位：分。正數＝對方欠我，負數＝我欠對方。 */
+  /** 往來餘額，單位：分。正數＝對方欠我，負數＝我欠對方。只含個人往來（3f 意義不變）。 */
   balance: Cents;
+  /**
+   * 指向這個對象的共享帳本的人，在各帳本裡跟我之間的結清轉帳（3f 決策 142）。
+   * 依帳本名稱排序；金額為 0 的不列。
+   */
+  ledgerParts: CounterpartyLedgerPart[];
+  /** `balance` ＋ `ledgerParts` 的金額加總（3f 決策 143），由後端算。 */
+  totalBalance: Cents;
   /** 連動中的使用者；沒有連動時為 `null`。 */
   link: CounterpartyLinkInfo | null;
   /** ISO 8601。 */
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * 對象總額的一個帳本來源（3f §4.2）。`amount` 正數＝對方欠我、負數＝我欠對方，不為 0。
+ * `left` 為 `true` 代表我已退出那本帳本：只能打開唯讀畫面，不能記結清（W139）。
+ */
+export interface CounterpartyLedgerPart {
+  ledgerId: string;
+  ledgerName: string;
+  personId: string;
+  personName: string;
+  amount: Cents;
+  left: boolean;
 }
 
 /** 一筆往來紀錄。 */
@@ -201,6 +221,8 @@ export interface ListCounterpartiesQuery {
   q?: string;
   /** 只有 `GET /counterparties` 使用：`true` 時只列待詢問的對象（總覽的待確認卡片）。 */
   askMerge?: boolean;
+  /** 只有 `GET /counterparties` 使用：`true` 時只列 `totalBalance ≠ 0` 的對象（借還頁，W136）。 */
+  nonZero?: boolean;
 }
 
 /** `POST /counterparties` 的 body：不記帳先新增一個人（3b-2 決策 55）。 */

@@ -135,6 +135,8 @@ export class LedgersService {
     return {
       ...this.toLedger(ledger),
       members: ledger.members.map((member) => this.toMemberInfo(member)),
+      // 3f 契約佔位：已退出者的唯讀回應由 uf-left 接上（tasks/phase-3f-plan.md §1.2 第 2 項）。
+      left: false,
     };
   }
 

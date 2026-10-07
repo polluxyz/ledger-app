@@ -144,7 +144,8 @@ export async function addMember(
     headers: authHeaders(token),
     data: body,
   });
-  return readJson<LedgerMemberInfo>(response, `把 ${body.email} 加入帳本`);
+  const who = 'email' in body ? body.email : `對象 ${body.counterpartyId}`;
+  return readJson<LedgerMemberInfo>(response, `把 ${who} 加入帳本`);
 }
 
 /** 變更成員角色。 */

@@ -26,14 +26,21 @@ export interface LedgerPerson {
   status: LedgerPersonStatus;
 }
 
-/** `POST /ledgers/{ledgerId}/people` 的 body：新增非成員。 */
+/** `POST /ledgers/{ledgerId}/people` 的 body：新增虛擬成員（3f W140 起改稱「虛擬成員」）。 */
 export interface CreateLedgerPersonRequest {
-  /** 1～50 字，同一本帳本的非成員之間不能重複。 */
+  /** 1～50 字，同一本帳本的虛擬成員之間不能重複。 */
   name: string;
+  /**
+   * 選填（3f §4.3）：建立的同時替呼叫者把這個虛擬成員指向我的這個對象，在同一個資料庫交易。
+   * 別人的對象回 404。
+   */
+  counterpartyId?: string;
 }
 
-/** `PATCH /ledgers/{ledgerId}/people/{id}` 的 body：非成員改名。成員那一筆不能改（400）。 */
-export type UpdateLedgerPersonRequest = CreateLedgerPersonRequest;
+/** `PATCH /ledgers/{ledgerId}/people/{id}` 的 body：虛擬成員改名。成員那一筆不能改（400）。 */
+export interface UpdateLedgerPersonRequest {
+  name: string;
+}
 
 /** 名單裡的一個人（請求）。 */
 export interface LedgerShareInput {

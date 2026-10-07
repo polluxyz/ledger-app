@@ -13,6 +13,8 @@ describe('CounterpartyDirectory', () => {
     displayName: '小明',
     askMerge: false,
     balance: 98765400,
+    ledgerParts: [],
+    totalBalance: 98765400,
     link: { userId: 'user-1', userName: '王小明', theirBalance: -12345600 },
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',

@@ -62,7 +62,13 @@ export interface LedgerMemberInfo {
 
 /** 帳本＋其完整成員清單（帳本明細端點）。 */
 export interface LedgerDetail extends Ledger {
+  /** 已退出的人（`left: true`）一律是空陣列，看不到成員（3f 決策 151）。 */
   members: LedgerMemberInfo[];
+  /**
+   * 呼叫者已退出這本帳本（3f §4.4）。這時帳本只能唯讀：交易列表只回跟呼叫者有關的帳，
+   * 其他帳本端點回 404，寫入回 409 `LEDGER_LEFT`。現任成員一律 `false`。
+   */
+  left: boolean;
 }
 
 /** GET /ledgers 的查詢參數。 */
@@ -95,9 +101,22 @@ export interface UpdateLedgerRequest {
   name: string;
 }
 
-/** POST /ledgers/{ledgerId}/members 的請求 body：以 email 加入已註冊的使用者。 */
-export interface AddMemberRequest {
+/**
+ * POST /ledgers/{ledgerId}/members 的請求 body，兩種擇一：
+ *
+ * - `{ email, role }`：以 email 加入已註冊的使用者。
+ * - `{ counterpartyId, role }`（3f §4.3）：用我已連動的對象加入，後端取連動的帳號，
+ *   前端拿不到對方 email。對象沒連動回 400 `COUNTERPARTY_NOT_LINKED`，別人的對象回 404。
+ */
+export type AddMemberRequest = AddMemberByEmailRequest | AddMemberByCounterpartyRequest;
+
+export interface AddMemberByEmailRequest {
   email: string;
+  role: LedgerRole;
+}
+
+export interface AddMemberByCounterpartyRequest {
+  counterpartyId: string;
   role: LedgerRole;
 }
 

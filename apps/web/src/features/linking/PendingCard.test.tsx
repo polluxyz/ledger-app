@@ -35,6 +35,8 @@ describe('PendingCard', () => {
     displayName: '小明',
     askMerge: false,
     balance: 10000,
+    ledgerParts: [],
+    totalBalance: 10000,
     link: null,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
