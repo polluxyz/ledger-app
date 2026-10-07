@@ -1,10 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
-  computeLedgerNets,
   ErrorCode,
-  suggestSettlements,
   type CreateSettlementRequest,
-  type LedgerNetEntry,
   type SettlementSummary,
   type Transaction,
   type UpdateSettlementRequest,
@@ -18,6 +15,7 @@ import {
 import { resolvePayerAccount } from '../ledger-people/payer-account-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
+import { computeLedgerSummary } from './ledger-summary';
 
 /**
  * 結清是一筆 TRANSFER 與一筆 LedgerSettlement 的配對。所有寫入放在同一個資料庫交易；
@@ -42,43 +40,7 @@ interface LockedSettlement {
   note: string | null;
 }
 
-interface SplitShareRow {
-  transactionId: string;
-  type: string;
-  amount: number;
-  payerId: string | null;
-  personId: string | null;
-  share: number | null;
-}
-
-interface SettlementNetRow {
-  fromId: string;
-  toId: string;
-  amount: number;
-}
-
 type AccountRuleError = 'ACCOUNT_REQUIRED' | 'ACCOUNT_NOT_ALLOWED' | 'ACCOUNT_NOT_PAYERS';
-
-const SPLIT_SUMMARY_SQL = [
-  'SELECT t."id" AS "transactionId", t."type"::text AS "type", t."amount" AS "amount",',
-  'COALESCE(t."payerPersonId", creator."id") AS "payerId",',
-  'share."personId" AS "personId", share."share" AS "share"',
-  'FROM "Transaction" t',
-  'INNER JOIN "LedgerSplit" split ON split."transactionId" = t."id"',
-  'LEFT JOIN "LedgerShare" share ON share."ledgerSplitId" = split."id"',
-  'LEFT JOIN "LedgerPerson" creator ON creator."ledgerId" = t."ledgerId" AND creator."userId" = t."creatorId"',
-  'WHERE t."ledgerId" = $1 AND t."deletedAt" IS NULL',
-  'ORDER BY t."createdAt", t."id", share."sortOrder", share."id"',
-].join(' ');
-
-const SETTLEMENT_SUMMARY_SQL = [
-  'SELECT settlement."fromPersonId" AS "fromId", settlement."toPersonId" AS "toId",',
-  't."amount" AS "amount"',
-  'FROM "Transaction" t',
-  'INNER JOIN "LedgerSettlement" settlement ON settlement."transactionId" = t."id"',
-  'WHERE t."ledgerId" = $1 AND t."deletedAt" IS NULL',
-  'ORDER BY t."createdAt", t."id"',
-].join(' ');
 
 const LOCK_SETTLEMENT_SQL = [
   'SELECT t."id" AS "transactionId", settlement."id" AS "settlementId",',
@@ -100,73 +62,7 @@ export class SettlementsService {
   ) {}
 
   async summary(ledgerId: string): Promise<SettlementSummary> {
-    const data = await this.prisma.$transaction(async (tx) => {
-      await this.assertSharedLedger(tx, ledgerId);
-      const ledgerPeople = await this.people.listPeople(tx, ledgerId);
-      const splitRows = await tx.$queryRawUnsafe<SplitShareRow[]>(SPLIT_SUMMARY_SQL, ledgerId);
-      const settlementRows = await tx.$queryRawUnsafe<SettlementNetRow[]>(
-        SETTLEMENT_SUMMARY_SQL,
-        ledgerId,
-      );
-      return { ledgerPeople, splitRows, settlementRows };
-    });
-
-    const entries: LedgerNetEntry[] = [];
-    const grouped = new Map<
-      string,
-      {
-        type: 'EXPENSE' | 'INCOME';
-        amount: number;
-        payerId: string | null;
-        shares: { personId: string; share: number }[];
-      }
-    >();
-    for (const row of data.splitRows) {
-      let entry = grouped.get(row.transactionId);
-      if (!entry) {
-        if (row.type !== 'EXPENSE' && row.type !== 'INCOME') {
-          throw this.summaryFailure();
-        }
-        entry = { type: row.type, amount: row.amount, payerId: row.payerId, shares: [] };
-        grouped.set(row.transactionId, entry);
-      }
-      if (row.personId !== null && row.share !== null) {
-        entry.shares.push({ personId: row.personId, share: row.share });
-      }
-    }
-
-    for (const entry of grouped.values()) {
-      if (entry.payerId === null) throw this.summaryFailure();
-      entries.push({
-        kind: entry.type,
-        payerId: entry.payerId,
-        total: entry.amount,
-        shares: entry.shares,
-      });
-    }
-    for (const settlement of data.settlementRows) {
-      entries.push({
-        kind: 'SETTLEMENT',
-        fromId: settlement.fromId,
-        toId: settlement.toId,
-        amount: settlement.amount,
-      });
-    }
-
-    const orderedPeople = data.ledgerPeople;
-    const nets = computeLedgerNets({
-      personIds: orderedPeople.map((person) => person.id),
-      entries,
-    });
-    return {
-      people: orderedPeople.map((person) => ({
-        person: this.people.toView(person),
-        net: nets.get(person.id) ?? 0,
-      })),
-      suggestions: suggestSettlements(
-        orderedPeople.map((person) => ({ personId: person.id, net: nets.get(person.id) ?? 0 })),
-      ),
-    };
+    return this.prisma.$transaction((tx) => computeLedgerSummary(tx, ledgerId, this.people));
   }
 
   async create(
@@ -459,13 +355,5 @@ export class SettlementsService {
 
   private notFound(message: string): AppException {
     return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, message);
-  }
-
-  private summaryFailure(): AppException {
-    return new AppException(
-      HttpStatus.INTERNAL_SERVER_ERROR,
-      ErrorCode.INTERNAL_ERROR,
-      'Unable to calculate the settlement summary.',
-    );
   }
 }

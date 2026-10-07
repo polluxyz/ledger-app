@@ -10,6 +10,7 @@ import type {
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import {
   counterpartyLinked,
   findLinkOfCounterparty,
@@ -46,13 +47,16 @@ type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
  */
 @Injectable()
 export class CounterpartiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledgerDebts: LedgerDebtsService,
+  ) {}
 
   /** 不記帳先新增一個人（決策 55）。名字已在 DTO 去掉前後空白；撞名回 409。 */
   async create(userId: string, name: string): Promise<Counterparty> {
     try {
       const row = await this.prisma.counterparty.create({ data: { ownerId: userId, name } });
-      return toCounterparty(row, 0, null);
+      return this.present(this.prisma, row);
     } catch (error) {
       throw mapNameTaken(error);
     }
@@ -87,7 +91,7 @@ export class CounterpartiesService {
             ],
           };
 
-    const [rows, sums] = await Promise.all([
+    const [rows, sums, parts] = await Promise.all([
       this.prisma.counterparty.findMany({
         where: {
           ownerId: userId,
@@ -100,6 +104,7 @@ export class CounterpartiesService {
         where: { deletedAt: null, counterparty: { ownerId: userId } },
         _sum: { delta: true },
       }),
+      this.ledgerDebts.partsByCounterparty(userId),
     ]);
     const balances = new Map(sums.map((sum) => [sum.counterpartyId, sum._sum.delta ?? 0]));
 
@@ -108,21 +113,24 @@ export class CounterpartiesService {
       rows.map((row) => row.id),
     );
     const sorted = rows
-      .map((row) => ({ row, balance: balances.get(row.id) ?? 0 }))
+      .map((row) =>
+        toCounterparty(
+          row,
+          balances.get(row.id) ?? 0,
+          links.get(row.id) ?? null,
+          parts.get(row.id) ?? [],
+        ),
+      )
+      .filter((row) => query.nonZero !== true || row.totalBalance !== 0)
       .sort(
         (a, b) =>
-          Number(a.balance === 0) - Number(b.balance === 0) ||
-          (a.row.name ?? links.get(a.row.id)?.userName ?? '').localeCompare(
-            b.row.name ?? links.get(b.row.id)?.userName ?? '',
-            'zh-Hant',
-          ),
+          Number(a.totalBalance === 0) - Number(b.totalBalance === 0) ||
+          a.displayName.localeCompare(b.displayName, 'zh-Hant'),
       );
     const pageRows = sorted.slice((page - 1) * limit, page * limit);
 
     return {
-      items: pageRows.map((item) =>
-        toCounterparty(item.row, item.balance, links.get(item.row.id) ?? null),
-      ),
+      items: pageRows,
       page,
       limit,
       total: sorted.length,
@@ -284,7 +292,7 @@ export class CounterpartiesService {
 
   /** 合併前先驗兩邊都屬於呼叫者，避免從錯誤碼探測別人的對象。 */
   async merge(userId: string, targetId: string, sourceId: string): Promise<Counterparty> {
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await loadOwnedCounterparty(tx, userId, targetId);
       await loadOwnedCounterparty(tx, userId, sourceId);
       for (const id of [targetId, sourceId].sort()) await lockCounterparty(tx, id);
@@ -380,13 +388,19 @@ export class CounterpartiesService {
         }
         await proposeAmend(tx, { fromUserId: userId, entry: changed, now: new Date() });
       }
+      // 指向屬於我；先搬移再刪來源，避免來源外鍵 cascade 把帳本來源清掉。
+      await tx.ledgerPersonPointer.updateMany({
+        where: { userId, counterpartyId: source.id },
+        data: { counterpartyId: target.id },
+      });
       await tx.counterparty.delete({ where: { id: source.id } });
       const updated = await tx.counterparty.update({
         where: { id: target.id },
         data: { name: target.name ?? source.name, askMerge: false },
       });
-      return this.present(tx, updated);
+      return updated;
     });
+    return this.present(this.prisma, updated);
   }
 
   async dismissMergePrompt(userId: string, counterpartyId: string): Promise<void> {
@@ -402,11 +416,12 @@ export class CounterpartiesService {
     client: Pick<Prisma.TransactionClient, 'counterpartyLink' | 'debtEntry' | 'counterparty'>,
     row: CounterpartyRow,
   ): Promise<Counterparty> {
-    const [balance, links] = await Promise.all([
+    const [balance, links, parts] = await Promise.all([
       currentBalance(client, row.id),
       linkInfoFor(client, [row.id]),
+      this.ledgerDebts.partsByCounterparty(row.ownerId),
     ]);
-    return toCounterparty(row, balance, links.get(row.id) ?? null);
+    return toCounterparty(row, balance, links.get(row.id) ?? null, parts.get(row.id) ?? []);
   }
 }
 
