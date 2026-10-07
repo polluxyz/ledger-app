@@ -63,6 +63,9 @@ describe('CounterpartiesPage', () => {
       if (url.includes('/ledgers')) {
         return json(withLedger ? [ledger] : []);
       }
+      if (url.includes('/ledger-groups')) {
+        return json([]);
+      }
       if (url.includes('/friend-requests')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });
       }
