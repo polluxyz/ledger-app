@@ -8,6 +8,8 @@ import {
   useLedgerPeople,
   useRenameLedgerPerson,
 } from '../ledger-people/use-ledger-people';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import {
   useCreateSettlement,
   useDeleteSettlement,
@@ -156,6 +158,8 @@ describe('3e data hooks', () => {
         ['transactions', 'ledger-1'],
         ['settlement-summary', 'ledger-1'],
         ['accounts'],
+        COUNTERPARTIES_KEY,
+        LEDGER_GROUPS_KEY,
       ]) as unknown,
     );
   });
@@ -192,6 +196,8 @@ describe('3e data hooks', () => {
         ['transactions', 'ledger-1'],
         ['settlement-summary', 'ledger-1'],
         ['accounts'],
+        COUNTERPARTIES_KEY,
+        LEDGER_GROUPS_KEY,
       ]) as unknown,
     );
   });

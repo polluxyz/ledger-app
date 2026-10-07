@@ -52,9 +52,9 @@ export function SettlementView({ ledger, onSettle }: SettlementViewProps) {
           </section>
 
           {summary.data.suggestions.length > 0 && (
-            <section className={styles.section} aria-labelledby="settlement-suggestions">
-              <h2 className={styles.heading} id="settlement-suggestions">
-                建議
+            <section className={styles.section} aria-labelledby="settlement-transfers">
+              <h2 className={styles.heading} id="settlement-transfers">
+                轉帳
               </h2>
               <ul className={styles.suggestionList}>
                 {summary.data.suggestions.map((suggestion, index) => {

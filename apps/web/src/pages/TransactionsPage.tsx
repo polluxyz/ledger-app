@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
@@ -11,9 +11,15 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { useCurrentUser } from '../features/auth/use-current-user';
 import { DebtsView } from '../features/debts/DebtsView';
+import { useLedgerPeople } from '../features/ledger-people/use-ledger-people';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
 import { SettlementView } from '../features/settlements/SettlementView';
+import {
+  readSettleIntentState,
+  SETTLE_INTENT_STATE_KEY,
+} from '../features/settlements/settle-intent';
 import {
   TransactionFilterDrawer,
   TransactionFilterToggle,
@@ -48,7 +54,115 @@ import styles from './TransactionsPage.module.css';
  * 可以記帳，留一張記不進去的表單只會讓人以為壞了。
  */
 export default function TransactionsPage() {
-  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
+  const {
+    ledger,
+    ledgers,
+    isLoading: ledgerLoading,
+    error: ledgerError,
+    setActiveLedgerId,
+  } = useActiveLedger();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const settleIntent = readSettleIntentState(location.state);
+  const [handledSettleLocationKey, setHandledSettleLocationKey] = useState<string | null>(null);
+  const settleIntentLedgerId = settleIntent?.ledgerId ?? null;
+  const settleIntentPersonId = settleIntent?.personId ?? null;
+  const settleIntentAmount = settleIntent?.amount ?? null;
+  const settleIntentState = useMemo(
+    () =>
+      settleIntentLedgerId !== null && settleIntentPersonId !== null && settleIntentAmount !== null
+        ? {
+            [SETTLE_INTENT_STATE_KEY]: {
+              ledgerId: settleIntentLedgerId,
+              personId: settleIntentPersonId,
+              amount: settleIntentAmount,
+            },
+          }
+        : null,
+    [settleIntentAmount, settleIntentLedgerId, settleIntentPersonId],
+  );
+
+  // 清單載入後才判斷目標帳本是否可切換，避免把尚未回來的資料誤判成「不在清單」。
+  if (
+    settleIntentLedgerId !== null &&
+    !ledgerLoading &&
+    ledgerError === null &&
+    handledSettleLocationKey !== location.key
+  ) {
+    setHandledSettleLocationKey(location.key);
+  }
+
+  useEffect(() => {
+    if (
+      settleIntentLedgerId === null ||
+      ledgerLoading ||
+      ledgerError !== null ||
+      handledSettleLocationKey !== location.key
+    ) {
+      return;
+    }
+
+    const targetLedger = ledgers.find((item) => item.id === settleIntentLedgerId);
+    if (!targetLedger || targetLedger.kind !== 'SHARED') {
+      // state 裡的帳本已不可用時整個忽略該指示，連 `?view=settle` 也一併移除。
+      const next = new URLSearchParams(searchParams);
+      next.delete('view');
+      setSearchParams(next, { replace: true, state: { keepRightPanel: true } });
+      return;
+    }
+
+    // 先切換作用中帳本，等 context 真的換過來後再切結清檢視，避免面板對錯帳本。
+    if (ledger?.id !== settleIntentLedgerId) {
+      setActiveLedgerId(settleIntentLedgerId);
+      return;
+    }
+
+    if (searchParams.get('view') !== 'settle') {
+      const next = new URLSearchParams(searchParams);
+      next.set('view', 'settle');
+      setSearchParams(next, { replace: true, state: settleIntentState ?? {} });
+    }
+  }, [
+    handledSettleLocationKey,
+    ledger?.id,
+    ledgerError,
+    ledgerLoading,
+    ledgers,
+    location.key,
+    searchParams,
+    setActiveLedgerId,
+    setSearchParams,
+    settleIntentState,
+    settleIntentLedgerId,
+  ]);
+
+  const intentTarget = ledgers.find((item) => item.id === settleIntentLedgerId);
+  const intentTargetExists = intentTarget?.kind === 'SHARED';
+  const waitingForIntentLedger =
+    settleIntentLedgerId !== null &&
+    !ledgerError &&
+    (ledgerLoading ||
+      !intentTargetExists ||
+      ledger?.id !== settleIntentLedgerId ||
+      searchParams.get('view') !== 'settle');
+
+  if (waitingForIntentLedger) {
+    return (
+      <PageContent>
+        <PageHeader title="交易" />
+        <p className={styles.note}>載入中…</p>
+      </PageContent>
+    );
+  }
+
+  if (settleIntentLedgerId !== null && ledgerError) {
+    return (
+      <PageContent>
+        <PageHeader title="交易" />
+        <FormError error={ledgerError} />
+      </PageContent>
+    );
+  }
 
   if (ledger) {
     return <LedgerTransactions key={ledger.id} ledger={ledger} />;
@@ -87,12 +201,19 @@ type TransactionsView = 'details' | 'debts' | 'settle';
  */
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const settleIntent = readSettleIntentState(location.state);
+  const currentUser = useCurrentUser();
+  const ledgerPeople = useLedgerPeople(
+    ledger.id,
+    ledger.kind === 'SHARED' && settleIntent?.ledgerId === ledger.id,
+  );
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterPanelId = useId();
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
-  const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get('view');
   const view: TransactionsView =
     requestedView === 'debts'
@@ -162,7 +283,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     面板內容在 render 期間就換（React 的「依 props 調整 state」寫法，以 location key 防止
     重複），effect 只負責打開右側欄與換掉 state 這兩件外部的事。
   */
-  const location = useLocation();
   const openCounterpartyId = readOpenCounterpartyState(location.state);
   const [handledLocationKey, setHandledLocationKey] = useState<string | null>(null);
   if (openCounterpartyId !== null && handledLocationKey !== location.key) {
@@ -176,6 +296,54 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     open();
     setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
   }, [open, openCounterpartyId, setSearchParams]);
+
+  const settleIntentReady =
+    settleIntent?.ledgerId === ledger.id &&
+    requestedView === 'settle' &&
+    !ledgerPeople.isLoading &&
+    !currentUser.isLoading;
+  const settleIntentPersonId = settleIntent?.personId;
+  const settleIntentAmount = settleIntent?.amount;
+  const currentPerson = ledgerPeople.data?.find((person) => person.userId === currentUser.data?.id);
+  const settlePrefill = useMemo(() => {
+    if (
+      !settleIntentReady ||
+      !currentPerson ||
+      settleIntentPersonId === undefined ||
+      settleIntentAmount === undefined ||
+      settleIntentAmount === 0
+    ) {
+      return null;
+    }
+    return {
+      fromPersonId: settleIntentAmount > 0 ? settleIntentPersonId : currentPerson.id,
+      toPersonId: settleIntentAmount > 0 ? currentPerson.id : settleIntentPersonId,
+      amount: Math.abs(settleIntentAmount),
+    };
+  }, [currentPerson, settleIntentAmount, settleIntentPersonId, settleIntentReady]);
+  const [handledSettleLocationKey, setHandledSettleLocationKey] = useState<string | null>(null);
+  if (settleIntentReady && handledSettleLocationKey !== location.key) {
+    setHandledSettleLocationKey(location.key);
+    if (settlePrefill) {
+      setPanelTarget({ kind: 'settlement', prefill: settlePrefill });
+    }
+  }
+  useEffect(() => {
+    if (!settleIntentReady || handledSettleLocationKey !== location.key) {
+      return;
+    }
+    if (settlePrefill) {
+      open();
+    }
+    setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
+  }, [
+    handledSettleLocationKey,
+    location.key,
+    open,
+    setSearchParams,
+    settleIntentReady,
+    settlePrefill,
+  ]);
 
   /** 往來帳的「記一筆」回到借還表單，預帶對象並把面板焦點移入表單。 */
   function recordEntry(name: string) {

@@ -8,6 +8,8 @@ import type {
   UpdateSettlementRequest,
 } from '@ledger/shared';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import { apiRequest } from '../../lib/api-client';
 
 /**
@@ -21,8 +23,8 @@ export function settlementSummaryKey(ledgerId: string | null) {
 }
 
 /**
- * 結清與補帳戶都會動到三件事：交易列表（結清是一筆轉帳）、淨額、帳戶餘額。
- * 少了任何一個都不會報錯，只會讓畫面停在舊數字，所以集中在這裡一起失效。
+ * 結清與補帳戶會改變交易列表、淨額、帳戶餘額，也會改變借還頁的對象總額與帳本群組。
+ * 少了任何一份都不會報錯，只會讓畫面停在舊數字，所以集中在這裡一起失效。
  *
  * 交易列表的 key 直接寫字面值，不從 `use-transactions` 匯入：那一份反過來要匯入
  * 本檔的 `settlementSummaryKey`，互相匯入會形成循環。
@@ -33,6 +35,8 @@ function useInvalidateSettlementWrites(ledgerId: string) {
     void queryClient.invalidateQueries({ queryKey: ['transactions', ledgerId] });
     void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
     void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+    void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
+    void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
   };
 }
 
