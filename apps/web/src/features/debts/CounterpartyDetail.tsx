@@ -93,7 +93,7 @@ export function CounterpartyDetail({
   }
 
   const person = counterparty.data;
-  const ledgerParts = person.ledgerParts ?? [];
+  const { ledgerParts } = person;
 
   return (
     <div className={styles.detail}>

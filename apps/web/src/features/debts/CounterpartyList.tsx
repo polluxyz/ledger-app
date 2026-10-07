@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CounterpartyLedgerPart, LedgerGroup } from '@ledger/shared';
+import type { CounterpartyLedgerPart } from '@ledger/shared';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
@@ -30,9 +30,7 @@ export function CounterpartyList({
     return <p className={styles.status}>載入中…</p>;
   }
   const items = counterparties.data?.items ?? [];
-  const groups = Array.isArray(unpointedGroups.data)
-    ? unpointedGroups.data.filter(isLedgerGroup)
-    : [];
+  const groups = unpointedGroups.data ?? [];
   const showEmptyPrompt =
     !counterparties.isLoading &&
     !counterparties.error &&
@@ -54,8 +52,7 @@ export function CounterpartyList({
             {items.map((counterparty) => {
               const expanded = expandedId === counterparty.id;
               const sourcesId = `counterparty-sources-${counterparty.id}`;
-              const ledgerParts = counterparty.ledgerParts ?? [];
-              const totalBalance = counterparty.totalBalance ?? counterparty.balance;
+              const { ledgerParts, totalBalance } = counterparty;
 
               return (
                 <li key={counterparty.id} className={styles.item}>
@@ -152,16 +149,4 @@ function formatCounterpartyBalance(displayName: string, balance: number) {
     );
   }
   return '兩清';
-}
-
-/** 只顯示符合群組契約的回應，避免其他 API 回應被誤當成帳本來源。 */
-function isLedgerGroup(value: unknown): value is LedgerGroup {
-  if (typeof value !== 'object' || value === null || !('ledger' in value)) {
-    return false;
-  }
-  const { ledger, people } = value as { ledger: unknown; people?: unknown };
-  if (typeof ledger !== 'object' || ledger === null || !('id' in ledger) || !('name' in ledger)) {
-    return false;
-  }
-  return Array.isArray(people);
 }

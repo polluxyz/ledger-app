@@ -39,6 +39,8 @@ describe('Transactions page', () => {
     askMerge: false,
     link: null,
     balance: 500000,
+    ledgerParts: [],
+    totalBalance: 500000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
   };
@@ -110,6 +112,9 @@ describe('Transactions page', () => {
       }
       if (url.includes('/counterparties')) {
         return json({ items: [counterparty], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/ledger-groups')) {
+        return json([]);
       }
       return json([ledger]);
     });
@@ -375,6 +380,9 @@ describe('Transactions page', () => {
       }
       if (url.includes('/counterparties')) {
         return json({ items: [counterparty], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/ledger-groups')) {
+        return json([]);
       }
       return json([ledger]);
     });
