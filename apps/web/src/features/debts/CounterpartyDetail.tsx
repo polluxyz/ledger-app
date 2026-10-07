@@ -1,19 +1,11 @@
 import { useState } from 'react';
-import type {
-  CounterpartyLedgerPart,
-  DebtEntry,
-  DebtEntryKind,
-  LedgerSummary,
-} from '@ledger/shared';
-import { useNavigate } from 'react-router-dom';
+import type { DebtEntry, DebtEntryKind, LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
-import { Pagination } from '../../components/Pagination';
 import { formatDate, formatMoney } from '../../lib/format';
-import { useOpenSettleIntent } from '../settlements/settle-intent';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntryForm } from './DebtEntryForm';
 import {
@@ -24,34 +16,35 @@ import {
 } from './use-debts';
 import { LedgerSourceList } from './LedgerSourceList';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
+import { splitDebtEntriesByBalanceZero } from './debt-entry-history';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
   ledger: LedgerSummary;
   counterpartyId: string;
+  mode: 'overview' | 'personal';
   onEditSplit?: (splitId: string) => void;
 }
 
 /**
- * 對象列展開後顯示 API 餘額、共享來源、記錄表單與往來明細；變更仍交給資料層 hooks。
+ * 對象列展開後顯示 API 餘額與往來紀錄；個人分頁才顯示可寫入的操作。
  */
 export function CounterpartyDetail({
   ledger,
   counterpartyId,
+  mode,
   onEditSplit,
 }: CounterpartyDetailProps) {
-  const [page, setPage] = useState(1);
   const counterparty = useCounterparty(counterpartyId);
-  const entries = useCounterpartyEntries(counterpartyId, { page, limit: 20 });
+  const entries = useCounterpartyEntries(counterpartyId, { limit: 100 });
   const forgive = useForgiveCounterparty();
   const removeEntry = useDeleteDebtEntry();
-  const openSettleIntent = useOpenSettleIntent();
-  const navigate = useNavigate();
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<DebtEntry | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<DebtEntry | null>(null);
   const [entryFormOpen, setEntryFormOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   function closeForgive() {
     setForgiveOpen(false);
@@ -74,18 +67,6 @@ export function CounterpartyDetail({
     removeEntry.mutate(entryToDelete.id, { onSuccess: closeEntryDelete });
   }
 
-  function handleOpenLedgerSource(source: CounterpartyLedgerPart) {
-    if (source.left) {
-      void navigate(`/ledgers/${source.ledgerId}/history`);
-      return;
-    }
-    openSettleIntent({
-      ledgerId: source.ledgerId,
-      personId: source.personId,
-      amount: source.amount,
-    });
-  }
-
   if (counterparty.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -101,6 +82,78 @@ export function CounterpartyDetail({
   const sharedLedgersHeadingId = `counterparty-shared-ledgers-${counterpartyId}`;
   const entriesHeadingId = `counterparty-entries-${counterpartyId}`;
   const entryFormId = `counterparty-entry-form-${counterpartyId}`;
+  const historyId = `counterparty-history-${counterpartyId}`;
+  const { outstanding, history } = splitDebtEntriesByBalanceZero(entries.data?.items ?? []);
+  const canWrite = mode === 'personal';
+
+  function renderEntryList(items: readonly DebtEntry[], editable: boolean) {
+    return (
+      <ul className={styles.entryList}>
+        {items.map((entry) => {
+          const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
+          const canEdit = editable && !isAdjustment && entry.splitId === null;
+          const isUnrecorded = entry.transactionId === null && !isAdjustment;
+          return (
+            <li key={entry.id} className={styles.entry}>
+              <div className={styles.entryInfo}>
+                <div className={styles.entryLine}>
+                  <time dateTime={entry.date}>{formatDate(entry.date)}</time>
+                  <span className={styles.kind}>{ENTRY_KIND_LABELS[entry.kind]}</span>
+                  <span className={styles.delta}>{formatDelta(entry.delta)}</span>
+                </div>
+                <div className={styles.entryLine}>
+                  {entry.balanceAfter !== undefined && (
+                    <span className={styles.balanceAfter}>
+                      {formatBalanceAfter(entry.balanceAfter)}
+                    </span>
+                  )}
+                  {isUnrecorded && <span className={styles.unrecorded}>未記帳</span>}
+                  {SYNC_STATUS_LABELS[entry.sync] && (
+                    <span className={`${styles.syncLabel} ${styles[entry.sync.toLowerCase()]}`}>
+                      {SYNC_STATUS_LABELS[entry.sync]}
+                    </span>
+                  )}
+                </div>
+                {entry.note && <p className={styles.note}>{entry.note}</p>}
+              </div>
+              {editable && (
+                <div className={styles.entryActions}>
+                  {entry.splitId !== null ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => onEditSplit?.(entry.splitId!)}
+                    >
+                      分帳
+                    </Button>
+                  ) : (
+                    canEdit && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setEntryToEdit(entry)}
+                      >
+                        修改
+                      </Button>
+                    )
+                  )}
+                  {entry.splitId === null && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setEntryToDelete(entry)}
+                    >
+                      刪除
+                    </Button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   return (
     <div className={styles.detail}>
@@ -108,41 +161,45 @@ export function CounterpartyDetail({
         {formatCounterpartyBalance(person.displayName, person.balance)}
       </p>
 
-      {ledgerParts.length > 0 && (
+      {mode === 'overview' && ledgerParts.length > 0 && (
         <section className={styles.sharedLedgers} aria-labelledby={sharedLedgersHeadingId}>
           <h4 id={sharedLedgersHeadingId}>共享帳本</h4>
-          <LedgerSourceList sources={ledgerParts} onOpenSource={handleOpenLedgerSource} />
+          <LedgerSourceList sources={ledgerParts} readOnly />
         </section>
       )}
 
-      <div className={styles.actions}>
-        <Button
-          type="button"
-          aria-expanded={entryFormOpen}
-          aria-controls={entryFormId}
-          onClick={() => setEntryFormOpen((open) => !open)}
-        >
-          記一筆
-        </Button>
-        {person.balance > 0 && (
-          <Button type="button" variant="secondary" onClick={() => setForgiveOpen(true)}>
-            免除剩餘
+      {canWrite && (
+        <div className={styles.actions}>
+          <Button
+            type="button"
+            aria-expanded={entryFormOpen}
+            aria-controls={entryFormId}
+            onClick={() => setEntryFormOpen((open) => !open)}
+          >
+            記一筆
           </Button>
-        )}
-      </div>
+          {person.balance > 0 && (
+            <Button type="button" variant="secondary" onClick={() => setForgiveOpen(true)}>
+              免除剩餘
+            </Button>
+          )}
+        </div>
+      )}
 
-      <AnimatedDisclosure
-        id={entryFormId}
-        open={entryFormOpen}
-        className={styles.entryFormDisclosure}
-      >
-        <DebtEntryForm
-          ledger={ledger}
-          initialCounterpartyName={person.displayName}
-          onCancel={() => setEntryFormOpen(false)}
-          onSaved={() => setEntryFormOpen(false)}
-        />
-      </AnimatedDisclosure>
+      {canWrite && (
+        <AnimatedDisclosure
+          id={entryFormId}
+          open={entryFormOpen}
+          className={styles.entryFormDisclosure}
+        >
+          <DebtEntryForm
+            ledger={ledger}
+            initialCounterpartyName={person.displayName}
+            onCancel={() => setEntryFormOpen(false)}
+            onSaved={() => setEntryFormOpen(false)}
+          />
+        </AnimatedDisclosure>
+      )}
 
       <section className={styles.entries} aria-labelledby={entriesHeadingId}>
         <h4 id={entriesHeadingId}>往來紀錄</h4>
@@ -150,85 +207,29 @@ export function CounterpartyDetail({
           <p className={styles.status}>載入中…</p>
         ) : entries.error ? (
           <FormError error={entries.error} />
-        ) : entries.data?.items.length === 0 ? (
-          <p className={styles.empty}>還沒有往來紀錄。</p>
+        ) : outstanding.length === 0 ? (
+          <p className={styles.empty}>目前沒有未還清紀錄。</p>
         ) : (
-          <>
-            <ul className={styles.entryList}>
-              {entries.data?.items.map((entry) => {
-                const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
-                const canEdit = !isAdjustment && entry.splitId === null;
-                const isUnrecorded = entry.transactionId === null && !isAdjustment;
-                return (
-                  <li key={entry.id} className={styles.entry}>
-                    <div className={styles.entryInfo}>
-                      <div className={styles.entryLine}>
-                        <time dateTime={entry.date}>{formatDate(entry.date)}</time>
-                        <span className={styles.kind}>{ENTRY_KIND_LABELS[entry.kind]}</span>
-                        <span className={styles.delta}>{formatDelta(entry.delta)}</span>
-                      </div>
-                      <div className={styles.entryLine}>
-                        {entry.balanceAfter !== undefined && (
-                          <span className={styles.balanceAfter}>
-                            {formatBalanceAfter(entry.balanceAfter)}
-                          </span>
-                        )}
-                        {isUnrecorded && <span className={styles.unrecorded}>未記帳</span>}
-                        {SYNC_STATUS_LABELS[entry.sync] && (
-                          <span
-                            className={`${styles.syncLabel} ${styles[entry.sync.toLowerCase()]}`}
-                          >
-                            {SYNC_STATUS_LABELS[entry.sync]}
-                          </span>
-                        )}
-                      </div>
-                      {entry.note && <p className={styles.note}>{entry.note}</p>}
-                    </div>
-                    <div className={styles.entryActions}>
-                      {entry.splitId !== null ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => onEditSplit?.(entry.splitId!)}
-                        >
-                          分帳
-                        </Button>
-                      ) : (
-                        canEdit && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => setEntryToEdit(entry)}
-                          >
-                            修改
-                          </Button>
-                        )
-                      )}
-                      {entry.splitId === null && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setEntryToDelete(entry)}
-                        >
-                          刪除
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            {entries.data && (
-              <Pagination
-                page={entries.data.page}
-                limit={entries.data.limit}
-                total={entries.data.total}
-                onChange={setPage}
-              />
-            )}
-          </>
+          renderEntryList(outstanding, canWrite)
         )}
       </section>
+
+      {history.length > 0 && (
+        <section className={styles.history}>
+          <Button
+            type="button"
+            variant="secondary"
+            aria-expanded={historyOpen}
+            aria-controls={historyId}
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            歷史
+          </Button>
+          <AnimatedDisclosure id={historyId} open={historyOpen}>
+            {renderEntryList(history, canWrite)}
+          </AnimatedDisclosure>
+        </section>
+      )}
 
       <ConfirmDialog
         open={forgiveOpen}

@@ -7,7 +7,7 @@ import type { Cents } from '@ledger/shared';
  *
  * 送出端（借還頁、往來帳明細）與接收端（交易頁）是不同的元件，所以契約集中在這裡，沿用
  * `features/linking/navigation.ts` 的作法：用 `location.state` 帶一次性的指示，交易頁讀到後
- * 切換作用中帳本、切到「結清」、打開預填的結清表單，再把 state 清掉，重新整理不會再開一次。
+ * 切到共享分頁、在來源帳本下方打開預填表單，再把 state 清掉，重新整理不會再開一次。
  *
  * 只帶 API 給的原始值（`CounterpartyLedgerPart` 的 `ledgerId`、`personId`、`amount`），
  * 「我是哪一個 LedgerPerson」由接收端從帳本裡的人找出（`userId`＝目前使用者），前端不算錢。
@@ -32,7 +32,7 @@ export function useOpenSettleIntent(): (intent: SettleIntent) => void {
   const navigate = useNavigate();
   return useCallback(
     (intent: SettleIntent) => {
-      void navigate('/transactions?view=settle', {
+      void navigate('/transactions?view=debts&tab=shared', {
         state: { [SETTLE_INTENT_STATE_KEY]: intent },
       });
     },

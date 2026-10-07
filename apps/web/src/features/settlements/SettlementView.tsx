@@ -21,6 +21,8 @@ export function SettlementView({ ledger, onSettle }: SettlementViewProps) {
   const summary = useSettlementSummary(ledger.id, ledger.kind === 'SHARED');
   const currentUser = useCurrentUser();
   const canCreate = ledger.role !== 'VIEWER' && ledger.archivedAt === null;
+  const netsHeadingId = `settlement-nets-${ledger.id}`;
+  const transfersHeadingId = `settlement-transfers-${ledger.id}`;
   const peopleById = new Map(summary.data?.people.map(({ person }) => [person.id, person]));
 
   function displayName(person: { id: string; name: string; userId: string | null }) {
@@ -33,8 +35,8 @@ export function SettlementView({ ledger, onSettle }: SettlementViewProps) {
       {summary.error && <FormError error={summary.error} />}
       {summary.data && (
         <>
-          <section className={styles.section} aria-labelledby="settlement-nets">
-            <h2 className={styles.heading} id="settlement-nets">
+          <section className={styles.section} aria-labelledby={netsHeadingId}>
+            <h2 className={styles.heading} id={netsHeadingId}>
               淨額
             </h2>
             <ul className={styles.netList}>
@@ -52,8 +54,8 @@ export function SettlementView({ ledger, onSettle }: SettlementViewProps) {
           </section>
 
           {summary.data.suggestions.length > 0 && (
-            <section className={styles.section} aria-labelledby="settlement-transfers">
-              <h2 className={styles.heading} id="settlement-transfers">
+            <section className={styles.section} aria-labelledby={transfersHeadingId}>
+              <h2 className={styles.heading} id={transfersHeadingId}>
                 轉帳
               </h2>
               <ul className={styles.suggestionList}>

@@ -4,10 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import type { LedgerGroup, LedgerSummary } from '@ledger/shared';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { DebtsView } from './DebtsView';
 
-/** DebtsView 負責借還提示、外部展開請求與帳本來源導覽，不另算往來資料。 */
+/** DebtsView 負責個人分頁的新增入口與外部展開請求，不另算往來資料。 */
 describe('DebtsView', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
@@ -90,7 +90,10 @@ describe('DebtsView', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderView(openCounterpartyId?: string | null) {
+  function renderView(
+    openCounterpartyId?: string | null,
+    mode: 'overview' | 'personal' = 'personal',
+  ) {
     function Harness() {
       const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(
         openCounterpartyId ?? null,
@@ -98,6 +101,7 @@ describe('DebtsView', () => {
       return (
         <DebtsView
           ledger={ledger}
+          mode={mode}
           expandedCounterpartyId={expandedCounterpartyId}
           onExpandedChange={setExpandedCounterpartyId}
           openCounterpartyId={openCounterpartyId}
@@ -111,16 +115,15 @@ describe('DebtsView', () => {
         <QueryClientProvider client={queryClient}>
           <Harness />
         </QueryClientProvider>
-        <LocationProbe />
       </MemoryRouter>,
     );
   }
 
-  it('labels the view and expands the selected person in place', async () => {
+  it('keeps the personal add entry and expands the selected person in place', async () => {
     const user = userEvent.setup();
     renderView();
 
-    expect(screen.getByText('借還紀錄不分帳本')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '＋ 新增' })).toBeInTheDocument();
     const row = await screen.findByRole('button', { name: /^小明/ });
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
@@ -149,9 +152,7 @@ describe('DebtsView', () => {
     counterpartyItems = [];
     renderView();
 
-    expect(
-      await screen.findByText('還沒有借還紀錄，從『新增交易 → 借還』開始記第一筆'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('目前沒有個人往來。')).toBeInTheDocument();
   });
 
   it('creates a counterparty from the header without opening a right panel', async () => {
@@ -185,35 +186,7 @@ describe('DebtsView', () => {
     );
   });
 
-  it('opens a settle intent with the API group values for an active ledger', async () => {
-    const user = userEvent.setup();
-    ledgerGroups = [
-      {
-        ledger: { id: 'ledger-hualien', name: '花蓮三日', left: false },
-        people: [
-          {
-            person: { id: 'person-ming', name: '明哥', userId: null, status: 'GUEST' },
-            amount: -51200,
-            pointer: { counterpartyId: null, auto: false },
-          },
-        ],
-      },
-    ];
-    renderView();
-
-    await user.click(await screen.findByRole('button', { name: /開啟 花蓮三日 的結清/ }));
-
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/transactions',
-      search: '?view=settle',
-      state: {
-        settleIntent: { ledgerId: 'ledger-hualien', personId: 'person-ming', amount: -51200 },
-      },
-    });
-  });
-
-  it('opens history for an exited ledger source', async () => {
-    const user = userEvent.setup();
+  it('shows the overview without the personal add action and keeps source rows read-only', async () => {
     ledgerGroups = [
       {
         ledger: { id: 'ledger-old-home', name: '老家', left: true },
@@ -226,28 +199,11 @@ describe('DebtsView', () => {
         ],
       },
     ];
-    renderView();
+    renderView(undefined, 'overview');
 
-    await user.click(await screen.findByRole('button', { name: /唯讀畫面/ }));
-
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/ledgers/ledger-old-home/history',
-      search: '',
-      state: null,
-    });
+    expect(await screen.findByRole('heading', { name: /老家.*已退出/ })).toBeInTheDocument();
+    expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '＋ 新增' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /老家|明哥/ })).not.toBeInTheDocument();
   });
 });
-
-function LocationProbe() {
-  const location = useLocation();
-  const state: unknown = location.state;
-  return (
-    <output data-testid="location-state">
-      {JSON.stringify({
-        pathname: location.pathname,
-        search: location.search,
-        state,
-      })}
-    </output>
-  );
-}

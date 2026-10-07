@@ -20,8 +20,7 @@ import styles from './TransactionWorkbench.module.css';
  * - `transaction`：編輯一筆一般交易。
  * - `debtTransaction`：編輯一筆往來紀錄產生的交易。
  * - `split`：編輯一筆分帳。
- * - `settlement`：共享帳本的結清表單（3e W116～W121）。帶 `settlement`＝編輯那一筆結清
- *   （`transaction.settlement` 有值的交易）；帶 `prefill`＝從結清建議打開；兩者都沒有＝空白新增。
+ * - `settlement`：首頁既有的結清編輯入口；交易頁新增結清已移到共享分頁的帳本組內。
  * - `fillAccount`：補帳戶（3e W125），只有一個帳戶下拉。交易本身是一般交易或結清皆可。
  */
 export type PanelTarget =
@@ -55,7 +54,7 @@ export interface TransactionWorkbenchProps {
  * 右側欄的內容（spec 2i §4.5、plan D25、3b-1 W5）。
  *
  * 總覽與交易頁兩頁都要用同一個面板：頁面各自持有目標狀態，面板依 `target.kind`
- * 渲染新增、交易編輯、分帳編輯、結清或補帳戶內容。
+ * 渲染新增、交易編輯、分帳編輯、首頁既有結清編輯或補帳戶內容。
  *
  * ## 各面板目標互斥
  *

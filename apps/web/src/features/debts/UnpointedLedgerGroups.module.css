@@ -44,16 +44,6 @@
   color: var(--color-text);
   font: inherit;
   text-align: left;
-  cursor: pointer;
-}
-
-.person:hover {
-  background: var(--color-fill);
-}
-
-.person:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
 }
 
 .personName {

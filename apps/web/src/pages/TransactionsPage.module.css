@@ -81,3 +81,7 @@
 .toolbarRow .viewSwitch {
   margin-bottom: 0;
 }
+
+.debtsTabs {
+  margin-top: calc(-1 * var(--space-sm));
+}

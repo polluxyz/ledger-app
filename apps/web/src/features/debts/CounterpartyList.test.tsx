@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { CounterpartyList } from './CounterpartyList';
 import { useState } from 'react';
 
-/** 借還清單驗 API 總額、列內明細展開、未指向群組與來源互動。 */
+/** 借還清單驗兩種餘額來源、總覽唯讀展開與個人分頁的前端零值過濾。 */
 describe('CounterpartyList', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
@@ -108,6 +108,16 @@ describe('CounterpartyList', () => {
                 ledgerParts: [],
                 link: null,
               },
+              {
+                id: 'cp-3',
+                name: '清零的人',
+                displayName: '清零的人',
+                askMerge: false,
+                balance: 0,
+                totalBalance: 2500,
+                ledgerParts: [],
+                link: null,
+              },
             ]
           : [
               {
@@ -121,21 +131,25 @@ describe('CounterpartyList', () => {
                 link: null,
               },
             ];
-      return json({ items, page, limit: 20, total: 42 });
+      const filteredItems =
+        parsedUrl.searchParams.get('nonZero') === 'true'
+          ? items.filter((item) => item.balance !== 0)
+          : items;
+      return json({ items: filteredItems, page, limit: 20, total: 42 });
     });
   });
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderList(onOpenLedgerSource = vi.fn()) {
+  function renderList(mode: 'overview' | 'personal' = 'overview') {
     function Harness() {
       const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(null);
       return (
         <CounterpartyList
           ledger={ledger}
+          mode={mode}
           expandedCounterpartyId={expandedCounterpartyId}
           onExpandedChange={setExpandedCounterpartyId}
-          onOpenLedgerSource={onOpenLedgerSource}
           onEditSplit={vi.fn()}
         />
       );
@@ -148,7 +162,6 @@ describe('CounterpartyList', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    return { onOpenLedgerSource };
   }
 
   it('shows API total balances and asks the server to omit two-cleared counterparties', async () => {
@@ -159,6 +172,7 @@ describe('CounterpartyList', () => {
     expect(screen.getByText('連動')).toBeInTheDocument();
     expect(screen.queryByText('兩清')).not.toBeInTheDocument();
     expect(screen.queryByText('老王')).not.toBeInTheDocument();
+    expect(screen.queryByText('清零的人')).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).match(/\/counterparties\?page=1&limit=20&nonZero=true$/),
@@ -184,6 +198,7 @@ describe('CounterpartyList', () => {
     expect(screen.getByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
     expect(screen.queryByText('個人往來')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
 
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'false');
@@ -203,10 +218,7 @@ describe('CounterpartyList', () => {
     expect(screen.getByText('老家')).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
     expect(screen.getByText('你欠小明 $15')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /開啟已退出帳本 老家 的唯讀畫面/ }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /老家|花蓮三日/ })).not.toBeInTheDocument();
 
     await user.click(secondRow);
     expect(firstRow).toHaveAttribute('aria-expanded', 'false');
@@ -227,26 +239,14 @@ describe('CounterpartyList', () => {
         ],
       },
     ];
-    const user = userEvent.setup();
-    const { onOpenLedgerSource } = renderList();
+    renderList();
 
     expect(await screen.findByRole('heading', { name: /花蓮三日.*已退出/ })).toBeInTheDocument();
     expect(screen.getByText('小華欠你 $1,394')).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledger-groups?unpointed=true')),
     ).toBe(true);
-    await user.click(screen.getByRole('button', { name: /開啟已退出帳本 花蓮三日 的唯讀畫面/ }));
-
-    await waitFor(() =>
-      expect(onOpenLedgerSource).toHaveBeenCalledWith({
-        ledgerId: 'ledger-unpointed',
-        ledgerName: '花蓮三日',
-        personId: 'person-hua',
-        personName: '小華',
-        amount: 139400,
-        left: true,
-      }),
-    );
+    expect(screen.queryByRole('button', { name: /小華|花蓮三日/ })).not.toBeInTheDocument();
   });
 
   it('requests the next page through the shared pagination control', async () => {
@@ -264,5 +264,17 @@ describe('CounterpartyList', () => {
       ).toBe(true),
     );
     expect(await screen.findByRole('button', { name: /^小美/ })).toBeInTheDocument();
+  });
+
+  it('uses personal balance, filters zero balances in the browser, and omits the server filter', async () => {
+    renderList('personal');
+
+    expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
+    expect(screen.getByText('你欠阿華 $11')).toBeInTheDocument();
+    expect(screen.queryByText('清零的人')).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).match(/\/counterparties\?page=1&limit=20$/)),
+    ).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('nonZero=true'))).toBe(false);
   });
 });

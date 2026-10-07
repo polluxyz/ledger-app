@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerSourceList } from './LedgerSourceList';
 
-/** LedgerSourceList 驗共享帳本來源的正負方向、退出標籤與可操作入口。 */
+/** LedgerSourceList 驗共享帳本來源的正負方向、退出標籤與唯讀狀態。 */
 describe('LedgerSourceList', () => {
   const sources: CounterpartyLedgerPart[] = [
     {
@@ -33,10 +33,18 @@ describe('LedgerSourceList', () => {
     expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
     expect(screen.getByText('你欠小明 $25')).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
-    const sourceButton = screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ });
+    const sourceButton = screen.getByRole('button', { name: /花蓮三日/ });
+    expect(sourceButton).not.toHaveAttribute('aria-label');
     sourceButton.focus();
     await user.keyboard('{Enter}');
 
     expect(onOpenSource).toHaveBeenCalledWith(sources[0]);
+  });
+
+  it('renders overview sources without an action button', () => {
+    render(<LedgerSourceList sources={sources} readOnly />);
+
+    expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

@@ -6,28 +6,40 @@ import styles from './LedgerSourceList.module.css';
 /** 共用帳本來源的唯讀入口，讓借還展開區與往來帳明細保持相同的金額方向。 */
 interface LedgerSourceListProps {
   sources: readonly CounterpartyLedgerPart[];
-  onOpenSource: (source: CounterpartyLedgerPart) => void;
+  onOpenSource?: (source: CounterpartyLedgerPart) => void;
+  readOnly?: boolean;
 }
 
-export function LedgerSourceList({ sources, onOpenSource }: LedgerSourceListProps) {
+export function LedgerSourceList({
+  sources,
+  onOpenSource,
+  readOnly = false,
+}: LedgerSourceListProps) {
   return (
     <ul className={styles.list}>
-      {sources.map((source) => (
-        <li key={`${source.ledgerId}-${source.personId}`}>
-          <button
-            type="button"
-            className={styles.row}
-            aria-label={getLedgerSourceLabel(source)}
-            onClick={() => onOpenSource(source)}
-          >
+      {sources.map((source) => {
+        const content = (
+          <>
             <span className={styles.ledgerName}>
               {source.ledgerName} <span aria-hidden="true">›</span>
               {source.left && <span className={styles.left}>已退出</span>}
             </span>
             <SmallDebtDirection personName={source.personName} amount={source.amount} />
-          </button>
-        </li>
-      ))}
+          </>
+        );
+
+        return (
+          <li key={`${source.ledgerId}-${source.personId}`}>
+            {readOnly ? (
+              <span className={`${styles.row} ${styles.readOnly}`}>{content}</span>
+            ) : (
+              <button type="button" className={styles.row} onClick={() => onOpenSource?.(source)}>
+                {content}
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -45,12 +57,4 @@ export function SmallDebtDirection({ personName, amount }: { personName: string;
       <span className={styles.amount}>{amountText}</span>
     </span>
   );
-}
-
-function getLedgerSourceLabel(source: CounterpartyLedgerPart): string {
-  const direction = source.amount > 0 ? `${source.personName}欠你` : `你欠${source.personName}`;
-  const access = source.left
-    ? `開啟已退出帳本 ${source.ledgerName} 的唯讀畫面`
-    : `開啟 ${source.ledgerName} 的結清`;
-  return `${access}：${direction} ${formatMoney(Math.abs(source.amount))}`;
 }

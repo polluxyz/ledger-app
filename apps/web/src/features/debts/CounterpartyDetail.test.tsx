@@ -3,11 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Counterparty, LedgerSummary } from '@ledger/shared';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { CounterpartyDetail } from './CounterpartyDetail';
 
 /**
- * CounterpartyDetail 驗 API 餘額、共享來源、列內新增表單與往來紀錄操作。
+ * CounterpartyDetail 驗兩種分頁的唯讀內容、未還清分組、歷史與個人操作。
  */
 describe('CounterpartyDetail', () => {
   const fetchMock = vi.fn();
@@ -83,7 +83,7 @@ describe('CounterpartyDetail', () => {
           }),
         );
       if (url.includes('/counterparties/cp-1/entries')) {
-        return json({ items, page: 1, limit: 20, total });
+        return json({ items, page: 1, limit: 100, total });
       }
       if (url.includes('/debt-entries') && init?.method === 'POST') {
         return json(
@@ -129,15 +129,20 @@ describe('CounterpartyDetail', () => {
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
     } = {},
+    mode: 'overview' | 'personal' = 'personal',
   ) {
     const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
       <MemoryRouter initialEntries={['/transactions?view=debts']}>
         <QueryClientProvider client={queryClient}>
-          <CounterpartyDetail ledger={ledger} counterpartyId="cp-1" onEditSplit={onEditSplit} />
+          <CounterpartyDetail
+            ledger={ledger}
+            counterpartyId="cp-1"
+            mode={mode}
+            onEditSplit={onEditSplit}
+          />
         </QueryClientProvider>
-        <LocationProbe />
       </MemoryRouter>,
     );
     return { onEditSplit, ...result };
@@ -180,8 +185,7 @@ describe('CounterpartyDetail', () => {
     await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
   });
 
-  it('shows shared ledgers below the personal balance and opens their settle intent', async () => {
-    const user = userEvent.setup();
+  it('shows shared ledgers as read-only rows in the overview', async () => {
     const source = {
       ledgerId: 'ledger-hualien',
       ledgerName: '花蓮三日',
@@ -190,23 +194,17 @@ describe('CounterpartyDetail', () => {
       amount: 51200,
       left: false,
     };
-    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
     expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
     expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ }));
-
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/transactions',
-      search: '?view=settle',
-      state: {
-        settleIntent: { ledgerId: 'ledger-hualien', personId: 'person-ming', amount: 51200 },
-      },
-    });
+    expect(screen.queryByRole('button', { name: /花蓮三日/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /記一筆|免除剩餘|修改|刪除|分帳/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it('opens the read-only history for an exited shared ledger', async () => {
-    const user = userEvent.setup();
+  it('keeps an exited shared source read-only in the overview', async () => {
     const source = {
       ledgerId: 'ledger-old-home',
       ledgerName: '老家',
@@ -215,15 +213,29 @@ describe('CounterpartyDetail', () => {
       amount: -2500,
       left: true,
     };
-    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
-    await user.click(await screen.findByRole('button', { name: /唯讀畫面/ }));
+    expect(await screen.findByText('已退出')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /老家/ })).not.toBeInTheDocument();
+  });
 
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/ledgers/ledger-old-home/history',
-      search: '',
-      state: null,
-    });
+  it('shows only newer records before the latest zero and opens older entries as history', async () => {
+    const user = userEvent.setup();
+    const entries = [
+      { ...baseEntry, id: 'outstanding', balanceAfter: 3000, note: '未還清' },
+      { ...baseEntry, id: 'zero', balanceAfter: 0, note: '歸零' },
+      { ...baseEntry, id: 'older', balanceAfter: -2000, note: '更舊' },
+    ];
+    renderDetail(3000, entries, entries.length);
+
+    expect(await screen.findByText('未還清')).toBeInTheDocument();
+    expect(screen.queryByText('歸零')).not.toBeInTheDocument();
+    expect(screen.queryByText('更舊')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '歷史' }));
+    expect(await screen.findByText('歸零')).toBeInTheDocument();
+    expect(screen.getByText('更舊')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '修改' })).toHaveLength(3);
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {
@@ -283,9 +295,12 @@ describe('CounterpartyDetail', () => {
     ];
     renderDetail(0, entries, entries.length);
 
-    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
+    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付']) {
       expect(await screen.findByText(kind)).toBeInTheDocument();
     }
+    await userEvent.setup().click(screen.getByRole('button', { name: '歷史' }));
+    expect(await screen.findByText('結清差額')).toBeInTheDocument();
+    expect(screen.getByText('免除')).toBeInTheDocument();
     expect(screen.getByText('+$120')).toBeInTheDocument();
     expect(screen.getByText('−$111')).toBeInTheDocument();
     expect(screen.getAllByText('餘額 $120').length).toBeGreaterThan(0);
@@ -387,17 +402,3 @@ describe('CounterpartyDetail', () => {
     expect(within(confirmation).getByText('小明欠你的 $50 將歸零')).toBeInTheDocument();
   });
 });
-
-function LocationProbe() {
-  const location = useLocation();
-  const state: unknown = location.state;
-  return (
-    <output data-testid="location-state">
-      {JSON.stringify({
-        pathname: location.pathname,
-        search: location.search,
-        state,
-      })}
-    </output>
-  );
-}

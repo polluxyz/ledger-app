@@ -1,14 +1,13 @@
 import { useCallback, useState } from 'react';
-import type { Counterparty, CounterpartyLedgerPart, LedgerSummary } from '@ledger/shared';
-import { useNavigate } from 'react-router-dom';
+import type { Counterparty, LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
-import { useOpenSettleIntent } from '../settlements/settle-intent';
 import { AddCounterpartyDialog } from './AddCounterpartyDialog';
 import { CounterpartyList } from './CounterpartyList';
 import styles from './DebtsView.module.css';
 
 interface DebtsViewProps {
   ledger: LedgerSummary;
+  mode: 'overview' | 'personal';
   expandedCounterpartyId: string | null;
   onExpandedChange: (counterpartyId: string | null) => void;
   openCounterpartyId?: string | null;
@@ -16,9 +15,10 @@ interface DebtsViewProps {
   onEditSplit: (splitId: string) => void;
 }
 
-/** 借還檢視只列往來對象；餘額與排序都由 API 提供，避免前端重做帳務計算。 */
+/** 借還的總覽與個人分頁共用對象清單，寫入入口只在個人分頁顯示。 */
 export function DebtsView({
   ledger,
+  mode,
   expandedCounterpartyId,
   onExpandedChange,
   openCounterpartyId,
@@ -27,8 +27,6 @@ export function DebtsView({
 }: DebtsViewProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [createdCounterpartyId, setCreatedCounterpartyId] = useState<string | null>(null);
-  const openSettleIntent = useOpenSettleIntent();
-  const navigate = useNavigate();
 
   function handleCounterpartyCreated(counterparty: Counterparty) {
     setCreatedCounterpartyId(counterparty.id);
@@ -45,33 +43,22 @@ export function DebtsView({
     [createdCounterpartyId, onExpandedChange, onOpenRequestHandled],
   );
 
-  function handleOpenLedgerSource(source: CounterpartyLedgerPart) {
-    if (source.left) {
-      void navigate(`/ledgers/${source.ledgerId}/history`);
-      return;
-    }
-    openSettleIntent({
-      ledgerId: source.ledgerId,
-      personId: source.personId,
-      amount: source.amount,
-    });
-  }
-
   return (
     <div className={styles.view}>
-      <div className={styles.header}>
-        <p className={styles.note}>借還紀錄不分帳本</p>
-        <Button variant="secondary" onClick={() => setAddDialogOpen(true)}>
-          ＋ 新增
-        </Button>
-      </div>
+      {mode === 'personal' && (
+        <div className={styles.header}>
+          <Button variant="secondary" onClick={() => setAddDialogOpen(true)}>
+            ＋ 新增
+          </Button>
+        </div>
+      )}
       <CounterpartyList
         ledger={ledger}
+        mode={mode}
         expandedCounterpartyId={expandedCounterpartyId}
         onExpandedChange={onExpandedChange}
         openCounterpartyId={openCounterpartyId ?? createdCounterpartyId}
         onOpenRequestHandled={handleOpenRequestHandled}
-        onOpenLedgerSource={handleOpenLedgerSource}
         onEditSplit={onEditSplit}
       />
       <AddCounterpartyDialog
