@@ -5,11 +5,13 @@ import type {
   UpdateLedgerPersonRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from './use-ledger-pointers';
 import { settlementSummaryKey } from '../settlements/use-settlements';
 import { transactionsKey } from '../transactions/use-transactions';
 
 /**
- * 共享帳本裡的人（3e：成員、非成員、已離開的成員），端點是 `/ledgers/:ledgerId/people`。
+ * 共享帳本裡的人（3e：成員、虛擬成員、已離開的成員），端點是 `/ledgers/:ledgerId/people`。
  *
  * 只有 `SHARED` 帳本有這組端點，個人帳本打了會 404，所以呼叫端要傳 `enabled`
  * （通常是 `ledger.kind === 'SHARED'`）。誰能新增、改名、刪除由後端的角色檢查決定；
@@ -38,10 +40,12 @@ function useInvalidatePeople(ledgerId: string) {
     void queryClient.invalidateQueries({ queryKey: ledgerPeopleKey(ledgerId) });
     void queryClient.invalidateQueries({ queryKey: transactionsKey(ledgerId) });
     void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
+    void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
+    void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
   };
 }
 
-/** 新增非成員。名字重複回 409 `LEDGER_PERSON_NAME_TAKEN`。 */
+/** 新增虛擬成員（3f 起的稱呼，即 3e 的非成員）。名字重複回 409 `LEDGER_PERSON_NAME_TAKEN`。 */
 export function useCreateLedgerPerson(ledgerId: string) {
   const invalidate = useInvalidatePeople(ledgerId);
   return useMutation({
@@ -51,7 +55,7 @@ export function useCreateLedgerPerson(ledgerId: string) {
   });
 }
 
-/** 非成員改名。成員那一筆不能改（400）。 */
+/** 虛擬成員改名。成員那一筆不能改（400）。 */
 export function useRenameLedgerPerson(ledgerId: string) {
   const invalidate = useInvalidatePeople(ledgerId);
   return useMutation({
@@ -64,7 +68,7 @@ export function useRenameLedgerPerson(ledgerId: string) {
   });
 }
 
-/** 刪除沒用到的非成員。還在交易或結清裡時回 409 `LEDGER_PERSON_IN_USE`。 */
+/** 刪除沒用到的虛擬成員。還在交易或結清裡時回 409 `LEDGER_PERSON_IN_USE`。 */
 export function useDeleteLedgerPerson(ledgerId: string) {
   const invalidate = useInvalidatePeople(ledgerId);
   return useMutation({
