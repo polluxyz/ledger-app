@@ -9,6 +9,11 @@
   gap: var(--space-lg);
 }
 
+.ledgerGroups {
+  display: grid;
+  gap: var(--space-lg);
+}
+
 .group,
 .invites {
   min-width: 0;

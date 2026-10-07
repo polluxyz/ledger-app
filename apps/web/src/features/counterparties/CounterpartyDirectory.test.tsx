@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Counterparty, FriendRequest } from '@ledger/shared';
+import type { Counterparty, FriendRequest, LedgerGroup } from '@ledger/shared';
 import { CounterpartyDirectory } from './CounterpartyDirectory';
 
 describe('CounterpartyDirectory', () => {
@@ -34,6 +34,16 @@ describe('CounterpartyDirectory', () => {
     createdAt: '2026-09-01T00:00:00.000Z',
     respondedAt: null,
   };
+  const ledgerGroup: LedgerGroup = {
+    ledger: { id: 'ledger-1', name: '家用帳本', left: false },
+    people: [
+      {
+        person: { id: 'person-1', name: '小安', userId: 'user-2', status: 'MEMBER' },
+        amount: 500,
+        pointer: { counterpartyId: 'linked-1', auto: true },
+      },
+    ],
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -44,7 +54,11 @@ describe('CounterpartyDirectory', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function respondWith(items: Counterparty[], getInvite: () => FriendRequest | null) {
+  function respondWith(
+    items: Counterparty[],
+    getInvite: () => FriendRequest | null,
+    groups: LedgerGroup[] = [],
+  ) {
     fetchMock.mockImplementation((input: string, init?: RequestInit) => {
       const url = String(input);
       const json = (body: unknown) =>
@@ -61,6 +75,9 @@ describe('CounterpartyDirectory', () => {
       if (url.includes('/friend-requests?direction=outgoing')) {
         const invite = getInvite();
         return json({ items: invite ? [invite] : [], page: 1, limit: 100, total: invite ? 1 : 0 });
+      }
+      if (url.includes('/ledger-groups')) {
+        return json(groups);
       }
       if (url.includes('/counterparties')) {
         return json({ items, page: 1, limit: 100, total: items.length });
@@ -119,6 +136,9 @@ describe('CounterpartyDirectory', () => {
           total: pendingInvite ? 1 : 0,
         });
       }
+      if (url.includes('/ledger-groups')) {
+        return json([]);
+      }
       if (url.includes('/counterparties')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });
       }
@@ -162,12 +182,80 @@ describe('CounterpartyDirectory', () => {
     ).toBe(true);
   });
 
+  it('renders API ledger groups below the directory and opens the pointer dialog', async () => {
+    const user = userEvent.setup();
+    respondWith([linkedCounterparty], () => null, [ledgerGroup]);
+    renderDirectory();
+
+    expect(await screen.findByRole('heading', { name: '家用帳本' })).toBeInTheDocument();
+    expect(screen.getByText('→ 小明')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => {
+        const url = new URL(String(input), window.location.origin);
+        return url.pathname.endsWith('/ledger-groups') && !url.searchParams.has('unpointed');
+      }),
+    ).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: '指向' }));
+    expect(screen.getByRole('dialog', { name: '小安' })).toBeInTheDocument();
+    expect(screen.getByLabelText('指向已建立的對象')).toHaveValue('linked-1');
+  });
+
+  it('loads pointer names and options from later unfiltered counterparty pages', async () => {
+    const user = userEvent.setup();
+    const laterPageGroup: LedgerGroup = {
+      ...ledgerGroup,
+      people: ledgerGroup.people.map((person) => ({
+        ...person,
+        pointer: { ...person.pointer, counterpartyId: unlinkedCounterparty.id },
+      })),
+    };
+    fetchMock.mockImplementation((input: string) => {
+      const url = new URL(String(input), window.location.origin);
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+
+      if (url.pathname.endsWith('/ledger-groups')) {
+        return json([laterPageGroup]);
+      }
+      if (url.pathname.endsWith('/friend-requests')) {
+        return json({ items: [], page: 1, limit: 100, total: 0 });
+      }
+      if (url.pathname.endsWith('/counterparties')) {
+        const page = Number(url.searchParams.get('page') ?? 1);
+        if (url.searchParams.has('q')) {
+          return json({ items: [], page, limit: 100, total: 0 });
+        }
+        return json({
+          items: page === 1 ? [linkedCounterparty] : [unlinkedCounterparty],
+          page,
+          limit: 100,
+          total: 101,
+        });
+      }
+      return Promise.reject(new Error(`未預期的請求：${url}`));
+    });
+    renderDirectory('搜尋中的名字');
+
+    expect(await screen.findByText('→ 林小安')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '指向' }));
+    expect(await screen.findByRole('option', { name: '林小安' })).toBeInTheDocument();
+    expect(screen.getByLabelText('指向已建立的對象')).toHaveValue('unlinked-1');
+  });
+
   it('shows the search reminder only when the server reports more than one hundred people', async () => {
     fetchMock.mockImplementation((input: string) => {
       const url = String(input);
-      const body = url.includes('/counterparties')
-        ? { items: [unlinkedCounterparty], page: 1, limit: 100, total: 101 }
-        : { items: [], page: 1, limit: 100, total: 0 };
+      const body = url.includes('/ledger-groups')
+        ? []
+        : url.includes('/counterparties')
+          ? { items: [unlinkedCounterparty], page: 1, limit: 100, total: 101 }
+          : { items: [], page: 1, limit: 100, total: 0 };
       return Promise.resolve(
         new Response(JSON.stringify(body), {
           status: 200,

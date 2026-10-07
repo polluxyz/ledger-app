@@ -1,9 +1,17 @@
-import type { Counterparty } from '@ledger/shared';
+import { useQueries } from '@tanstack/react-query';
+import { useState } from 'react';
+import type { Counterparty, Paginated } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
-import { useCounterparties } from '../debts/use-debts';
+import { apiRequest } from '../../lib/api-client';
+import { COUNTERPARTIES_KEY, useCounterparties } from '../debts/use-debts';
+import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { useCancelLinkInvite, useOutgoingInvites } from '../linking/use-linking';
+import { LedgerGroupSection } from './LedgerGroupSection';
+import { PointerDialog, type PointerDialogTarget } from './PointerDialog';
 import styles from './CounterpartyDirectory.module.css';
+
+const COUNTERPARTY_PAGE_SIZE = 100;
 
 interface CounterpartyDirectoryProps {
   q: string;
@@ -17,15 +25,52 @@ interface CounterpartyDirectoryProps {
  */
 export function CounterpartyDirectory({ q, onSelectCounterparty }: CounterpartyDirectoryProps) {
   const counterparties = useCounterparties({ q, limit: 100 });
+  const allCounterparties = useCounterparties({ limit: COUNTERPARTY_PAGE_SIZE });
+  const additionalCounterpartyPages = useQueries({
+    queries: Array.from(
+      {
+        length: Math.max(
+          0,
+          Math.ceil((allCounterparties.data?.total ?? 0) / COUNTERPARTY_PAGE_SIZE) - 1,
+        ),
+      },
+      (_, index) => {
+        const page = index + 2;
+        return {
+          queryKey: [...COUNTERPARTIES_KEY, 'list', { page, limit: COUNTERPARTY_PAGE_SIZE }],
+          queryFn: () =>
+            apiRequest<Paginated<Counterparty>>(
+              `/counterparties?page=${page}&limit=${COUNTERPARTY_PAGE_SIZE}`,
+            ),
+        };
+      },
+    ),
+  });
+  const ledgerGroups = useLedgerGroups();
   const outgoingInvites = useOutgoingInvites();
   const cancelInvite = useCancelLinkInvite();
+  const [pointerTarget, setPointerTarget] = useState<PointerDialogTarget | null>(null);
   const items = counterparties.data?.items ?? [];
+  const pointerCounterparties = [
+    ...(allCounterparties.data?.items ?? []),
+    ...additionalCounterpartyPages.flatMap((page) => page.data?.items ?? []),
+  ];
+  const pointerCounterpartyError =
+    allCounterparties.error ?? additionalCounterpartyPages.find((page) => page.error)?.error;
   const linked = items.filter((counterparty) => counterparty.link !== null);
   const unlinked = items.filter((counterparty) => counterparty.link === null);
 
   return (
     <div className={styles.directory}>
-      <FormError error={counterparties.error ?? outgoingInvites.error ?? cancelInvite.error} />
+      <FormError
+        error={
+          counterparties.error ??
+          pointerCounterpartyError ??
+          ledgerGroups.error ??
+          outgoingInvites.error ??
+          cancelInvite.error
+        }
+      />
 
       {items.length > 0 && (
         <div className={styles.groups}>
@@ -44,9 +89,31 @@ export function CounterpartyDirectory({ q, onSelectCounterparty }: CounterpartyD
         </div>
       )}
 
-      {!counterparties.isLoading && !counterparties.error && items.length === 0 && (
-        <p className={styles.empty}>還沒有對象</p>
+      {(ledgerGroups.data?.length ?? 0) > 0 && (
+        <div className={styles.ledgerGroups}>
+          {ledgerGroups.data?.map((group) => (
+            <LedgerGroupSection
+              key={group.ledger.id}
+              group={group}
+              counterparties={pointerCounterparties}
+              onSetPointer={(person) =>
+                setPointerTarget({
+                  ledgerId: group.ledger.id,
+                  personId: person.person.id,
+                  personName: person.person.name,
+                  counterpartyId: person.pointer.counterpartyId,
+                })
+              }
+            />
+          ))}
+        </div>
       )}
+
+      {!counterparties.isLoading &&
+        !counterparties.error &&
+        items.length === 0 &&
+        !ledgerGroups.isLoading &&
+        (ledgerGroups.data?.length ?? 0) === 0 && <p className={styles.empty}>還沒有對象</p>}
 
       {(outgoingInvites.data?.length ?? 0) > 0 && (
         <section className={styles.invites} aria-labelledby="outgoing-invites-title">
@@ -77,6 +144,12 @@ export function CounterpartyDirectory({ q, onSelectCounterparty }: CounterpartyD
       {(counterparties.data?.total ?? 0) > 100 && (
         <p className={styles.limitNote}>用搜尋縮小範圍</p>
       )}
+
+      <PointerDialog
+        target={pointerTarget}
+        counterparties={pointerCounterparties}
+        onClose={() => setPointerTarget(null)}
+      />
     </div>
   );
 }
