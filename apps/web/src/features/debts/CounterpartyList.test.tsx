@@ -123,7 +123,7 @@ describe('CounterpartyList', () => {
     const user = userEvent.setup();
     const { onSelectCounterparty } = renderList();
 
-    await user.click(await screen.findByRole('button', { name: '開啟小明的暱稱的往來帳' }));
+    await user.click(await screen.findByRole('button', { name: /^小明的暱稱/ }));
 
     expect(onSelectCounterparty).toHaveBeenCalledWith('cp-1');
   });
@@ -196,7 +196,7 @@ describe('CounterpartyList', () => {
     const user = userEvent.setup();
     renderList();
 
-    await screen.findByRole('button', { name: '開啟小明的暱稱的往來帳' });
+    await screen.findByRole('button', { name: /^小明的暱稱/ });
     await user.click(screen.getByRole('button', { name: '下一頁' }));
 
     await waitFor(() =>
@@ -206,6 +206,6 @@ describe('CounterpartyList', () => {
         ),
       ).toBe(true),
     );
-    expect(await screen.findByRole('button', { name: '開啟小美的往來帳' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^小美/ })).toBeInTheDocument();
   });
 });

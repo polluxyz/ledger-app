@@ -91,7 +91,7 @@ describe('DebtsView', () => {
     renderView(onSelectCounterparty);
 
     expect(screen.getByText('借還紀錄不分帳本')).toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: '開啟小明的往來帳' }));
+    await user.click(await screen.findByRole('button', { name: /^小明/ }));
     expect(onSelectCounterparty).toHaveBeenCalledWith('counterparty-1');
   });
 

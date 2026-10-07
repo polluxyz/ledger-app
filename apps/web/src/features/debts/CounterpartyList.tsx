@@ -60,7 +60,6 @@ export function CounterpartyList({
                     <button
                       type="button"
                       className={styles.row}
-                      aria-label={`開啟${counterparty.displayName}的往來帳`}
                       onClick={() => onSelectCounterparty(counterparty.id)}
                     >
                       <span className={styles.nameGroup}>
