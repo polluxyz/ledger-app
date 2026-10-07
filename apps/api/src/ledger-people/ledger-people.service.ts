@@ -120,11 +120,24 @@ export class LedgerPeopleService {
   }
 
   /** 新增非成員；唯一索引是並行請求下名稱不重複的最後防線。 */
-  async createGuest(ledgerId: string, name: string): Promise<LedgerPerson> {
+  async createGuest(
+    ledgerId: string,
+    name: string,
+    userId: string,
+    counterpartyId?: string,
+  ): Promise<LedgerPerson> {
     const normalizedName = name.trim();
     try {
       return await this.prisma.$transaction(async (tx) => {
         await this.assertSharedLedger(tx, ledgerId);
+        if (counterpartyId !== undefined) {
+          const counterparty = await tx.counterparty.findFirst({
+            where: { id: counterpartyId, ownerId: userId },
+            select: { id: true },
+          });
+          if (!counterparty) throw this.notFound();
+        }
+
         const existing = await tx.ledgerPerson.findFirst({
           where: { ledgerId, userId: null, deletedAt: null, name: normalizedName },
           select: { id: true },
@@ -134,6 +147,13 @@ export class LedgerPeopleService {
         const person = await tx.ledgerPerson.create({
           data: { ledgerId, userId: null, name: normalizedName },
         });
+        if (counterpartyId !== undefined) {
+          await tx.ledgerPersonPointer.upsert({
+            where: { userId_ledgerPersonId: { userId, ledgerPersonId: person.id } },
+            create: { userId, ledgerPersonId: person.id, counterpartyId },
+            update: { counterpartyId },
+          });
+        }
         return { id: person.id, name: person.name!, userId: null, status: 'GUEST' };
       });
     } catch (error) {

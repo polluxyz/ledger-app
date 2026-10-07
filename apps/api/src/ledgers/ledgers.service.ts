@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   DEFAULT_CATEGORIES,
   ErrorCode,
+  type AddMemberRequest,
   LedgerDetail,
   LedgerKind,
   LedgerMemberInfo,
@@ -13,6 +14,7 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
+import { findLinkOfCounterparty, otherSide } from '../debts/counterparty-links';
 
 /**
  * 帳本與成員的業務邏輯——授權與資料隔離的重心。個人模式與家庭模式共用同一套
@@ -262,7 +264,7 @@ export class LedgersService {
   }
 
   /**
-   * 以 email 查出「已註冊」的使用者並加入帳本（查無此人或已是成員都會擋下）。
+   * 先把 email 或呼叫者自己的已連動對象解析成帳號，再共用同一條 userId 加入路徑。
    *
    * **私人帳本一律擋下，owner 本人也不例外**——那不是權限不足，是帳本的類型不允許。
    * 前端不會為私人帳本畫出「新增成員」的按鈕，但那只是體驗：Swagger UI 就開在
@@ -272,30 +274,47 @@ export class LedgersService {
    * 一個沒註冊的 email 會拿到 `USER_NOT_FOUND`，那洩漏了該 email 未註冊，而呼叫者
    * 本就無權對這本帳本做任何成員操作。
    */
-  async addMember(ledgerId: string, email: string, role: LedgerRole): Promise<LedgerMemberInfo> {
-    const ledger = await this.prisma.ledger.findUnique({ where: { id: ledgerId } });
-    if (!ledger) {
-      throw this.notFound();
-    }
-    if (ledger.kind === 'PERSONAL') {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.PERSONAL_LEDGER_CANNOT_SHARE,
-        'This is a personal ledger; create a shared ledger to record with others.',
-      );
+  async addMember(
+    ledgerId: string,
+    input: AddMemberRequest,
+    requesterUserId: string,
+  ): Promise<LedgerMemberInfo> {
+    await this.assertSharedLedger(ledgerId);
+
+    let targetUserId: string;
+    if ('email' in input) {
+      const user = await this.prisma.user.findUnique({ where: { email: input.email } });
+      if (!user) {
+        throw new AppException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.USER_NOT_FOUND,
+          'No registered user with that email.',
+        );
+      }
+      targetUserId = user.id;
+    } else {
+      const counterparty = await this.prisma.counterparty.findFirst({
+        where: { id: input.counterpartyId, ownerId: requesterUserId },
+        select: { id: true },
+      });
+      if (!counterparty) throw this.notFound();
+
+      const link = await findLinkOfCounterparty(this.prisma, input.counterpartyId);
+      if (!link) throw this.counterpartyNotLinked();
+      targetUserId = otherSide(link, input.counterpartyId).userId;
     }
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      throw new AppException(
-        HttpStatus.NOT_FOUND,
-        ErrorCode.USER_NOT_FOUND,
-        'No registered user with that email.',
-      );
-    }
+    return this.addMemberByUserId(ledgerId, targetUserId, input.role);
+  }
 
+  /** email 與對象入口都在此處檢查成員狀態，並原子建立成員與沿用帳本人物資料。 */
+  private async addMemberByUserId(
+    ledgerId: string,
+    targetUserId: string,
+    role: LedgerRole,
+  ): Promise<LedgerMemberInfo> {
     const existing = await this.prisma.ledgerMember.findUnique({
-      where: { ledgerId_userId: { ledgerId, userId: user.id } },
+      where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
     });
     if (existing) {
       throw new AppException(
@@ -307,13 +326,35 @@ export class LedgersService {
 
     const member = await this.prisma.$transaction(async (tx) => {
       const created = await tx.ledgerMember.create({
-        data: { ledgerId, userId: user.id, role },
+        data: { ledgerId, userId: targetUserId, role },
         include: { user: true },
       });
-      await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, user.id);
+      await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, targetUserId);
       return created;
     });
     return this.toMemberInfo(member);
+  }
+
+  private async assertSharedLedger(ledgerId: string): Promise<void> {
+    const ledger = await this.prisma.ledger.findUnique({ where: { id: ledgerId } });
+    if (!ledger) {
+      throw this.notFound();
+    }
+    if (ledger.kind === 'PERSONAL') {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.PERSONAL_LEDGER_CANNOT_SHARE,
+        'This is a personal ledger; create a shared ledger to record with others.',
+      );
+    }
+  }
+
+  private counterpartyNotLinked(): AppException {
+    return new AppException(
+      HttpStatus.BAD_REQUEST,
+      ErrorCode.COUNTERPARTY_NOT_LINKED,
+      'This counterparty is not linked to another user.',
+    );
   }
 
   /**

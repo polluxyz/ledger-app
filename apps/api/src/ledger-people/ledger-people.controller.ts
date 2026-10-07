@@ -11,7 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { LedgerPerson } from '@ledger/shared';
+import type { JwtPayload, LedgerPerson } from '@ledger/shared';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateGuestDto } from './dto/create-guest.dto';
@@ -36,8 +37,12 @@ export class LedgerPeopleController {
 
   @Post()
   @RequireLedgerRole('EDITOR')
-  create(@Param('ledgerId') ledgerId: string, @Body() dto: CreateGuestDto): Promise<LedgerPerson> {
-    return this.people.createGuest(ledgerId, dto.name);
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Param('ledgerId') ledgerId: string,
+    @Body() dto: CreateGuestDto,
+  ): Promise<LedgerPerson> {
+    return this.people.createGuest(ledgerId, dto.name, user.sub, dto.counterpartyId);
   }
 
   @Patch(':id')
