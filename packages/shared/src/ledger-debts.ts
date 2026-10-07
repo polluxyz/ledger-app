@@ -42,8 +42,14 @@ export interface ResolvePointerInput {
  * 否則不指向。呼叫端負責排除「我自己那一筆」。
  */
 export function resolvePointer(input: ResolvePointerInput): LedgerPointer {
-  void input;
-  throw new Error('resolvePointer: not implemented');
+  if (input.explicit !== undefined) {
+    return { counterpartyId: input.explicit, auto: false };
+  }
+  const linked =
+    input.personUserId === null
+      ? undefined
+      : input.linkedCounterpartyByUserId.get(input.personUserId);
+  return { counterpartyId: linked ?? null, auto: true };
 }
 
 /** 決策 143：總額＝個人往來餘額＋各帳本來源金額。 */
