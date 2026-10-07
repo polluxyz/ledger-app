@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import styles from './AddMemberMenu.module.css';
 
@@ -7,22 +7,15 @@ interface AddMemberMenuProps {
   onAddVirtualMember: () => void;
 }
 
-/** 帳本成員只有一個新增入口；選擇來源後才開對應的表單。 */
+/**
+ * 帳本成員只有一個新增入口；選擇來源後才開對應的表單（3f W143）。
+ *
+ * 滑出動畫只用 `--motion-*` token。站內關掉動畫（`data-motion='off'`）時 token 歸零，
+ * 選項直接出現；不看作業系統的 `prefers-reduced-motion`（見 `global.css` 的說明）。
+ */
 export function AddMemberMenu({ onAddCounterparty, onAddVirtualMember }: AddMemberMenuProps) {
   const [expanded, setExpanded] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(
-    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-  );
   const optionsId = useId();
-
-  useEffect(() => {
-    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!query) return;
-
-    const updatePreference = () => setReducedMotion(query.matches);
-    query.addEventListener?.('change', updatePreference);
-    return () => query.removeEventListener?.('change', updatePreference);
-  }, []);
 
   function choose(action: () => void) {
     setExpanded(false);
@@ -45,8 +38,6 @@ export function AddMemberMenu({ onAddCounterparty, onAddVirtualMember }: AddMemb
         role="group"
         aria-label="新增方式"
         aria-hidden={!expanded}
-        data-reduced-motion={reducedMotion}
-        style={{ transitionDuration: reducedMotion ? '0ms' : undefined }}
       >
         <div className={styles.inner}>
           <Button
