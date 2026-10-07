@@ -81,6 +81,9 @@ describe('SettlementView', () => {
     expect(
       within(screen.getByRole('region', { name: '淨額' })).getByText('我'),
     ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '淨額' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '轉帳' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '建議' })).not.toBeInTheDocument();
     expect(screen.getByText('小明欠我 $2,050')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/ledgers/ledger-1/settlement-summary'),

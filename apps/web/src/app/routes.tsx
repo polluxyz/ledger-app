@@ -5,6 +5,7 @@ import CounterpartiesPage from '../pages/CounterpartiesPage';
 import HomePage from '../pages/HomePage';
 import InvitePage from '../pages/InvitePage';
 import LedgerDetailPage from '../pages/LedgerDetailPage';
+import LedgerHistoryPage from '../pages/LedgerHistoryPage';
 import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
 import ProfilePage from '../pages/ProfilePage';
@@ -42,6 +43,7 @@ export function AppRoutes() {
         <Route path="/counterparties" element={<CounterpartiesPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/ledgers" element={<LedgersPage />} />
+        <Route path="/ledgers/:ledgerId/history" element={<LedgerHistoryPage />} />
         <Route path="/ledgers/:ledgerId" element={<LedgerDetailPage />} />
         {/* 分類頁的帳本由 `?ledgerId=` 指定，不是路徑參數——它與側邊欄的作用中
             帳本各自獨立，網址帶得走才能從帳本明細頁直接連過來。 */}

@@ -13,6 +13,8 @@ import type {
   UpdateTransactionRequest,
 } from '@ledger/shared';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import { settlementSummaryKey } from '../settlements/use-settlements';
 import { apiRequest } from '../../lib/api-client';
 
@@ -68,13 +70,15 @@ export function useTransactions(ledgerId: string | null, query: ListTransactions
  * 數字直到重整——那種問題很難被發現，也很難聯想到原因，所以
  * `use-transactions.test.tsx` 為新增、編輯、刪除各有一條專屬測試釘住它。
  *
- * 共享帳本的淨額（3e 結清檢視）也是依交易算的，同一個理由一起失效。個人帳本沒有
- * 這份快取，失效一個不存在的 key 不會發出請求。
+ * 共享帳本的淨額與借還頁總額也依交易算，同一個理由一起失效。個人帳本沒有這些快取，
+ * 失效不存在的 key 不會發出請求。
  */
 function invalidateAfterWrite(queryClient: QueryClient, ledgerId: string | null): void {
   void queryClient.invalidateQueries({ queryKey: transactionsKey(ledgerId) });
   void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
   void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
+  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
+  void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
 }
 
 /**

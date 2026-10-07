@@ -1,7 +1,17 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+} from './use-transactions';
 
 /**
  * 記帳頁上可能有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增
@@ -194,5 +204,76 @@ describe('Writing a transaction refreshes account balances', () => {
     // 側欄的站名是回首頁的連結，而導覽列這一步還沒有「交易」那一項。
     await user.click(screen.getByRole('link', { name: '記帳系統' }));
     expect(await screen.findByText('$5,120')).toBeInTheDocument();
+  });
+});
+
+/** 共享帳本交易也會改變借還總額，新增、編輯、刪除各自釘住兩份彙總快取。 */
+describe('transaction writes refresh shared-ledger debt totals', () => {
+  const fetchMock = vi.fn();
+  let queryClient: QueryClient;
+  let invalidate: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('ledger.accessToken', 'jwt-abc');
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockReset();
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve(
+        init?.method === 'DELETE'
+          ? new Response(null, { status: 204 })
+          : new Response(JSON.stringify({ id: 'txn-1' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+      ),
+    );
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    queryClient.clear();
+  });
+
+  function wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+
+  function expectDebtTotalsInvalidated() {
+    const keys = (invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>).map(
+      ([filters]) => filters.queryKey,
+    );
+    expect(keys).toEqual(
+      expect.arrayContaining([COUNTERPARTIES_KEY, LEDGER_GROUPS_KEY]) as unknown,
+    );
+  }
+
+  it('invalidates counterparties and ledger groups after every transaction write', async () => {
+    const create = renderHook(() => useCreateTransaction('ledger-1'), { wrapper });
+    await act(() =>
+      create.result.current.mutateAsync({
+        type: 'EXPENSE',
+        amount: 12000,
+        date: '2026-10-05',
+      }),
+    );
+    expectDebtTotalsInvalidated();
+
+    invalidate.mockClear();
+    const update = renderHook(() => useUpdateTransaction('ledger-1'), { wrapper });
+    await act(() =>
+      update.result.current.mutateAsync({
+        transactionId: 'txn-1',
+        input: { amount: 13000 },
+      }),
+    );
+    expectDebtTotalsInvalidated();
+
+    invalidate.mockClear();
+    const remove = renderHook(() => useDeleteTransaction('ledger-1'), { wrapper });
+    await act(() => remove.result.current.mutateAsync('txn-1'));
+    expectDebtTotalsInvalidated();
   });
 });

@@ -25,6 +25,11 @@ interface TransactionListProps {
   emptyMessage?: string;
   /** 正在編輯的那一筆的 id，該列會標成選取中。沒有就傳 null 或不傳。 */
   selectedId?: string | null;
+  /**
+   * 唯讀（3f W147，已退出帳本的歷史頁）：每一列都不可點、不顯示「待補」。
+   * 寫入權限仍由後端把關，這裡只是不給入口。
+   */
+  readOnly?: boolean;
   onEdit: (transaction: Transaction) => void;
   /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
   onEditDebtTransaction?: (transaction: Transaction) => void;
@@ -121,6 +126,7 @@ export function TransactionList({
   variant = 'grouped',
   emptyMessage,
   selectedId = null,
+  readOnly = false,
   onEdit,
   onEditDebtTransaction,
   onFillAccount,
@@ -160,6 +166,9 @@ export function TransactionList({
 
   /** 點一列（或它的第一格按鈕）要做的事：一般交易或自己的往來紀錄進入編輯。 */
   function openRow(transaction: Transaction) {
+    if (readOnly) {
+      return;
+    }
     if (transaction.debt) {
       onEditDebtTransaction?.(transaction);
       return;
@@ -188,7 +197,8 @@ export function TransactionList({
               const settlement = transaction.settlement;
               const hasSplit = Boolean(split || ledgerSplit);
               const expanded = expandedId === transaction.id;
-              const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
+              const isClickable =
+                !readOnly && (transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt);
               const amount = ledgerSplit
                 ? transaction.amount
                 : split
@@ -276,7 +286,7 @@ export function TransactionList({
                       : formatTransactionAmount(transaction.type, amount)}
                   </span>
                   <span className={styles.actions}>
-                    {transaction.accountPending && (
+                    {transaction.accountPending && !readOnly && (
                       <button
                         type="button"
                         className={styles.pendingButton}
