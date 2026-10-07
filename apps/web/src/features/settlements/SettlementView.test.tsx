@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LedgerSummary, SettlementSummary } from '@ledger/shared';
@@ -9,7 +9,7 @@ vi.mock('../auth/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-hua' } }),
 }));
 
-/** 結清檢視只顯示 summary API 回傳的淨額與建議，不查或列出過去的結清。 */
+/** 結清檢視只顯示轉帳建議與展開的結清表單，不顯示淨額。 */
 describe('SettlementView', () => {
   const fetchMock = vi.fn();
   const ledger: LedgerSummary = {
@@ -63,6 +63,25 @@ describe('SettlementView', () => {
           }),
         );
       }
+      if (String(url).endsWith('/people')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { id: 'person-hua', name: '小華', userId: 'user-hua', status: 'MEMBER' },
+              { id: 'person-min', name: '小明', userId: 'user-min', status: 'MEMBER' },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (String(url).endsWith('/accounts')) {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
       return Promise.resolve(new Response(null, { status: 404 }));
     });
   });
@@ -71,39 +90,51 @@ describe('SettlementView', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the API net amounts in order and opens a prefilled suggestion', async () => {
+  it('shows transfer suggestions without net amounts, and clicks the transfer row to open the settlement form inline', async () => {
     const user = userEvent.setup();
     const onSettle = renderView();
 
-    expect(await screen.findByText('+$3,050')).toBeInTheDocument();
-    expect(screen.getByText('−$1,000')).toBeInTheDocument();
-    expect(screen.getByText('$0')).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('region', { name: '淨額' })).getByText('我'),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '淨額' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '轉帳' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '建議' })).not.toBeInTheDocument();
-    expect(screen.getByText('小明欠我 $2,050')).toBeInTheDocument();
+    expect(await screen.findByText('小明欠我 $2,050')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '淨額' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/ledgers/ledger-1/settlement-summary'),
       expect.objectContaining({ method: 'GET' }),
     );
 
-    await user.click(screen.getByRole('button', { name: '結清' }));
+    const rowButton = screen.getByRole('button', { name: '小明欠我 $2,050' });
+    expect(rowButton).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(rowButton);
+    expect(rowButton).toHaveAttribute('aria-expanded', 'true');
     expect(onSettle).toHaveBeenCalledWith({
       fromPersonId: 'person-min',
       toPersonId: 'person-hua',
       amount: 205000,
     });
+    expect(await screen.findByRole('button', { name: '取消' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '取消' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument(),
+    );
+    expect(rowButton).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('omits suggestions when none are returned and hides settlement actions for a viewer', async () => {
+  it('shows 兩清 when suggestions are empty, and keeps rows non-clickable for viewers', async () => {
     responseSummary = { ...summary, suggestions: [] };
+    renderView();
+
+    expect(await screen.findByText('兩清')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '淨額' })).not.toBeInTheDocument();
+  });
+
+  it('keeps transfer row non-clickable for a viewer', async () => {
     renderView({ ...ledger, role: 'VIEWER' });
 
-    expect(await screen.findByRole('heading', { name: '淨額' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '建議' })).not.toBeInTheDocument();
+    expect(await screen.findByText('小明欠我 $2,050')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '小明欠我 $2,050' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
   });
 });

@@ -101,9 +101,6 @@ export function CounterpartyList({
                     <span className={styles.balance}>
                       {formatCounterpartyBalance(counterparty.displayName, balance)}
                     </span>
-                    <span className={styles.chevron} aria-hidden="true">
-                      {expanded ? '⌃' : '⌄'}
-                    </span>
                   </button>
                   <AnimatedDisclosure id={detailsId} open={expanded}>
                     <CounterpartyDetail

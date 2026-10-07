@@ -271,7 +271,8 @@ describe('Transactions page', () => {
 
     const row = await screen.findByRole('button', { name: /小明/ }, WAIT);
     await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'), WAIT);
-    expect(await screen.findByRole('heading', { name: '往來紀錄' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText('借出', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     await waitFor(() => {
       const state = window.history.state as { usr?: Record<string, unknown> };
@@ -289,7 +290,8 @@ describe('Transactions page', () => {
     await user.click(debtButton);
 
     expect(debtButton).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByRole('heading', { name: '往來紀錄' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '記一筆' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '記一筆' }));
     expect(await screen.findByLabelText('對象', undefined, WAIT)).toHaveValue('小明');
@@ -496,14 +498,17 @@ describe('Transactions page', () => {
 
     await user.click(within(debtsTabs).getByRole('button', { name: '個人' }));
     expect(window.location.search).toBe('?view=debts&tab=personal');
-    expect(page().getByRole('button', { name: '＋ 新增' })).toBeInTheDocument();
+    expect(page().queryByRole('button', { name: '＋ 新增' })).not.toBeInTheDocument();
 
     await user.click(within(debtsTabs).getByRole('button', { name: '共享' }));
     expect(window.location.search).toBe('?view=debts&tab=shared');
     expect(await screen.findByText('目前沒有共享帳本。', undefined, WAIT)).toBeInTheDocument();
+
+    await user.click(within(debtsTabs).getByRole('button', { name: '歷史' }));
+    expect(window.location.search).toBe('?view=debts&tab=history');
   });
 
-  it('shows every shared ledger, expands its settlement form inline, and lists only settlement history', async () => {
+  it('shows every shared ledger, expands its settlement form inline on transfer row click', async () => {
     const sharedLedger = {
       ...ledger,
       id: 'ledger-2',
@@ -591,23 +596,15 @@ describe('Transactions page', () => {
     await user.click(await page().findByRole('button', { name: '共享' }, WAIT));
     const group = await screen.findByRole('region', { name: '旅行帳本' }, WAIT);
     const archivedGroup = screen.getByRole('region', { name: '封存帳本' });
-    expect(within(group).getByRole('heading', { name: '淨額' })).toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: '新增結清' })).toBeInTheDocument();
+    expect(within(group).queryByRole('heading', { name: '淨額' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: '新增結清' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
     expect(
       within(archivedGroup).queryByRole('button', { name: '新增結清' }),
     ).not.toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('type=TRANSFER&limit=100')),
-    ).toBe(true);
 
-    await user.click(within(group).getByRole('button', { name: '歷史' }));
-    const history = within(group).getByRole('region', { name: '歷史' });
-    expect(await within(history).findByText('結清', {}, WAIT)).toBeInTheDocument();
-    expect(within(history).queryByText('普通轉帳')).not.toBeInTheDocument();
-    expect(within(group).queryByRole('button', { name: /^編輯/ })).not.toBeInTheDocument();
-
-    const transfers = within(group).getByRole('region', { name: '轉帳' });
-    await user.click(within(transfers).getByRole('button', { name: '結清' }));
+    const transferRow = within(group).getByRole('button', { name: '小明欠我 $2,050' });
+    await user.click(transferRow);
     const form = within(group).getByLabelText('付錢的人').closest('form');
     expect(form).not.toBeNull();
     expect(screen.queryByRole('dialog', { name: '結清' })).not.toBeInTheDocument();
@@ -655,7 +652,10 @@ describe('Transactions page', () => {
       if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
       if (url.endsWith('/ledgers/ledger-2/people')) return json([me, other]);
       if (url.endsWith('/ledgers/ledger-2/settlement-summary'))
-        return json({ people: [], suggestions: [] });
+        return json({
+          people: [me, other],
+          suggestions: [{ fromPersonId: me.id, toPersonId: other.id, amount: 51200 }],
+        });
       if (url.includes('/transactions'))
         return json({ items: [lunch], page: 1, limit: 20, total: 1 });
       if (url.endsWith('/accounts')) return json([account]);
@@ -714,9 +714,10 @@ describe('Transactions page', () => {
     window.history.pushState({}, '', '/transactions?view=debts&tab=shared');
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: '淨額' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText('小明欠我 $10', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '淨額' })).not.toBeInTheDocument();
     expect(page().queryByRole('button', { name: '新增結清' })).not.toBeInTheDocument();
-    const suggestions = screen.getByRole('region', { name: '轉帳' });
-    expect(within(suggestions).queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '小明欠我 $10' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
   });
 });

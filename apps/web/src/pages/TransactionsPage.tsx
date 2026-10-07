@@ -11,6 +11,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { DebtHistoryView } from '../features/debts/DebtHistoryView';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
 import { SharedSettlementsView } from '../features/settlements/SharedSettlementsView';
@@ -73,7 +74,7 @@ export default function TransactionsPage() {
  * 交易頁只有明細與借還兩個檢視，子分頁只在借還檢視內選擇。
  */
 type TransactionsView = 'details' | 'debts';
-type DebtsTab = 'overview' | 'personal' | 'shared';
+type DebtsTab = 'overview' | 'personal' | 'shared' | 'history';
 
 /**
  * 一本帳本的交易列表。
@@ -103,7 +104,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const view: TransactionsView = requestedView === 'debts' || routeToShared ? 'debts' : 'details';
   const debtsTab: DebtsTab = routeToShared
     ? 'shared'
-    : requestedTab === 'personal' || requestedTab === 'shared'
+    : requestedTab === 'personal' || requestedTab === 'shared' || requestedTab === 'history'
       ? requestedTab
       : 'overview';
   const sharedSettleIntent =
@@ -127,7 +128,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
       requestedView === 'debts' &&
       requestedTab !== 'overview' &&
       requestedTab !== 'personal' &&
-      requestedTab !== 'shared'
+      requestedTab !== 'shared' &&
+      requestedTab !== 'history'
     ) {
       setSearchParams({ view: 'debts', tab: 'overview' }, { replace: true, state: routeState });
     }
@@ -315,12 +317,22 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
             >
               共享
             </button>
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={debtsTab === 'history'}
+              onClick={() => switchDebtsTab('history')}
+            >
+              歷史
+            </button>
           </div>
         )}
 
         {view === 'debts' ? (
           debtsTab === 'shared' ? (
             <SharedSettlementsView settleIntent={sharedSettleIntent} />
+          ) : debtsTab === 'history' ? (
+            <DebtHistoryView ledger={ledger} onEditSplit={editSplit} />
           ) : (
             <DebtsView
               ledger={ledger}

@@ -148,27 +148,22 @@ describe('CounterpartyDetail', () => {
     return { onEditSplit, ...result };
   }
 
-  it.each([
-    [900, '小明欠你 $9'],
-    [-1100, '你欠小明 $11'],
-    [0, '兩清'],
-  ])('shows the API balance phrase for balance %i', async (balance, phrase) => {
-    renderDetail(balance);
-    expect(await screen.findByText(phrase)).toBeInTheDocument();
+  it('omits duplicate balance arrow and heading in expanded detail (debts-tabs2)', async () => {
+    renderDetail(900);
+    expect(await screen.findByText('借款')).toBeInTheDocument();
+    expect(screen.queryByText('小明欠你 $9')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
   });
 
   it('opens a prefilled form above the entries and lets the user cancel it', async () => {
     const user = userEvent.setup();
     renderDetail();
-    await screen.findByText('小明欠你 $9');
+    await screen.findByText('借款');
 
     await user.click(screen.getByRole('button', { name: '記一筆' }));
 
     const form = await screen.findByRole('button', { name: '取消' });
     expect(screen.getByLabelText('對象')).toHaveValue('小明');
-    expect(screen.getByRole('heading', { name: '往來紀錄' }).compareDocumentPosition(form)).toBe(
-      Node.DOCUMENT_POSITION_PRECEDING,
-    );
 
     await user.click(form);
     await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
@@ -219,8 +214,7 @@ describe('CounterpartyDetail', () => {
     expect(screen.queryByRole('button', { name: /老家/ })).not.toBeInTheDocument();
   });
 
-  it('shows only newer records before the latest zero and opens older entries as history', async () => {
-    const user = userEvent.setup();
+  it('shows only outstanding records and omits settled records and history button', async () => {
     const entries = [
       { ...baseEntry, id: 'outstanding', balanceAfter: 3000, note: '未還清' },
       { ...baseEntry, id: 'zero', balanceAfter: 0, note: '歸零' },
@@ -231,11 +225,7 @@ describe('CounterpartyDetail', () => {
     expect(await screen.findByText('未還清')).toBeInTheDocument();
     expect(screen.queryByText('歸零')).not.toBeInTheDocument();
     expect(screen.queryByText('更舊')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '歷史' }));
-    expect(await screen.findByText('歸零')).toBeInTheDocument();
-    expect(screen.getByText('更舊')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: '修改' })).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {
@@ -245,11 +235,11 @@ describe('CounterpartyDetail', () => {
       displayName: '小明',
     });
 
-    expect(await screen.findByText('小明欠你 $9')).toBeInTheDocument();
-    // 帳的內容都在：餘額、記一筆、免除剩餘（對方欠我時）與往來紀錄。
+    expect(await screen.findByText('借款')).toBeInTheDocument();
+    // 帳的內容都在：記一筆、免除剩餘（對方欠我時），不顯示重複的箭頭與標題。
     expect(screen.getByRole('button', { name: '記一筆' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '免除剩餘' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     // 管理按鈕搬到對象頁（W53），這裡一顆都不能出現。
     expect(screen.queryByRole('button', { name: '改名' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '設定暱稱' })).not.toBeInTheDocument();
@@ -281,7 +271,7 @@ describe('CounterpartyDetail', () => {
         id: 'settlement',
         kind: 'SETTLEMENT',
         delta: -800,
-        balanceAfter: 0,
+        balanceAfter: 100,
         transactionId: null,
       },
       {
@@ -289,18 +279,15 @@ describe('CounterpartyDetail', () => {
         id: 'forgive',
         kind: 'FORGIVE',
         delta: -900,
-        balanceAfter: 0,
+        balanceAfter: 200,
         transactionId: null,
       },
     ];
     renderDetail(0, entries, entries.length);
 
-    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付']) {
+    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
       expect(await screen.findByText(kind)).toBeInTheDocument();
     }
-    await userEvent.setup().click(screen.getByRole('button', { name: '歷史' }));
-    expect(await screen.findByText('結清差額')).toBeInTheDocument();
-    expect(screen.getByText('免除')).toBeInTheDocument();
     expect(screen.getByText('+$120')).toBeInTheDocument();
     expect(screen.getByText('−$111')).toBeInTheDocument();
     expect(screen.getAllByText('餘額 $120').length).toBeGreaterThan(0);
@@ -394,8 +381,8 @@ describe('CounterpartyDetail', () => {
   it('confirms forgiveness with the API balance amount', async () => {
     const user = userEvent.setup();
     renderDetail(5000);
-    await screen.findByText('小明欠你 $50');
-    await user.click(screen.getByRole('button', { name: '免除剩餘' }));
+    const forgiveButton = await screen.findByRole('button', { name: '免除剩餘' });
+    await user.click(forgiveButton);
 
     const confirmation = await screen.findByRole('dialog', { name: '免除剩餘' });
     // 免除會把欠款歸零，和錢有關，所以留一句短話說明金額（W44 的例外）。

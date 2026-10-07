@@ -1,0 +1,120 @@
+/* 往來紀錄列表維持緊湊，操作按鈕靠右排列。 */
+.entryList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.entryInfo {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.entryLine {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.kind {
+  font-weight: 600;
+}
+
+.delta,
+.balanceAfter {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.delta {
+  font-weight: 600;
+}
+
+.unrecorded {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.syncLabel {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.pending {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+
+.synced {
+  border-color: var(--color-income);
+  color: var(--color-income);
+}
+
+.declined {
+  border-color: var(--color-expense);
+  color: var(--color-expense);
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.entryActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.confirmContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.confirmContent p {
+  margin: 0;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+@media (max-width: 38rem) {
+  .entry {
+    flex-direction: column;
+  }
+
+  .entryActions {
+    align-self: flex-end;
+  }
+}

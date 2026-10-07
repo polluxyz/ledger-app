@@ -1,70 +1,76 @@
+/* 結清檢視只呈現轉帳建議，列本身就是展開結清表單的按鈕。 */
 .view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
-.status {
+.status,
+.settled {
   margin: 0;
+  padding: var(--space-sm) 0;
   color: var(--color-text-muted);
 }
 
-.section {
-  padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.heading {
-  margin: 0 0 var(--space-md);
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.netList,
 .suggestionList {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.netRow {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-sm) 0;
+.suggestionItem {
   border-bottom: 1px solid var(--color-border);
 }
 
-.netRow:last-child {
+.suggestionItem:last-child {
   border-bottom: 0;
-}
-
-.amount {
-  font-variant-numeric: tabular-nums;
-}
-
-.suggestionList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
 }
 
 .suggestionRow {
   display: flex;
+  width: 100%;
+  min-height: 5.5rem;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
 }
 
-@media (max-width: 36rem) {
-  .section {
-    padding: var(--space-md);
-  }
+.suggestionRow:hover {
+  background: var(--color-fill);
+}
 
-  .suggestionRow {
-    align-items: flex-start;
-  }
+.suggestionRow:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.suggestionRow.readOnly {
+  cursor: default;
+}
+
+.suggestionRow.readOnly:hover {
+  background: transparent;
+}
+
+.formContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  margin-bottom: var(--space-sm);
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
 }

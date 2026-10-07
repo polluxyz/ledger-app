@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
@@ -119,15 +119,15 @@ describe('DebtsView', () => {
     );
   }
 
-  it('keeps the personal add entry and expands the selected person in place', async () => {
+  it('omits personal add button and expands the selected person in place', async () => {
     const user = userEvent.setup();
     renderView();
 
-    expect(screen.getByRole('button', { name: '＋ 新增' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '＋ 新增' })).not.toBeInTheDocument();
     const row = await screen.findByRole('button', { name: /^小明/ });
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '記一筆' })).toBeInTheDocument();
   });
 
   it('expands an externally requested person only when it appears in this page', async () => {
@@ -137,7 +137,7 @@ describe('DebtsView', () => {
       'aria-expanded',
       'true',
     );
-    expect(await screen.findByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '記一筆' })).toBeInTheDocument();
   });
 
   it('leaves the list collapsed when an externally requested person is not on this page', async () => {
@@ -145,7 +145,7 @@ describe('DebtsView', () => {
 
     const row = await screen.findByRole('button', { name: /^小明/ });
     expect(row).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
   });
 
   it('shows the first-entry prompt when the API returns no counterparties', async () => {
@@ -153,37 +153,6 @@ describe('DebtsView', () => {
     renderView();
 
     expect(await screen.findByText('目前沒有個人往來。')).toBeInTheDocument();
-  });
-
-  it('creates a counterparty from the header without opening a right panel', async () => {
-    createdCounterparty = {
-      id: 'counterparty-new',
-      name: '小華',
-      displayName: '小華',
-      askMerge: false,
-      balance: 0,
-      totalBalance: 0,
-      ledgerParts: [],
-      link: null,
-      createdAt: '2026-09-25T00:00:00.000Z',
-      updatedAt: '2026-09-25T00:00:00.000Z',
-    };
-    const user = userEvent.setup();
-    renderView();
-
-    await user.click(screen.getByRole('button', { name: '＋ 新增' }));
-    const dialog = screen.getByRole('dialog', { name: '新增一個人' });
-    await user.type(within(dialog).getByLabelText('名字'), '小華');
-    await user.click(within(dialog).getByRole('button', { name: '新增' }));
-
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: '新增一個人' })).not.toBeInTheDocument(),
-    );
-    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/counterparties$/),
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: '小華' }) }),
-    );
   });
 
   it('shows the overview without the personal add action and keeps source rows read-only', async () => {

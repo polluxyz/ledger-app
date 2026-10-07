@@ -194,9 +194,8 @@ describe('CounterpartyList', () => {
 
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByText('個人往來')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
 
@@ -212,8 +211,7 @@ describe('CounterpartyList', () => {
     const secondRow = screen.getByRole('button', { name: /^阿華/ });
 
     await user.click(firstRow);
-    expect(screen.getByText('小明的暱稱欠你 $9')).toBeInTheDocument();
-    expect(screen.getByText('花蓮三日')).toBeInTheDocument();
+    expect(await screen.findByText('花蓮三日')).toBeInTheDocument();
     expect(screen.getByText('明哥欠你 $3')).toBeInTheDocument();
     expect(screen.getByText('老家')).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
