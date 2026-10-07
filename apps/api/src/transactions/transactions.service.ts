@@ -21,6 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { deriveSync } from '../debts/debt-proposal-rules';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
+import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 
 /**
  * 交易的業務邏輯——整個記帳系統的核心。呼叫進來之前，controller 已完成身分驗證
@@ -312,9 +313,35 @@ export class TransactionsService {
     ledgerId: string,
     viewerUserId: string,
     query: ListTransactionsQuery,
+    access: LedgerAccess = 'MEMBER',
   ): Promise<Paginated<Transaction>> {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    let leftScope = Prisma.empty;
+    if (access === 'LEFT') {
+      const person = await this.prisma.ledgerPerson.findUnique({
+        where: { ledgerId_userId: { ledgerId, userId: viewerUserId } },
+        select: { id: true },
+      });
+      if (!person) {
+        throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
+      }
+      // 與既有條件以 AND 合併，且同時用於分頁及 total；查詢參數不能擴大退出者的範圍。
+      leftScope = Prisma.sql`AND (
+        t."payerPersonId" = ${person.id}
+        OR (t."payerPersonId" IS NULL AND t."creatorId" = ${viewerUserId})
+        OR EXISTS (
+          SELECT 1 FROM "LedgerSplit" ls
+          JOIN "LedgerShare" sh ON sh."ledgerSplitId" = ls."id"
+          WHERE ls."transactionId" = t."id" AND sh."personId" = ${person.id}
+        )
+        OR EXISTS (
+          SELECT 1 FROM "LedgerSettlement" st
+          WHERE st."transactionId" = t."id"
+            AND (st."fromPersonId" = ${person.id} OR st."toPersonId" = ${person.id})
+        )
+      )`;
+    }
 
     // SQL 先依分帳擁有者合併，再篩選、分頁與計數；先取交易再在記憶體合併會讓
     // 第 2 頁筆數和 total 都錯。其他帳本成員的 s 為 null，因此逐筆看見原交易。
@@ -328,6 +355,7 @@ export class TransactionsService {
         FROM "Transaction" t
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
         WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+          ${leftScope}
           ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
           ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
           ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
@@ -355,6 +383,7 @@ export class TransactionsService {
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
       WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        ${leftScope}
         ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
         ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
         ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
@@ -366,7 +395,9 @@ export class TransactionsService {
 
     const context = await this.viewContext(ledgerId);
     return {
-      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
+      items: selected.map((item) =>
+        this.toTransaction(byId.get(item.id)!, viewerUserId, context, access),
+      ),
       page,
       limit,
       total,
@@ -1167,6 +1198,7 @@ export class TransactionsService {
     row: TransactionRow,
     viewerUserId: string,
     context?: ViewContext,
+    access: LedgerAccess = 'MEMBER',
   ): Transaction {
     const payer =
       context?.shared && this.isIncomeExpense(row.type) && !row.splitId && !row.debtEntry
@@ -1238,7 +1270,8 @@ export class TransactionsService {
       payer,
       ledgerSplit,
       settlement,
-      accountPending,
+      // 退出者不能補帳戶，不能在唯讀回應裡提示可寫入的待補狀態。
+      accountPending: access === 'LEFT' ? false : accountPending,
       createdAt: row.createdAt.toISOString(),
     };
   }

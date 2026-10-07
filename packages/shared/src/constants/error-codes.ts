@@ -130,6 +130,10 @@ export const ErrorCode = {
   SETTLEMENT_SAME_PERSON: 'SETTLEMENT_SAME_PERSON',
   /** 結清產生的交易只能從結清端點修改或刪除（3e 決策 132）。409。 */
   SETTLEMENT_TRANSACTION_READ_ONLY: 'SETTLEMENT_TRANSACTION_READ_ONLY',
+  /** 已退出帳本的人對那本帳本做寫入，含設定指向（3f §4.5）。409。 */
+  LEDGER_LEFT: 'LEDGER_LEFT',
+  /** 用沒連動的對象加入帳本成員（3f §4.3）。400。 */
+  COUNTERPARTY_NOT_LINKED: 'COUNTERPARTY_NOT_LINKED',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

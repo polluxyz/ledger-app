@@ -95,11 +95,15 @@ describe('Ledger members', () => {
     });
   }
 
-  /**
-   * 成員清單的那一列。用 email 定位而不是名字——名字那個 span 在「我」那一列的
-   * 文字是「Alice（我）」，用名字精準比對會找不到。
-   */
-  const rowOf = (email: string) => within(screen.getByText(email).closest('li') as HTMLElement);
+  /** 成員 email 不再出現在清單，改用名字定位該列。 */
+  const rowOf = (name: string) =>
+    within(
+      within(screen.getByRole('list', { name: '帳本成員' }))
+        .getByText(
+          (_, element) => element?.tagName === 'SPAN' && element.textContent?.startsWith(name),
+        )
+        .closest('li') as HTMLElement,
+    );
 
   /**
    * 等 `/users/me` 回來、「我的角色」那張卡填上值為止。
@@ -135,13 +139,12 @@ describe('Ledger members', () => {
     // 自己是誰的時候就往下斷言。
     expect(await screen.findByLabelText('Bob的角色')).toBeInTheDocument();
     // Bob 那列可以改角色與移除。
-    expect(rowOf('bob@example.com').getByLabelText('Bob的角色')).toBeInTheDocument();
-    expect(rowOf('bob@example.com').getByRole('button', { name: '移除Bob' })).toBeInTheDocument();
-    // 自己那列沒有改角色與移除，只有退出。
-    expect(rowOf('alice@example.com').queryByLabelText('Alice的角色')).not.toBeInTheDocument();
-    expect(
-      rowOf('alice@example.com').getByRole('button', { name: '退出帳本' }),
-    ).toBeInTheDocument();
+    expect(rowOf('Bob').getByLabelText('Bob的角色')).toBeInTheDocument();
+    expect(rowOf('Bob').getByRole('option', { name: '移除' })).toBeInTheDocument();
+    // 自己那列沒有改角色；退出入口在成員清單底部。
+    expect(rowOf('Alice').queryByLabelText('Alice的角色')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出帳本' })).toBeInTheDocument();
+    expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
   });
 
   it('hides management from a member who is not the owner', async () => {
@@ -151,14 +154,10 @@ describe('Ledger members', () => {
     render(<App />);
 
     // 先等清單畫出來，再等一個依賴 /users/me 的元素：Bob 自己那列的「退出帳本」。
-    await screen.findByText('bob@example.com');
-    expect(
-      await rowOf('bob@example.com').findByRole('button', { name: '退出帳本' }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '加入成員' })).not.toBeInTheDocument();
-    expect(
-      rowOf('alice@example.com').queryByRole('button', { name: '移除Alice' }),
-    ).not.toBeInTheDocument();
+    await screen.findByText('Bob');
+    expect(await screen.findByRole('button', { name: '退出帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增成員' })).not.toBeInTheDocument();
+    expect(rowOf('Alice').queryByLabelText('Alice的角色')).not.toBeInTheDocument();
   });
 
   it('offers no way to add members to a personal ledger', async () => {
@@ -170,7 +169,7 @@ describe('Ledger members', () => {
 
     await waitForMyRole();
     // 後端會回 409，所以連入口都不畫。
-    expect(screen.queryByRole('button', { name: '加入成員' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增成員' })).not.toBeInTheDocument();
   });
 
   it('makes an archived ledger read-only, including leaving it', async () => {
@@ -180,39 +179,28 @@ describe('Ledger members', () => {
 
     expect(await screen.findByText(/帳本已封存，僅可讀取/)).toBeInTheDocument();
     await waitForMyRole();
-    expect(screen.queryByRole('button', { name: '加入成員' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增成員' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出帳本' })).not.toBeInTheDocument();
-    expect(rowOf('bob@example.com').queryByLabelText('Bob的角色')).not.toBeInTheDocument();
+    expect(rowOf('Bob').queryByLabelText('Bob的角色')).not.toBeInTheDocument();
   });
 
-  // ── 加入成員 ─────────────────────────────────────────────────────────────
+  // ── 新增成員 ─────────────────────────────────────────────────────────────
 
-  /**
-   * 2h 之後「加入成員」是往下展開的面板，不再是蓋住畫面的彈窗（SC-30）。
-   * 這條驗兩件面板才需要自己負責的事：aria-expanded 跟著開關變，以及
-   * Esc 收起後焦點回到按鈕——少了後者，鍵盤使用者得從頁面最上面重新 Tab。
-   */
-  it('expands the add-member form in place and returns focus on Escape', async () => {
+  it('opens the two add sources from the single add-member entry', async () => {
     routeFetch();
     const user = userEvent.setup();
 
     render(<App />);
     await waitForMyRole();
 
-    const trigger = screen.getByRole('button', { name: '加入成員' });
+    const trigger = screen.getByRole('button', { name: '新增成員' });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     await user.click(trigger);
 
-    // 展開後它仍然是 dialog、名稱不變——e2e 靠這個名稱找表單。
-    expect(screen.getByRole('dialog', { name: '加入成員' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新增對象' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新增虛擬成員' })).toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-
-    await user.keyboard('{Escape}');
-
-    expect(screen.queryByRole('dialog', { name: '加入成員' })).not.toBeInTheDocument();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger).toHaveFocus();
   });
 
   it('opens the add-member form in the right panel', async () => {
@@ -222,11 +210,13 @@ describe('Ledger members', () => {
     render(<App />);
     await waitForMyRole();
 
-    await user.click(screen.getByRole('button', { name: '加入成員' }));
+    await user.click(screen.getByRole('button', { name: '新增成員' }));
+    await user.click(screen.getByRole('button', { name: '新增對象' }));
+    await user.click(await screen.findByRole('button', { name: '用 email 新增' }));
 
     // SC-42：表單搬到右側欄，不再往下擠開成員清單。右側欄是 <main> 的兄弟，
     // 所以「不在 main 裡」就是「在右側欄」，這個判準不依賴 CSS 類名。
-    const form = await screen.findByRole('dialog', { name: '加入成員' });
+    const form = await screen.findByRole('dialog', { name: '新增成員' });
     expect(form.closest('main')).toBeNull();
   });
 
@@ -236,7 +226,9 @@ describe('Ledger members', () => {
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '加入成員' }));
+    await user.click(await screen.findByRole('button', { name: '新增成員' }));
+    await user.click(screen.getByRole('button', { name: '新增對象' }));
+    await user.click(await screen.findByRole('button', { name: '用 email 新增' }));
     await user.type(screen.getByLabelText('email'), 'carol@example.com');
     await user.selectOptions(screen.getByLabelText('角色'), 'VIEWER');
     await user.click(screen.getByRole('button', { name: '加入' }));
@@ -261,7 +253,9 @@ describe('Ledger members', () => {
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '加入成員' }));
+    await user.click(await screen.findByRole('button', { name: '新增成員' }));
+    await user.click(screen.getByRole('button', { name: '新增對象' }));
+    await user.click(await screen.findByRole('button', { name: '用 email 新增' }));
     await user.type(screen.getByLabelText('email'), 'ghost@example.com');
     await user.click(screen.getByRole('button', { name: '加入' }));
 
@@ -279,7 +273,9 @@ describe('Ledger members', () => {
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '加入成員' }));
+    await user.click(await screen.findByRole('button', { name: '新增成員' }));
+    await user.click(screen.getByRole('button', { name: '新增對象' }));
+    await user.click(await screen.findByRole('button', { name: '用 email 新增' }));
     await user.type(screen.getByLabelText('email'), 'bob@example.com');
     await user.click(screen.getByRole('button', { name: '加入' }));
 
@@ -297,7 +293,7 @@ describe('Ledger members', () => {
     const options = within(select)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['擁有者', '可編輯', '唯讀']);
+    expect(options).toEqual(['擁有者', '可編輯', '唯讀', '移除']);
   });
 
   it('changes a role straight from the row (S6-D2)', async () => {
@@ -333,9 +329,7 @@ describe('Ledger members', () => {
     await user.selectOptions(await screen.findByLabelText('Bob的角色'), 'VIEWER');
 
     // 訊息貼在 Bob 那一列裡面——整頁共用一個錯誤框的話，看的人不知道是哪一列。
-    expect(await rowOf('bob@example.com').findByRole('alert')).toHaveTextContent(
-      '至少要有一位擁有者',
-    );
+    expect(await rowOf('Bob').findByRole('alert')).toHaveTextContent('至少要有一位擁有者');
     // 下拉退回原值：清單讀的是伺服器上的角色，而那一筆並沒有被改動。
     expect(screen.getByLabelText('Bob的角色')).toHaveValue('OWNER');
   });
@@ -348,7 +342,11 @@ describe('Ledger members', () => {
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '移除Bob' }));
+    const roleSelect = await screen.findByLabelText('Bob的角色');
+    await user.selectOptions(
+      roleSelect,
+      screen.getByRole('option', { name: '移除' }).getAttribute('value') ?? '',
+    );
 
     expect(screen.getByText(/將 Bob 移出這本帳本/)).toBeInTheDocument();
     expect(screen.getByText(/他先前記的交易會留下/)).toBeInTheDocument();

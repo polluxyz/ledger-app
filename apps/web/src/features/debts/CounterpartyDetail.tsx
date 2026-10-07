@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { DebtEntry, DebtEntryKind } from '@ledger/shared';
+import type { CounterpartyLedgerPart, DebtEntry, DebtEntryKind } from '@ledger/shared';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
@@ -7,12 +8,14 @@ import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, formatMoney } from '../../lib/format';
+import { useOpenSettleIntent } from '../settlements/settle-intent';
 import {
   useCounterparty,
   useCounterpartyEntries,
   useDeleteDebtEntry,
   useForgiveCounterparty,
 } from './use-debts';
+import { LedgerSourceList } from './LedgerSourceList';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
 import styles from './CounterpartyDetail.module.css';
 
@@ -39,6 +42,8 @@ export function CounterpartyDetail({
   const entries = useCounterpartyEntries(counterpartyId, { page, limit: 20 });
   const forgive = useForgiveCounterparty();
   const removeEntry = useDeleteDebtEntry();
+  const openSettleIntent = useOpenSettleIntent();
+  const navigate = useNavigate();
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<DebtEntry | null>(null);
@@ -65,6 +70,18 @@ export function CounterpartyDetail({
     removeEntry.mutate(entryToDelete.id, { onSuccess: closeEntryDelete });
   }
 
+  function handleOpenLedgerSource(source: CounterpartyLedgerPart) {
+    if (source.left) {
+      void navigate(`/ledgers/${source.ledgerId}/history`);
+      return;
+    }
+    openSettleIntent({
+      ledgerId: source.ledgerId,
+      personId: source.personId,
+      amount: source.amount,
+    });
+  }
+
   if (counterparty.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -76,6 +93,7 @@ export function CounterpartyDetail({
   }
 
   const person = counterparty.data;
+  const { ledgerParts } = person;
 
   return (
     <div className={styles.detail}>
@@ -89,6 +107,16 @@ export function CounterpartyDetail({
       <p className={styles.balance}>
         {formatCounterpartyBalance(person.displayName, person.balance)}
       </p>
+
+      {ledgerParts.length > 0 && (
+        <section
+          className={styles.sharedLedgers}
+          aria-labelledby="counterparty-shared-ledgers-heading"
+        >
+          <h4 id="counterparty-shared-ledgers-heading">共享帳本</h4>
+          <LedgerSourceList sources={ledgerParts} onOpenSource={handleOpenLedgerSource} />
+        </section>
+      )}
 
       <div className={styles.actions}>
         <Button type="button" onClick={() => onRecordEntry(person.displayName)}>

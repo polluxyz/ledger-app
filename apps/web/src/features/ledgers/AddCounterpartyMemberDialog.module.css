@@ -1,0 +1,53 @@
+.body,
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.invite p {
+  margin: 0;
+}
+
+.results {
+  max-height: 18rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  list-style: none;
+}
+
+.result + .result {
+  border-top: 1px solid var(--color-border);
+}
+
+.select {
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select:hover:not(:disabled) {
+  background: var(--color-fill);
+}
+
+.select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}

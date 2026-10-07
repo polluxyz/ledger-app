@@ -1,5 +1,5 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { listAccounts } from './api';
+import { createDebtEntry, listAccounts } from './api';
 import { expect, test } from './fixtures';
 import {
   expectRightPanelClosedWithoutAddForm,
@@ -106,7 +106,18 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   expect(
     await newTransactionForm(page).evaluate((element) => element.closest('[inert]') !== null),
   ).toBe(false);
-  await expect(page.getByRole('button', { name: /小明.*兩清/ })).toBeVisible();
+  // 3f W136：兩清的對象不列，小明這時不在借還清單上。
+  await expect(page.getByRole('button', { name: /^小明/ })).toHaveCount(0);
+
+  // 再補一筆不記帳的借出 100（前置條件，D3）讓小明回到清單，後面才能從借還檢視
+  // 開她的往來帳（SC-W58 後半）。切換檢視會重新拉清單，畫面就看得到。
+  await createDebtEntry(request, userA.token, {
+    counterparty: { name: '小明' },
+    kind: 'LEND',
+    amount: 10000,
+    date: new Date().toISOString(),
+    record: null,
+  });
 
   // SC-W58：明細點借還列直接編輯該筆；收起後改從借還檢視開啟往來帳。
   await viewSwitch(page).getByRole('button', { name: '明細' }).click();
@@ -120,15 +131,15 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
   await page.getByRole('button', { name: /^小明/ }).click();
   const panel = ledgerPanel(page);
-  await expect(panel.getByText('兩清', { exact: true })).toBeVisible();
+  await expect(panel.getByText('小明欠你 $100')).toHaveCount(1);
   const balances = panel.getByText(/^餘額 /);
-  await expect(balances).toHaveText(['餘額 $0', '餘額 $4', '餘額 $9', '餘額 $120']);
+  await expect(balances).toHaveText(['餘額 $100', '餘額 $0', '餘額 $4', '餘額 $9', '餘額 $120']);
 
-  // SC-W25：刪掉結清差額 → 欠我 4；免除 → 兩清；刪掉免除 → 回到欠我 4。
+  // SC-W25：刪掉結清差額 → 欠我 104；免除 → 兩清；刪掉免除 → 回到欠我 104。
   const settlementRow = panel.getByRole('listitem').filter({ hasText: '結清差額' });
   await settlementRow.getByRole('button', { name: /刪除/ }).click();
   await page.getByRole('dialog', { name: /刪除/ }).getByRole('button', { name: '刪除' }).click();
-  await expect(panel.getByText('小明欠你 $4')).toHaveCount(1);
+  await expect(panel.getByText('小明欠你 $104')).toHaveCount(1);
 
   await panel.getByRole('button', { name: '免除剩餘' }).click();
   await page
@@ -140,15 +151,18 @@ test('往來帳主線：借出、借入抵銷、以此結清、明細編輯、�
   const forgiveRow = panel.getByRole('listitem').filter({ hasText: '免除' });
   await forgiveRow.getByRole('button', { name: /刪除/ }).click();
   await page.getByRole('dialog', { name: /刪除/ }).getByRole('button', { name: '刪除' }).click();
-  await expect(panel.getByText('小明欠你 $4')).toHaveCount(1);
+  await expect(panel.getByText('小明欠你 $104')).toHaveCount(1);
 
-  // SC-W26：把借出 120 改成 150 → 現金再少 30，往來餘額跟著變。
-  const lendRow = panel.getByRole('listitem').filter({ hasText: '借出' });
+  // SC-W26：把借出 120 改成 150 → 現金再少 30，往來餘額跟著變。清單裡有兩筆借出，用金額鎖定 120 那筆。
+  const lendRow = panel
+    .getByRole('listitem')
+    .filter({ hasText: '借出' })
+    .filter({ hasText: '$120' });
   await lendRow.getByRole('button', { name: /修改/ }).click();
   const editDialog = page.getByRole('dialog', { name: /修改/ });
   await editDialog.getByLabel('金額').fill('150');
   await editDialog.getByRole('button', { name: /儲存/ }).click();
-  await expect(panel.getByText('小明欠你 $34')).toHaveCount(1);
+  await expect(panel.getByText('小明欠你 $134')).toHaveCount(1);
   await expect.poll(() => cash(request, userA.token)).toBe(before - 3400);
 });
 
@@ -229,7 +243,8 @@ test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款�
   await expect.poll(() => cash(request, userA.token)).toBe(before + 5000);
 
   await viewSwitch(page).getByRole('button', { name: '借還' }).click();
-  await expect(page.getByRole('button', { name: /小華.*兩清/ })).toBeVisible();
+  // 3f W136：還款結清後兩清的對象不列，小華不在清單上。
+  await expect(page.getByRole('button', { name: /^小華/ })).toHaveCount(0);
 
   // 換到別的頁面再回來，右側欄照 2i 的規則是關的（SC-W27 後半、SC-44）。
   await page

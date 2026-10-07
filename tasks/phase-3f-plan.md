@@ -123,4 +123,35 @@ W137 的跨頁傳遞：借還頁送出「切到帳本 X、打開結清表單、�
 
 ## 6. 實作紀錄
 
-（實作時補）
+2026-10-07，一個 Orca Run（`run_78a4a8ab6c17`），三波共 12 個 worker。
+
+| worker           | 角色                     | 結果                                                                              |
+| ---------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `uf-schema`      | `backend`                | 一次通過；migration SQL 與 spec §3 一致                                           |
+| `uf-left`        | `backend`                | 一次通過；guard 只對標了裝飾器的 3 個 handler 放行                                |
+| `uf-shared`      | `default`                | 一次通過                                                                          |
+| `uf-people-dir`  | `default`                | 一次通過                                                                          |
+| `uf-debts`       | `default`                | 通過；兩處防禦寫法由協調者移除（下方第 4 點）                                     |
+| `uf-members`     | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成；協調者改掉動畫偵測（下方第 5 點）                |
+| `uf-settle`      | `default`                | Codex 額度用完時程式已完成，由協調者驗收、改寫唯讀列表後 commit（下方第 3 點）    |
+| `uf-balances`    | `backend`                | Codex 額度用完時程式與測試已全綠，由協調者逐行驗收後 commit                       |
+| `uf-members-api` | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成                                                   |
+| `uf-api-e2e`     | `fallback-1`             | Codex 用完，直接派 Pi GLM                                                         |
+| `uf-web-e2e`     | `fallback-1`             | 寫完測試、還沒驗證時 GLM 額度也用完；協調者接手跑完並修掉兩個產品問題（第 10 點） |
+
+偏離與補充：
+
+1. **契約補強**：派工時發現 `resolvePointer` 與 `/ledger-groups` 的 web hook 會被兩個 worker 同時需要，協調者先實作進契約（`7bb71b8`），避免撞檔。
+2. **spec 沒寫、實作時定下的行為**（已補進 spec §4.1、§4.4）：指向端點回 `200`＋有效指向；封存帳本也能設定指向（`@AllowOnArchived`，指向是自己的設定）；合併對象時指向搬到目標；已退出者的帳本明細 `members` 為空、交易的 `accountPending` 為 `false`。
+3. **唯讀列表**：`uf-settle` 的唯讀畫面在每筆交易塞假的 `debt` 標記來借用「不可點」判斷。協調者改成 `TransactionList` 的正式 `readOnly` 屬性。
+4. **防禦寫法**：`uf-debts` 在元件裡檢查 `/ledger-groups` 回應形狀、`totalBalance` 缺值時退回 `balance`，實際是遷就 `TransactionsPage.test.tsx` 缺 `/ledger-groups` 與新欄位的假資料。改成修假資料、移除防禦。
+5. **動畫**：Task spec 誤要求看作業系統的 `prefers-reduced-motion`，與 `global.css` 記載的 2026-09-24 決定（只看站內開關）衝突。`uf-members` 的 worker 指出後，協調者移除系統偵測，只靠 `--motion-*` token。
+6. **額度**：Codex（sol 與 luna 共用 5 小時視窗）在第 2 波中途用完，13:13 重置。`backend` 的 `uf-balances` 剛好已完成，不必問開發者；`default` 依 §4 自動換到 `fallback-1`。
+7. **效能**：`/counterparties` 在 10 本共享帳本、每本 20 筆交易時約 62ms（`ledger-groups.e2e-spec.ts` 量測），低於 500ms 目標，不需要快取。代價：回傳單一對象時也會重算全部共享帳本的結清。
+8. **dev 資料手動點過一次**（plan §5 最後一條）改為：dev 資料庫要等合併後才 migrate，所以以 Web e2e 主線取代，合併部署後再請開發者實際操作。
+9. **罕見競態**：設定指向的同時對象被刪除，外鍵會讓請求回 500（不會寫壞資料）。沒有處理。
+10. **Web e2e 抓到的兩個產品問題**（都在 `feature/unified-debts` 修掉）：
+    - 借還頁每一列加了 `aria-label="開啟X的往來帳"`，蓋掉原本「名字＋金額」的可存取名稱，螢幕閱讀器讀到的內容變了，既有 e2e 也找不到列。拿掉 `aria-label`。
+    - App 開著時被加進新帳本，帳本清單快取裡沒有它；點借還頁的帳本來源會被當成「不在我的帳本」而悄悄退回明細。改成先重抓一次帳本清單，抓完還找不到才忽略，並補單元測試。
+    - 另修兩處測試錯誤：補的往來紀錄金額寫成 `100`（1 元，API 單位是分）；存檔後右側欄收起但內容不卸載（#84），不能驗「表單消失」。
+11. **GLM 額度**：Pi GLM 在第 3 波也用完（13:52 重置）。`uf-web-e2e` 只剩驗證，協調者自己跑完，沒有再往 `fallback-2` 派。

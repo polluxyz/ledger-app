@@ -26,6 +26,8 @@ describe('CounterpartiesPage', () => {
     displayName: '小明',
     askMerge: false,
     balance: 100000000,
+    ledgerParts: [],
+    totalBalance: 100000000,
     link: { userId: 'user-1', userName: '王小明', theirBalance: -70000000 },
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
@@ -60,6 +62,9 @@ describe('CounterpartiesPage', () => {
 
       if (url.includes('/ledgers')) {
         return json(withLedger ? [ledger] : []);
+      }
+      if (url.includes('/ledger-groups')) {
+        return json([]);
       }
       if (url.includes('/friend-requests')) {
         return json({ items: [], page: 1, limit: 100, total: 0 });

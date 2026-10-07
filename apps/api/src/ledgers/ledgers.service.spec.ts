@@ -12,6 +12,8 @@ describe('LedgersService (members)', () => {
   let service: LedgersService;
   let prisma: {
     user: { findUnique: jest.Mock };
+    counterparty: { findFirst: jest.Mock };
+    counterpartyLink: { findFirst: jest.Mock };
     ledger: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock };
     category: { createMany: jest.Mock };
     ledgerMember: {
@@ -45,6 +47,8 @@ describe('LedgersService (members)', () => {
   beforeEach(() => {
     prisma = {
       user: { findUnique: jest.fn() },
+      counterparty: { findFirst: jest.fn() },
+      counterpartyLink: { findFirst: jest.fn() },
       ledger: {
         findUnique: jest.fn().mockResolvedValue(ledgerRow),
         create: jest.fn().mockResolvedValue(ledgerRow),
@@ -224,7 +228,9 @@ describe('LedgersService (members)', () => {
       prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
       prisma.ledgerMember.findUnique.mockResolvedValue(null);
 
-      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).rejects.toMatchObject({
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({
         constructor: AppException,
         status: 409,
         errorCode: 'PERSONAL_LEDGER_CANNOT_SHARE',
@@ -239,7 +245,9 @@ describe('LedgersService (members)', () => {
       prisma.ledger.findUnique.mockResolvedValue({ ...ledgerRow, kind: 'PERSONAL' });
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.addMember(ledgerId, 'ghost@x.com', 'EDITOR')).rejects.toMatchObject({
+      await expect(
+        service.addMember(ledgerId, { email: 'ghost@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({
         errorCode: 'PERSONAL_LEDGER_CANNOT_SHARE',
       });
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
@@ -257,9 +265,9 @@ describe('LedgersService (members)', () => {
         user: { email: 'bob@x.com', name: 'Bob' },
       });
 
-      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).resolves.toMatchObject({
-        userId: 'user-2',
-      });
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).resolves.toMatchObject({ userId: 'user-2' });
     });
   });
 
@@ -267,20 +275,18 @@ describe('LedgersService (members)', () => {
     it('404s when no user has the email', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.addMember(ledgerId, 'ghost@x.com', 'EDITOR')).rejects.toMatchObject({
-        constructor: AppException,
-        errorCode: 'USER_NOT_FOUND',
-      });
+      await expect(
+        service.addMember(ledgerId, { email: 'ghost@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({ constructor: AppException, errorCode: 'USER_NOT_FOUND' });
     });
 
     it('409s when the user is already a member', async () => {
       prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
       prisma.ledgerMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
 
-      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).rejects.toMatchObject({
-        constructor: AppException,
-        errorCode: 'ALREADY_MEMBER',
-      });
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({ constructor: AppException, errorCode: 'ALREADY_MEMBER' });
     });
 
     it('adds a new member and returns their info', async () => {
@@ -292,13 +298,62 @@ describe('LedgersService (members)', () => {
         user: { email: 'bob@x.com', name: 'Bob' },
       });
 
-      await expect(service.addMember(ledgerId, 'bob@x.com', 'EDITOR')).resolves.toEqual({
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@x.com', role: 'EDITOR' }, 'owner-1'),
+      ).resolves.toEqual({
         userId: 'user-2',
         email: 'bob@x.com',
         name: 'Bob',
         role: 'EDITOR',
       });
       expect(prisma.$transaction).toHaveBeenCalled();
+      expect(ledgerPeople.ensureMemberPerson).toHaveBeenCalledWith(prisma, ledgerId, 'user-2');
+    });
+
+    it('hides another user’s counterparty and does not look up its link', async () => {
+      prisma.counterparty.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.addMember(ledgerId, { counterpartyId: 'foreign-cp', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
+      expect(prisma.counterpartyLink.findFirst).not.toHaveBeenCalled();
+      expect(prisma.ledgerMember.create).not.toHaveBeenCalled();
+    });
+
+    it('returns COUNTERPARTY_NOT_LINKED for an owned counterparty without a link', async () => {
+      prisma.counterparty.findFirst.mockResolvedValue({ id: 'owned-cp' });
+      prisma.counterpartyLink.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.addMember(ledgerId, { counterpartyId: 'owned-cp', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({ status: 400, errorCode: 'COUNTERPARTY_NOT_LINKED' });
+      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
+      expect(prisma.ledgerMember.create).not.toHaveBeenCalled();
+    });
+
+    it('resolves an owned linked counterparty and creates the member with its requested role', async () => {
+      prisma.counterparty.findFirst.mockResolvedValue({ id: 'owned-cp' });
+      prisma.counterpartyLink.findFirst.mockResolvedValue({
+        id: 'link-1',
+        userLowId: 'owner-1',
+        userHighId: 'user-2',
+        counterpartyLowId: 'owned-cp',
+        counterpartyHighId: 'target-cp',
+      });
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      prisma.ledgerMember.create.mockResolvedValue({
+        userId: 'user-2',
+        role: 'VIEWER',
+        user: { email: 'bob@x.com', name: 'Bob' },
+      });
+
+      await expect(
+        service.addMember(ledgerId, { counterpartyId: 'owned-cp', role: 'VIEWER' }, 'owner-1'),
+      ).resolves.toMatchObject({ userId: 'user-2', role: 'VIEWER' });
+      expect(prisma.ledgerMember.create).toHaveBeenCalledWith({
+        data: { ledgerId, userId: 'user-2', role: 'VIEWER' },
+        include: { user: true },
+      });
       expect(ledgerPeople.ensureMemberPerson).toHaveBeenCalledWith(prisma, ledgerId, 'user-2');
     });
   });

@@ -16,6 +16,9 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload, Paginated, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
+import { LeftMemberAccess } from '../common/decorators/left-member-access.decorator';
+import { LedgerAccessKind } from '../common/decorators/ledger-access-kind.decorator';
+import type { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
@@ -48,12 +51,14 @@ export class TransactionsController {
   // 「誰在看」。這個參數沒有預設值，漏傳會直接編譯失敗——遮蔽不會靜悄悄失效。
   @Get()
   @RequireLedgerRole('VIEWER')
+  @LeftMemberAccess('read')
   list(
     @Param('ledgerId') ledgerId: string,
     @CurrentUser() user: JwtPayload,
     @Query() query: ListTransactionsQueryDto,
+    @LedgerAccessKind() access: LedgerAccess,
   ): Promise<Paginated<Transaction>> {
-    return this.transactions.list(ledgerId, user.sub, query);
+    return this.transactions.list(ledgerId, user.sub, query, access);
   }
 
   @Post()

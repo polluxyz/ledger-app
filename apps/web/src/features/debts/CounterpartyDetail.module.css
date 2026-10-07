@@ -41,6 +41,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sharedLedgers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sharedLedgers h4 {
+  margin: 0;
+}
+
 .actions,
 .dialogActions,
 .entryActions {

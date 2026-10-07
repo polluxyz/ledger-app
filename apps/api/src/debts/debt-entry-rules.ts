@@ -1,8 +1,9 @@
 import { HttpStatus } from '@nestjs/common';
-import { ErrorCode } from '@ledger/shared';
+import { ErrorCode, mergeTotals } from '@ledger/shared';
 import type {
   Counterparty,
   CounterpartyLinkInfo,
+  CounterpartyLedgerPart,
   DebtEntry,
   DebtEntryKind,
   DebtEntrySyncStatus,
@@ -140,6 +141,7 @@ export function toCounterparty(
   row: CounterpartyRow,
   balance: number,
   link: CounterpartyLinkInfo | null,
+  ledgerParts: CounterpartyLedgerPart[] = [],
 ): Counterparty {
   return {
     id: row.id,
@@ -147,6 +149,8 @@ export function toCounterparty(
     displayName: row.name ?? link?.userName ?? '',
     askMerge: row.askMerge,
     balance,
+    ledgerParts,
+    totalBalance: mergeTotals(balance, ledgerParts),
     link,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

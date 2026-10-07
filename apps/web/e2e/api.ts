@@ -14,12 +14,14 @@ import type {
   CreateTransactionRequest,
   FriendRequest,
   LedgerMemberInfo,
+  LedgerPerson,
   LinkAccepted,
   LedgerRole,
   LedgerSummary,
   Paginated,
   Split,
   Transaction,
+  UpdateCounterpartyRequest,
 } from '@ledger/shared';
 import { API_BASE_URL } from './env';
 
@@ -144,7 +146,8 @@ export async function addMember(
     headers: authHeaders(token),
     data: body,
   });
-  return readJson<LedgerMemberInfo>(response, `把 ${body.email} 加入帳本`);
+  const who = 'email' in body ? body.email : `對象 ${body.counterpartyId}`;
+  return readJson<LedgerMemberInfo>(response, `把 ${who} 加入帳本`);
 }
 
 /** 變更成員角色。 */
@@ -250,6 +253,32 @@ export async function createDebtEntry(
     data: body,
   });
   return readJson<CreateDebtEntryResponse>(response, '記一筆往來');
+}
+
+/** 改對象的名字（暱稱）。 */
+export async function renameCounterparty(
+  request: APIRequestContext,
+  token: string,
+  counterpartyId: string,
+  name: string,
+): Promise<Counterparty> {
+  const response = await request.patch(`${API_BASE_URL}/counterparties/${counterpartyId}`, {
+    headers: authHeaders(token),
+    data: { name } satisfies UpdateCounterpartyRequest,
+  });
+  return readJson<Counterparty>(response, `把對象改名為「${name}」`);
+}
+
+/** 列出共享帳本裡的人（成員與虛擬成員）。要用某個人記交易或結清前，先從這裡拿 id。 */
+export async function listLedgerPeople(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+): Promise<LedgerPerson[]> {
+  const response = await request.get(`${API_BASE_URL}/ledgers/${ledgerId}/people`, {
+    headers: authHeaders(token),
+  });
+  return readJson<LedgerPerson[]>(response, '列出帳本裡的人');
 }
 
 /**

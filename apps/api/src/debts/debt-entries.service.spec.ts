@@ -1,6 +1,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TransactionsService } from '../transactions/transactions.service';
 import { DebtEntriesService } from './debt-entries.service';
+import type { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
 
 /**
@@ -104,6 +105,9 @@ describe('DebtEntriesService', () => {
     service = new DebtEntriesService(
       prisma as unknown as PrismaService,
       transactions as unknown as TransactionsService,
+      {
+        partsByCounterparty: jest.fn().mockResolvedValue(new Map()),
+      } as unknown as LedgerDebtsService,
     );
   });
 

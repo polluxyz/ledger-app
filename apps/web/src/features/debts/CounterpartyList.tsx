@@ -1,63 +1,129 @@
 import { useState } from 'react';
+import type { CounterpartyLedgerPart } from '@ledger/shared';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { formatMoney } from '../../lib/format';
+import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
+import { LedgerSourceList, SmallDebtDirection } from './LedgerSourceList';
+import { UnpointedLedgerGroups } from './UnpointedLedgerGroups';
 import { useCounterparties } from './use-debts';
 import styles from './CounterpartyList.module.css';
 
 interface CounterpartyListProps {
   /** 每列都用按鈕，滑鼠、鍵盤與螢幕閱讀器走同一個開啟入口。 */
   onSelectCounterparty: (counterpartyId: string) => void;
+  onOpenLedgerSource: (source: CounterpartyLedgerPart) => void;
 }
 
-/** 對象清單由 API 分頁與排序；列上的金額文字只呈現回傳餘額，不自行推算。 */
-export function CounterpartyList({ onSelectCounterparty }: CounterpartyListProps) {
+/** 借還清單直接使用 API 的總額、兩清過濾、排序與分頁，展開內容只呈現來源。 */
+export function CounterpartyList({
+  onSelectCounterparty,
+  onOpenLedgerSource,
+}: CounterpartyListProps) {
   const [page, setPage] = useState(1);
-  const counterparties = useCounterparties({ page, limit: 20 });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const counterparties = useCounterparties({ page, limit: 20, nonZero: true });
+  const unpointedGroups = useLedgerGroups({ unpointed: true });
 
-  if (counterparties.isLoading) {
+  if (counterparties.isLoading && unpointedGroups.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
-  if (counterparties.error) {
-    return <FormError error={counterparties.error} />;
-  }
-  if (!counterparties.data || counterparties.data.items.length === 0) {
-    return <p className={styles.empty}>還沒有借還紀錄，從『新增交易 → 借還』開始記第一筆</p>;
-  }
+  const items = counterparties.data?.items ?? [];
+  const groups = unpointedGroups.data ?? [];
+  const showEmptyPrompt =
+    !counterparties.isLoading &&
+    !counterparties.error &&
+    !unpointedGroups.isLoading &&
+    !unpointedGroups.error &&
+    items.length === 0 &&
+    groups.length === 0;
 
   return (
     <>
-      <ul className={styles.list}>
-        {counterparties.data.items.map((counterparty) => (
-          <li key={counterparty.id} className={styles.item}>
-            <button
-              type="button"
-              className={styles.row}
-              onClick={() => onSelectCounterparty(counterparty.id)}
-            >
-              <span className={styles.nameGroup}>
-                <span className={styles.name}>{counterparty.displayName}</span>
-                {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
-              </span>
-              <span className={styles.balance}>
-                {formatCounterpartyBalance(counterparty.displayName, counterparty.balance)}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <Pagination
-        page={counterparties.data.page}
-        limit={counterparties.data.limit}
-        total={counterparties.data.total}
-        onChange={setPage}
-      />
+      {counterparties.error && <FormError error={counterparties.error} />}
+      {unpointedGroups.error && <FormError error={unpointedGroups.error} />}
+      {showEmptyPrompt && (
+        <p className={styles.empty}>還沒有借還紀錄，從『新增交易 → 借還』開始記第一筆</p>
+      )}
+      {items.length > 0 && (
+        <>
+          <ul className={styles.list}>
+            {items.map((counterparty) => {
+              const expanded = expandedId === counterparty.id;
+              const sourcesId = `counterparty-sources-${counterparty.id}`;
+              const { ledgerParts, totalBalance } = counterparty;
+
+              return (
+                <li key={counterparty.id} className={styles.item}>
+                  <div className={styles.rowGroup}>
+                    <button
+                      type="button"
+                      className={styles.row}
+                      onClick={() => onSelectCounterparty(counterparty.id)}
+                    >
+                      <span className={styles.nameGroup}>
+                        <span className={styles.name}>{counterparty.displayName}</span>
+                        {counterparty.link !== null && (
+                          <span className={styles.linkBadge}>連動</span>
+                        )}
+                      </span>
+                      <span className={styles.balance}>
+                        {formatCounterpartyBalance(counterparty.displayName, totalBalance)}
+                      </span>
+                    </button>
+                    {ledgerParts.length > 0 && (
+                      <button
+                        type="button"
+                        className={styles.expandButton}
+                        aria-label={`${expanded ? '收合' : '展開'}${counterparty.displayName}的帳本來源`}
+                        aria-expanded={expanded}
+                        aria-controls={sourcesId}
+                        onClick={() => setExpandedId(expanded ? null : counterparty.id)}
+                      >
+                        <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+                      </button>
+                    )}
+                  </div>
+                  {ledgerParts.length > 0 && (
+                    <div id={sourcesId} className={styles.details} hidden={!expanded}>
+                      {counterparty.balance !== 0 && (
+                        <button
+                          type="button"
+                          className={styles.personalRow}
+                          aria-label={`開啟${counterparty.displayName}的個人往來`}
+                          onClick={() => onSelectCounterparty(counterparty.id)}
+                        >
+                          <span>個人往來</span>
+                          <SmallDebtDirection
+                            personName={counterparty.displayName}
+                            amount={counterparty.balance}
+                          />
+                        </button>
+                      )}
+                      <LedgerSourceList sources={ledgerParts} onOpenSource={onOpenLedgerSource} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {counterparties.data && (
+            <Pagination
+              page={counterparties.data.page}
+              limit={counterparties.data.limit}
+              total={counterparties.data.total}
+              onChange={setPage}
+            />
+          )}
+        </>
+      )}
+      <UnpointedLedgerGroups groups={groups} onOpenSource={onOpenLedgerSource} />
     </>
   );
 }
 
-/** 清單用箭頭呈現 API 回傳的往來方向；零餘額維持簡短的「兩清」。 */
+/** 清單用 API 回傳的 totalBalance 決定總額箭頭；nonZero 由 API 負責過濾。 */
 function formatCounterpartyBalance(displayName: string, balance: number) {
   if (balance > 0) {
     return (

@@ -1,9 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ErrorCode, SETTLEABLE_DEBT_ENTRY_KINDS } from '@ledger/shared';
+import { ErrorCode, mergeTotals, SETTLEABLE_DEBT_ENTRY_KINDS } from '@ledger/shared';
 import type { CreateDebtEntryResponse, DebtEntry, UpdateDebtEntryRequest } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { proposeAmend, proposeCreate, proposeDelete, syncStatuses } from './debt-proposal-rules';
 import { recordDebtTransaction, writeSettlement } from './debt-recording';
@@ -41,13 +42,14 @@ export class DebtEntriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionsService,
+    private readonly ledgerDebts: LedgerDebtsService,
   ) {}
 
   /** 記一筆往來；帶 `settle` 時同一個資料庫交易裡補一筆結清差額（決策 38）。 */
   async create(userId: string, input: CreateDebtEntryDto): Promise<CreateDebtEntryResponse> {
     assertEntryShape(input);
 
-    return this.prisma.$transaction(async (tx) => {
+    const response = await this.prisma.$transaction(async (tx) => {
       const counterparty = await this.resolveCounterparty(tx, userId, input.counterparty);
       // 先鎖對象再讀餘額：還款的方向、超額檢查、結清差額都依賴「寫入前的餘額」（決策 50）。
       await lockCounterparty(tx, counterparty.id);
@@ -104,6 +106,14 @@ export class DebtEntriesService {
         entries: entries.map((row) => toDebtEntry(row, { sync: sync.get(row.id) })),
       };
     });
+    // 交易提交後再讀帳本來源，確保新紀錄的回應也使用與列表相同的總額。
+    const parts = await this.ledgerDebts.partsByCounterparty(userId);
+    response.counterparty.ledgerParts = parts.get(response.counterparty.id) ?? [];
+    response.counterparty.totalBalance = mergeTotals(
+      response.counterparty.balance,
+      response.counterparty.ledgerParts,
+    );
+    return response;
   }
 
   /**

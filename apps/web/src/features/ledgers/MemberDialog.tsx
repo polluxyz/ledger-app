@@ -5,7 +5,6 @@ import { FormError } from '../../components/FormError';
 import { MemberFields } from './MemberFields';
 import { newParticipant } from './participant-draft';
 import { useAddMember } from './use-members';
-import styles from './MemberDialog.module.css';
 
 interface MemberDialogProps {
   open: boolean;
@@ -50,15 +49,13 @@ function MemberDialogForm({
   }
 
   return (
-    <Dialog open title="加入成員" onClose={onClose} variant={variant}>
+    <Dialog open title="新增成員" onClose={onClose} variant={variant}>
       <form onSubmit={handleSubmit} noValidate>
         <FormError error={addMember.error} />
 
         {/* 只有一列，所以不帶序號。角色一樣只給可編輯 / 唯讀——要給擁有者請在
             清單上明確變更角色（S6-D1），那才是移交擁有權該有的儀式。 */}
         <MemberFields value={draft} onChange={setDraft} disabled={addMember.isPending} />
-
-        <p className={styles.hint}>對方需要已經註冊。還沒註冊的話，可以之後再加。</p>
 
         <Button type="submit" block disabled={addMember.isPending}>
           {addMember.isPending ? '加入中…' : '加入'}

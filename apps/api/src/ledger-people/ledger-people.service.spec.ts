@@ -32,6 +32,8 @@ describe('LedgerPeopleService', () => {
     },
     user: { findUnique: jest.fn(), findMany: jest.fn() },
     ledgerMember: { findUnique: jest.fn(), findMany: jest.fn() },
+    counterparty: { findFirst: jest.fn() },
+    ledgerPersonPointer: { upsert: jest.fn() },
     $queryRaw: jest.fn(),
   };
   const client = tx as unknown as Prisma.TransactionClient;
@@ -132,7 +134,7 @@ describe('LedgerPeopleService', () => {
     tx.ledgerPerson.findFirst.mockResolvedValue(null);
     tx.ledgerPerson.create.mockResolvedValue({ ...guest, name: 'Amie' });
 
-    await expect(service.createGuest('ledger', '  Amie  ')).resolves.toEqual({
+    await expect(service.createGuest('ledger', '  Amie  ', 'user')).resolves.toEqual({
       id: 'b',
       name: 'Amie',
       userId: null,
@@ -148,10 +150,56 @@ describe('LedgerPeopleService', () => {
         clientVersion: 'unit-test',
       }),
     );
-    await expect(service.createGuest('ledger', 'Amie')).rejects.toMatchObject({
+    await expect(service.createGuest('ledger', 'Amie', 'user')).rejects.toMatchObject({
       status: 409,
       errorCode: 'LEDGER_PERSON_NAME_TAKEN',
     });
+  });
+
+  it('creates a guest and upserts the caller’s pointer in the same transaction', async () => {
+    tx.counterparty.findFirst.mockResolvedValue({ id: 'counterparty' });
+    tx.ledgerPerson.findFirst.mockResolvedValue(null);
+    tx.ledgerPerson.create.mockResolvedValue(guest);
+
+    await expect(service.createGuest('ledger', 'Guest', 'user', 'counterparty')).resolves.toEqual({
+      id: 'b',
+      name: 'Guest',
+      userId: null,
+      status: 'GUEST',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(tx.ledgerPersonPointer.upsert).toHaveBeenCalledWith({
+      where: { userId_ledgerPersonId: { userId: 'user', ledgerPersonId: 'b' } },
+      create: { userId: 'user', ledgerPersonId: 'b', counterpartyId: 'counterparty' },
+      update: { counterpartyId: 'counterparty' },
+    });
+  });
+
+  it('does not create a guest or pointer when the counterparty belongs to someone else', async () => {
+    tx.counterparty.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createGuest('ledger', 'Hidden', 'user', 'foreign-counterparty'),
+    ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
+
+    expect(tx.ledgerPerson.create).not.toHaveBeenCalled();
+    expect(tx.ledgerPersonPointer.upsert).not.toHaveBeenCalled();
+  });
+
+  it('does not create a pointer when the guest name already exists', async () => {
+    tx.counterparty.findFirst.mockResolvedValue({ id: 'counterparty' });
+    tx.ledgerPerson.findFirst.mockResolvedValue({ id: 'existing' });
+
+    await expect(
+      service.createGuest('ledger', 'Guest', 'user', 'counterparty'),
+    ).rejects.toMatchObject({
+      status: 409,
+      errorCode: 'LEDGER_PERSON_NAME_TAKEN',
+    });
+
+    expect(tx.ledgerPerson.create).not.toHaveBeenCalled();
+    expect(tx.ledgerPersonPointer.upsert).not.toHaveBeenCalled();
   });
 
   it('returns 404 for personal ledgers and soft-deleted guest ids', async () => {
