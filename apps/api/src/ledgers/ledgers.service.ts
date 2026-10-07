@@ -12,6 +12,7 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
+import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 
 /**
  * 帳本與成員的業務邏輯——授權與資料隔離的重心。個人模式與家庭模式共用同一套
@@ -123,7 +124,7 @@ export class LedgersService {
   }
 
   /** 回傳帳本及其完整成員清單。存取權限在上游（guard）把關。 */
-  async getDetail(ledgerId: string): Promise<LedgerDetail> {
+  async getDetail(ledgerId: string, access: LedgerAccess = 'MEMBER'): Promise<LedgerDetail> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
       include: { members: { include: { user: true } } },
@@ -134,9 +135,9 @@ export class LedgersService {
 
     return {
       ...this.toLedger(ledger),
-      members: ledger.members.map((member) => this.toMemberInfo(member)),
-      // 3f 契約佔位：已退出者的唯讀回應由 uf-left 接上（tasks/phase-3f-plan.md §1.2 第 2 項）。
-      left: false,
+      // 已退出者不再有成員清單的讀取權；唯讀畫面只需要帳本基本資訊。
+      members: access === 'LEFT' ? [] : ledger.members.map((member) => this.toMemberInfo(member)),
+      left: access === 'LEFT',
     };
   }
 

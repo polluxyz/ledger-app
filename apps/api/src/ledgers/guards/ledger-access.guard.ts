@@ -3,6 +3,12 @@ import { Reflector } from '@nestjs/core';
 import { ErrorCode, JwtPayload, LedgerRole } from '@ledger/shared';
 import { AppException } from '../../common/exceptions/app.exception';
 import { REQUIRE_LEDGER_ROLE_KEY } from '../../common/decorators/require-ledger-role.decorator';
+import { ALLOW_ON_ARCHIVED_KEY } from '../../common/decorators/allow-on-archived.decorator';
+import {
+  LEFT_MEMBER_ACCESS_KEY,
+  LeftMemberPolicy,
+} from '../../common/decorators/left-member-access.decorator';
+import { LedgerAccess } from '../../common/decorators/ledger-access-kind.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /** 數字越大權限越高，用來比較角色是否達到門檻。 */
@@ -17,6 +23,7 @@ interface LedgerScopedRequest {
   params: { ledgerId?: string };
   method: string;
   ledgerRole?: LedgerRole;
+  ledgerAccess?: LedgerAccess;
 }
 
 /**
@@ -63,6 +70,30 @@ export class LedgerAccessGuard implements CanActivate {
 
     // 非成員：回 404 而非 403——不洩漏這個帳本存在。
     if (!membership) {
+      const policy = this.reflector.getAllAndOverride<LeftMemberPolicy | undefined>(
+        LEFT_MEMBER_ACCESS_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+      // 沒有 opt-in 的路由不多查 LedgerPerson，原本的拒絕規則保持不變。
+      if (policy) {
+        const person = await this.prisma.ledgerPerson.findUnique({
+          where: { ledgerId_userId: { ledgerId, userId } },
+          select: { id: true },
+        });
+        if (person) {
+          if (policy === 'reject') {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              ErrorCode.LEDGER_LEFT,
+              'You left this ledger.',
+            );
+          }
+          if (request.method === 'GET') {
+            request.ledgerAccess = 'LEFT';
+            return true;
+          }
+        }
+      }
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
     }
 
@@ -75,7 +106,11 @@ export class LedgerAccessGuard implements CanActivate {
     }
 
     // 封存的帳本轉為唯讀：GET 一律放行（歷史紀錄必須看得到），其餘方法擋下。
-    if (request.method !== 'GET') {
+    const allowOnArchived = this.reflector.getAllAndOverride<boolean | undefined>(
+      ALLOW_ON_ARCHIVED_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (request.method !== 'GET' && !allowOnArchived) {
       const ledger = await this.prisma.ledger.findUnique({
         where: { id: ledgerId },
         select: { archivedAt: true },
@@ -91,6 +126,7 @@ export class LedgerAccessGuard implements CanActivate {
 
     // 把解析出的角色掛回 request，供後續 handler 需要時取用。
     request.ledgerRole = membership.role;
+    request.ledgerAccess = 'MEMBER';
     return true;
   }
 }
