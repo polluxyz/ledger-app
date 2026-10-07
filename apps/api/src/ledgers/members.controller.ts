@@ -10,8 +10,9 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { JwtPayload, LedgerMemberInfo } from '@ledger/shared';
+import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
+import { LEDGER_ROLES } from '@ledger/shared';
+import type { AddMemberRequest, JwtPayload, LedgerMemberInfo } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { AddMemberDto } from './dto/add-member.dto';
@@ -39,8 +40,41 @@ export class MembersController {
 
   @Post()
   @RequireLedgerRole('OWNER')
-  add(@Param('ledgerId') ledgerId: string, @Body() dto: AddMemberDto): Promise<LedgerMemberInfo> {
-    return this.ledgers.addMember(ledgerId, dto.email, dto.role);
+  @ApiBody({
+    description: 'Choose exactly one member identifier: email or counterpartyId.',
+    schema: {
+      oneOf: [
+        {
+          type: 'object',
+          required: ['email', 'role'],
+          properties: {
+            email: { type: 'string', format: 'email', example: 'bob@example.com' },
+            role: { type: 'string', enum: [...LEDGER_ROLES], example: 'EDITOR' },
+          },
+          additionalProperties: false,
+        },
+        {
+          type: 'object',
+          required: ['counterpartyId', 'role'],
+          properties: {
+            counterpartyId: { type: 'string', format: 'uuid' },
+            role: { type: 'string', enum: [...LEDGER_ROLES], example: 'EDITOR' },
+          },
+          additionalProperties: false,
+        },
+      ],
+    },
+  })
+  add(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: AddMemberDto,
+  ): Promise<LedgerMemberInfo> {
+    const input: AddMemberRequest =
+      dto.email !== undefined
+        ? { email: dto.email, role: dto.role }
+        : { counterpartyId: dto.counterpartyId!, role: dto.role };
+    return this.ledgers.addMember(ledgerId, input, user.sub);
   }
 
   @Patch(':userId')
