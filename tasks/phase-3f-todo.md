@@ -22,9 +22,9 @@ plan：`tasks/phase-3f-plan.md`；spec：`docs/specs/phase-3f-unified-debts.md`�
       驗收：SC-F1、F2、F6、F7 與 SC-F9 的金額部分；3e 的結清 e2e 數字不變；隔離測試全綠。
 - [x] **F9 新增成員的兩種入口**（依賴 F1；`uf-members-api`，與 F8 平行）：plan §1.2 第 5 項。
       驗收：SC-F8。
-- [ ] **F10 API 情境 e2e 與回歸**（依賴 F1、F2、F8、F9；`uf-api-e2e`）。
+- [x] **F10 API 情境 e2e 與回歸**（依賴 F1、F2、F8、F9；`uf-api-e2e`）。
       驗收：`unified-debts.e2e-spec.ts` 走完 SC-F1～F9；全部 API e2e 全綠。
-- [ ] **F11 Web e2e**（依賴 F4～F10 全部 merge；`uf-web-e2e`）。
+- [x] **F11 Web e2e**（依賴 F4～F10 全部 merge；`uf-web-e2e`）。
       驗收：主線通過；既有 Web e2e 全綠。
 - [ ] **F12 驗收與合併**（協調者）：plan §4 全部；開 PR、盯 CI、合併；替開發者部署；實作紀錄寫進 plan §6；spec §8 標「由 3f 取代」的舊決策。
       驗收：SC-F11、F12；PR 合併；dev 資料庫 migrate 完成。

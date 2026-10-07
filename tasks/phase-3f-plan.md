@@ -125,19 +125,19 @@ W137 的跨頁傳遞：借還頁送出「切到帳本 X、打開結清表單、�
 
 2026-10-07，一個 Orca Run（`run_78a4a8ab6c17`），三波共 12 個 worker。
 
-| worker           | 角色                     | 結果                                                                           |
-| ---------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| `uf-schema`      | `backend`                | 一次通過；migration SQL 與 spec §3 一致                                        |
-| `uf-left`        | `backend`                | 一次通過；guard 只對標了裝飾器的 3 個 handler 放行                             |
-| `uf-shared`      | `default`                | 一次通過                                                                       |
-| `uf-people-dir`  | `default`                | 一次通過                                                                       |
-| `uf-debts`       | `default`                | 通過；兩處防禦寫法由協調者移除（下方第 4 點）                                  |
-| `uf-members`     | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成；協調者改掉動畫偵測（下方第 5 點）             |
-| `uf-settle`      | `default`                | Codex 額度用完時程式已完成，由協調者驗收、改寫唯讀列表後 commit（下方第 3 點） |
-| `uf-balances`    | `backend`                | Codex 額度用完時程式與測試已全綠，由協調者逐行驗收後 commit                    |
-| `uf-members-api` | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成                                                |
-| `uf-api-e2e`     | `fallback-1`             | Codex 用完，直接派 Pi GLM                                                      |
-| `uf-web-e2e`     | `fallback-1`             | 同上                                                                           |
+| worker           | 角色                     | 結果                                                                              |
+| ---------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `uf-schema`      | `backend`                | 一次通過；migration SQL 與 spec §3 一致                                           |
+| `uf-left`        | `backend`                | 一次通過；guard 只對標了裝飾器的 3 個 handler 放行                                |
+| `uf-shared`      | `default`                | 一次通過                                                                          |
+| `uf-people-dir`  | `default`                | 一次通過                                                                          |
+| `uf-debts`       | `default`                | 通過；兩處防禦寫法由協調者移除（下方第 4 點）                                     |
+| `uf-members`     | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成；協調者改掉動畫偵測（下方第 5 點）                |
+| `uf-settle`      | `default`                | Codex 額度用完時程式已完成，由協調者驗收、改寫唯讀列表後 commit（下方第 3 點）    |
+| `uf-balances`    | `backend`                | Codex 額度用完時程式與測試已全綠，由協調者逐行驗收後 commit                       |
+| `uf-members-api` | `default` → `fallback-1` | Codex 額度用完，Pi GLM 接手完成                                                   |
+| `uf-api-e2e`     | `fallback-1`             | Codex 用完，直接派 Pi GLM                                                         |
+| `uf-web-e2e`     | `fallback-1`             | 寫完測試、還沒驗證時 GLM 額度也用完；協調者接手跑完並修掉兩個產品問題（第 10 點） |
 
 偏離與補充：
 
@@ -150,3 +150,8 @@ W137 的跨頁傳遞：借還頁送出「切到帳本 X、打開結清表單、�
 7. **效能**：`/counterparties` 在 10 本共享帳本、每本 20 筆交易時約 62ms（`ledger-groups.e2e-spec.ts` 量測），低於 500ms 目標，不需要快取。代價：回傳單一對象時也會重算全部共享帳本的結清。
 8. **dev 資料手動點過一次**（plan §5 最後一條）改為：dev 資料庫要等合併後才 migrate，所以以 Web e2e 主線取代，合併部署後再請開發者實際操作。
 9. **罕見競態**：設定指向的同時對象被刪除，外鍵會讓請求回 500（不會寫壞資料）。沒有處理。
+10. **Web e2e 抓到的兩個產品問題**（都在 `feature/unified-debts` 修掉）：
+    - 借還頁每一列加了 `aria-label="開啟X的往來帳"`，蓋掉原本「名字＋金額」的可存取名稱，螢幕閱讀器讀到的內容變了，既有 e2e 也找不到列。拿掉 `aria-label`。
+    - App 開著時被加進新帳本，帳本清單快取裡沒有它；點借還頁的帳本來源會被當成「不在我的帳本」而悄悄退回明細。改成先重抓一次帳本清單，抓完還找不到才忽略，並補單元測試。
+    - 另修兩處測試錯誤：補的往來紀錄金額寫成 `100`（1 元，API 單位是分）；存檔後右側欄收起但內容不卸載（#84），不能驗「表單消失」。
+11. **GLM 額度**：Pi GLM 在第 3 波也用完（13:52 重置）。`uf-web-e2e` 只剩驗證，協調者自己跑完，沒有再往 `fallback-2` 派。
