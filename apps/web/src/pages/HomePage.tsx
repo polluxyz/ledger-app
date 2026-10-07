@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
-import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -163,19 +162,23 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
-      <PageToolbarStart>
-        <LedgerSwitcher />
-      </PageToolbarStart>
-      <PageToolbarActions>
-        <Button onClick={startAdding}>
-          <Icon name="plus" />
-          新增交易
-        </Button>
-      </PageToolbarActions>
-
+      {/*
+        帳本切換與「＋ 新增交易」在標題同一排的右邊（開發者 2026-10-07）：最上排
+        的橫條清空留給之後的 AI 功能，記進哪一本帳本就近放在記帳的按鈕旁邊。
+      */}
       <PageContent>
-        <PageHeader title="總覽" />
+        <PageHeader
+          title="總覽"
+          actions={
+            <>
+              <LedgerSwitcher />
+              <Button onClick={startAdding}>
+                <Icon name="plus" />
+                新增交易
+              </Button>
+            </>
+          }
+        />
         <PendingCard />
 
         <StatsRow authenticated />

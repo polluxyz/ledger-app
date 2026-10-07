@@ -4,16 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
 /**
- * 帳本頁的版面（spec 2i SC-38.3、SC-38.5）。
+ * 帳本頁的版面（spec 2i SC-38.5、開發者 2026-10-07 修訂）。
  *
  * 建立帳本的流程由 `features/ledgers/ledgers.test.tsx` 負責，這一檔只驗
- * 「建立帳本」搬到橫條之後位置變了、行為沒變，以及第三輪的兩件事：按鈕前面有
- * 「＋」（SC-41），表單從右側欄滑出（SC-42）。管理頁沒有帳本切換器（SC-33.4），
- * 一併釘住。
- *
- * 右側欄的內容是 portal 進外殼的，第一次 render 可能晚一拍，所以用 `findBy*`。
+ * 「建立帳本」從最上排橫條回到標題那一排之後位置變了、行為沒變，以及兩件事：
+ * 按鈕前面有「＋」（SC-41）、表單從右側欄滑出（SC-42）。管理頁沒有帳本切換器
+ * （SC-33.4），一併釘住。
  */
-describe('Ledgers page toolbar', () => {
+describe('Ledgers page header actions', () => {
   const fetchMock = vi.fn();
 
   const personal = {
@@ -50,15 +48,15 @@ describe('Ledgers page toolbar', () => {
 
   const WAIT = { timeout: 5000 };
 
-  it('puts 建立帳本 in the toolbar instead of next to the title', async () => {
+  it('puts 建立帳本 on the title row of the page content', async () => {
     render(<App />);
 
     const button = await screen.findByRole('button', { name: '建立帳本' }, WAIT);
     const heading = screen.getByRole('heading', { name: '帳本' });
 
-    // 橫條在標題列之外、也在它前面（判準不依賴 CSS 類名）。
-    expect(button.closest('header')).toBeNull();
-    expect(button.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    // 按鈕在頁首的 <header> 裡、標題後面（判準不依賴 CSS 類名）。
+    expect(button.closest('header')).toBe(heading.closest('header'));
+    expect(heading.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(heading.closest('header')?.firstElementChild).toBe(heading);
   });
 

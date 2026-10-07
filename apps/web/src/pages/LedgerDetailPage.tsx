@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { LedgerDetail, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
-import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { RightPanelContent } from '../app/RightPanel';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -37,10 +36,10 @@ export default function LedgerDetailPage() {
 
   if (ledger.isLoading) {
     return (
-      <>
+      <section className={styles.page}>
         <BackToLedgers />
         <p className={styles.status}>載入中…</p>
-      </>
+      </section>
     );
   }
 
@@ -49,7 +48,7 @@ export default function LedgerDetailPage() {
     const notFound = ledger.error instanceof ApiError && ledger.error.statusCode === 404;
     return (
       <section className={styles.page}>
-        {/* 回列表的路只留橫條那一條（SC-38.2）。內容裡再放一次，同一個無障礙名稱
+        {/* 回列表的路只留標題上方這一條。內容裡再放一次，同一個無障礙名稱
             就會在頁面上出現兩遍，螢幕閱讀器與 e2e 都分不出該用哪一個。 */}
         <BackToLedgers />
         <PageHeader title="帳本" />
@@ -208,18 +207,19 @@ function LedgerDetailView({
 
   return (
     <section className={styles.page}>
-      {/* 橫條左邊是返回連結、右邊是頁面層級的按鈕（SC-38.2、SC-38.3）。
-          「改名」的出現條件照舊：owner 而且未封存。 */}
+      {/* 返回連結在標題左上，「改名」在標題同一排右邊（開發者 2026-10-07：最上排
+          橫條清空留給 AI 功能）。「改名」的出現條件照舊：owner 而且未封存。 */}
       <BackToLedgers />
-      {isOwner && !isArchived && (
-        <PageToolbarActions>
-          <Button variant="secondary" onClick={() => onRename(ledger)}>
-            改名
-          </Button>
-        </PageToolbarActions>
-      )}
-
-      <PageHeader title={ledger.name} />
+      <PageHeader
+        title={ledger.name}
+        actions={
+          isOwner && !isArchived ? (
+            <Button variant="secondary" onClick={() => onRename(ledger)}>
+              改名
+            </Button>
+          ) : undefined
+        }
+      />
 
       <dl className={styles.facts}>
         <Fact
@@ -386,7 +386,7 @@ function LedgerDetailView({
 }
 
 /**
- * 橫條左邊的返回連結（SC-38.2）。
+ * 標題左上方的返回連結。
  *
  * 看得到的是「← 帳本」，但無障礙名稱是「回到帳本列表」——一個箭頭加兩個字，
  * 螢幕閱讀器讀出來不知道會去哪裡。這一頁的三種狀態（載入中、載不出來、正常）
@@ -394,12 +394,10 @@ function LedgerDetailView({
  */
 function BackToLedgers() {
   return (
-    <PageToolbarStart>
-      <Link className={styles.back} to="/ledgers" aria-label="回到帳本列表">
-        <Icon name="chevronLeft" size={16} />
-        帳本
-      </Link>
-    </PageToolbarStart>
+    <Link className={styles.back} to="/ledgers" aria-label="回到帳本列表">
+      <Icon name="chevronLeft" size={16} />
+      帳本
+    </Link>
   );
 }
 

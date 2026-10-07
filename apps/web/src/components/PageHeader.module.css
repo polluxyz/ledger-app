@@ -1,10 +1,15 @@
 /*
- * 頁首：只有標題與說明（spec 2i SC-38.5）。
+ * 頁首：標題、說明，以及標題同一排右邊的頁面層級動作（spec 2i SC-38.5、
+ * 2026-10-07 修訂）。
  *
- * 頁面層級的按鈕移到橫條之後，這裡不再需要左右分欄——標題直接貼齊包裝的左緣，
- * 每一頁的標題因此落在同一條線上。
+ * 標題與說明用 flex 排：動作靠 `margin-left: auto` 推到右邊，說明佔滿一整行
+ * 排在下面。窄螢幕放不下時整排換行，不產生橫向捲動。
  */
 .header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-lg);
 }
 
@@ -16,8 +21,20 @@
   letter-spacing: -0.01em;
 }
 
+/* 標題右邊的動作。換行掉到下一行時仍靠右——按鈕的位置換頁前後才不會跳。 */
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
+/* 說明整行佔滿，一定落在標題（與動作）那一排的下面。 */
 .description {
-  margin: var(--space-xs) 0 0;
+  flex-basis: 100%;
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }

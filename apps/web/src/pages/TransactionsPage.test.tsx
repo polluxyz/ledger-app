@@ -14,9 +14,8 @@ import App from '../App';
  * 點「明細」回到交易列表。淨額卡片、狀態分頁與列表本身的行為在
  * `features/debts/` 各自的測試檔裡。
  *
- * 橫條的帳本切換器一律用 `within(<main>)` 限定範圍：側欄那一份由另一位 worker
- * 移除，兩邊都在的那段期間整頁會有兩個「作用中帳本」。橫條在 `<main>` 之內，
- * 所以這個範圍同時涵蓋橫條與內容。
+ * 帳本切換器一律用 `within(<main>)` 限定範圍，它住在「明細／借還」那一排（開發者
+ * 2026-10-07），在 `<main>` 之內，這個範圍同時涵蓋那一排與內容。
  */
 describe('Transactions page', () => {
   const fetchMock = vi.fn();
@@ -133,17 +132,8 @@ describe('Transactions page', () => {
     return JSON.parse(options.body) as unknown;
   }
 
-  /** 橫條與內容都在 `<main>` 裡，側欄不在。 */
+  /** 分頁那一排與內容都在 `<main>` 裡，側欄不在。 */
   const page = () => within(screen.getByRole('main'));
-
-  /**
-   * 「在橫條裡」的判準，刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，
-   * 所以它裡面的東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
-   */
-  function expectInToolbar(element: HTMLElement, heading: HTMLElement) {
-    expect(element.closest('header')).toBeNull();
-    expect(element.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-  }
 
   it('lists the ledger transactions with the filters and the pager', async () => {
     render(<App />);
@@ -159,20 +149,31 @@ describe('Transactions page', () => {
     expect(screen.getByRole('navigation', { name: '分頁' })).toBeInTheDocument();
   });
 
-  it('puts the ledger switcher and the add button in the page toolbar', async () => {
+  it('puts the ledger switcher and the add button on the view-switch row', async () => {
     render(<App />);
 
     // 標題在帳本載入前就有了，所以等的是只有載完才出現的「＋ 新增交易」。
     const addButton = await page().findByRole('button', { name: '新增交易' }, WAIT);
-    const heading = screen.getByRole('heading', { name: '交易' });
+    const viewSwitch = page().getByRole('group', { name: '檢視' });
 
-    // 兩者都在橫條裡（SC-38.2、SC-38.3）。
-    expectInToolbar(addButton, heading);
+    /*
+     * 開發者 2026-10-07：最上排橫條清空留給 AI 功能，帳本切換、「＋ 新增交易」
+     * 移進「明細／借還」那一排。判準刻意不看 CSS 類名：「同一排的右邊」就是在
+     * 檢視切換之後（DOM 順序）。
+     */
+    expect(
+      viewSwitch.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+
     // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
-    expectInToolbar(page().getByText('我的帳本'), heading);
+    const switcher = page().getByText('我的帳本');
+    expect(
+      viewSwitch.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
     expect(page().queryByLabelText('作用中帳本')).not.toBeInTheDocument();
 
-    // SC-38.5：標題上方不再有任何一行字。
+    // 標題仍是頁首裡的第一個東西——每一頁的標題高度才會一致。
+    const heading = screen.getByRole('heading', { name: '交易' });
     expect(heading.closest('header')?.firstElementChild).toBe(heading);
   });
 
@@ -241,6 +242,10 @@ describe('Transactions page', () => {
     // 明細那套（篩選列與交易列表）不該同時出現。
     expect(screen.queryByRole('button', { name: '篩選' })).not.toBeInTheDocument();
     expect(screen.queryByText('午餐')).not.toBeInTheDocument();
+
+    // 借還不分帳本：帳本切換與「＋ 新增交易」不跟進這個檢視（它們只屬於明細）。
+    expect(screen.queryByRole('button', { name: '新增交易' })).not.toBeInTheDocument();
+    expect(screen.queryByText('我的帳本')).not.toBeInTheDocument();
   });
 
   it('returns to the transaction list when 明細 is clicked', async () => {

@@ -69,17 +69,40 @@
   color: var(--color-text-muted);
 }
 
-/* 檢視切換與漏斗同一列（3d T6）：漏斗靠右。viewSwitch 自帶的下邊距移到這一列。 */
+/*
+ * 檢視切換那一排（開發者 2026-10-07）：左邊「明細／借還」加帳本切換，右邊
+ * 「＋ 新增交易」與篩選，各自包一組才好靠兩端對齊。窄螢幕整排可以換行
+ * （`flex-wrap`），不產生水平捲動。viewSwitch 自帶的下邊距移到這一列。
+ */
 .toolbarRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  gap: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
 }
 
 .toolbarRow .viewSwitch {
   margin-bottom: 0;
+}
+
+/* 左側那組：檢視切換＋帳本切換。`min-width: 0` 讓長帳本名可以收縮換行。 */
+.toolbarMain {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+/* 右側那組：新增與篩選。換行掉到下一行時 `margin-left: auto` 讓它仍靠右。 */
+.toolbarSide {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-left: auto;
 }
 
 .debtsTabs {

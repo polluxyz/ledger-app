@@ -459,31 +459,34 @@ describe('Home dashboard', () => {
     expect(within(mePayerRow).getByText('-$3,000')).toBeInTheDocument();
   });
 
-  it('puts the ledger switcher and the add button in the page toolbar', async () => {
-    // SC-38.2、SC-38.3：切換器在橫條左邊、「＋ 新增交易」在橫條右邊。
-    // 判準刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，所以它裡面的
-    // 東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
+  it('puts the ledger switcher and the add button on the title row of the content', async () => {
+    // 開發者 2026-10-07：最上排橫條清空留給 AI 功能，切換器與「＋ 新增交易」
+    // 移到標題同一排的右邊。判準刻意不看 CSS 類名：兩者都在頁首的 `<header>`
+    // 裡、標題後面，就是「標題那一排右邊」。
     signIn();
 
     render(<App />);
 
+    // 等載完才出現的「＋ 新增交易」，之後才拿標題——帳本載入前頁首是另一份
+    // （沒有 actions），先抓會抓到卸載前的暫存節點。
     const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
     const heading = screen.getByRole('heading', { name: '總覽' });
+    const header = heading.closest('header');
 
-    expect(addButton.closest('header')).toBeNull();
-    expect(addButton.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+    expect(addButton.closest('header')).toBe(header);
+    expect(heading.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
       0,
     );
 
     // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
     const switcher = screen.getByText('我的帳本');
-    expect(switcher.closest('header')).toBeNull();
-    expect(switcher.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+    expect(switcher.closest('header')).toBe(header);
+    expect(heading.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
       0,
     );
 
-    // SC-38.5：標題上方不再有任何一行字。
-    expect(heading.closest('header')?.firstElementChild).toBe(heading);
+    // 標題仍是頁首裡的第一個東西——每一頁的標題高度才會一致。
+    expect(header?.firstElementChild).toBe(heading);
   });
 
   it('leaves the filters and the pager on the transactions page', async () => {

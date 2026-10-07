@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
-import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -237,53 +236,51 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
-      {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
-      <PageToolbarStart>
-        <LedgerSwitcher />
-      </PageToolbarStart>
-      <PageToolbarActions>
-        {view === 'details' && (
-          <Button onClick={startAdding}>
-            <Icon name="plus" />
-            新增交易
-          </Button>
-        )}
-      </PageToolbarActions>
-
       <PageContent>
         <PageHeader title="交易" />
 
         {/*
           「明細／借還」的檢視切換（spec 4.2）。狀態在網址上，這裡只反映目前值。
           借還也是交易（錢進出帳戶），所以它住在交易頁，側欄不加項目（決策 W1）。
+
+          帳本切換、「＋ 新增交易」與篩選都只跟著「明細」出現（開發者 2026-10-07）：
+          明細記進作用中帳本，借還已不分帳本，那一排不需要它們。
         */}
-        {/* 檢視切換與漏斗同一列（3d T6）：漏斗只在明細時出現。 */}
         <div className={styles.toolbarRow}>
-          <div className={styles.viewSwitch} role="group" aria-label="檢視">
-            <button
-              type="button"
-              className={styles.viewSwitchButton}
-              aria-pressed={view === 'details'}
-              onClick={() => switchView('details')}
-            >
-              明細
-            </button>
-            <button
-              type="button"
-              className={styles.viewSwitchButton}
-              aria-pressed={view === 'debts'}
-              onClick={() => switchView('debts')}
-            >
-              借還
-            </button>
+          <div className={styles.toolbarMain}>
+            <div className={styles.viewSwitch} role="group" aria-label="檢視">
+              <button
+                type="button"
+                className={styles.viewSwitchButton}
+                aria-pressed={view === 'details'}
+                onClick={() => switchView('details')}
+              >
+                明細
+              </button>
+              <button
+                type="button"
+                className={styles.viewSwitchButton}
+                aria-pressed={view === 'debts'}
+                onClick={() => switchView('debts')}
+              >
+                借還
+              </button>
+            </div>
+            {view === 'details' && <LedgerSwitcher />}
           </div>
           {view === 'details' && (
-            <TransactionFilterToggle
-              filters={filters}
-              expanded={filtersOpen}
-              controlsId={filterPanelId}
-              onToggle={() => setFiltersOpen((current) => !current)}
-            />
+            <div className={styles.toolbarSide}>
+              <Button onClick={startAdding}>
+                <Icon name="plus" />
+                新增交易
+              </Button>
+              <TransactionFilterToggle
+                filters={filters}
+                expanded={filtersOpen}
+                controlsId={filterPanelId}
+                onToggle={() => setFiltersOpen((current) => !current)}
+              />
+            </div>
           )}
         </div>
 
