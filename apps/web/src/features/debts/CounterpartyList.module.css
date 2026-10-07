@@ -1,4 +1,4 @@
-/* 對象清單讓每筆往來有一致的點擊範圍，讓整列都能開啟右側往來帳。 */
+/* 對象清單保留獨立的往來入口與展開控制，兩者都能用鍵盤操作。 */
 .list {
   margin: 0;
   padding: 0;
@@ -9,12 +9,20 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.rowGroup {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
 .row {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   width: 100%;
-  min-height: 3.25rem;
+  min-height: 5.5rem;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border: 0;
@@ -34,8 +42,28 @@
   outline-offset: -2px;
 }
 
+.expandButton {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.expandButton:hover {
+  background: var(--color-fill);
+}
+
+.expandButton:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
 .nameGroup {
   display: flex;
+  flex: 0 1 9rem;
   align-items: center;
   min-width: 0;
   gap: var(--space-sm);
@@ -60,9 +88,50 @@
 }
 
 .balance {
+  display: flex;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0 var(--space-md) var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.details[hidden] {
+  display: none;
+}
+
+.personalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-xs);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.personalRow:hover {
+  background: var(--color-fill);
+}
+
+.personalRow:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
 }
 
 .empty,
