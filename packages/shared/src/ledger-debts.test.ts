@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { resolvePointer } from './ledger-debts.ts';
+import { mergeTotals, myLedgerAmounts, resolvePointer } from './ledger-debts.ts';
 
 const MING_USER = 'user-ming';
 const MING_COUNTERPARTY = 'cp-ming';
@@ -68,5 +68,78 @@ describe('resolvePointer：決策 148', () => {
       }),
       { counterpartyId: null, auto: false },
     );
+  });
+});
+
+/** 驗證共享帳本結清轉帳如何換成我的角度，並逐筆加進個人往來總額。 */
+describe('myLedgerAmounts：決策 142', () => {
+  it('花蓮三日只收錄跟我有關的轉帳', () => {
+    assert.deepEqual(
+      myLedgerAmounts(
+        [
+          { fromPersonId: '小華', toPersonId: 'me', amount: 139400 },
+          { fromPersonId: '小明', toPersonId: 'me', amount: 51200 },
+          { fromPersonId: '小明', toPersonId: '小美', amount: 40000 },
+          { fromPersonId: '小明', toPersonId: '阿美', amount: 20000 },
+        ],
+        'me',
+      ),
+      new Map([
+        ['小華', 139400],
+        ['小明', 51200],
+      ]),
+    );
+  });
+
+  it('我付給某人時以負數記錄', () => {
+    assert.deepEqual(
+      myLedgerAmounts([{ fromPersonId: 'me', toPersonId: '小華', amount: 35000 }], 'me'),
+      new Map([['小華', -35000]]),
+    );
+  });
+
+  it('同一個人一收一付抵銷為 0 時不放進結果', () => {
+    assert.deepEqual(
+      myLedgerAmounts(
+        [
+          { fromPersonId: '小明', toPersonId: 'me', amount: 12000 },
+          { fromPersonId: 'me', toPersonId: '小明', amount: 12000 },
+        ],
+        'me',
+      ),
+      new Map(),
+    );
+  });
+
+  it('同一個人的多筆轉帳相加', () => {
+    assert.deepEqual(
+      myLedgerAmounts(
+        [
+          { fromPersonId: '小明', toPersonId: 'me', amount: 12000 },
+          { fromPersonId: '小明', toPersonId: 'me', amount: 20000 },
+        ],
+        'me',
+      ),
+      new Map([['小明', 32000]]),
+    );
+  });
+
+  it('沒有轉帳時回傳空 Map', () => {
+    assert.deepEqual(myLedgerAmounts([], 'me'), new Map());
+  });
+});
+
+/** 驗證個人往來餘額與各共享帳本來源以整數分加總。 */
+describe('mergeTotals：決策 143', () => {
+  it('合併 SC-F1 明哥的個人往來與帳本金額', () => {
+    assert.equal(mergeTotals(50000, [{ amount: 51200 }]), 101200);
+  });
+
+  it('沒有帳本來源時回傳原往來餘額', () => {
+    assert.equal(mergeTotals(50000, []), 50000);
+  });
+
+  it('正負帳本來源會相加', () => {
+    assert.equal(mergeTotals(50000, [{ amount: 51200 }, { amount: -20000 }]), 81200);
   });
 });

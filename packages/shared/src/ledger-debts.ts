@@ -19,9 +19,30 @@ export function myLedgerAmounts(
   suggestions: readonly SettlementSuggestion[],
   myPersonId: string,
 ): Map<string, Cents> {
-  void suggestions;
-  void myPersonId;
-  throw new Error('myLedgerAmounts: not implemented');
+  const amounts = new Map<string, Cents>();
+
+  for (const { fromPersonId, toPersonId, amount } of suggestions) {
+    let personId: string;
+    let signedAmount: Cents;
+
+    if (toPersonId === myPersonId) {
+      personId = fromPersonId;
+      signedAmount = amount;
+    } else if (fromPersonId === myPersonId) {
+      personId = toPersonId;
+      signedAmount = -amount;
+    } else {
+      continue;
+    }
+
+    amounts.set(personId, (amounts.get(personId) ?? 0) + signedAmount);
+  }
+
+  for (const [personId, amount] of amounts) {
+    if (amount === 0) amounts.delete(personId);
+  }
+
+  return amounts;
 }
 
 /** `resolvePointer` 的輸入。 */
@@ -54,7 +75,5 @@ export function resolvePointer(input: ResolvePointerInput): LedgerPointer {
 
 /** 決策 143：總額＝個人往來餘額＋各帳本來源金額。 */
 export function mergeTotals(balance: Cents, parts: readonly { amount: Cents }[]): Cents {
-  void balance;
-  void parts;
-  throw new Error('mergeTotals: not implemented');
+  return parts.reduce((total, { amount }) => total + amount, balance);
 }
