@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Counterparty } from '@ledger/shared';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { CounterpartyDetail } from './CounterpartyDetail';
 
 /**
@@ -49,6 +50,7 @@ describe('CounterpartyDetail', () => {
       link?: Counterparty['link'];
       name?: string | null;
       displayName?: string;
+      ledgerParts?: Counterparty['ledgerParts'];
     } = {},
   ) {
     fetchMock.mockImplementation((url: string) => {
@@ -73,6 +75,8 @@ describe('CounterpartyDetail', () => {
           displayName: options.displayName ?? name ?? options.link?.userName ?? '小明',
           askMerge: false,
           balance,
+          totalBalance: balance,
+          ledgerParts: options.ledgerParts ?? [],
           link: options.link ?? null,
           createdAt: '2026-09-01T04:00:00.000Z',
           updatedAt: '2026-09-01T04:00:00.000Z',
@@ -90,19 +94,23 @@ describe('CounterpartyDetail', () => {
       link?: Counterparty['link'];
       name?: string | null;
       displayName?: string;
+      ledgerParts?: Counterparty['ledgerParts'];
     } = {},
   ) {
     const onRecordEntry = vi.fn();
     const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
-      <QueryClientProvider client={queryClient}>
-        <CounterpartyDetail
-          counterpartyId="cp-1"
-          onRecordEntry={onRecordEntry}
-          onEditSplit={onEditSplit}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter initialEntries={['/transactions?view=debts']}>
+        <QueryClientProvider client={queryClient}>
+          <CounterpartyDetail
+            counterpartyId="cp-1"
+            onRecordEntry={onRecordEntry}
+            onEditSplit={onEditSplit}
+          />
+        </QueryClientProvider>
+        <LocationProbe />
+      </MemoryRouter>,
     );
     return { onRecordEntry, onEditSplit, ...result };
   }
@@ -124,6 +132,52 @@ describe('CounterpartyDetail', () => {
     await user.click(screen.getByRole('button', { name: '記一筆' }));
 
     expect(onRecordEntry).toHaveBeenCalledWith('小明');
+  });
+
+  it('shows shared ledgers below the personal balance and opens their settle intent', async () => {
+    const user = userEvent.setup();
+    const source = {
+      ledgerId: 'ledger-hualien',
+      ledgerName: '花蓮三日',
+      personId: 'person-ming',
+      personName: '明哥',
+      amount: 51200,
+      left: false,
+    };
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+
+    expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
+    expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ }));
+
+    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
+      pathname: '/transactions',
+      search: '?view=settle',
+      state: {
+        settleIntent: { ledgerId: 'ledger-hualien', personId: 'person-ming', amount: 51200 },
+      },
+    });
+  });
+
+  it('opens the read-only history for an exited shared ledger', async () => {
+    const user = userEvent.setup();
+    const source = {
+      ledgerId: 'ledger-old-home',
+      ledgerName: '老家',
+      personId: 'person-old-home',
+      personName: '小明',
+      amount: -2500,
+      left: true,
+    };
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+
+    await user.click(await screen.findByRole('button', { name: /唯讀畫面/ }));
+
+    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
+      pathname: '/ledgers/ledger-old-home/history',
+      search: '',
+      state: null,
+    });
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {
@@ -286,3 +340,17 @@ describe('CounterpartyDetail', () => {
     expect(within(confirmation).getByText('小明欠你的 $50 將歸零')).toBeInTheDocument();
   });
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  const state: unknown = location.state;
+  return (
+    <output data-testid="location-state">
+      {JSON.stringify({
+        pathname: location.pathname,
+        search: location.search,
+        state,
+      })}
+    </output>
+  );
+}
