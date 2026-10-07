@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AddMemberRequest, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import { LEDGERS_KEY } from './use-ledgers';
+
+function invalidatePeopleSummaries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
+  void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
+}
 
 /**
  * 帳本成員的伺服器狀態，端點巢狀在 `/ledgers/:ledgerId/members`。
@@ -40,6 +47,7 @@ export function useAddMember(ledgerId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
+      invalidatePeopleSummaries(queryClient);
     },
   });
 }
@@ -62,6 +70,7 @@ export function useAddMemberTo() {
     onSuccess: (_data, { ledgerId }) => {
       void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
+      invalidatePeopleSummaries(queryClient);
     },
   });
 }
@@ -100,6 +109,7 @@ export function useRemoveMember(ledgerId: string) {
       void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
+      invalidatePeopleSummaries(queryClient);
     },
   });
 }

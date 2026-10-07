@@ -9,6 +9,9 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { PageHeader } from '../components/PageHeader';
 import { useCurrentUser } from '../features/auth/use-current-user';
+import { useCounterparties } from '../features/debts/use-debts';
+import { AddCounterpartyMemberDialog } from '../features/ledgers/AddCounterpartyMemberDialog';
+import { AddMemberMenu } from '../features/ledgers/AddMemberMenu';
 import { LedgerRenameDialog } from '../features/ledgers/LedgerRenameDialog';
 import { MemberDialog } from '../features/ledgers/MemberDialog';
 import { MemberList } from '../features/ledgers/MemberList';
@@ -16,6 +19,7 @@ import { ROLE_LABEL } from '../features/ledgers/role-labels';
 import { useArchiveLedger, useDeleteLedger, useLedger } from '../features/ledgers/use-ledgers';
 import { useRemoveMember, useUpdateMemberRole } from '../features/ledgers/use-members';
 import { GuestList } from '../features/ledger-people/GuestList';
+import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { ApiError } from '../lib/api-client';
 import { formatDate } from '../lib/format';
 import styles from './LedgerDetailPage.module.css';
@@ -78,10 +82,28 @@ function LedgerDetailView({
   // 私人帳本加不了人（後端回 409），所以連入口都不畫；已封存則整頁唯讀。
   const canAddMembers = isOwner && ledger.kind === 'SHARED' && !isArchived;
 
-  const [adding, setAdding] = useState(false);
+  const [addingByEmail, setAddingByEmail] = useState(false);
+  const [addingCounterparty, setAddingCounterparty] = useState(false);
   const { isOpen, open, close } = useRightPanel();
   // 「右側欄正開著這張表單」才算展開：右側欄也可能被外殼關掉（例如換頁）。
-  const showAdd = adding && isOpen;
+  const showAddByEmail = addingByEmail && isOpen;
+  const groups = useLedgerGroups();
+  const counterparties = useCounterparties({ limit: 100 });
+  const currentLedgerGroup = groups.data?.find((group) => group.ledger.id === ledger.id);
+  const counterpartyNames = new Map(
+    (counterparties.data?.items ?? []).map((counterparty) => [
+      counterparty.id,
+      counterparty.displayName,
+    ]),
+  );
+  const pointerNames: Record<string, string> = {};
+  for (const { person, pointer } of currentLedgerGroup?.people ?? []) {
+    if (pointer.counterpartyId === null) continue;
+    const displayName = counterpartyNames.get(pointer.counterpartyId);
+    if (!displayName) continue;
+    pointerNames[person.id] = displayName;
+    if (person.userId !== null) pointerNames[person.userId] = displayName;
+  }
   const [removing, setRemoving] = useState<LedgerMemberInfo | null>(null);
   // 封存與刪除同時間只會開一個彈窗，用一個欄位表示比兩個布林值更不容易出錯。
   const [danger, setDanger] = useState<'archive' | 'delete' | null>(null);
@@ -118,17 +140,13 @@ function LedgerDetailView({
     // 而那一筆並沒有被改動。不必自己保存「原本選什麼」。
   }
 
-  function toggleAdd() {
-    if (showAdd) {
-      closeAdd();
-      return;
-    }
-    setAdding(true);
+  function openEmailAdd() {
+    setAddingByEmail(true);
     open();
   }
 
-  function closeAdd() {
-    setAdding(false);
+  function closeEmailAdd() {
+    setAddingByEmail(false);
     close();
   }
 
@@ -235,48 +253,66 @@ function LedgerDetailView({
         </p>
       )}
 
-      <div className={styles.membersHead}>
-        <h3 className={styles.subtitle}>成員（{ledger.members.length}）</h3>
-        {canAddMembers && (
-          <Button variant="secondary" aria-expanded={showAdd} onClick={toggleAdd}>
-            加入成員
-          </Button>
+      <GuestList
+        ledgerId={ledger.id}
+        enabled={ledger.kind === 'SHARED'}
+        canManage={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
+      >
+        {({ virtualMembers, openCreate, openRename, openDelete }) => (
+          <>
+            <div className={styles.membersHead}>
+              <h3 className={styles.subtitle}>
+                成員（{ledger.members.length + virtualMembers.length}）
+              </h3>
+              {canAddMembers && (
+                <AddMemberMenu
+                  onAddCounterparty={() => setAddingCounterparty(true)}
+                  onAddVirtualMember={openCreate}
+                />
+              )}
+            </div>
+
+            <RightPanelContent>
+              {showAddByEmail ? (
+                <MemberDialog open ledgerId={ledger.id} variant="panel" onClose={closeEmailAdd} />
+              ) : null}
+            </RightPanelContent>
+
+            {isArchived && (
+              <p className={styles.readonly}>
+                帳本已封存，僅可讀取。成員無法變更，目前也無法退出。
+              </p>
+            )}
+
+            <MemberList
+              members={ledger.members}
+              virtualMembers={virtualMembers}
+              currentUserId={currentUser.data?.id}
+              isOwner={isOwner}
+              isArchived={isArchived}
+              canManageVirtualMembers={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
+              pendingUserId={updateRole.isPending ? updateRole.variables?.userId : undefined}
+              rowError={roleError}
+              pointerNames={pointerNames}
+              onChangeRole={handleChangeRole}
+              onRemove={setRemoving}
+              onLeave={setRemoving}
+              onRenameVirtualMember={openRename}
+              onDeleteVirtualMember={openDelete}
+            />
+
+            {addingCounterparty && canAddMembers && (
+              <AddCounterpartyMemberDialog
+                ledgerId={ledger.id}
+                ledgerName={ledger.name}
+                members={ledger.members}
+                onClose={() => setAddingCounterparty(false)}
+                onAddByEmail={openEmailAdd}
+              />
+            )}
+          </>
         )}
-      </div>
-
-      {/*
-        「加入成員」與帳本頁的「建立帳本」同一套互動（spec 2i SC-42）：從右側欄
-        滑出，不往下擠開成員清單。`Dialog` 的 panel 變體收起時整個卸載，下次打開的
-        欄位因此是空的；它也負責把焦點送進第一個欄位、關閉時送回「加入成員」。
-      */}
-      <RightPanelContent>
-        {showAdd ? (
-          <MemberDialog open ledgerId={ledger.id} variant="panel" onClose={closeAdd} />
-        ) : null}
-      </RightPanelContent>
-
-      {isArchived && (
-        <p className={styles.readonly}>帳本已封存，僅可讀取。成員無法變更，目前也無法退出。</p>
-      )}
-
-      <MemberList
-        members={ledger.members}
-        currentUserId={currentUser.data?.id}
-        isOwner={isOwner}
-        isArchived={isArchived}
-        pendingUserId={updateRole.isPending ? updateRole.variables?.userId : undefined}
-        rowError={roleError}
-        onChangeRole={handleChangeRole}
-        onRemove={setRemoving}
-        onLeave={setRemoving}
-      />
-
-      {ledger.kind === 'SHARED' && (
-        <GuestList
-          ledgerId={ledger.id}
-          canManage={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
-        />
-      )}
+      </GuestList>
 
       {/* 已封存的帳本沒有東西好封存，後端也不接受刪除，整個區塊就不畫。 */}
       {isOwner && !isArchived && (

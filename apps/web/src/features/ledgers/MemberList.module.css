@@ -1,6 +1,5 @@
 /*
- * 成員清單：一張卡片、一列一人。左邊是「誰」（名字＋email），右邊是
- * 角色與操作——誰看得到哪些操作由 MemberList 決定，樣式只負責排好它們。
+ * 成員清單：一張卡片、一列一人。左邊是名字、虛擬成員標籤與指向，右邊是角色或管理操作。
  */
 .list {
   margin: 0;
@@ -45,11 +44,26 @@
   font-weight: 600;
 }
 
-.email {
-  overflow: hidden;
+.personMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.virtualTag {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.pointer {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .right {
@@ -103,6 +117,12 @@
 .role:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
 }
 
 /* 移除／退出是危險方向：文字用 danger，框用半透明的 danger 軟化。 */

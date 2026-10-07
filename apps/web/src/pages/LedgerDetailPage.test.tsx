@@ -27,6 +27,12 @@ describe('Ledger detail page', () => {
       { userId: 'u2', email: 'bob@example.com', name: 'Bob', role: 'EDITOR' },
     ],
   };
+  const virtualMember = {
+    id: 'person-1',
+    name: '阿美',
+    userId: null,
+    status: 'GUEST',
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -52,12 +58,27 @@ describe('Ledger detail page', () => {
       detail?: () => Promise<Response>;
       me?: Record<string, unknown>;
       remove?: () => Promise<Response>;
+      people?: unknown[];
+      groups?: unknown[];
+      counterparties?: unknown[];
     } = {},
   ) {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const target = String(url);
       if (target.includes('/users/me')) {
         return Promise.resolve(jsonResponse(200, overrides.me ?? alice));
+      }
+      if (target.endsWith('/ledgers/led-2/people')) {
+        return Promise.resolve(jsonResponse(200, overrides.people ?? []));
+      }
+      if (target.includes('/ledger-groups')) {
+        return Promise.resolve(jsonResponse(200, overrides.groups ?? []));
+      }
+      if (target.includes('/counterparties')) {
+        const items = overrides.counterparties ?? [];
+        return Promise.resolve(
+          jsonResponse(200, { items, page: 1, limit: 100, total: items.length }),
+        );
       }
       if (target.includes('/ledgers/led-2/archive')) {
         return Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archivedOn }));
@@ -90,19 +111,24 @@ describe('Ledger detail page', () => {
     // 兩個不可更改的欄位都要把這件事寫在畫面上。
     expect(screen.getAllByText('建立後不可更改')).toHaveLength(2);
     expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '成員（2）' })).toBeInTheDocument();
   });
 
-  it('places the guest list below members and lets an editor manage it', async () => {
-    routeFetch({ me: { id: 'u2', email: 'bob@example.com', name: 'Bob' } });
+  it('shows virtual members in the same counted list and lets an editor manage them', async () => {
+    routeFetch({
+      me: { id: 'u2', email: 'bob@example.com', name: 'Bob' },
+      people: [virtualMember],
+    });
 
     render(<App />);
 
-    const members = await screen.findByRole('heading', { name: '成員（2）' });
-    const guests = await screen.findByRole('heading', { name: '非成員' });
-    expect(members.compareDocumentPosition(guests) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-    expect(screen.getByRole('button', { name: '新增' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '成員（3）' })).toBeInTheDocument();
+    expect(screen.getByText('阿美')).toBeInTheDocument();
+    expect(screen.getByText('虛擬成員')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '非成員' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '改名阿美' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '刪除阿美' })).toBeInTheDocument();
   });
 
   it('keeps an archived shared ledger readable while hiding guest management', async () => {
@@ -112,8 +138,8 @@ describe('Ledger detail page', () => {
 
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: '非成員' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '新增' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '成員（2）' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增成員' })).not.toBeInTheDocument();
   });
 
   it('does not request or show a guest list for a personal ledger', async () => {
@@ -124,7 +150,7 @@ describe('Ledger detail page', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: '家庭帳本' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '非成員' })).not.toBeInTheDocument();
+    expect(screen.queryByText('虛擬成員')).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledgers/led-2/people')),
     ).toBe(false);

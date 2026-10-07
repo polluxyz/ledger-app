@@ -1,0 +1,33 @@
+.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+
+.options {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows var(--motion-panel) var(--motion-ease),
+    opacity var(--motion-fade) var(--motion-ease);
+}
+
+.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  min-height: 0;
+  overflow: hidden;
+  padding-top: var(--space-sm);
+}
