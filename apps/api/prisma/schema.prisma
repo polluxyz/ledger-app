@@ -41,10 +41,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships  LedgerMember[]
-  ledgerPeople LedgerPerson[]
-  transactions Transaction[]  @relation("TransactionCreator")
-  accounts     Account[]
+  memberships          LedgerMember[]
+  ledgerPeople         LedgerPerson[]
+  ledgerPersonPointers LedgerPersonPointer[]
+  transactions         Transaction[]         @relation("TransactionCreator")
+  accounts             Account[]
 
   // 好友系統（3a）。Friendship 一對只存一筆，所以一個人可能出現在 low 或 high 任一側。
   friendshipsAsLow       Friendship[]       @relation("FriendshipLow")
@@ -204,10 +205,11 @@ model LedgerPerson {
   ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  paidTransactions Transaction[]      @relation("TransactionPayer")
+  paidTransactions Transaction[]         @relation("TransactionPayer")
   shares           LedgerShare[]
-  settlementsFrom  LedgerSettlement[] @relation("SettlementFrom")
-  settlementsTo    LedgerSettlement[] @relation("SettlementTo")
+  settlementsFrom  LedgerSettlement[]    @relation("SettlementFrom")
+  settlementsTo    LedgerSettlement[]    @relation("SettlementTo")
+  pointers         LedgerPersonPointer[]
 
   @@unique([ledgerId, userId])
   @@index([ledgerId])
@@ -351,16 +353,35 @@ model Counterparty {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner             User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  entries           DebtEntry[]
-  splitsAsPayer     Split[]            @relation("SplitPayer")
-  splitParticipants SplitParticipant[]
+  owner                User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  entries              DebtEntry[]
+  splitsAsPayer        Split[]               @relation("SplitPayer")
+  splitParticipants    SplitParticipant[]
+  ledgerPersonPointers LedgerPersonPointer[]
 
   // 連動（3b-2）：一個對象最多出現在一筆 CounterpartyLink 的其中一側。
   linkAsLow  CounterpartyLink? @relation("CounterpartyLinkLowCounterparty")
   linkAsHigh CounterpartyLink? @relation("CounterpartyLinkHighCounterparty")
 
   @@unique([ownerId, name])
+}
+
+/// 我把共享帳本裡的某個人指向我的某個對象（3f 決策 146）。只有 userId 本人讀得到。
+model LedgerPersonPointer {
+  id             String   @id @default(uuid())
+  userId         String
+  ledgerPersonId String
+  /// null＝明確「不指向」（蓋過自動指向，決策 148）
+  counterpartyId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerPerson LedgerPerson  @relation(fields: [ledgerPersonId], references: [id], onDelete: Cascade)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ledgerPersonId])
+  @@index([counterpartyId])
 }
 
 /// 一筆往來紀錄。往來餘額 = Σ 未刪除紀錄的 delta，**不存欄位**（spec 3b 決策 34）。
