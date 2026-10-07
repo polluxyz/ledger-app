@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FriendsModule } from '../friends/friends.module';
+import { LedgerGroupsModule } from '../ledger-groups/ledger-groups.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { CounterpartiesController } from './counterparties.controller';
 import { CounterpartiesService } from './counterparties.service';
@@ -15,7 +16,7 @@ import { DebtProposalsService } from './debt-proposals.service';
  * 不自己寫交易。
  */
 @Module({
-  imports: [TransactionsModule, FriendsModule],
+  imports: [TransactionsModule, FriendsModule, LedgerGroupsModule],
   controllers: [CounterpartiesController, DebtEntriesController, DebtProposalsController],
   providers: [CounterpartiesService, DebtEntriesService, DebtProposalsService],
 })

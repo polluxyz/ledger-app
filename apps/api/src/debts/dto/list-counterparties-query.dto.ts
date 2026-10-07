@@ -39,4 +39,12 @@ export class ListCounterpartiesQueryDto implements ListCounterpartiesQuery {
   )
   @IsBoolean()
   askMerge?: boolean;
+
+  @ApiPropertyOptional({ enum: ['true', 'false'] })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  nonZero?: boolean;
 }
