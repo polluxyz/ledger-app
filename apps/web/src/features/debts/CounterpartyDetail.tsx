@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import type { CounterpartyLedgerPart, DebtEntry, DebtEntryKind } from '@ledger/shared';
+import type {
+  CounterpartyLedgerPart,
+  DebtEntry,
+  DebtEntryKind,
+  LedgerSummary,
+} from '@ledger/shared';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -9,6 +14,8 @@ import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useOpenSettleIntent } from '../settlements/settle-intent';
+import { AnimatedDisclosure } from './AnimatedDisclosure';
+import { DebtEntryForm } from './DebtEntryForm';
 import {
   useCounterparty,
   useCounterpartyEntries,
@@ -20,21 +27,17 @@ import { DebtEntryEditDialog } from './DebtEntryEditDialog';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
+  ledger: LedgerSummary;
   counterpartyId: string;
-  /** 記往來仍由新增表單負責；這裡只提供對象名字給交易頁。 */
-  onRecordEntry: (name: string) => void;
   onEditSplit?: (splitId: string) => void;
 }
 
 /**
- * 交易頁的往來帳只留帳（spec 修訂 2 W55）：名字＋連動標記、餘額、記一筆、免除剩餘
- * 與往來紀錄（含修改、刪除）。改名、暱稱、合併、解除連動與刪除對象屬於對象頁的
- * 「對象」面板（`CounterpartyProfile`），這裡不再出現。餘額與逐筆紀錄全部來自 API，
- * 寫入交給資料層 hooks。
+ * 對象列展開後顯示 API 餘額、共享來源、記錄表單與往來明細；變更仍交給資料層 hooks。
  */
 export function CounterpartyDetail({
+  ledger,
   counterpartyId,
-  onRecordEntry,
   onEditSplit,
 }: CounterpartyDetailProps) {
   const [page, setPage] = useState(1);
@@ -48,6 +51,7 @@ export function CounterpartyDetail({
   const [forgiveOpen, setForgiveOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<DebtEntry | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<DebtEntry | null>(null);
+  const [entryFormOpen, setEntryFormOpen] = useState(false);
 
   function closeForgive() {
     setForgiveOpen(false);
@@ -94,32 +98,30 @@ export function CounterpartyDetail({
 
   const person = counterparty.data;
   const { ledgerParts } = person;
+  const sharedLedgersHeadingId = `counterparty-shared-ledgers-${counterpartyId}`;
+  const entriesHeadingId = `counterparty-entries-${counterpartyId}`;
+  const entryFormId = `counterparty-entry-form-${counterpartyId}`;
 
   return (
     <div className={styles.detail}>
-      <header className={styles.heading}>
-        <div className={styles.titleRow}>
-          <h3>{person.displayName}</h3>
-          {person.link && <span className={styles.linkBadge}>連動</span>}
-        </div>
-      </header>
-
       <p className={styles.balance}>
         {formatCounterpartyBalance(person.displayName, person.balance)}
       </p>
 
       {ledgerParts.length > 0 && (
-        <section
-          className={styles.sharedLedgers}
-          aria-labelledby="counterparty-shared-ledgers-heading"
-        >
-          <h4 id="counterparty-shared-ledgers-heading">共享帳本</h4>
+        <section className={styles.sharedLedgers} aria-labelledby={sharedLedgersHeadingId}>
+          <h4 id={sharedLedgersHeadingId}>共享帳本</h4>
           <LedgerSourceList sources={ledgerParts} onOpenSource={handleOpenLedgerSource} />
         </section>
       )}
 
       <div className={styles.actions}>
-        <Button type="button" onClick={() => onRecordEntry(person.displayName)}>
+        <Button
+          type="button"
+          aria-expanded={entryFormOpen}
+          aria-controls={entryFormId}
+          onClick={() => setEntryFormOpen((open) => !open)}
+        >
           記一筆
         </Button>
         {person.balance > 0 && (
@@ -129,8 +131,21 @@ export function CounterpartyDetail({
         )}
       </div>
 
-      <section className={styles.entries} aria-labelledby="counterparty-entries-heading">
-        <h4 id="counterparty-entries-heading">往來紀錄</h4>
+      <AnimatedDisclosure
+        id={entryFormId}
+        open={entryFormOpen}
+        className={styles.entryFormDisclosure}
+      >
+        <DebtEntryForm
+          ledger={ledger}
+          initialCounterpartyName={person.displayName}
+          onCancel={() => setEntryFormOpen(false)}
+          onSaved={() => setEntryFormOpen(false)}
+        />
+      </AnimatedDisclosure>
+
+      <section className={styles.entries} aria-labelledby={entriesHeadingId}>
+        <h4 id={entriesHeadingId}>往來紀錄</h4>
         {entries.isLoading ? (
           <p className={styles.status}>載入中…</p>
         ) : entries.error ? (

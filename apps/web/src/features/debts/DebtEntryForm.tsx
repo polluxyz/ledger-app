@@ -21,6 +21,8 @@ interface DebtEntryFormProps {
   ledger: LedgerSummary;
   amountFieldId?: string;
   initialCounterpartyName?: string;
+  onSaved?: () => void;
+  onCancel?: () => void;
 }
 
 type DebtEntryFormKind = Exclude<CreateDebtEntryKind, 'PAID_FOR_ME'>;
@@ -45,6 +47,8 @@ export function DebtEntryForm({
   ledger,
   amountFieldId,
   initialCounterpartyName = '',
+  onSaved,
+  onCancel,
 }: DebtEntryFormProps) {
   const [kind, setKind] = useState<DebtEntryFormKind>('LEND');
   const [counterpartyName, setCounterpartyName] = useState(initialCounterpartyName);
@@ -217,6 +221,7 @@ export function DebtEntryForm({
           setKind('LEND');
           setSettle(false);
         }
+        onSaved?.();
       },
     });
   }
@@ -337,9 +342,14 @@ export function DebtEntryForm({
       )}
 
       <div className={styles.actions}>
-        <Button type="submit" block disabled={submitDisabled}>
+        <Button type="submit" block={!onCancel} disabled={submitDisabled}>
           {createEntry.isPending ? '新增中…' : '新增'}
         </Button>
+        {onCancel && (
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            取消
+          </Button>
+        )}
       </div>
     </form>
   );

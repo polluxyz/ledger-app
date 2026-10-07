@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { Counterparty, CounterpartyLedgerPart } from '@ledger/shared';
+import { useCallback, useState } from 'react';
+import type { Counterparty, CounterpartyLedgerPart, LedgerSummary } from '@ledger/shared';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { useOpenSettleIntent } from '../settlements/settle-intent';
@@ -8,19 +8,42 @@ import { CounterpartyList } from './CounterpartyList';
 import styles from './DebtsView.module.css';
 
 interface DebtsViewProps {
-  /** 點選對象後由交易頁開啟右側往來帳，這一層不持有面板狀態。 */
-  onSelectCounterparty: (counterpartyId: string) => void;
+  ledger: LedgerSummary;
+  expandedCounterpartyId: string | null;
+  onExpandedChange: (counterpartyId: string | null) => void;
+  openCounterpartyId?: string | null;
+  onOpenRequestHandled?: (counterpartyId: string, foundInCurrentPage: boolean) => void;
+  onEditSplit: (splitId: string) => void;
 }
 
 /** 借還檢視只列往來對象；餘額與排序都由 API 提供，避免前端重做帳務計算。 */
-export function DebtsView({ onSelectCounterparty }: DebtsViewProps) {
+export function DebtsView({
+  ledger,
+  expandedCounterpartyId,
+  onExpandedChange,
+  openCounterpartyId,
+  onOpenRequestHandled,
+  onEditSplit,
+}: DebtsViewProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [createdCounterpartyId, setCreatedCounterpartyId] = useState<string | null>(null);
   const openSettleIntent = useOpenSettleIntent();
   const navigate = useNavigate();
 
   function handleCounterpartyCreated(counterparty: Counterparty) {
-    onSelectCounterparty(counterparty.id);
+    setCreatedCounterpartyId(counterparty.id);
   }
+
+  const handleOpenRequestHandled = useCallback(
+    (counterpartyId: string, foundInCurrentPage: boolean) => {
+      if (createdCounterpartyId === counterpartyId && foundInCurrentPage) {
+        onExpandedChange(counterpartyId);
+      }
+      setCreatedCounterpartyId((current) => (current === counterpartyId ? null : current));
+      onOpenRequestHandled?.(counterpartyId, foundInCurrentPage);
+    },
+    [createdCounterpartyId, onExpandedChange, onOpenRequestHandled],
+  );
 
   function handleOpenLedgerSource(source: CounterpartyLedgerPart) {
     if (source.left) {
@@ -43,8 +66,13 @@ export function DebtsView({ onSelectCounterparty }: DebtsViewProps) {
         </Button>
       </div>
       <CounterpartyList
-        onSelectCounterparty={onSelectCounterparty}
+        ledger={ledger}
+        expandedCounterpartyId={expandedCounterpartyId}
+        onExpandedChange={onExpandedChange}
+        openCounterpartyId={openCounterpartyId ?? createdCounterpartyId}
+        onOpenRequestHandled={handleOpenRequestHandled}
         onOpenLedgerSource={handleOpenLedgerSource}
+        onEditSplit={onEditSplit}
       />
       <AddCounterpartyDialog
         open={addDialogOpen}

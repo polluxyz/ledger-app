@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Counterparty } from '@ledger/shared';
+import type { Counterparty, LedgerSummary } from '@ledger/shared';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { CounterpartyDetail } from './CounterpartyDetail';
 
 /**
- * CounterpartyDetail 驗 API 餘額、紀錄呈現與帳的操作（修改、刪除、免除）。修訂 2 起
- * 只留帳（W55）：管理按鈕搬到對象頁的 CounterpartyProfile，這裡一顆都不能出現（SC-W63）。
+ * CounterpartyDetail 驗 API 餘額、共享來源、列內新增表單與往來紀錄操作。
  */
 describe('CounterpartyDetail', () => {
   const fetchMock = vi.fn();
@@ -31,6 +30,28 @@ describe('CounterpartyDetail', () => {
   };
 
   const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 987600 };
+  const ledger: LedgerSummary = {
+    id: 'ledger-1',
+    name: '我的帳本',
+    currency: 'TWD',
+    kind: 'PERSONAL',
+    tracksBalance: false,
+    archivedAt: null,
+    role: 'OWNER',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
+  const counterpartyForForm = {
+    id: 'cp-1',
+    name: '小明',
+    displayName: '小明',
+    askMerge: false,
+    balance: 900,
+    totalBalance: 900,
+    ledgerParts: [],
+    link: null,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -53,16 +74,28 @@ describe('CounterpartyDetail', () => {
       ledgerParts?: Counterparty['ledgerParts'];
     } = {},
   ) {
-    fetchMock.mockImplementation((url: string) => {
-      const json = (body: unknown) =>
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const json = (body: unknown, status = 200) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
-            status: 200,
+            status,
             headers: { 'Content-Type': 'application/json' },
           }),
         );
       if (url.includes('/counterparties/cp-1/entries')) {
         return json({ items, page: 1, limit: 20, total });
+      }
+      if (url.includes('/debt-entries') && init?.method === 'POST') {
+        return json(
+          { counterparty: { ...counterpartyForForm, balance: balance + 100 }, entries: [] },
+          201,
+        );
+      }
+      if (url.endsWith('/counterparties?limit=100')) {
+        return json({ items: [counterpartyForForm], page: 1, limit: 100, total: 1 });
+      }
+      if (url.endsWith('/accounts')) {
+        return json([]);
       }
       if (url.endsWith('/counterparties/cp-1/link')) {
         return json({});
@@ -97,22 +130,17 @@ describe('CounterpartyDetail', () => {
       ledgerParts?: Counterparty['ledgerParts'];
     } = {},
   ) {
-    const onRecordEntry = vi.fn();
     const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
       <MemoryRouter initialEntries={['/transactions?view=debts']}>
         <QueryClientProvider client={queryClient}>
-          <CounterpartyDetail
-            counterpartyId="cp-1"
-            onRecordEntry={onRecordEntry}
-            onEditSplit={onEditSplit}
-          />
+          <CounterpartyDetail ledger={ledger} counterpartyId="cp-1" onEditSplit={onEditSplit} />
         </QueryClientProvider>
         <LocationProbe />
       </MemoryRouter>,
     );
-    return { onRecordEntry, onEditSplit, ...result };
+    return { onEditSplit, ...result };
   }
 
   it.each([
@@ -124,14 +152,32 @@ describe('CounterpartyDetail', () => {
     expect(await screen.findByText(phrase)).toBeInTheDocument();
   });
 
-  it('passes the current counterparty name to 記一筆', async () => {
+  it('opens a prefilled form above the entries and lets the user cancel it', async () => {
     const user = userEvent.setup();
-    const { onRecordEntry } = renderDetail();
+    renderDetail();
     await screen.findByText('小明欠你 $9');
 
     await user.click(screen.getByRole('button', { name: '記一筆' }));
 
-    expect(onRecordEntry).toHaveBeenCalledWith('小明');
+    const form = await screen.findByRole('button', { name: '取消' });
+    expect(screen.getByLabelText('對象')).toHaveValue('小明');
+    expect(screen.getByRole('heading', { name: '往來紀錄' }).compareDocumentPosition(form)).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+
+    await user.click(form);
+    await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
+  });
+
+  it('closes the inline form after a successful entry save', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: '記一筆' }));
+    await user.type(await screen.findByLabelText('金額'), '1');
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
   });
 
   it('shows shared ledgers below the personal balance and opens their settle intent', async () => {
@@ -198,7 +244,8 @@ describe('CounterpartyDetail', () => {
     expect(screen.queryByRole('button', { name: '合併之前的紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '解除連動' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除對象' })).not.toBeInTheDocument();
-    // 標題只有名字與連動標記，不再顯示帳號名稱小字（W55）。
+    // 名字與連動標記已由清單列承載，明細不再重複顯示標題。
+    expect(screen.queryByRole('heading', { name: '小明' })).not.toBeInTheDocument();
     expect(screen.queryByText('王小明')).not.toBeInTheDocument();
   });
 

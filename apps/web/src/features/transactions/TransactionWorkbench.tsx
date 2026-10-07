@@ -1,10 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { Cents, LedgerSummary, Transaction } from '@ledger/shared';
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
 import { Icon } from '../../components/Icon';
-import { CounterpartyDetail } from '../debts/CounterpartyDetail';
 import { DebtEntryEditForm } from '../debts/DebtEntryEditDialog';
 import { TransactionDialog } from './TransactionDialog';
 import { TransactionForm } from './TransactionForm';
@@ -19,17 +18,17 @@ import styles from './TransactionWorkbench.module.css';
  *
  * - `new`：新增表單（預設）。
  * - `transaction`：編輯一筆一般交易。
- * - `counterparty`：檢視對象的往來帳與紀錄。
  * - `debtTransaction`：編輯一筆往來紀錄產生的交易。
+ * - `split`：編輯一筆分帳。
  * - `settlement`：共享帳本的結清表單（3e W116～W121）。帶 `settlement`＝編輯那一筆結清
  *   （`transaction.settlement` 有值的交易）；帶 `prefill`＝從結清建議打開；兩者都沒有＝空白新增。
  * - `fillAccount`：補帳戶（3e W125），只有一個帳戶下拉。交易本身是一般交易或結清皆可。
  */
 export type PanelTarget =
-  | { kind: 'new'; debtCounterparty?: string }
+  | { kind: 'new' }
   | { kind: 'transaction'; transaction: Transaction }
-  | { kind: 'counterparty'; counterpartyId: string }
   | { kind: 'debtTransaction'; transaction: Transaction }
+  | { kind: 'split'; splitId: string }
   | { kind: 'settlement'; settlement?: Transaction; prefill?: SettlementPrefill }
   | { kind: 'fillAccount'; transaction: Transaction };
 
@@ -48,8 +47,6 @@ export interface TransactionWorkbenchProps {
   editing?: Transaction | null;
   /** 關閉面板（儲存成功、取消、關閉、Esc）時呼叫。 */
   onClose?: () => void;
-  /** 從往來帳按「記一筆」時，要求新增表單開啟借還並預帶對象。 */
-  onRecordEntry?: (name: string) => void;
   /** @deprecated 相容舊的 onEditDone prop */
   onEditDone?: () => void;
 }
@@ -57,13 +54,12 @@ export interface TransactionWorkbenchProps {
 /**
  * 右側欄的內容（spec 2i §4.5、plan D25、3b-1 W5）。
  *
- * 總覽與交易頁兩頁都要用同一個面板：頁面各自持有目標狀態，
- * 面板依 `target.kind` 渲染新增表單、交易編輯面板或債務詳情。
+ * 總覽與交易頁兩頁都要用同一個面板：頁面各自持有目標狀態，面板依 `target.kind`
+ * 渲染新增、交易編輯、分帳編輯、結清或補帳戶內容。
  *
- * ## 新增、交易編輯與債務詳情互斥
+ * ## 各面板目標互斥
  *
- * 欄位標籤與焦點必須清晰，同一時間只會渲染其中一種內容。
- * 借還往來與編輯目標都以 `Dialog variant="panel"` 包裹；頁面負責關閉時收起側欄。
+ * 欄位標籤與焦點必須清晰，同一時間只會渲染一種內容；表單對話框由頁面負責關閉。
  *
  * ## 焦點怎麼進來（SC-35.3）
  *
@@ -75,14 +71,12 @@ export function TransactionWorkbench({
   target,
   editing,
   onClose,
-  onRecordEntry,
   onEditDone,
 }: TransactionWorkbenchProps) {
   const { close, focusRequest } = useRightPanel();
   const amountFieldId = useId();
   // 初值就是目前的計數，所以「第一次 render」永遠不算一次 focus 要求。
   const seenFocusRequest = useRef(focusRequest);
-  const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
 
   const handleClose = onClose ?? onEditDone ?? (() => {});
   const activeTarget: PanelTarget =
@@ -116,11 +110,7 @@ export function TransactionWorkbench({
           >
             <Icon name="chevronRight" size={18} />
           </button>
-          <TransactionForm
-            ledger={ledger}
-            amountFieldId={amountFieldId}
-            initialDebtCounterparty={activeTarget.debtCounterparty}
-          />
+          <TransactionForm ledger={ledger} amountFieldId={amountFieldId} />
         </div>
       )}
       {activeTarget.kind === 'transaction' && (
@@ -131,27 +121,9 @@ export function TransactionWorkbench({
           onClose={handleClose}
         />
       )}
-      {activeTarget.kind === 'counterparty' && (
-        <Dialog
-          open={true}
-          title={editingSplitId ? '編輯交易' : '借還往來'}
-          variant="panel"
-          onClose={editingSplitId ? () => setEditingSplitId(null) : handleClose}
-        >
-          {editingSplitId ? (
-            <SplitEditPanel
-              ledger={ledger}
-              splitId={editingSplitId}
-              onClose={() => setEditingSplitId(null)}
-            />
-          ) : (
-            <CounterpartyDetail
-              key={activeTarget.counterpartyId}
-              counterpartyId={activeTarget.counterpartyId}
-              onRecordEntry={onRecordEntry ?? (() => {})}
-              onEditSplit={setEditingSplitId}
-            />
-          )}
+      {activeTarget.kind === 'split' && (
+        <Dialog open={true} title="編輯交易" variant="panel" onClose={handleClose}>
+          <SplitEditPanel ledger={ledger} splitId={activeTarget.splitId} onClose={handleClose} />
         </Dialog>
       )}
       {activeTarget.kind === 'debtTransaction' && activeTarget.transaction.debt && (

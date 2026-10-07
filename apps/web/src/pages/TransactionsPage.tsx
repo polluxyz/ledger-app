@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
@@ -246,6 +246,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
+  const [pendingCounterpartyId, setPendingCounterpartyId] = useState<string | null>(null);
+  const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(null);
 
   // 個人帳本沒有結清檢視；直接進入舊連結時移除無效參數，回到明細。
   useEffect(() => {
@@ -288,35 +290,37 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     open();
   }
 
-  function openCounterparty(counterpartyId: string) {
-    setPanelTarget({ kind: 'counterparty', counterpartyId });
-    open();
-  }
-
   /*
-    從總覽或邀請頁過來、要直接打開某人的往來帳（phase-3b2-web W41，見
-    features/linking/navigation.ts）。打開後把 state 換掉，重新整理或回上一頁就不會再開一次。
-
-    換掉 state 是一次 replace 導覽，會換 location key；帶 keepRightPanel 讓右側欄把開啟記號
-    搬過去（RightPanelProvider 的 W15 機制），否則剛打開就被收起。用 passive effect：它在
-    RightPanelProvider 的 layout effect 之後才跑，不會被「換頁就收起」蓋掉。
-
-    面板內容在 render 期間就換（React 的「依 props 調整 state」寫法，以 location key 防止
-    重複），effect 只負責打開右側欄與換掉 state 這兩件外部的事。
+    從總覽或邀請頁帶來的對象 id 只要求切到借還檢視；清單載入後會在目前頁面有該對象時展開，
+    並把導覽 state 清掉，避免重新整理或返回時重複處理。
   */
   const openCounterpartyId = readOpenCounterpartyState(location.state);
-  const [handledLocationKey, setHandledLocationKey] = useState<string | null>(null);
-  if (openCounterpartyId !== null && handledLocationKey !== location.key) {
-    setHandledLocationKey(location.key);
-    setPanelTarget({ kind: 'counterparty', counterpartyId: openCounterpartyId });
+  const [handledCounterpartyLocationKey, setHandledCounterpartyLocationKey] = useState<
+    string | null
+  >(null);
+  if (openCounterpartyId !== null && handledCounterpartyLocationKey !== location.key) {
+    setHandledCounterpartyLocationKey(location.key);
+    setPendingCounterpartyId(openCounterpartyId);
+    setExpandedCounterpartyId(openCounterpartyId);
   }
   useEffect(() => {
     if (openCounterpartyId === null) {
       return;
     }
-    open();
-    setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
-  }, [open, openCounterpartyId, setSearchParams]);
+    const next = new URLSearchParams(searchParams);
+    next.set('view', 'debts');
+    setSearchParams(next, { replace: true, state: null });
+  }, [location.key, openCounterpartyId, searchParams, setSearchParams]);
+
+  const handleCounterpartyRequestHandled = useCallback(
+    (counterpartyId: string, foundInCurrentPage: boolean) => {
+      setPendingCounterpartyId((current) => (current === counterpartyId ? null : current));
+      if (!foundInCurrentPage) {
+        setExpandedCounterpartyId((current) => (current === counterpartyId ? null : current));
+      }
+    },
+    [],
+  );
 
   const settleIntentReady =
     settleIntent?.ledgerId === ledger.id &&
@@ -366,12 +370,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     settlePrefill,
   ]);
 
-  /** 往來帳的「記一筆」回到借還表單，預帶對象並把面板焦點移入表單。 */
-  function recordEntry(name: string) {
-    setPanelTarget({ kind: 'new', debtCounterparty: name });
-    requestFocus();
-  }
-
   /*
    * 關閉只收起右側欄，不換內容（W57）：收起有滑出動畫，這時先換成新增表單，動畫裡滑出去
    * 的就會是「新增一筆交易」。每個打開右側欄的入口都會先設好自己的目標，所以留著舊內容
@@ -397,6 +395,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     prefill: NonNullable<Extract<PanelTarget, { kind: 'settlement' }>['prefill']>,
   ) {
     setPanelTarget({ kind: 'settlement', prefill });
+    open();
+  }
+
+  function editSplit(splitId: string) {
+    setPanelTarget({ kind: 'split', splitId });
     open();
   }
 
@@ -483,7 +486,14 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
         {view === 'debts' ? (
           // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
-          <DebtsView onSelectCounterparty={openCounterparty} />
+          <DebtsView
+            ledger={ledger}
+            expandedCounterpartyId={expandedCounterpartyId}
+            onExpandedChange={setExpandedCounterpartyId}
+            openCounterpartyId={pendingCounterpartyId}
+            onOpenRequestHandled={handleCounterpartyRequestHandled}
+            onEditSplit={editSplit}
+          />
         ) : view === 'settle' ? (
           <SettlementView ledger={ledger} onSettle={openSuggestedSettlement} />
         ) : (
@@ -522,12 +532,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         )}
       </PageContent>
 
-      <TransactionWorkbench
-        ledger={ledger}
-        target={panelTarget}
-        onClose={closeWorkbench}
-        onRecordEntry={recordEntry}
-      />
+      <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
   );
 }

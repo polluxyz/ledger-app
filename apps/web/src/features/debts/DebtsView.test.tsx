@@ -2,17 +2,28 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LedgerGroup } from '@ledger/shared';
+import { useState } from 'react';
+import type { LedgerGroup, LedgerSummary } from '@ledger/shared';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { DebtsView } from './DebtsView';
 
-/** DebtsView 負責借還提示與把對象選擇回報交易頁，不在這一層另算往來資料。 */
+/** DebtsView 負責借還提示、外部展開請求與帳本來源導覽，不另算往來資料。 */
 describe('DebtsView', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
   let counterpartyItems: unknown[];
   let ledgerGroups: LedgerGroup[];
   let createdCounterparty: unknown;
+  const ledger: LedgerSummary = {
+    id: 'ledger-1',
+    name: '我的帳本',
+    currency: 'TWD',
+    kind: 'PERSONAL',
+    tracksBalance: false,
+    archivedAt: null,
+    role: 'OWNER',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -62,6 +73,12 @@ describe('DebtsView', () => {
       if (parsedUrl.pathname.endsWith('/counterparties') && init?.method === 'POST') {
         return json(createdCounterparty, 201);
       }
+      if (parsedUrl.pathname.endsWith('/counterparties/counterparty-1/entries')) {
+        return json({ items: [], page: 1, limit: 20, total: 0 });
+      }
+      if (parsedUrl.pathname.endsWith('/counterparties/counterparty-1')) {
+        return json(counterpartyItems[0]);
+      }
       return json({
         items: counterpartyItems,
         page: 1,
@@ -73,26 +90,59 @@ describe('DebtsView', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderView(onSelectCounterparty = vi.fn()) {
+  function renderView(openCounterpartyId?: string | null) {
+    function Harness() {
+      const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(
+        openCounterpartyId ?? null,
+      );
+      return (
+        <DebtsView
+          ledger={ledger}
+          expandedCounterpartyId={expandedCounterpartyId}
+          onExpandedChange={setExpandedCounterpartyId}
+          openCounterpartyId={openCounterpartyId}
+          onEditSplit={vi.fn()}
+        />
+      );
+    }
+
     render(
       <MemoryRouter initialEntries={['/transactions?view=debts']}>
         <QueryClientProvider client={queryClient}>
-          <DebtsView onSelectCounterparty={onSelectCounterparty} />
+          <Harness />
         </QueryClientProvider>
         <LocationProbe />
       </MemoryRouter>,
     );
-    return onSelectCounterparty;
   }
 
-  it('labels the view as not belonging to a ledger and opens the selected person', async () => {
+  it('labels the view and expands the selected person in place', async () => {
     const user = userEvent.setup();
-    const onSelectCounterparty = vi.fn();
-    renderView(onSelectCounterparty);
+    renderView();
 
     expect(screen.getByText('借還紀錄不分帳本')).toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: /^小明/ }));
-    expect(onSelectCounterparty).toHaveBeenCalledWith('counterparty-1');
+    const row = await screen.findByRole('button', { name: /^小明/ });
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+  });
+
+  it('expands an externally requested person only when it appears in this page', async () => {
+    renderView('counterparty-1');
+
+    expect(await screen.findByRole('button', { name: /^小明/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(await screen.findByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+  });
+
+  it('leaves the list collapsed when an externally requested person is not on this page', async () => {
+    renderView('counterparty-not-listed');
+
+    const row = await screen.findByRole('button', { name: /^小明/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
   });
 
   it('shows the first-entry prompt when the API returns no counterparties', async () => {
@@ -104,7 +154,7 @@ describe('DebtsView', () => {
     ).toBeInTheDocument();
   });
 
-  it('creates a counterparty from the header and opens its ledger', async () => {
+  it('creates a counterparty from the header without opening a right panel', async () => {
     createdCounterparty = {
       id: 'counterparty-new',
       name: '小華',
@@ -118,14 +168,17 @@ describe('DebtsView', () => {
       updatedAt: '2026-09-25T00:00:00.000Z',
     };
     const user = userEvent.setup();
-    const onSelectCounterparty = renderView();
+    renderView();
 
     await user.click(screen.getByRole('button', { name: '＋ 新增' }));
     const dialog = screen.getByRole('dialog', { name: '新增一個人' });
     await user.type(within(dialog).getByLabelText('名字'), '小華');
     await user.click(within(dialog).getByRole('button', { name: '新增' }));
 
-    await waitFor(() => expect(onSelectCounterparty).toHaveBeenCalledWith('counterparty-new'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '新增一個人' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/counterparties$/),
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: '小華' }) }),

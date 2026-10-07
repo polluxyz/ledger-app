@@ -1,37 +1,14 @@
-/* 往來帳內容分成對象摘要、操作與日期排序的紀錄，窄側欄也能逐筆掃讀。 */
+/* 展開明細保持緊湊，讓共享來源、表單與紀錄順著同一列閱讀。 */
 .detail {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
 }
 
-.heading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.heading h3,
 .entries h4 {
   margin: 0;
-}
-
-/* 名字與「連動」標籤同一行；標籤不被長名字擠掉。 */
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.linkBadge {
-  flex: 0 0 auto;
-  padding: 0 var(--space-xs);
-  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
-  border-radius: var(--radius);
-  color: var(--color-accent);
-  font-size: var(--text-xs);
-  white-space: nowrap;
 }
 
 .balance {
@@ -57,6 +34,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
+}
+
+.entryFormDisclosure {
+  margin-top: calc(-1 * var(--space-sm));
 }
 
 .entries {

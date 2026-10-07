@@ -260,9 +260,8 @@ describe('Transactions page', () => {
     expect(window.location.search).toBe('');
   });
 
-  it('opens the counterparty ledger requested by another page, only once', async () => {
-    // 總覽或邀請頁用 location.state 指定要打開誰（phase-3b2-web W41）。BrowserRouter 把
-    // state 放在 history.state.usr，這裡直接模擬「從別頁導過來」的那一筆 history。
+  it('switches to debts and expands a requested counterparty from another page', async () => {
+    // 其他頁用 location.state 指定對象；交易頁消耗指示後只切檢視並展開清單列。
     window.history.pushState(
       { usr: { openCounterpartyId: 'counterparty-1' }, key: 'from-home', idx: 0 },
       '',
@@ -270,18 +269,18 @@ describe('Transactions page', () => {
     );
     render(<App />);
 
-    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
-    // 指示用過就換掉：重新整理不會再打開一次，網址維持在借還檢視。
+    const row = await screen.findByRole('button', { name: /小明/ }, WAIT);
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'), WAIT);
+    expect(await screen.findByRole('heading', { name: '往來紀錄' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     await waitFor(() => {
       const state = window.history.state as { usr?: Record<string, unknown> };
-      expect(state.usr).toEqual({ keepRightPanel: true });
-    });
+      expect(state.usr ?? {}).not.toHaveProperty('openCounterpartyId');
+    }, WAIT);
     expect(window.location.search).toBe('?view=debts');
-    expect(screen.getByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
   });
 
-  it('closes the right panel without showing the add form after closing debt detail', async () => {
+  it('opens the debt form in the expanded row without opening the right panel', async () => {
     const user = userEvent.setup();
     window.history.pushState({}, '', '/transactions?view=debts');
     render(<App />);
@@ -289,33 +288,12 @@ describe('Transactions page', () => {
     const debtButton = await screen.findByRole('button', { name: /小明/ }, WAIT);
     await user.click(debtButton);
 
-    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
-    expect(within(dialog).getByText('往來紀錄')).toBeInTheDocument();
-
-    const rightPanel = dialog.closest('[data-registered]');
-    await user.click(within(dialog).getByRole('button', { name: '關閉' }));
-    await waitFor(() => expect(rightPanel).not.toHaveAttribute('data-open'), WAIT);
-    // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
-    expect(screen.getByRole('dialog', { name: '借還往來' }).closest('[inert]')).not.toBeNull();
-    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
-  });
-
-  it('starts a prefilled debt entry when 記一筆 is selected in the counterparty panel', async () => {
-    const user = userEvent.setup();
-    window.history.pushState({}, '', '/transactions?view=debts');
-    render(<App />);
-
-    await user.click(await screen.findByRole('button', { name: /小明/ }, WAIT));
-    const detail = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    await user.click(within(detail).getByRole('button', { name: '記一筆' }));
-
-    const form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByRole('button', { name: '借還' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(within(form).getByLabelText('對象')).toHaveValue('小明');
+    expect(debtButton).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('heading', { name: '往來紀錄' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '記一筆' }));
+    expect(await screen.findByLabelText('對象', undefined, WAIT)).toHaveValue('小明');
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
   });
 
   it('edits a linked debt transaction directly and closes after sending only the changed amount', async () => {
