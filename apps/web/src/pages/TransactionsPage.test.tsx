@@ -618,6 +618,54 @@ describe('Transactions page', () => {
     },
   );
 
+  it('refetches a stale ledger list before giving up on a settlement intent', async () => {
+    // App 開著時被加進新帳本：第一次抓到的清單沒有它，重抓後才有。
+    const sharedLedger = { ...ledger, id: 'ledger-2', name: '旅行帳本', kind: 'SHARED' };
+    const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
+    const other = { id: 'person-other', name: '小明', userId: 'user-2', status: 'MEMBER' };
+    let ledgerListCalls = 0;
+    window.history.pushState(
+      {
+        usr: { settleIntent: { ledgerId: sharedLedger.id, personId: other.id, amount: 51200 } },
+        key: 'from-debts',
+        idx: 0,
+      },
+      '',
+      '/transactions?view=settle',
+    );
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
+      if (url.endsWith('/ledgers/ledger-2/people')) return json([me, other]);
+      if (url.endsWith('/ledgers/ledger-2/settlement-summary')) {
+        return json({ people: [], suggestions: [] });
+      }
+      if (url.includes('/transactions')) {
+        return json({ items: [lunch], page: 1, limit: 20, total: 1 });
+      }
+      if (url.endsWith('/accounts')) return json([account]);
+      if (url.endsWith('/categories')) return json([expenseCategory]);
+      if (url.endsWith('/ledgers')) {
+        ledgerListCalls += 1;
+        return json(ledgerListCalls === 1 ? [ledger] : [ledger, sharedLedger]);
+      }
+      return json([ledger]);
+    });
+
+    render(<App />);
+
+    const form = await screen.findByRole('dialog', { name: '結清' }, WAIT);
+    expect(within(form).getByLabelText('付錢的人')).toHaveValue(other.id);
+    expect(within(form).getByLabelText('收錢的人')).toHaveValue(me.id);
+    expect(ledgerListCalls).toBeGreaterThanOrEqual(2);
+  });
+
   it('ignores and clears a settlement intent when its ledger is not in my ledger list', async () => {
     window.history.pushState(
       {

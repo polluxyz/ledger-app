@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
@@ -11,6 +12,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { LEDGERS_KEY } from '../features/ledgers/use-ledgers';
 import { useCurrentUser } from '../features/auth/use-current-user';
 import { DebtsView } from '../features/debts/DebtsView';
 import { useLedgerPeople } from '../features/ledger-people/use-ledger-people';
@@ -65,6 +67,10 @@ export default function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const settleIntent = readSettleIntentState(location.state);
   const [handledSettleLocationKey, setHandledSettleLocationKey] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // 為哪一次導覽（location key）重抓過帳本清單：開始用 ref 記（不觸發重繪），完成才寫 state。
+  const ledgerRefetchStartedFor = useRef<string | null>(null);
+  const [ledgerRefetchDoneFor, setLedgerRefetchDoneFor] = useState<string | null>(null);
   const settleIntentLedgerId = settleIntent?.ledgerId ?? null;
   const settleIntentPersonId = settleIntent?.personId ?? null;
   const settleIntentAmount = settleIntent?.amount ?? null;
@@ -104,6 +110,19 @@ export default function TransactionsPage() {
 
     const targetLedger = ledgers.find((item) => item.id === settleIntentLedgerId);
     if (!targetLedger || targetLedger.kind !== 'SHARED') {
+      // 帳本清單是快取：App 開著時被別人加進新帳本，快取裡就沒有它。先重抓一次，
+      // 抓完還找不到才當成不可用，否則點借還頁的帳本來源會悄悄退回明細。
+      if (ledgerRefetchStartedFor.current !== location.key) {
+        const key = location.key;
+        ledgerRefetchStartedFor.current = key;
+        void queryClient
+          .refetchQueries({ queryKey: LEDGERS_KEY })
+          .finally(() => setLedgerRefetchDoneFor(key));
+        return;
+      }
+      if (ledgerRefetchDoneFor !== location.key) {
+        return;
+      }
       // state 裡的帳本已不可用時整個忽略該指示，連 `?view=settle` 也一併移除。
       const next = new URLSearchParams(searchParams);
       next.delete('view');
@@ -127,8 +146,10 @@ export default function TransactionsPage() {
     ledger?.id,
     ledgerError,
     ledgerLoading,
+    ledgerRefetchDoneFor,
     ledgers,
     location.key,
+    queryClient,
     searchParams,
     setActiveLedgerId,
     setSearchParams,
