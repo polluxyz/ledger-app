@@ -158,6 +158,12 @@ model LedgerPersonPointer {
 
 現任成員才能呼叫（`VIEWER` 以上）；已退出的帳本回 `409 LEDGER_LEFT`（新錯誤碼）。不能指向自己那一筆（`400`）。
 
+實作補充（2026-10-07，plan §6）：
+
+- 兩個端點都回 `200` 與設定後的有效指向 `{ counterpartyId, auto }`。`DELETE` 沒有設定時也回 `200`。
+- 封存的帳本也可以設定指向。指向是我自己的設定，不是帳本資料；封存帳本照樣出現在借還頁（決策 144）。
+- 合併對象（3b-2）時，指向來源對象的設定改指向目標對象，不會因刪除來源而消失。
+
 ### 4.2 對象頁與借還頁
 
 - `GET /counterparties` 每一筆多兩個欄位，`balance` 意義不變：
@@ -209,7 +215,8 @@ model LedgerPersonPointer {
 ### 4.4 退出後的唯讀
 
 - `GET /ledgers/{ledgerId}/transactions` 對已退出的人：只回 §151 範圍的交易，`role` 視為唯讀。其他端點（people、settlement-summary、寫入）照舊回 `404`。
-- `GET /ledgers/{ledgerId}` 對已退出的人回帳本名稱與 `left: true`，供唯讀畫面標題。
+- `GET /ledgers/{ledgerId}` 對已退出的人回帳本名稱與 `left: true`，供唯讀畫面標題。`members` 是空陣列（看不到成員）。
+- 已退出者的交易回應裡 `accountPending` 一律是 `false`（他不能補帳戶）。
 
 ### 4.5 錯誤碼（新增）
 
