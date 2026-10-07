@@ -106,13 +106,20 @@ test('情境 3：加入成員、變更角色，對方就看得到這本帳本', 
   });
   await page.goto(`/ledgers/${ledger.id}`);
 
-  await page.getByRole('button', { name: '加入成員' }).click();
-  const dialog = page.getByRole('dialog', { name: '加入成員' });
+  // 3f W143～W144：加入成員改從「新增成員」滑出選單進，email 加入藏在「新增對象」彈窗的最後一列。
+  await page.getByRole('button', { name: '新增成員' }).click();
+  await page.getByRole('button', { name: '新增對象' }).click();
+  const addDialog = page.getByRole('dialog', { name: '新增對象' });
+  await addDialog.getByRole('button', { name: '用 email 新增' }).click();
+
+  const dialog = page.getByRole('dialog', { name: '新增成員' });
   await dialog.getByLabel('email').fill(USER_B_EMAIL);
   await dialog.getByLabel('角色').selectOption({ label: '可編輯' });
   await dialog.getByRole('button', { name: '加入', exact: true }).click();
 
-  await expect(page.getByText(USER_B_EMAIL)).toBeVisible();
+  // 3f W141：單一成員清單不顯示 email，改從成員名字確認加入成功。
+  const memberList = page.getByRole('list', { name: '帳本成員' });
+  await expect(memberList.getByText(userB.name, { exact: true })).toBeVisible();
 
   const roleSelect = page.getByLabel(`${userB.name}的角色`);
   await expect(roleSelect).toHaveValue('EDITOR');
@@ -136,11 +143,15 @@ test('情境 4：非 owner 看不到成員管理的操作', async ({ userA, user
   await pageB.goto(`/ledgers/${ledger.id}`);
 
   // 先確認這一頁真的載出來了，否則下面「什麼都看不到」會是假通過。
+  // 3f W141：成員區不再顯示 email，改從成員名字確認。
   await expect(pageB.getByRole('heading', { name: TRIP_LEDGER_NAME })).toBeVisible();
-  await expect(pageB.getByText(userA.email)).toBeVisible();
+  await expect(
+    pageB.getByRole('list', { name: '帳本成員' }).getByText(userA.name, { exact: true }),
+  ).toBeVisible();
 
-  await expect(pageB.getByRole('button', { name: '加入成員' })).toHaveCount(0);
-  await expect(pageB.getByLabel(`移除${userA.name}`)).toHaveCount(0);
+  await expect(pageB.getByRole('button', { name: '新增成員' })).toHaveCount(0);
+  // 3f W141：非 owner 看到的是角色標籤，不是帶「移除」選項的角色下拉。
+  await expect(pageB.getByLabel(`${userA.name}的角色`)).toHaveCount(0);
   await expect(pageB.getByRole('button', { name: '刪除帳本' })).toHaveCount(0);
   await expect(pageB.getByRole('button', { name: '封存帳本' })).toHaveCount(0);
 

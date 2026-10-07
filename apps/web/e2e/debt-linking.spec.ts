@@ -98,6 +98,7 @@ async function expectNoFriendWord(page: Page): Promise<void> {
 test('連動主線：對象頁邀請與取消、接受後詢問並合併、同步一筆、暱稱、解除', async ({
   signedInPage: pageA,
   openAs,
+  userA,
   userB,
   request,
 }) => {
@@ -122,6 +123,16 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   await addDialog.getByRole('button', { name: '新增' }).click();
   await expect(group(pageA, '未連動').getByRole('button', { name: '阿乙' })).toBeVisible();
   await expect(pageA.getByRole('main')).not.toContainText('$');
+
+  // 3f W136：兩清的對象不列。A 先記一筆對阿乙的借入（還沒連動，不送提議），
+  // 之後併入連動對象，A 的帳就不是兩清，才能從借還清單開往來帳去按「記一筆」。
+  await createDebtEntry(request, userA.token, {
+    counterparty: { name: '阿乙' },
+    kind: 'BORROW',
+    amount: 3000,
+    date: new Date().toISOString(),
+    record: null,
+  });
 
   // SC-W52：邀請、邀請中、取消、再邀請。
   await pageA.getByRole('button', { name: '邀請連動' }).click();
@@ -330,6 +341,14 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await expect(pendingRow(pageB, /你欠.*\$50/)).toHaveCount(0);
 
   // 小明已併進乙（displayName＝小明），借還檢視的列顯示 displayName（W47）。
+  // 3f W136：拒絕後兩清的對象不列；補一筆小額借出讓小明回到清單。
+  await createDebtEntry(request, userA.token, {
+    counterparty: { id: inviterSideId },
+    kind: 'LEND',
+    amount: 3000,
+    date: new Date().toISOString(),
+    record: null,
+  });
   const ledgerA = await openLedger(pageA, /小明/);
   await expect(ledgerA.getByText('對方未接受')).toBeVisible();
 });

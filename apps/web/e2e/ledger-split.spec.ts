@@ -129,7 +129,8 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   await expect(bNets.getByRole('listitem').filter({ hasText: '甲' })).toContainText('+$2,250');
   await expect(bNets.getByRole('listitem').filter({ hasText: '我' })).toContainText('−$2,250');
 
-  const suggestions = pageB.getByRole('region', { name: '建議' });
+  // 3f W148：結清檢視的分兩張卡片，「建議」改名「轉帳」且不寫建議二字。
+  const suggestions = pageB.getByRole('region', { name: '轉帳' });
   await expect(suggestions.getByRole('listitem')).toHaveCount(1);
   const suggestion = suggestions.getByRole('listitem');
   await expect(suggestion).toContainText('我');
@@ -185,5 +186,5 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   const aNets = pageA.getByRole('region', { name: '淨額' });
   await expect(aNets.getByRole('listitem')).toHaveCount(2);
   await expect(aNets.getByText('$0', { exact: true })).toHaveCount(2);
-  await expect(pageA.getByRole('region', { name: '建議' })).toHaveCount(0);
+  await expect(pageA.getByRole('region', { name: '轉帳' })).toHaveCount(0);
 });
