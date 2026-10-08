@@ -276,7 +276,7 @@ describe('Transactions page', () => {
 
     const row = await screen.findByRole('button', { name: /小明/ }, WAIT);
     await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'), WAIT);
-    expect(await screen.findByText('借出', undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByTitle('我借小明 $5,000', undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     await waitFor(() => {

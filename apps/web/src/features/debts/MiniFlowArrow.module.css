@@ -1,0 +1,73 @@
+/* 列內箭頭以首字和短線取代重複姓名，讓方向成為主要線索。 */
+.mini {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 32%, transparent);
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.line {
+  position: relative;
+  flex: none;
+  width: 2.6rem;
+  height: 1px;
+  background: var(--color-text-muted);
+}
+
+.line::after {
+  position: absolute;
+  top: -3.5px;
+  right: -1px;
+  width: 6px;
+  height: 7px;
+  background: var(--color-text-muted);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  content: '';
+}
+
+.flow .line {
+  height: 0;
+  border-top: 1.5px dashed var(--color-primary);
+  background: none;
+}
+
+.flow .line::after {
+  top: -5px;
+  background: var(--color-primary);
+}
+
+.marker {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  transform: translate(-50%, -50%);
+}
+
+.marker svg {
+  width: 13px;
+  height: 13px;
+}

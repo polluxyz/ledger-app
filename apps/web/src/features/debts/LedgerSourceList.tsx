@@ -1,5 +1,5 @@
 import type { CounterpartyLedgerPart } from '@ledger/shared';
-import { DebtArrow } from '../../components/DebtArrow';
+import { MiniFlowArrow } from './MiniFlowArrow';
 import { formatMoney } from '../../lib/format';
 import styles from './LedgerSourceList.module.css';
 
@@ -19,13 +19,13 @@ export function LedgerSourceList({
     <ul className={styles.list}>
       {sources.map((source) => {
         const content = (
-          <>
+          <span className={styles.content}>
             <span className={styles.ledgerName}>
-              {source.ledgerName} <span aria-hidden="true">›</span>
+              {source.ledgerName}
               {source.left && <span className={styles.left}>已退出</span>}
             </span>
             <SmallDebtDirection personName={source.personName} amount={source.amount} />
-          </>
+          </span>
         );
 
         return (
@@ -44,7 +44,7 @@ export function LedgerSourceList({
   );
 }
 
-/** 單行版沿用 DebtArrow 的無頭貼箭頭，金額只讀 API 的原始正負方向。 */
+/** 帳本來源以實線表示目前欠款方向，金額只顯示絕對值。 */
 export function SmallDebtDirection({ personName, amount }: { personName: string; amount: number }) {
   const from = amount > 0 ? personName : '我';
   const to = amount > 0 ? '我' : personName;
@@ -53,7 +53,8 @@ export function SmallDebtDirection({ personName, amount }: { personName: string;
 
   return (
     <span className={styles.direction}>
-      <DebtArrow compact from={from} to={to} amount={Math.abs(amount)} srText={srText} />
+      <span className={styles.srOnly}>{srText}</span>
+      <MiniFlowArrow from={from} to={to} variant="owe" />
       <span className={styles.amount}>{amountText}</span>
     </span>
   );

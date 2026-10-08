@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import type { DebtEntry, DebtEntryKind } from '@ledger/shared';
+import { Check } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { formatDate, formatMoney } from '../../lib/format';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
+import { getDebtEntryFlow } from './entry-flow';
+import { MiniFlowArrow } from './MiniFlowArrow';
 import { useDeleteDebtEntry } from './use-debts';
 import styles from './DebtEntriesList.module.css';
 
@@ -22,8 +25,7 @@ interface DebtEntriesListProps {
  * ## 為什麼把清單與刪除／修改對話框抽成獨立元件
  *
  * 個人分頁展開明細與歷史分頁的「個人往來」都要呈現往來紀錄，並提供修改、刪除
- * 與分帳入口。將渲染邏輯集中在此，確保兩處欄位格式（delta、累計餘額、連動狀態）
- * 與操作回饋完全一致。
+ * 與分帳入口。統一用方向符號、金額和同步狀態，讓使用者不用再解讀動詞與正負號。
  */
 export function DebtEntriesList({
   entries,
@@ -54,29 +56,41 @@ export function DebtEntriesList({
           const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
           const canEdit = editable && !isAdjustment && entry.splitId === null;
           const isUnrecorded = entry.transactionId === null && !isAdjustment;
+          const flow = getDebtEntryFlow(entry, displayName);
+          const from = flow.direction === 'toThem' ? '我' : displayName;
+          const to = flow.direction === 'toThem' ? displayName : '我';
 
           return (
-            <li key={entry.id} className={styles.entry}>
+            <li
+              key={entry.id}
+              className={styles.entry}
+              aria-label={flow.description}
+              title={flow.description}
+            >
               <div className={styles.entryInfo}>
                 <div className={styles.entryLine}>
-                  <time dateTime={entry.date}>{formatDate(entry.date)}</time>
-                  <span className={styles.kind}>{ENTRY_KIND_LABELS[entry.kind]}</span>
-                  <span className={styles.delta}>{formatDelta(entry.delta)}</span>
-                </div>
-                <div className={styles.entryLine}>
-                  {entry.balanceAfter !== undefined && (
-                    <span className={styles.balanceAfter}>
-                      {formatBalanceAfter(entry.balanceAfter)}
+                  {/* 同一頁都是同年往來，日期只留 MM/DD，年份沒有資訊量。 */}
+                  <time dateTime={entry.date}>{formatDate(entry.date).slice(5)}</time>
+                  {flow.marker === 'check' ? (
+                    <span className={styles.adjustmentIcon} aria-hidden="true">
+                      <Check size={14} strokeWidth={2.5} />
                     </span>
+                  ) : (
+                    flow.direction !== null && (
+                      <MiniFlowArrow from={from} to={to} variant="flow" marker={flow.marker} />
+                    )
                   )}
+                  {entry.note && <span className={styles.note}>{entry.note}</span>}
+                </div>
+                <div className={styles.entryAmount}>
                   {isUnrecorded && <span className={styles.unrecorded}>未記帳</span>}
                   {SYNC_STATUS_LABELS[entry.sync] && (
                     <span className={`${styles.syncLabel} ${styles[entry.sync.toLowerCase()]}`}>
                       {SYNC_STATUS_LABELS[entry.sync]}
                     </span>
                   )}
+                  <span className={styles.delta}>{formatMoney(Math.abs(entry.delta))}</span>
                 </div>
-                {entry.note && <p className={styles.note}>{entry.note}</p>}
               </div>
               {editable && (
                 <div className={styles.entryActions}>
@@ -165,28 +179,3 @@ const SYNC_STATUS_LABELS = {
   SYNCED: '已同步',
   DECLINED: '對方未接受',
 } as const;
-
-const ENTRY_KIND_LABELS: Record<DebtEntryKind, string> = {
-  LEND: '借出',
-  BORROW: '借入',
-  COLLECT: '對方還我',
-  REPAY: '我還對方',
-  PAID_FOR_ME: '幫我付',
-  PAID_FOR_THEM: '我幫對方付',
-  RECEIVED_FOR_THEM: '我幫對方代收',
-  RECEIVED_FOR_ME: '對方幫我代收',
-  SETTLEMENT: '結清差額',
-  FORGIVE: '免除',
-  FORGIVEN: '被免除',
-};
-
-function formatDelta(delta: number): string {
-  return delta > 0 ? `+${formatMoney(delta)}` : `−${formatMoney(Math.abs(delta))}`;
-}
-
-function formatBalanceAfter(balanceAfter: number): string {
-  if (balanceAfter < 0) {
-    return `餘額 −${formatMoney(Math.abs(balanceAfter))}`;
-  }
-  return `餘額 ${formatMoney(balanceAfter)}`;
-}

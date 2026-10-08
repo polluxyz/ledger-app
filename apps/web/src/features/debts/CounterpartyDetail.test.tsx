@@ -251,7 +251,7 @@ describe('CounterpartyDetail', () => {
     expect(screen.queryByText('王小明')).not.toBeInTheDocument();
   });
 
-  it('shows Chinese entry kinds, signed deltas, API balances, notes, and the unrecorded label', async () => {
+  it('labels each entry row with a full sentence and drops verb phrases and running balances', async () => {
     const entries = [
       { ...baseEntry, id: 'lend', kind: 'LEND', delta: 12000, balanceAfter: 12000 },
       {
@@ -285,14 +285,27 @@ describe('CounterpartyDetail', () => {
     ];
     renderDetail(0, entries, entries.length);
 
-    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
-      expect(await screen.findByText(kind)).toBeInTheDocument();
+    // 每列的 title 就是完整說明句（可存取名稱同值），方向與金額都在句子裡。
+    const rows = await screen.findAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('title'))).toEqual([
+      '我借小明 $120',
+      '我向小明借 $111',
+      '小明還我 $30',
+      '我還小明 $40',
+      '小明幫我付 $50',
+      '我和小明結清差額 $8',
+      '我免除小明欠我的 $9',
+    ]);
+    // 金額不帶正負號（D1），也不再顯示逐筆「餘額」（D2）與動詞片語。
+    const [firstRow] = rows;
+    if (!firstRow) throw new Error('往來紀錄列不存在');
+    expect(within(firstRow).getByText('$120')).toBeInTheDocument();
+    expect(screen.queryByText('+$120')).not.toBeInTheDocument();
+    expect(screen.queryByText('−$111')).not.toBeInTheDocument();
+    expect(screen.queryByText(/餘額/)).not.toBeInTheDocument();
+    for (const phrase of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
+      expect(screen.queryByText(phrase)).not.toBeInTheDocument();
     }
-    expect(screen.getByText('+$120')).toBeInTheDocument();
-    expect(screen.getByText('−$111')).toBeInTheDocument();
-    expect(screen.getAllByText('餘額 $120').length).toBeGreaterThan(0);
-    expect(screen.getByText('餘額 $9')).toBeInTheDocument();
-    expect(screen.getByText('餘額 −$11')).toBeInTheDocument();
     expect(screen.getByText('未記帳')).toBeInTheDocument();
     expect(screen.getAllByText('借款').length).toBeGreaterThan(0);
   });
