@@ -115,6 +115,7 @@ export function CounterpartyList({
                       ledger={ledger}
                       counterpartyId={counterparty.id}
                       mode={mode}
+                      counterpartyLabel={avatarLabels.get(counterparty.displayName)}
                       onEditSplit={onEditSplit}
                     />
                   </AnimatedDisclosure>

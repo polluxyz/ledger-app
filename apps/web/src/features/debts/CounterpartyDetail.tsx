@@ -17,6 +17,8 @@ interface CounterpartyDetailProps {
   ledger: LedgerSummary;
   counterpartyId: string;
   mode: 'overview' | 'personal';
+  /** 對象列已算好的頭貼字；展開區沿用它，列上與展開後才會是同一個字。 */
+  counterpartyLabel?: string;
   onEditSplit?: (splitId: string) => void;
 }
 
@@ -32,6 +34,7 @@ export function CounterpartyDetail({
   ledger,
   counterpartyId,
   mode,
+  counterpartyLabel,
   onEditSplit,
 }: CounterpartyDetailProps) {
   const counterparty = useCounterparty(counterpartyId);
@@ -65,11 +68,15 @@ export function CounterpartyDetail({
   const entryFormId = `counterparty-entry-form-${counterpartyId}`;
   const { outstanding } = splitDebtEntriesByBalanceZero(entries.data?.items ?? []);
   const canWrite = mode === 'personal';
-  const avatarLabels = getAvatarLabels([
+  const computedLabels = getAvatarLabels([
     '我',
     person.displayName,
     ...ledgerParts.map((source) => source.personName),
   ]);
+  const avatarLabels =
+    counterpartyLabel === undefined
+      ? computedLabels
+      : new Map([...computedLabels, [person.displayName, counterpartyLabel]]);
 
   return (
     <div className={styles.detail}>
