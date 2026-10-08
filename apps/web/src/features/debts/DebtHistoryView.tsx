@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import type { Counterparty, LedgerSummary, Paginated, Transaction } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
 import { apiRequest } from '../../lib/api-client';
+import { getAvatarLabels } from '../../lib/avatar-labels';
 import { useLedgers } from '../ledgers/use-ledgers';
 import { TransactionList } from '../transactions/TransactionList';
 import { transactionsKey } from '../transactions/use-transactions';
@@ -23,7 +24,7 @@ interface DebtHistoryViewProps {
  * ## 為什麼將歷史統一至獨立分頁
  *
  * 原先散落在各個對象展開明細與共享帳本組底部的歷史按鈕，集中在此處分段管理。
- * - 個人往來：列出所有有往來紀錄的對象（點擊展開已歸零／還清的紀錄，可修改、刪除）。
+ * - 個人往來：列出所有有往來紀錄的對象（點擊展開已歸零／還清的紀錄，可修改、撤銷）。
  * - 共享帳本：列出有已記結清的共享帳本（點擊展開唯讀交易清單）。
  * 某段無資料時隱藏，兩段皆無資料時呈現「沒有歷史紀錄」。
  */
@@ -60,6 +61,15 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
       .filter((item) => item.settlements.length > 0);
   }, [sharedLedgers, sharedTransferQueries]);
 
+  const counterpartyItems = useMemo(
+    () => counterparties.data?.items ?? [],
+    [counterparties.data?.items],
+  );
+  const avatarLabels = useMemo(
+    () => getAvatarLabels(['我', ...counterpartyItems.map((person) => person.displayName)]),
+    [counterpartyItems],
+  );
+
   const isLoading =
     counterparties.isLoading || ledgers.isLoading || sharedTransferQueries.some((q) => q.isLoading);
 
@@ -67,7 +77,6 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
     return <p className={styles.status}>載入中…</p>;
   }
 
-  const counterpartyItems = counterparties.data?.items ?? [];
   const hasPersonal = counterpartyItems.length > 0;
   const hasShared = settledSharedLedgers.length > 0;
 
@@ -102,7 +111,11 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
                     <span className={styles.name}>{person.displayName}</span>
                   </button>
                   <AnimatedDisclosure id={detailsId} open={expanded}>
-                    <PersonHistoryDetail person={person} onEditSplit={onEditSplit} />
+                    <PersonHistoryDetail
+                      person={person}
+                      avatarLabels={avatarLabels}
+                      onEditSplit={onEditSplit}
+                    />
                   </AnimatedDisclosure>
                 </li>
               );
@@ -156,9 +169,11 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
 
 function PersonHistoryDetail({
   person,
+  avatarLabels,
   onEditSplit,
 }: {
   person: Counterparty;
+  avatarLabels: ReadonlyMap<string, string>;
   onEditSplit: (splitId: string) => void;
 }) {
   const entries = useCounterpartyEntries(person.id, { limit: 100 });
@@ -178,7 +193,9 @@ function PersonHistoryDetail({
     <div className={styles.personHistoryDetail}>
       <DebtEntriesList
         entries={history}
+        balance={person.balance}
         displayName={person.displayName}
+        avatarLabels={avatarLabels}
         editable
         onEditSplit={onEditSplit}
       />

@@ -12,6 +12,8 @@ interface MiniOweArrowProps {
   toLabel?: string;
   /** 還款在線中點放「回頭」圖示，表示被還掉的那筆欠款。 */
   repay?: boolean;
+  /** 確認預覽空間較窄時縮小頭貼與箭線，仍沿用同一個方向符號。 */
+  compact?: boolean;
 }
 
 /**
@@ -19,9 +21,16 @@ interface MiniOweArrowProps {
  * 頭貼只有一個字，兩個人的名字同首字時分不出來，所以完整語意一律由外層的說明句
  * 提供，本身對輔助技術隱藏。
  */
-export function MiniOweArrow({ from, fromLabel, to, toLabel, repay = false }: MiniOweArrowProps) {
+export function MiniOweArrow({
+  from,
+  fromLabel,
+  to,
+  toLabel,
+  repay = false,
+  compact = false,
+}: MiniOweArrowProps) {
   return (
-    <span className={styles.mini} aria-hidden="true">
+    <span className={`${styles.mini} ${compact ? styles.compact : ''}`} aria-hidden="true">
       <span className={styles.avatar} title={from}>
         {fromLabel ?? Array.from(from)[0] ?? ''}
       </span>

@@ -4,11 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DebtEntry } from '@ledger/shared';
 import rowStyles from './DebtRow.module.css';
+import miniStyles from './MiniOweArrow.module.css';
 import { DebtEntriesList } from './DebtEntriesList';
 
 /**
  * DebtEntriesList 驗 2026-10-08 的列操作改版：方向箭頭接線（誰欠誰，由
- * entry-flow 決定）、「⋯」選單的開關與鍵盤行為、分帳紀錄走分帳的修改與刪除。
+ * entry-flow 決定）、「⋯」選單的開關與鍵盤行為、撤銷預覽，以及分帳紀錄走分帳的修改與撤銷。
  * 方向規則本身由 entry-flow.test.ts 鎖住，這裡只驗清單把它接對。
  */
 describe('DebtEntriesList', () => {
@@ -50,12 +51,18 @@ describe('DebtEntriesList', () => {
     });
   }
 
-  function renderList(entries: DebtEntry[], editable = true, onEditSplit?: (id: string) => void) {
+  function renderList(
+    entries: DebtEntry[],
+    editable = true,
+    onEditSplit?: (id: string) => void,
+    balance = 20_000,
+  ) {
     return render(
       <QueryClientProvider client={queryClient}>
         <DebtEntriesList
           entries={entries}
           displayName="小明"
+          balance={balance}
           editable={editable}
           onEditSplit={onEditSplit}
         />
@@ -107,7 +114,7 @@ describe('DebtEntriesList', () => {
     expect(screen.getByText('分帳')).toBeInTheDocument();
   });
 
-  it('opens the menu with edit and delete, then closes on Escape and refocuses the trigger', async () => {
+  it('opens the menu with edit and undo, then closes on Escape and refocuses the trigger', async () => {
     const user = userEvent.setup();
     renderList([entry()]);
 
@@ -120,7 +127,7 @@ describe('DebtEntriesList', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const menu = within(row).getByRole('menu');
     expect(within(menu).getByRole('menuitem', { name: '修改' })).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: '撤銷' })).toBeInTheDocument();
 
     trigger.focus();
     await user.keyboard('{Escape}');
@@ -144,7 +151,7 @@ describe('DebtEntriesList', () => {
     expect(within(screen.getAllByRole('listitem')[1]!).getByRole('menu')).toBeInTheDocument();
   });
 
-  it('edits a normal entry through the menu dialog and deletes it after confirmation', async () => {
+  it('edits a normal entry and previews its balance change before undoing it', async () => {
     const user = userEvent.setup();
     mockDelete();
     renderList([entry()]);
@@ -155,9 +162,14 @@ describe('DebtEntriesList', () => {
     expect(await screen.findByRole('dialog', { name: '修改往來紀錄' })).toBeInTheDocument();
 
     const menuAgain = await openMenu(row, user);
-    await user.click(within(menuAgain).getByRole('menuitem', { name: '刪除' }));
-    const confirmation = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
-    await user.click(within(confirmation).getByRole('button', { name: '刪除' }));
+    await user.click(within(menuAgain).getByRole('menuitem', { name: '撤銷' }));
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(
+      within(confirmation).getByRole('group', {
+        name: '撤銷後，往來從「小明欠你的金額 $200」變成「小明欠你的金額 $80」。',
+      }),
+    ).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole('button', { name: '撤銷' }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -167,14 +179,49 @@ describe('DebtEntriesList', () => {
     );
   });
 
-  it('offers only delete for adjustment records', async () => {
+  it('offers only undo for adjustment records', async () => {
     const user = userEvent.setup();
     renderList([entry({ kind: 'FORGIVE', delta: -400 })]);
 
     const row = screen.getByRole('listitem');
     const menu = await openMenu(row, user);
     expect(within(menu).queryByRole('menuitem', { name: '修改' })).not.toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: '撤銷' })).toBeInTheDocument();
+  });
+
+  it('shows 兩清 without an arrow when undo returns the balance to zero', async () => {
+    const user = userEvent.setup();
+    renderList([entry({ delta: 20_000 })], true, undefined, 20_000);
+
+    const row = screen.getByRole('listitem');
+    const menu = await openMenu(row, user);
+    await user.click(within(menu).getByRole('menuitem', { name: '撤銷' }));
+
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    const preview = within(confirmation).getByRole('group', {
+      name: '撤銷後，往來從「小明欠你的金額 $200」變成「兩清」。',
+    });
+    expect(within(preview).getByText('兩清')).toBeInTheDocument();
+    expect(preview.querySelectorAll(`.${miniStyles.mini}`)).toHaveLength(1);
+  });
+
+  it('reverses the preview arrow when undo crosses zero', async () => {
+    const user = userEvent.setup();
+    renderList([entry({ delta: 10_000 })], true, undefined, 5_000);
+
+    const row = screen.getByRole('listitem');
+    const menu = await openMenu(row, user);
+    await user.click(within(menu).getByRole('menuitem', { name: '撤銷' }));
+
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    const preview = within(confirmation).getByRole('group', {
+      name: '撤銷後，往來從「小明欠你的金額 $50」變成「你欠小明的金額 $50」。',
+    });
+    expect(
+      within(preview)
+        .getAllByTitle(/^(小明|我)$/)
+        .map((node) => node.getAttribute('title')),
+    ).toEqual(['小明', '我', '我', '小明']);
   });
 
   it('routes split entries to the split editor and split deletion', async () => {
@@ -191,10 +238,14 @@ describe('DebtEntriesList', () => {
     expect(onEditSplit).toHaveBeenCalledWith('split-1');
 
     const menuAgain = await openMenu(row, user);
-    await user.click(within(menuAgain).getByRole('menuitem', { name: '刪除' }));
-    const confirmation = await screen.findByRole('dialog', { name: '刪除分帳' });
-    expect(within(confirmation).getByText('刪除分帳？')).toBeInTheDocument();
-    await user.click(within(confirmation).getByRole('button', { name: '刪除' }));
+    await user.click(within(menuAgain).getByRole('menuitem', { name: '撤銷' }));
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(
+      within(confirmation).getByRole('group', {
+        name: '撤銷後，往來從「小明欠你的金額 $200」變成「小明欠你的金額 $80」。',
+      }),
+    ).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole('button', { name: '撤銷' }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -204,15 +255,16 @@ describe('DebtEntriesList', () => {
     );
   });
 
-  it('warns about sending split deletion to the counterpart when the entry is synced', async () => {
+  it('shows the counterpart notification below a synced undo preview', async () => {
     const user = userEvent.setup();
     renderList([entry({ splitId: 'split-1', sync: 'SYNCED' })]);
 
     const row = screen.getByRole('listitem');
     const menu = await openMenu(row, user);
-    await user.click(within(menu).getByRole('menuitem', { name: '刪除' }));
+    await user.click(within(menu).getByRole('menuitem', { name: '撤銷' }));
 
-    const confirmation = await screen.findByRole('dialog', { name: '刪除分帳' });
-    expect(within(confirmation).getByText('刪除後會送給對方確認。')).toBeInTheDocument();
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(within(confirmation).getByText('對方會收到通知')).toBeInTheDocument();
+    expect(confirmation).not.toHaveTextContent('分帳？');
   });
 });

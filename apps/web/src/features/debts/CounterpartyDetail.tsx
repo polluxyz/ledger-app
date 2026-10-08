@@ -123,6 +123,7 @@ export function CounterpartyDetail({
         ) : (
           <DebtEntriesList
             entries={outstanding}
+            balance={person.balance}
             editable={canWrite}
             displayName={person.displayName}
             avatarLabels={avatarLabels}

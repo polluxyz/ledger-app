@@ -196,7 +196,7 @@ describe('CounterpartyDetail', () => {
     expect(screen.getByRole('group', { name: '明哥欠你 $512' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /花蓮三日/ })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /記一筆|免除剩餘|修改|刪除|分帳/ }),
+      screen.queryByRole('button', { name: /記一筆|免除剩餘|修改|撤銷|分帳/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -377,7 +377,7 @@ describe('CounterpartyDetail', () => {
       await user.click(within(row).getByRole('button', { name: '更多操作' }));
       const menu = within(row).getByRole('menu');
       expect(within(menu).queryByRole('menuitem', { name: '修改' })).not.toBeInTheDocument();
-      expect(within(menu).getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: '撤銷' })).toBeInTheDocument();
       await user.keyboard('{Escape}');
     }
   });
@@ -396,12 +396,12 @@ describe('CounterpartyDetail', () => {
 
     await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
     await user.click(
-      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '刪除' }),
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }),
     );
-    expect(await screen.findByRole('dialog', { name: '刪除分帳' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '撤銷這筆？' })).toBeInTheDocument();
   });
 
-  it('confirms entry deletion with its linked transaction and balance consequences', async () => {
+  it('previews the entry undo balance before confirming', async () => {
     const user = userEvent.setup();
     renderDetail();
     const entryRow = (await screen.findAllByRole('listitem'))[0];
@@ -410,21 +410,21 @@ describe('CounterpartyDetail', () => {
     }
     await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
     await user.click(
-      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '刪除' }),
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }),
     );
 
-    const confirmation = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
     expect(
-      within(confirmation).getByText(
-        '刪除這筆往來？對應的交易會一起刪除，帳戶餘額與往來餘額會回到記這筆之前。',
-      ),
+      within(confirmation).getByRole('group', {
+        name: '撤銷後，往來從「小明欠你的金額 $9」變成「你欠小明的金額 $111」。',
+      }),
     ).toBeInTheDocument();
-    expect(confirmation).not.toHaveTextContent('這筆已和');
+    expect(confirmation).not.toHaveTextContent('對應的交易會一起刪除');
   });
 
-  it('adds the paired deletion explanation', async () => {
+  it('shows the synced notification on a paired entry undo preview', async () => {
     const user = userEvent.setup();
-    const pairedEntry = { ...baseEntry, paired: true };
+    const pairedEntry = { ...baseEntry, paired: true, sync: 'SYNCED' as const };
     renderDetail(900, [pairedEntry], 1, {
       link: linkedUser,
       name: '小明',
@@ -435,12 +435,11 @@ describe('CounterpartyDetail', () => {
       throw new Error('往來紀錄列不存在');
     }
     await user.click(within(row).getByRole('button', { name: '更多操作' }));
-    await user.click(within(within(row).getByRole('menu')).getByRole('menuitem', { name: '刪除' }));
+    await user.click(within(within(row).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }));
 
-    const deleteDialog = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
-    expect(deleteDialog).toHaveTextContent('刪除這筆往來？');
-    expect(deleteDialog).toHaveTextContent('會請小明也刪除');
-    expect(deleteDialog).not.toHaveTextContent('他不接受的話');
+    const undoDialog = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(undoDialog).toHaveTextContent('對方會收到通知');
+    expect(undoDialog).not.toHaveTextContent('會請小明也刪除');
   });
 
   it('confirms forgiveness with the API balance amount', async () => {

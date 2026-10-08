@@ -1,4 +1,4 @@
-/* 往來紀錄的列欄位由 DebtRow 共用；這裡只保留紀錄標籤與操作選單樣式。 */
+/* 往來紀錄的列欄位由 DebtRow 共用；這裡只放紀錄標籤、確認預覽與操作選單樣式。 */
 .entryList {
   margin: 0;
   padding: 0;
@@ -31,7 +31,7 @@
 }
 
 /*
- * 「分帳」小標籤比照對象列的「連動」：細框帶一點強調色，提示這筆的修改、刪除
+ * 「分帳」小標籤比照對象列的「連動」：細框帶一點強調色，提示這筆的修改、撤銷
  * 都走分帳。唯讀的總覽也顯示，它是資訊不是操作。
  */
 .splitBadge {
@@ -144,6 +144,38 @@
 
 .confirmContent p {
   margin: 0;
+}
+
+.undoPreview {
+  min-width: 0;
+}
+
+.previewRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.previewBalance {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.previewArrow {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.syncNotice {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .dialogActions {

@@ -12,7 +12,7 @@ vi.mock('../auth/use-current-user', () => ({
 
 /**
  * 借還歷史子分頁測試（debts-tabs2）。
- * 驗證個人往來已還清紀錄（可修改、刪除）、共享帳本結清紀錄（唯讀），
+ * 驗證個人往來已還清紀錄（可修改、撤銷）、共享帳本結清紀錄（唯讀），
  * 以及無資料時的段落隱藏與「沒有歷史紀錄」提示。
  */
 describe('DebtHistoryView', () => {
@@ -186,7 +186,7 @@ describe('DebtHistoryView', () => {
     expect(screen.getByRole('button', { name: '旅行帳本' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '家庭帳本' })).not.toBeInTheDocument();
 
-    // 展開個人往來歷史：已還清紀錄的修改、刪除收在「⋯」選單裡
+    // 展開個人往來歷史：已還清紀錄的修改、撤銷收在「⋯」選單裡
     await user.click(mingRow);
     expect(mingRow).toHaveAttribute('aria-expanded', 'true');
     expect(await screen.findByText('還清')).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe('DebtHistoryView', () => {
     expect(menuTriggers).toHaveLength(2);
     await user.click(menuTriggers[0]!);
     expect(screen.getByRole('menuitem', { name: '修改' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '撤銷' })).toBeInTheDocument();
 
     // 展開共享帳本歷史：唯讀交易清單
     const sharedRow = screen.getByRole('button', { name: '旅行帳本' });
