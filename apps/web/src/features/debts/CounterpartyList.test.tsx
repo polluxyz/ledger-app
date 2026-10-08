@@ -211,9 +211,9 @@ describe('CounterpartyList', () => {
     const secondRow = screen.getByRole('button', { name: /^阿華/ });
 
     await user.click(firstRow);
-    expect(await screen.findByText('花蓮三日')).toBeInTheDocument();
+    expect(await screen.findByText('花蓮三日 · 明哥')).toBeInTheDocument();
     expect(screen.getByText('明哥欠你 $3')).toBeInTheDocument();
-    expect(screen.getByText('老家')).toBeInTheDocument();
+    expect(screen.getByText('老家 · 小明')).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
     expect(screen.getByText('你欠小明 $15')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /老家|花蓮三日/ })).not.toBeInTheDocument();
@@ -221,7 +221,7 @@ describe('CounterpartyList', () => {
     await user.click(secondRow);
     expect(firstRow).toHaveAttribute('aria-expanded', 'false');
     expect(secondRow).toHaveAttribute('aria-expanded', 'true');
-    await waitFor(() => expect(screen.queryByText('花蓮三日')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('花蓮三日 · 明哥')).not.toBeInTheDocument());
   });
 
   it('shows unpointed people under each API ledger group and preserves the source values', async () => {

@@ -326,6 +326,7 @@ describe('CounterpartyDetail', () => {
   });
 
   it('does not offer edit for settlement or forgiveness adjustments', async () => {
+    const user = userEvent.setup();
     const entries = [
       { ...baseEntry, id: 'settlement', kind: 'SETTLEMENT' },
       { ...baseEntry, id: 'forgive', kind: 'FORGIVE' },
@@ -335,22 +336,31 @@ describe('CounterpartyDetail', () => {
     const rows = await screen.findAllByRole('listitem');
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(within(row).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
-      expect(within(row).getByRole('button', { name: '刪除' })).toBeInTheDocument();
+      await user.click(within(row).getByRole('button', { name: '更多操作' }));
+      const menu = within(row).getByRole('menu');
+      expect(within(menu).queryByRole('menuitem', { name: '修改' })).not.toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
+      await user.keyboard('{Escape}');
     }
   });
 
-  it('opens split entries through the split editor and hides entry edits', async () => {
+  it('labels split entries with a badge and routes both menu actions to the split', async () => {
     const user = userEvent.setup();
     const { onEditSplit } = renderDetail(0, [{ ...baseEntry, splitId: 'split-1' }]);
     const entryRow = (await screen.findAllByRole('listitem'))[0];
     if (!entryRow) throw new Error('往來紀錄列不存在');
 
-    expect(within(entryRow).getByRole('button', { name: '分帳' })).toBeInTheDocument();
-    expect(within(entryRow).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
-    expect(within(entryRow).queryByRole('button', { name: '刪除' })).not.toBeInTheDocument();
-    await user.click(within(entryRow).getByRole('button', { name: '分帳' }));
+    expect(within(entryRow).getByText('分帳')).toBeInTheDocument();
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    const menu = within(entryRow).getByRole('menu');
+    await user.click(within(menu).getByRole('menuitem', { name: '修改' }));
     expect(onEditSplit).toHaveBeenCalledWith('split-1');
+
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    await user.click(
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '刪除' }),
+    );
+    expect(await screen.findByRole('dialog', { name: '刪除分帳' })).toBeInTheDocument();
   });
 
   it('confirms entry deletion with its linked transaction and balance consequences', async () => {
@@ -360,7 +370,10 @@ describe('CounterpartyDetail', () => {
     if (!entryRow) {
       throw new Error('往來紀錄列不存在');
     }
-    await user.click(within(entryRow).getByRole('button', { name: '刪除' }));
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    await user.click(
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '刪除' }),
+    );
 
     const confirmation = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
     expect(
@@ -383,7 +396,8 @@ describe('CounterpartyDetail', () => {
     if (!row) {
       throw new Error('往來紀錄列不存在');
     }
-    await user.click(within(row).getByRole('button', { name: '刪除' }));
+    await user.click(within(row).getByRole('button', { name: '更多操作' }));
+    await user.click(within(within(row).getByRole('menu')).getByRole('menuitem', { name: '刪除' }));
 
     const deleteDialog = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
     expect(deleteDialog).toHaveTextContent('刪除這筆往來？');

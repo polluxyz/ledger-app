@@ -1,4 +1,7 @@
-/* 每筆紀錄以單列呈現方向、備註與金額，操作按鈕維持靠右排列。 */
+/*
+ * 每筆紀錄以單列呈現：日期、小頭貼箭頭（誰欠誰）、備註靠左，金額與狀態標籤靠右，
+ * 「⋯」選單按鈕固定在最右。
+ */
 .entryList {
   margin: 0;
   padding: 0;
@@ -81,6 +84,20 @@
   white-space: nowrap;
 }
 
+/*
+ * 「分帳」小標籤比照對象列的「連動」：細框帶一點強調色，提示這筆的修改、刪除
+ * 都走分帳。唯讀的總覽也顯示，它是資訊不是操作。
+ */
+.splitBadge {
+  flex: none;
+  padding: 0 var(--space-xs);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
 .syncLabel {
   padding: 0 var(--space-xs);
   border: 1px solid var(--color-border);
@@ -114,11 +131,64 @@
   white-space: nowrap;
 }
 
-.entryActions {
+.menuWrap {
+  position: relative;
+  flex: none;
+  margin-left: var(--space-sm);
+}
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--color-fill);
+  color: var(--color-text);
+}
+
+/* 選單浮在內容之上，用彈窗同款的外框與陰影，看得出它蓋在上面。 */
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
+  flex-direction: column;
+  min-width: 6rem;
+  padding: 4px;
+  border: var(--card-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.menuItem {
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--color-fill);
+}
+
+.menuItem:focus-visible {
+  outline-offset: -2px;
 }
 
 .confirmContent {
@@ -135,19 +205,4 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
-}
-
-@media (max-width: 38rem) {
-  .entry {
-    flex-wrap: wrap;
-  }
-
-  .entryInfo {
-    flex: 1 1 100%;
-  }
-
-  .entryActions {
-    align-self: flex-end;
-    margin-left: auto;
-  }
 }

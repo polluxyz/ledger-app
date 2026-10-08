@@ -1,4 +1,4 @@
-/* 帳本名稱作小標，下面用實線箭頭表示目前的欠款方向。 */
+/* 帳本來源一行一列，版面與往來紀錄列相同：左邊「帳本名稱 · 人名」，箭頭，右邊金額。 */
 .list {
   margin: 0;
   padding: 0;
@@ -7,12 +7,12 @@
 
 .row {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
   width: 100%;
   min-width: 0;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-xs);
+  padding: var(--space-xs) var(--space-xs);
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -34,15 +34,21 @@
   outline-offset: -2px;
 }
 
-.ledgerName {
+.source {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
+  gap: var(--space-sm);
   min-width: 0;
-  gap: var(--space-xs);
+}
+
+/* 太長就截斷：滑鼠提示保留全文，人名不能被截掉才分得出兩個「小」。 */
+.sourceName {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 400;
+  color: var(--color-text);
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -51,30 +57,14 @@
   flex: 0 0 auto;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  font-weight: 400;
-}
-
-.direction {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  width: 100%;
   white-space: nowrap;
 }
 
-.content {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-xs);
-  width: 100%;
-  min-width: 0;
-}
-
 .amount {
+  flex: none;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .srOnly {

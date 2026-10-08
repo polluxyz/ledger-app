@@ -186,13 +186,16 @@ describe('DebtHistoryView', () => {
     expect(screen.getByRole('button', { name: '旅行帳本' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '家庭帳本' })).not.toBeInTheDocument();
 
-    // 展開個人往來歷史：已還清紀錄可以修改、刪除
+    // 展開個人往來歷史：已還清紀錄的修改、刪除收在「⋯」選單裡
     await user.click(mingRow);
     expect(mingRow).toHaveAttribute('aria-expanded', 'true');
     expect(await screen.findByText('還清')).toBeInTheDocument();
     expect(screen.getByText('借款')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: '修改' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: '刪除' })).toHaveLength(2);
+    const menuTriggers = screen.getAllByRole('button', { name: '更多操作' });
+    expect(menuTriggers).toHaveLength(2);
+    await user.click(menuTriggers[0]!);
+    expect(screen.getByRole('menuitem', { name: '修改' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '刪除' })).toBeInTheDocument();
 
     // 展開共享帳本歷史：唯讀交易清單
     const sharedRow = screen.getByRole('button', { name: '旅行帳本' });

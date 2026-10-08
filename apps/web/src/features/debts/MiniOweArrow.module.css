@@ -1,4 +1,7 @@
-/* 列內箭頭以首字和短線取代重複姓名，讓方向成為主要線索。 */
+/*
+ * 列內箭頭以首字和短線取代重複姓名，讓「誰欠誰」成為主要線索。
+ * 只有一種樣式：灰色實線（同 DebtArrow 的線色）；還款的「回頭」圖示蓋在線中點。
+ */
 .mini {
   display: inline-flex;
   flex: none;
@@ -41,17 +44,7 @@
   content: '';
 }
 
-.flow .line {
-  height: 0;
-  border-top: 1.5px dashed var(--color-primary);
-  background: none;
-}
-
-.flow .line::after {
-  top: -5px;
-  background: var(--color-primary);
-}
-
+/* 「回頭」圖示不出新配色：中性圓片蓋在線中點，只用線色同款的 token。 */
 .marker {
   position: absolute;
   z-index: 1;
@@ -62,8 +55,9 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-text-muted);
   transform: translate(-50%, -50%);
 }
 

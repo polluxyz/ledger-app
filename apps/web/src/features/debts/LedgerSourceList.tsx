@@ -1,9 +1,9 @@
 import type { CounterpartyLedgerPart } from '@ledger/shared';
-import { MiniFlowArrow } from './MiniFlowArrow';
+import { MiniOweArrow } from './MiniOweArrow';
 import { formatMoney } from '../../lib/format';
 import styles from './LedgerSourceList.module.css';
 
-/** 共用帳本來源的唯讀入口，讓借還展開區與往來帳明細保持相同的金額方向。 */
+/** 共享帳本來源：與往來紀錄同一種「誰欠誰」箭頭，一行一列，總覽唯讀。 */
 interface LedgerSourceListProps {
   sources: readonly CounterpartyLedgerPart[];
   onOpenSource?: (source: CounterpartyLedgerPart) => void;
@@ -18,44 +18,47 @@ export function LedgerSourceList({
   return (
     <ul className={styles.list}>
       {sources.map((source) => {
+        // amount 正＝對方欠我（同 delta 慣例），箭頭起點永遠是欠錢的人。
+        const from = source.amount > 0 ? source.personName : '我';
+        const to = source.amount > 0 ? '我' : source.personName;
+        const amountText = formatMoney(Math.abs(source.amount));
+        const srText =
+          source.amount > 0
+            ? `${source.personName}欠你 ${amountText}`
+            : `你欠${source.personName} ${amountText}`;
+
         const content = (
-          <span className={styles.content}>
-            <span className={styles.ledgerName}>
-              {source.ledgerName}
-              {source.left && <span className={styles.left}>已退出</span>}
+          // 頭貼只有一個字，人名一定要出現在左邊文字裡，兩個「小」才分得出來。
+          <span className={styles.source}>
+            <span
+              className={styles.sourceName}
+              title={`${source.ledgerName} · ${source.personName}`}
+            >
+              {source.ledgerName} · {source.personName}
             </span>
-            <SmallDebtDirection personName={source.personName} amount={source.amount} />
+            {source.left && <span className={styles.left}>已退出</span>}
+            <MiniOweArrow from={from} to={to} />
           </span>
         );
 
         return (
           <li key={`${source.ledgerId}-${source.personId}`}>
             {readOnly ? (
-              <span className={`${styles.row} ${styles.readOnly}`}>{content}</span>
+              <span className={`${styles.row} ${styles.readOnly}`}>
+                <span className={styles.srOnly}>{srText}</span>
+                {content}
+                <span className={styles.amount}>{amountText}</span>
+              </span>
             ) : (
               <button type="button" className={styles.row} onClick={() => onOpenSource?.(source)}>
+                <span className={styles.srOnly}>{srText}</span>
                 {content}
+                <span className={styles.amount}>{amountText}</span>
               </button>
             )}
           </li>
         );
       })}
     </ul>
-  );
-}
-
-/** 帳本來源以實線表示目前欠款方向，金額只顯示絕對值。 */
-export function SmallDebtDirection({ personName, amount }: { personName: string; amount: number }) {
-  const from = amount > 0 ? personName : '我';
-  const to = amount > 0 ? '我' : personName;
-  const amountText = formatMoney(Math.abs(amount));
-  const srText = amount > 0 ? `${personName}欠你 ${amountText}` : `你欠${personName} ${amountText}`;
-
-  return (
-    <span className={styles.direction}>
-      <span className={styles.srOnly}>{srText}</span>
-      <MiniFlowArrow from={from} to={to} variant="owe" />
-      <span className={styles.amount}>{amountText}</span>
-    </span>
   );
 }
