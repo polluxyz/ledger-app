@@ -1,12 +1,15 @@
 import type { LedgerGroup } from '@ledger/shared';
-import { SmallDebtDirection } from './LedgerSourceList';
+import { BalanceArrow } from './BalanceArrow';
 import styles from './UnpointedLedgerGroups.module.css';
 
 interface UnpointedLedgerGroupsProps {
   groups: readonly LedgerGroup[];
 }
 
-/** 未指向的人依 API 分組唯讀呈現，保留帳本名稱與原始結清方向。 */
+/**
+ * 沒指向的人依帳本分組、唯讀呈現在對象清單下方。每一列的版面（名字、頭貼箭頭、
+ * 「需要支付」、金額靠右）跟上面的對象列一致，只差在多了帳本名稱當組標題。
+ */
 export function UnpointedLedgerGroups({ groups }: UnpointedLedgerGroupsProps) {
   if (groups.length === 0) {
     return null;
@@ -21,16 +24,16 @@ export function UnpointedLedgerGroups({ groups }: UnpointedLedgerGroupsProps) {
             {ledger.left && <span className={styles.left}>已退出</span>}
           </h3>
           <ul className={styles.people}>
-            {people.map(({ person, amount }) => {
-              return (
-                <li key={person.id}>
-                  <span className={styles.person}>
-                    <span className={styles.personName}>{person.name}</span>
-                    <SmallDebtDirection personName={person.name} amount={amount} />
+            {people.map(({ person, amount }) => (
+              <li key={person.id} className={styles.item}>
+                <span className={styles.row}>
+                  <span className={styles.name}>{person.name}</span>
+                  <span className={styles.balance}>
+                    <BalanceArrow name={person.name} amount={amount} />
                   </span>
-                </li>
-              );
-            })}
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
       ))}

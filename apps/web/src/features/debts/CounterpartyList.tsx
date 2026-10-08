@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LedgerSummary } from '@ledger/shared';
-import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
-import { formatMoney } from '../../lib/format';
 import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { CounterpartyDetail } from './CounterpartyDetail';
+import { BalanceArrow } from './BalanceArrow';
 import { UnpointedLedgerGroups } from './UnpointedLedgerGroups';
 import { useCounterparties } from './use-debts';
 import styles from './CounterpartyList.module.css';
@@ -99,7 +98,7 @@ export function CounterpartyList({
                       {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
                     </span>
                     <span className={styles.balance}>
-                      {formatCounterpartyBalance(counterparty.displayName, balance)}
+                      <BalanceArrow name={counterparty.displayName} amount={balance} />
                     </span>
                   </button>
                   <AnimatedDisclosure id={detailsId} open={expanded}>
@@ -127,31 +126,4 @@ export function CounterpartyList({
       {mode === 'overview' && <UnpointedLedgerGroups groups={groups} />}
     </>
   );
-}
-
-/** 總覽採 API 的 totalBalance；個人分頁採 API 的 balance 並在頁面端過濾零值。 */
-function formatCounterpartyBalance(displayName: string, balance: number) {
-  if (balance > 0) {
-    return (
-      <DebtArrow
-        from={displayName}
-        to="我"
-        amount={balance}
-        label="需要支付"
-        srText={`${displayName}欠你 ${formatMoney(balance)}`}
-      />
-    );
-  }
-  if (balance < 0) {
-    return (
-      <DebtArrow
-        from="我"
-        to={displayName}
-        amount={Math.abs(balance)}
-        label="需要支付"
-        srText={`你欠${displayName} ${formatMoney(Math.abs(balance))}`}
-      />
-    );
-  }
-  return '兩清';
 }
