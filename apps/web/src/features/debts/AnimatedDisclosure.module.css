@@ -19,3 +19,9 @@
   min-height: 0;
   overflow: hidden;
 }
+
+/* 展開動畫跑完後才解除裁切，讓裡面彈出的選單不被切掉（見元件註解）。 */
+.settled,
+.settled > .content {
+  overflow: visible;
+}

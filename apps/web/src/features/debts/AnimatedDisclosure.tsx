@@ -8,10 +8,43 @@ interface AnimatedDisclosureProps {
   className?: string;
 }
 
-/** 用版內 motion token 收合內容，並在轉場結束前保留子元件與它的狀態。 */
+/**
+ * 用版內 motion token 收合內容，並在轉場結束前保留子元件與它的狀態。
+ *
+ * 收合動畫靠 `overflow: hidden` 裁切高度，但完全展開後若還在裁切，裡面彈出的「⋯」選單
+ * 就會被切掉。所以展開動畫跑完才標記 `settled` 解除裁切；一開始收起就恢復裁切。
+ */
 export function AnimatedDisclosure({ open, id, children, className }: AnimatedDisclosureProps) {
   const [mounted, setMounted] = useState(open);
+  const [settled, setSettled] = useState(open);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const container = containerRef.current;
+    const transitionTime = container ? getTransitionTime(container) : 0;
+
+    if (!open) {
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setSettled(false);
+        }
+      });
+    } else if (!settled) {
+      const settleId = window.setTimeout(() => {
+        if (!cancelled) {
+          setSettled(true);
+        }
+      }, transitionTime + 32);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(settleId);
+      };
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [open, settled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +94,12 @@ export function AnimatedDisclosure({ open, id, children, className }: AnimatedDi
     <div
       ref={containerRef}
       id={id}
-      className={[styles.disclosure, open ? styles.open : '', className ?? '']
+      className={[
+        styles.disclosure,
+        open ? styles.open : '',
+        open && settled ? styles.settled : '',
+        className ?? '',
+      ]
         .filter(Boolean)
         .join(' ')}
       aria-hidden={!open}

@@ -16,11 +16,12 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-sm);
 }
 
 .entryFormDisclosure {
-  margin-top: calc(-1 * var(--space-sm));
+  margin-top: 0;
 }
 
 .entries {

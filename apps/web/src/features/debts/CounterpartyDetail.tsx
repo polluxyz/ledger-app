@@ -80,6 +80,37 @@ export function CounterpartyDetail({
 
   return (
     <div className={styles.detail}>
+      <section className={styles.entries}>
+        {entries.isLoading ? (
+          <p className={styles.status}>載入中…</p>
+        ) : entries.error ? (
+          <FormError error={entries.error} />
+        ) : outstanding.length === 0 ? (
+          <p className={styles.empty}>目前沒有未還清紀錄。</p>
+        ) : (
+          <DebtEntriesList
+            entries={outstanding}
+            balance={person.balance}
+            editable={canWrite}
+            displayName={person.displayName}
+            avatarLabels={avatarLabels}
+            onEditSplit={onEditSplit}
+          />
+        )}
+      </section>
+
+      {mode === 'overview' && ledgerParts.length > 0 && (
+        <section className={styles.sharedLedgers}>
+          <LedgerSourceList
+            sources={ledgerParts}
+            readOnly
+            reserveActionColumn={canWrite}
+            avatarLabels={avatarLabels}
+          />
+        </section>
+      )}
+
+      {/* 操作放在最下面靠右：先看完紀錄再決定要不要記一筆（開發者 2026-10-09）。 */}
       {canWrite && (
         <div className={styles.actions}>
           <Button
@@ -111,36 +142,6 @@ export function CounterpartyDetail({
             onSaved={() => setEntryFormOpen(false)}
           />
         </AnimatedDisclosure>
-      )}
-
-      <section className={styles.entries}>
-        {entries.isLoading ? (
-          <p className={styles.status}>載入中…</p>
-        ) : entries.error ? (
-          <FormError error={entries.error} />
-        ) : outstanding.length === 0 ? (
-          <p className={styles.empty}>目前沒有未還清紀錄。</p>
-        ) : (
-          <DebtEntriesList
-            entries={outstanding}
-            balance={person.balance}
-            editable={canWrite}
-            displayName={person.displayName}
-            avatarLabels={avatarLabels}
-            onEditSplit={onEditSplit}
-          />
-        )}
-      </section>
-
-      {mode === 'overview' && ledgerParts.length > 0 && (
-        <section className={styles.sharedLedgers}>
-          <LedgerSourceList
-            sources={ledgerParts}
-            readOnly
-            reserveActionColumn={canWrite}
-            avatarLabels={avatarLabels}
-          />
-        </section>
       )}
 
       <ConfirmDialog
