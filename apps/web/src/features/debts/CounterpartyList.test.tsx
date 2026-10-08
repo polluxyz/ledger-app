@@ -1,6 +1,6 @@
 import type { CounterpartyLedgerPart, LedgerGroup, LedgerSummary } from '@ledger/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -65,7 +65,7 @@ describe('CounterpartyList', () => {
         parsedUrl.pathname.endsWith(`/counterparties/${id}`),
       );
       if (detailId) {
-        const displayName = detailId === 'cp-1' ? '小明的暱稱' : '阿華';
+        const displayName = detailId === 'cp-1' ? '小明的暱稱' : '小華';
         const balance = detailId === 'cp-1' ? 900 : -1100;
         return json({
           id: detailId,
@@ -101,7 +101,7 @@ describe('CounterpartyList', () => {
               {
                 id: 'cp-2',
                 name: '阿華',
-                displayName: '阿華',
+                displayName: '小華',
                 askMerge: false,
                 balance: -1100,
                 totalBalance: -1100,
@@ -168,7 +168,7 @@ describe('CounterpartyList', () => {
     renderList();
 
     expect(await screen.findByText('小明的暱稱欠你 $42')).toBeInTheDocument();
-    expect(screen.getByText('你欠阿華 $11')).toBeInTheDocument();
+    expect(screen.getByText('你欠小華 $11')).toBeInTheDocument();
     expect(screen.getByText('連動')).toBeInTheDocument();
     expect(screen.queryByText('兩清')).not.toBeInTheDocument();
     expect(screen.queryByText('老王')).not.toBeInTheDocument();
@@ -178,6 +178,13 @@ describe('CounterpartyList', () => {
         String(url).match(/\/counterparties\?page=1&limit=20&nonZero=true$/),
       ),
     ).toBe(true);
+  });
+
+  it('uses one-character labels that distinguish names across the displayed counterparty list', async () => {
+    renderList();
+
+    expect(await screen.findByTitle('小明的暱稱')).toHaveTextContent('明');
+    expect(screen.getByTitle('小華')).toHaveTextContent('華');
   });
 
   it('toggles the inline detail from the primary row button', async () => {
@@ -194,34 +201,39 @@ describe('CounterpartyList', () => {
 
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '共享帳本' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByText('個人往來')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
 
     await user.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'false');
-    await waitFor(() => expect(screen.queryByText('共享帳本')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '花蓮三日' })).not.toBeInTheDocument(),
+    );
   });
 
   it('keeps only one counterparty expanded and renders the API shared sources', async () => {
     const user = userEvent.setup();
     renderList();
     const firstRow = await screen.findByRole('button', { name: /^小明的暱稱/ });
-    const secondRow = screen.getByRole('button', { name: /^阿華/ });
+    const secondRow = screen.getByRole('button', { name: /^小華/ });
 
     await user.click(firstRow);
-    expect(await screen.findByText('花蓮三日 · 明哥')).toBeInTheDocument();
-    expect(screen.getByText('明哥欠你 $3')).toBeInTheDocument();
-    expect(screen.getByText('老家 · 小明')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '明哥欠你 $3' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '老家' })).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
-    expect(screen.getByText('你欠小明 $15')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '你欠小明 $15' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /老家|花蓮三日/ })).not.toBeInTheDocument();
 
     await user.click(secondRow);
     expect(firstRow).toHaveAttribute('aria-expanded', 'false');
     expect(secondRow).toHaveAttribute('aria-expanded', 'true');
-    await waitFor(() => expect(screen.queryByText('花蓮三日 · 明哥')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '花蓮三日' })).not.toBeInTheDocument(),
+    );
   });
 
   it('shows unpointed people under each API ledger group and preserves the source values', async () => {
@@ -244,7 +256,8 @@ describe('CounterpartyList', () => {
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledger-groups?unpointed=true')),
     ).toBe(true);
-    expect(screen.queryByRole('button', { name: /小華|花蓮三日/ })).not.toBeInTheDocument();
+    const unpointedGroup = screen.getByRole('region', { name: '沒指向的共享帳本' });
+    expect(within(unpointedGroup).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('requests the next page through the shared pagination control', async () => {
@@ -268,7 +281,7 @@ describe('CounterpartyList', () => {
     renderList('personal');
 
     expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
-    expect(screen.getByText('你欠阿華 $11')).toBeInTheDocument();
+    expect(screen.getByText('你欠小華 $11')).toBeInTheDocument();
     expect(screen.queryByText('清零的人')).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).match(/\/counterparties\?page=1&limit=20$/)),

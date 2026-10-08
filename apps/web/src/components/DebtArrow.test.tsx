@@ -18,6 +18,24 @@ describe('DebtArrow', () => {
     expect(screen.getByText('小明', { selector: visual })).toBeInTheDocument();
     // 頭貼先用名字第一個字代替。
     expect(screen.getByText('小', { selector: visual })).toBeInTheDocument();
+    expect(screen.getByTitle('小明')).toHaveTextContent('小');
+    expect(screen.getByTitle('我')).toHaveTextContent('我');
+  });
+
+  it('uses labels supplied by the surrounding list', () => {
+    render(
+      <DebtArrow
+        from="小明"
+        fromLabel="明"
+        to="我"
+        toLabel="我"
+        amount={12000}
+        srText="小明欠你 $120"
+      />,
+    );
+
+    expect(screen.getByText('明', { selector: visual })).toBeInTheDocument();
+    expect(screen.getByTitle('小明')).toHaveTextContent('明');
   });
 
   it('可以換掉上方的字', () => {

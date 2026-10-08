@@ -4,8 +4,12 @@ import styles from './DebtArrow.module.css';
 interface DebtArrowProps {
   /** 箭頭的起點；代表欠款的一方。 */
   from: string;
+  /** 頭貼標籤；多個名字同首字時由清單計算後傳入。 */
+  fromLabel?: string;
   /** 箭頭的終點；代表被欠款的一方。 */
   to: string;
+  /** 頭貼標籤；多個名字同首字時由清單計算後傳入。 */
+  toLabel?: string;
   /** 金額以分傳入，顯示交由 shared formatter。 */
   amount: number;
   /** 保留既有的口語描述給螢幕閱讀器。 */
@@ -19,7 +23,9 @@ interface DebtArrowProps {
 /** 用同一個方向呈現誰欠誰，並把原本句子保留給輔助科技。 */
 export function DebtArrow({
   from,
+  fromLabel,
   to,
+  toLabel,
   amount,
   srText,
   label = '欠',
@@ -42,23 +48,25 @@ export function DebtArrow({
     <span className={styles.arrow}>
       <span className={styles.srOnly}>{srText}</span>
       <span className={styles.visual} aria-hidden="true">
-        <Person name={from} />
+        <Person name={from} label={fromLabel} />
         <span className={styles.track}>
           <span className={styles.label}>{label}</span>
           <span className={styles.line} />
           <span className={styles.amount}>{formatMoney(amount)}</span>
         </span>
-        <Person name={to} />
+        <Person name={to} label={toLabel} />
       </span>
     </span>
   );
 }
 
 /** 頭貼在上、名字在下。使用者還沒有頭貼，先用名字第一個字代替。 */
-function Person({ name }: { name: string }) {
+function Person({ name, label }: { name: string; label?: string }) {
   return (
     <span className={styles.person}>
-      <span className={styles.avatar}>{Array.from(name)[0] ?? ''}</span>
+      <span className={styles.avatar} title={name}>
+        {label ?? Array.from(name)[0] ?? ''}
+      </span>
       <span className={styles.name}>{name}</span>
     </span>
   );

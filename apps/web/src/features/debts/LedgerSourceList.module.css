@@ -1,79 +1,39 @@
-/* 帳本來源一行一列，版面與往來紀錄列相同：左邊「帳本名稱 · 人名」，箭頭，右邊金額。 */
-.list {
+/* 帳本名稱分組顯示；每筆來源沿用往來紀錄的共用列版面。 */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.group {
+  min-width: 0;
+}
+
+.heading {
+  margin: 0;
+  padding: 0 0 var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.sourceList {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  width: 100%;
-  min-width: 0;
-  padding: var(--space-xs) var(--space-xs);
-  border: 0;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.readOnly {
-  cursor: default;
-}
-
-.row:not(.readOnly):hover {
-  background: var(--color-fill);
-}
-
-.row:not(.readOnly):focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
-}
-
-.source {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-/* 太長就截斷：滑鼠提示保留全文，人名不能被截掉才分得出兩個「小」。 */
-.sourceName {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .left {
-  flex: 0 0 auto;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   white-space: nowrap;
 }
 
-.amount {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.visual {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  min-width: 0;
 }

@@ -4,8 +4,12 @@ import styles from './MiniOweArrow.module.css';
 interface MiniOweArrowProps {
   /** 欠錢的人（箭頭起點）。 */
   from: string;
+  /** 頭貼標籤；多個名字同首字時由清單計算後傳入。 */
+  fromLabel?: string;
   /** 被欠的人（箭頭終點）。 */
   to: string;
+  /** 頭貼標籤；多個名字同首字時由清單計算後傳入。 */
+  toLabel?: string;
   /** 還款在線中點放「回頭」圖示，表示被還掉的那筆欠款。 */
   repay?: boolean;
 }
@@ -15,10 +19,12 @@ interface MiniOweArrowProps {
  * 頭貼只有一個字，兩個人的名字同首字時分不出來，所以完整語意一律由外層的說明句
  * 提供，本身對輔助技術隱藏。
  */
-export function MiniOweArrow({ from, to, repay = false }: MiniOweArrowProps) {
+export function MiniOweArrow({ from, fromLabel, to, toLabel, repay = false }: MiniOweArrowProps) {
   return (
     <span className={styles.mini} aria-hidden="true">
-      <span className={styles.avatar}>{Array.from(from)[0] ?? ''}</span>
+      <span className={styles.avatar} title={from}>
+        {fromLabel ?? Array.from(from)[0] ?? ''}
+      </span>
       <span className={styles.line}>
         {repay && (
           <span className={styles.marker}>
@@ -26,7 +32,9 @@ export function MiniOweArrow({ from, to, repay = false }: MiniOweArrowProps) {
           </span>
         )}
       </span>
-      <span className={styles.avatar}>{Array.from(to)[0] ?? ''}</span>
+      <span className={styles.avatar} title={to}>
+        {toLabel ?? Array.from(to)[0] ?? ''}
+      </span>
     </span>
   );
 }

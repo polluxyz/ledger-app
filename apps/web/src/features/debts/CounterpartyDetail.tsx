@@ -4,6 +4,7 @@ import { Button } from '../../components/Button';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
 import { formatMoney } from '../../lib/format';
+import { getAvatarLabels } from '../../lib/avatar-labels';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntriesList } from './DebtEntriesList';
 import { DebtEntryForm } from './DebtEntryForm';
@@ -61,20 +62,17 @@ export function CounterpartyDetail({
 
   const person = counterparty.data;
   const { ledgerParts } = person;
-  const sharedLedgersHeadingId = `counterparty-shared-ledgers-${counterpartyId}`;
   const entryFormId = `counterparty-entry-form-${counterpartyId}`;
   const { outstanding } = splitDebtEntriesByBalanceZero(entries.data?.items ?? []);
   const canWrite = mode === 'personal';
+  const avatarLabels = getAvatarLabels([
+    '我',
+    person.displayName,
+    ...ledgerParts.map((source) => source.personName),
+  ]);
 
   return (
     <div className={styles.detail}>
-      {mode === 'overview' && ledgerParts.length > 0 && (
-        <section className={styles.sharedLedgers} aria-labelledby={sharedLedgersHeadingId}>
-          <h4 id={sharedLedgersHeadingId}>共享帳本</h4>
-          <LedgerSourceList sources={ledgerParts} readOnly />
-        </section>
-      )}
-
       {canWrite && (
         <div className={styles.actions}>
           <Button
@@ -120,10 +118,22 @@ export function CounterpartyDetail({
             entries={outstanding}
             editable={canWrite}
             displayName={person.displayName}
+            avatarLabels={avatarLabels}
             onEditSplit={onEditSplit}
           />
         )}
       </section>
+
+      {mode === 'overview' && ledgerParts.length > 0 && (
+        <section className={styles.sharedLedgers}>
+          <LedgerSourceList
+            sources={ledgerParts}
+            readOnly
+            reserveActionColumn={canWrite}
+            avatarLabels={avatarLabels}
+          />
+        </section>
+      )}
 
       <ConfirmDialog
         open={forgiveOpen}

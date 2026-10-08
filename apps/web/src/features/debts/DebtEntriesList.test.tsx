@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DebtEntry } from '@ledger/shared';
+import rowStyles from './DebtRow.module.css';
 import { DebtEntriesList } from './DebtEntriesList';
 
 /**
@@ -76,6 +77,12 @@ describe('DebtEntriesList', () => {
     ]);
 
     const rows = screen.getAllByRole('listitem');
+    const rowLayout = rows[0]!.querySelector(`.${rowStyles.row}`);
+    expect(rowLayout).toBeInTheDocument();
+    expect(rowLayout?.querySelector(`.${rowStyles.date}`)).toBeInTheDocument();
+    expect(rowLayout?.querySelector(`.${rowStyles.arrow}`)).toBeInTheDocument();
+    expect(rowLayout?.querySelector(`.${rowStyles.amount}`)).toBeInTheDocument();
+    expect(rowLayout?.querySelector(`.${rowStyles.actions}`)).toBeInTheDocument();
     const avatars = (row: HTMLElement) =>
       within(row)
         .getAllByText(/^(小|我)$/)
@@ -83,6 +90,8 @@ describe('DebtEntriesList', () => {
     expect(avatars(rows[0]!)).toEqual(['小', '我']);
     expect(avatars(rows[1]!)).toEqual(['我', '小']);
     expect(avatars(rows[2]!)).toEqual(['小', '我']);
+    expect(rows[0]!.querySelector('[title="小明"]')).toHaveTextContent('小');
+    expect(rows[0]!.querySelector('[title="我"]')).toHaveTextContent('我');
     // 還款線中點有「回頭」圖示；其他箭頭沒有。lucide 圖示沒有隱含角色，用 class 驗。
     expect(rows[2]!.querySelector('svg.lucide-undo-2')).not.toBeNull();
     expect(rows[0]!.querySelector('svg.lucide-undo-2')).toBeNull();

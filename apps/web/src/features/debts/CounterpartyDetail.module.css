@@ -13,10 +13,6 @@
   gap: var(--space-xs);
 }
 
-.sharedLedgers h4 {
-  margin: 0;
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { LedgerSummary } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
 import { Pagination } from '../../components/Pagination';
+import { getAvatarLabels } from '../../lib/avatar-labels';
 import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { CounterpartyDetail } from './CounterpartyDetail';
@@ -39,6 +40,10 @@ export function CounterpartyList({
     const items = counterparties.data?.items ?? [];
     return mode === 'personal' ? items.filter((item) => item.balance !== 0) : items;
   }, [counterparties.data?.items, mode]);
+  const avatarLabels = useMemo(
+    () => getAvatarLabels(['我', ...items.map((item) => item.displayName)]),
+    [items],
+  );
 
   useEffect(() => {
     if (openCounterpartyId == null || counterparties.isLoading) {
@@ -98,7 +103,11 @@ export function CounterpartyList({
                       {counterparty.link !== null && <span className={styles.linkBadge}>連動</span>}
                     </span>
                     <span className={styles.balance}>
-                      <BalanceArrow name={counterparty.displayName} amount={balance} />
+                      <BalanceArrow
+                        name={counterparty.displayName}
+                        nameLabel={avatarLabels.get(counterparty.displayName)}
+                        amount={balance}
+                      />
                     </span>
                   </button>
                   <AnimatedDisclosure id={detailsId} open={expanded}>

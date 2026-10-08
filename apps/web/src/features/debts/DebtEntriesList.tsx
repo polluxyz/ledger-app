@@ -7,6 +7,7 @@ import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useDeleteSplit } from '../transactions/use-splits';
+import rowStyles from './DebtRow.module.css';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
 import { getDebtEntryFlow } from './entry-flow';
 import { MiniOweArrow } from './MiniOweArrow';
@@ -18,6 +19,7 @@ interface DebtEntriesListProps {
   displayName: string;
   editable?: boolean;
   onEditSplit?: (splitId: string) => void;
+  avatarLabels?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -35,6 +37,7 @@ export function DebtEntriesList({
   displayName,
   editable = true,
   onEditSplit,
+  avatarLabels,
 }: DebtEntriesListProps) {
   const removeEntry = useDeleteDebtEntry();
   const removeSplit = useDeleteSplit();
@@ -79,26 +82,34 @@ export function DebtEntriesList({
           return (
             <li
               key={entry.id}
-              className={styles.entry}
+              className={rowStyles.item}
               aria-label={flow.description}
               title={flow.description}
             >
-              <div className={styles.entryInfo}>
-                <div className={styles.entryLine}>
-                  {/* 同一頁都是同年往來，日期只留 MM/DD，年份沒有資訊量。 */}
-                  <time dateTime={entry.date}>{formatDate(entry.date).slice(5)}</time>
+              <div className={rowStyles.row}>
+                {/* 同一頁都是同年往來，日期只留 MM/DD，年份沒有資訊量。 */}
+                <time className={rowStyles.date} dateTime={entry.date}>
+                  {formatDate(entry.date).slice(5)}
+                </time>
+                <span className={rowStyles.arrow}>
                   {flow.marker === 'check' ? (
                     <span className={styles.adjustmentIcon} aria-hidden="true">
                       <Check size={14} strokeWidth={2.5} />
                     </span>
                   ) : (
                     flow.direction !== null && (
-                      <MiniOweArrow from={from} to={to} repay={flow.marker === 'repay'} />
+                      <MiniOweArrow
+                        from={from}
+                        fromLabel={avatarLabels?.get(from)}
+                        to={to}
+                        toLabel={avatarLabels?.get(to)}
+                        repay={flow.marker === 'repay'}
+                      />
                     )
                   )}
-                  {entry.note && <span className={styles.note}>{entry.note}</span>}
-                </div>
-                <div className={styles.entryAmount}>
+                </span>
+                <span className={rowStyles.spacer} />
+                <span className={rowStyles.label}>
                   {entry.splitId !== null && <span className={styles.splitBadge}>分帳</span>}
                   {isUnrecorded && <span className={styles.unrecorded}>未記帳</span>}
                   {SYNC_STATUS_LABELS[entry.sync] && (
@@ -106,28 +117,33 @@ export function DebtEntriesList({
                       {SYNC_STATUS_LABELS[entry.sync]}
                     </span>
                   )}
-                  <span className={styles.delta}>{formatMoney(Math.abs(entry.delta))}</span>
-                </div>
+                  {entry.note && <span className={styles.note}>{entry.note}</span>}
+                </span>
+                <span className={rowStyles.amount}>
+                  <span className={rowStyles.amountText}>{formatMoney(Math.abs(entry.delta))}</span>
+                </span>
+                {editable && (
+                  <span className={rowStyles.actions}>
+                    <EntryMenu
+                      hasEdit={!isAdjustment}
+                      onEdit={() => {
+                        if (entry.splitId !== null) {
+                          onEditSplit?.(entry.splitId);
+                        } else {
+                          setEntryToEdit(entry);
+                        }
+                      }}
+                      onDelete={() => {
+                        if (entry.splitId !== null) {
+                          setSplitToDelete(entry);
+                        } else {
+                          setEntryToDelete(entry);
+                        }
+                      }}
+                    />
+                  </span>
+                )}
               </div>
-              {editable && (
-                <EntryMenu
-                  hasEdit={!isAdjustment}
-                  onEdit={() => {
-                    if (entry.splitId !== null) {
-                      onEditSplit?.(entry.splitId);
-                    } else {
-                      setEntryToEdit(entry);
-                    }
-                  }}
-                  onDelete={() => {
-                    if (entry.splitId !== null) {
-                      setSplitToDelete(entry);
-                    } else {
-                      setEntryToDelete(entry);
-                    }
-                  }}
-                />
-              )}
             </li>
           );
         })}

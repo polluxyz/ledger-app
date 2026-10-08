@@ -180,7 +180,7 @@ describe('CounterpartyDetail', () => {
     await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
   });
 
-  it('shows shared ledgers as read-only rows in the overview', async () => {
+  it('shows each shared ledger as a heading with read-only rows in the overview', async () => {
     const source = {
       ledgerId: 'ledger-hualien',
       ledgerName: '花蓮三日',
@@ -191,12 +191,31 @@ describe('CounterpartyDetail', () => {
     };
     renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
-    expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
-    expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '共享帳本' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '明哥欠你 $512' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /花蓮三日/ })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /記一筆|免除剩餘|修改|刪除|分帳/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it('places outstanding entries before the shared ledger groups', async () => {
+    const source = {
+      ledgerId: 'ledger-hualien',
+      ledgerName: '花蓮三日',
+      personId: 'person-ming',
+      personName: '明哥',
+      amount: 51200,
+      left: false,
+    };
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
+
+    const note = await screen.findByText('借款');
+    const ledgerHeading = await screen.findByRole('heading', { name: '花蓮三日' });
+    expect(
+      note.compareDocumentPosition(ledgerHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('keeps an exited shared source read-only in the overview', async () => {
@@ -212,6 +231,25 @@ describe('CounterpartyDetail', () => {
 
     expect(await screen.findByText('已退出')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /老家/ })).not.toBeInTheDocument();
+  });
+
+  it('shares avatar labels across the counterparty, ledger people, and entries in the expanded block', async () => {
+    const source = {
+      ledgerId: 'ledger-hualien',
+      ledgerName: '花蓮三日',
+      personId: 'person-hua',
+      personName: '小華',
+      amount: 51200,
+      left: false,
+    };
+    renderDetail(900, [baseEntry], 1, { displayName: '小明', ledgerParts: [source] }, 'overview');
+
+    await screen.findByRole('heading', { name: '花蓮三日' });
+    expect(screen.getByTitle('小華')).toHaveTextContent('華');
+    expect(screen.getByTitle('小明')).toHaveTextContent('明');
+    for (const avatar of screen.getAllByTitle('我')) {
+      expect(avatar).toHaveTextContent('我');
+    }
   });
 
   it('shows only outstanding records and omits settled records and history button', async () => {

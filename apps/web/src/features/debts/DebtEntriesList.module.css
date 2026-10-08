@@ -1,49 +1,8 @@
-/*
- * 每筆紀錄以單列呈現：日期、小頭貼箭頭（誰欠誰）、備註靠左，金額與狀態標籤靠右，
- * 「⋯」選單按鈕固定在最右。
- */
+/* 往來紀錄的列欄位由 DebtRow 共用；這裡只保留紀錄標籤與操作選單樣式。 */
 .entryList {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: var(--space-md) 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.entry:last-child {
-  border-bottom: 0;
-}
-
-.entryInfo {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-width: 0;
-}
-
-.entryLine {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.entryLine time {
-  flex: none;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .adjustmentIcon {
@@ -60,19 +19,6 @@
 .adjustmentIcon svg {
   width: 14px;
   height: 14px;
-}
-
-.entryAmount {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.delta {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  font-weight: 600;
 }
 
 .unrecorded {
@@ -122,7 +68,7 @@
 }
 
 .note {
-  flex: 1 1 auto;
+  flex: 0 1 12rem;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-muted);
@@ -134,7 +80,6 @@
 .menuWrap {
   position: relative;
   flex: none;
-  margin-left: var(--space-sm);
 }
 
 .menuButton {
