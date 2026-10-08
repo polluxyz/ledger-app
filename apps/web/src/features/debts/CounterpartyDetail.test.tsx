@@ -288,7 +288,7 @@ describe('CounterpartyDetail', () => {
     // 每列的 title 就是完整說明句（可存取名稱同值），方向與金額都在句子裡。
     const rows = await screen.findAllByRole('listitem');
     expect(rows.map((row) => row.getAttribute('title'))).toEqual([
-      '我借小明 $120',
+      '我借給小明 $120',
       '我向小明借 $111',
       '小明還我 $30',
       '我還小明 $40',

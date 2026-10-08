@@ -31,7 +31,7 @@ const ENTRY_MARKERS: Record<DebtEntryKind, DebtEntryMarker> = {
 };
 
 const DESCRIPTION_TEMPLATES: Record<DebtEntryKind, (displayName: string) => string> = {
-  LEND: (name) => `我借${name}`,
+  LEND: (name) => `我借給${name}`,
   BORROW: (name) => `我向${name}借`,
   COLLECT: (name) => `${name}還我`,
   REPAY: (name) => `我還${name}`,

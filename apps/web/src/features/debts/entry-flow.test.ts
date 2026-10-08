@@ -14,7 +14,7 @@ const CASES: {
     delta: 100_000,
     direction: 'toThem',
     marker: 'none',
-    description: '我借小明 $1,000',
+    description: '我借給小明 $1,000',
   },
   {
     kind: 'BORROW',
