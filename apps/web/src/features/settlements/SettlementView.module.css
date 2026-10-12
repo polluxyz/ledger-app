@@ -1,4 +1,10 @@
-/* 結清檢視只呈現轉帳建議，列本身就是展開結清表單的按鈕。 */
+/*
+ * 共享帳本結清檢視：轉帳以方塊格呈現（shared-tiles）。
+ *
+ * 寬螢幕一排兩欄、窄螢幕（≤ 640px / 40rem）一排單欄。
+ * 點選方塊後，結清表單在該排方塊下方橫跨整排展開（grid-column: 1 / -1），
+ * 避免擠在單一方塊內。
+ */
 .view {
   display: flex;
   flex-direction: column;
@@ -12,51 +18,88 @@
   color: var(--color-text-muted);
 }
 
-.suggestionList {
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.suggestionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.suggestionItem {
-  border-bottom: 1px solid var(--color-border);
+@media (max-width: 40rem) {
+  .suggestionGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.suggestionItem:last-child {
-  border-bottom: 0;
+.tileItem {
+  display: flex;
+  min-width: 0;
+  list-style: none;
 }
 
-.suggestionRow {
+/*
+ * 方塊底色比卡片（--color-surface）深一階（--color-bg），
+ * 圓角用 --radius-lg。內容置中放置大箭頭，不放額外文字。
+ */
+.tile {
   display: flex;
   width: 100%;
   min-height: 5.5rem;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
-  background: transparent;
+  justify-content: center;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg);
   color: var(--color-text);
+  box-sizing: border-box;
+  text-align: center;
+  transition:
+    background-color var(--motion-fade) var(--motion-ease),
+    border-color var(--motion-fade) var(--motion-ease);
+}
+
+.tileButton {
   font: inherit;
-  text-align: right;
   cursor: pointer;
 }
 
-.suggestionRow:hover {
-  background: var(--color-fill);
+.tileButton:hover {
+  background-color: var(--color-fill);
 }
 
-.suggestionRow:focus-visible {
+.tileButton:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
-.suggestionRow.readOnly {
+/* 選中（表單展開中）的方塊加金色細框與 fill 底色，比照對象列選中時的框。 */
+.tileButton.selected {
+  background-color: var(--color-fill);
+  border-color: color-mix(in srgb, var(--color-accent) 65%, transparent);
+}
+
+.tile.readOnly {
   cursor: default;
 }
 
-.suggestionRow.readOnly:hover {
-  background: transparent;
+.tile.readOnly:hover {
+  background-color: var(--color-bg);
+}
+
+/* 結清表單橫跨整張卡片的寬度（1 / -1），排在被點方塊所在排的正下方。 */
+.formRow {
+  grid-column: 1 / -1;
+  min-width: 0;
+  list-style: none;
 }
 
 .formContainer {
@@ -65,9 +108,8 @@
   gap: var(--space-md);
   padding: var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background-color: var(--color-fill);
-  margin-bottom: var(--space-sm);
 }
 
 .formActions {
