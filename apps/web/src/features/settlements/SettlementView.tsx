@@ -3,6 +3,7 @@ import type { LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
+import { getAvatarLabels } from '../../lib/avatar-labels';
 import { formatMoney } from '../../lib/format';
 import { useCurrentUser } from '../auth/use-current-user';
 import { AnimatedDisclosure } from '../debts/AnimatedDisclosure';
@@ -199,6 +200,12 @@ export function SettlementView({
     });
   }, [displayName, peopleById, summary.data?.suggestions]);
 
+  // 同一張帳本卡片裡的頭貼字不衝突（小明／小華 → 明／華），規則同借還頁的 avatar-labels。
+  const avatarLabels = useMemo(
+    () => getAvatarLabels(validSuggestions.flatMap((item) => [item.fromName, item.toName])),
+    [validSuggestions],
+  );
+
   const activeKeyToRender = currentActiveKey ?? displayedKey;
   const activeIndex = validSuggestions.findIndex((item) => item.key === activeKeyToRender);
   const activeItem = activeIndex >= 0 ? validSuggestions[activeIndex] : null;
@@ -252,6 +259,8 @@ export function SettlementView({
                             <DebtArrow
                               from={item.fromName}
                               to={item.toName}
+                              fromLabel={avatarLabels.get(item.fromName)}
+                              toLabel={avatarLabels.get(item.toName)}
                               amount={item.suggestion.amount}
                               srText={`${item.fromName}欠${item.toName} ${formatMoney(item.suggestion.amount)}`}
                             />
@@ -261,6 +270,8 @@ export function SettlementView({
                             <DebtArrow
                               from={item.fromName}
                               to={item.toName}
+                              fromLabel={avatarLabels.get(item.fromName)}
+                              toLabel={avatarLabels.get(item.toName)}
                               amount={item.suggestion.amount}
                               srText={`${item.fromName}欠${item.toName} ${formatMoney(item.suggestion.amount)}`}
                             />
