@@ -5,7 +5,8 @@ export function getAvatarLabels(names: readonly string[]): ReadonlyMap<string, s
   const labels = new Map<string, string>();
   const groups = new Map<string, string[]>();
 
-  for (const name of names) {
+  // 同一個名字出現多次（例如小明同時欠三個人）是同一個人，先去重複；否則會被當成同名的兩個人。
+  for (const name of new Set(names)) {
     const first = Array.from(name)[0] ?? '';
     labels.set(name, first);
     if (name === '我' || first === '') {

@@ -21,6 +21,16 @@ describe('getAvatarLabels', () => {
     expect(labels(['小明明', '小明華'])).toEqual(['明', '華']);
   });
 
+  it('treats a repeated name as one person', () => {
+    expect(labels(['小明', '小華', '小明', '小美', '小明'])).toEqual([
+      '明',
+      '華',
+      '明',
+      '美',
+      '明',
+    ]);
+  });
+
   it('falls back to the first character for identical names', () => {
     expect(labels(['小明', '小明'])).toEqual(['小', '小']);
   });
