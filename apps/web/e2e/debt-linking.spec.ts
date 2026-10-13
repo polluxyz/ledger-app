@@ -9,10 +9,12 @@ import {
 } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
+  type DebtsSubTab,
   expectNoHorizontalOverflow,
   expectRightPanelClosedWithoutAddForm,
+  expandDebtRow,
   openDashboard,
-  openTransactions,
+  openDebtsTab,
 } from './ui';
 
 /**
@@ -33,10 +35,6 @@ import {
 async function cash(request: APIRequestContext, token: string): Promise<number> {
   const accounts = await listAccounts(request, token);
   return accounts.find((account) => account.name === '現金')!.balance;
-}
-
-function ledgerPanel(page: Page): Locator {
-  return page.getByRole('dialog', { name: '借還往來' });
 }
 
 function pendingCard(page: Page): Locator {
@@ -70,14 +68,17 @@ async function openProfile(page: Page, name: string | RegExp): Promise<Locator> 
   return profile;
 }
 
-/** 在交易頁的借還檢視點一個人，打開往來帳（修訂 2 W55：這裡只看帳）。 */
-async function openLedger(page: Page, name: string | RegExp): Promise<Locator> {
-  await openTransactions(page);
-  await page.getByRole('group', { name: '檢視' }).getByRole('button', { name: '借還' }).click();
-  await page.getByRole('main').getByRole('button', { name }).first().click();
-  const panel = ledgerPanel(page);
-  await panel.waitFor();
-  return panel;
+/**
+ * 在交易頁的借還檢視，切到某個子分頁並展開一個人，回傳他那一列（3g W153：點一列就在
+ * 那一列下方展開，不再開右側欄）。預設個人分頁，記一筆與「已同步」都在那裡。
+ */
+async function openLedger(
+  page: Page,
+  name: string | RegExp,
+  tab: DebtsSubTab = '個人',
+): Promise<Locator> {
+  await openDebtsTab(page, tab);
+  return expandDebtRow(page, name);
 }
 
 /** 回答「之前有用別的名字記過他嗎？」。`source` 為 null 表示「沒有」。 */
@@ -183,11 +184,12 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   const bCashBefore = await cash(request, userB.token);
   const panelA = await openLedger(pageA, /乙/);
   await panelA.getByRole('button', { name: '記一筆' }).click();
-  const form = pageA.getByRole('group', { name: '新增一筆交易' });
-  await form.getByRole('button', { name: '借出' }).click();
+  // 記一筆的表單在列內展開（3g W154），範圍就是這一列，不再是右側欄的「新增一筆交易」。
+  const form = panelA;
+  await form.getByRole('button', { name: '借出', exact: true }).click();
   await form.getByLabel('金額').fill('120');
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
-  await form.getByRole('button', { name: '新增' }).click();
+  await form.getByRole('button', { name: '新增', exact: true }).click();
 
   await pageB.reload();
   await openDashboard(pageB);
@@ -292,9 +294,9 @@ test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async
   await expect(group(pageA, '已連動')).toContainText('乙（舊乙）');
   await expect(group(pageA, '未連動').getByRole('button', { name: '舊乙' })).toHaveCount(0);
 
-  // 帳（名字與餘額）在交易頁的往來帳看（W55）。
+  // 帳（名字與餘額）在交易頁的借還個人分頁看（W55）；展開後那一列就是他的帳。
   const panel = await openLedger(pageA, /舊乙/);
-  await expect(panel.getByRole('heading', { name: '舊乙' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /^舊乙/ })).toBeVisible();
   await expect(panel.getByText('舊乙欠你 $50')).toHaveCount(1);
 
   // 合併完成，待確認不再詢問。
@@ -341,7 +343,8 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await expect(pendingRow(pageB, /你欠.*\$50/)).toHaveCount(0);
 
   // 小明已併進乙（displayName＝小明），借還檢視的列顯示 displayName（W47）。
-  // 3f W136：拒絕後兩清的對象不列；補一筆小額借出讓小明回到清單。
+  // 補一筆小額借出讓小明回到個人分頁（欠款不再是 0）。被拒絕的那筆還款早在歷史裡（3g 決策 153：
+  // 餘額歸零為界，歸零那一筆與之前的紀錄都算已還清），所以「對方未接受」要到歷史去看。
   await createDebtEntry(request, userA.token, {
     counterparty: { id: inviterSideId },
     kind: 'LEND',
@@ -349,6 +352,6 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
     date: new Date().toISOString(),
     record: null,
   });
-  const ledgerA = await openLedger(pageA, /小明/);
+  const ledgerA = await openLedger(pageA, /小明/, '歷史');
   await expect(ledgerA.getByText('對方未接受')).toBeVisible();
 });

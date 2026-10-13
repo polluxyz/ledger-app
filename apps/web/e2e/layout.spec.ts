@@ -96,6 +96,18 @@ async function mainBox(page: Page) {
   return settledBox(page.getByRole('main'));
 }
 
+/**
+ * 沒有右側欄時，中間欄要一路延伸到內容區的右緣。
+ *
+ * 「內容區」不一定是視窗：根元素掛了 `scrollbar-gutter: stable`（W152，不論有沒有捲軸都預留
+ * 捲軸寬度），所以右側會留一段空。這裡比的是 `<body>` 的右緣，預留的那一段不算在中間欄裡。
+ */
+async function expectMainReachesContentEdge(page: Page): Promise<void> {
+  const main = await mainBox(page);
+  const body = await settledBox(page.locator('body'));
+  expect(Math.abs(main.x + main.width - (body.x + body.width))).toBeLessThanOrEqual(1);
+}
+
 test('SC-24.3：1440×900 的交易頁首屏至少看得到 10 筆交易', async ({
   signedInPage: page,
   userA,
@@ -214,10 +226,11 @@ test('SC-T3：40 字英文名稱不推動金額欄，375px 與 1440px 都無橫�
 
   const rightOffsetAtWidth = async (width: number) => {
     await page.setViewportSize({ width, height: 900 });
+    // 不能有橫向捲動：內容寬度不大於視窗。預留的捲軸寬度會讓差值變成負數，那不算捲動。
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
-    expect(overflow, `${width}px 出現橫向捲動`).toBe(0);
+    expect(overflow, `${width}px 出現橫向捲動`).toBeLessThanOrEqual(0);
 
     const row = transactionRow(page, '-$120');
     const rowBox = await row.boundingBox();
@@ -337,10 +350,11 @@ test('SC-24.6：375px 寬也不會橫向捲動', async ({ signedInPage: page, us
   for (const path of ['/', '/transactions', '/accounts', '/categories', '/ledgers', '/profile']) {
     await page.goto(path);
     await page.waitForLoadState('networkidle');
+    // 同 SC-T3：差值為負代表預留捲軸，沒有橫向捲動。
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
-    expect(overflow, `${path} 出現橫向捲動`).toBe(0);
+    expect(overflow, `${path} 出現橫向捲動`).toBeLessThanOrEqual(0);
   }
 });
 
@@ -480,9 +494,8 @@ test('SC-35.1：管理頁沒有「新增交易」，右側欄預設關閉', asyn
 
   await expect(newTransactionForm(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: '新增交易' })).toHaveCount(0);
-  // 沒有右側欄時，中間欄一路延伸到視窗右緣。
-  const main = await mainBox(page);
-  expect(Math.abs(main.x + main.width - 1440)).toBeLessThanOrEqual(1);
+  // 沒有右側欄時，中間欄一路延伸到內容區右緣（扣掉預留的捲軸，見 expectMainReachesContentEdge）。
+  await expectMainReachesContentEdge(page);
 });
 
 /**
@@ -497,8 +510,7 @@ test('SC-35.2：右側欄預設關閉，「新增交易」會把它打開', asyn
 
   await expect(newTransactionForm(page)).toHaveCount(1);
   expect(await inert()).toBe(true);
-  const closed = await mainBox(page);
-  expect(Math.abs(closed.x + closed.width - 1440)).toBeLessThanOrEqual(1);
+  await expectMainReachesContentEdge(page);
 
   await page.getByRole('button', { name: '新增交易' }).click();
   expect(await inert()).toBe(false);
@@ -578,9 +590,8 @@ test('SC-44：分類頁交替開兩張表單後換頁，右側欄收起', async 
   await nav.getByRole('link', { name: '帳戶' }).click();
   await expect(page.getByRole('heading', { level: 2, name: '帳戶' })).toBeVisible();
 
-  // 右側欄關著時，中間欄一路延伸到視窗右緣。
-  const main = await mainBox(page);
-  expect(Math.abs(main.x + main.width - 1440)).toBeLessThanOrEqual(1);
+  // 右側欄關著時，中間欄一路延伸到內容區右緣（扣掉預留的捲軸）。
+  await expectMainReachesContentEdge(page);
 });
 
 /**

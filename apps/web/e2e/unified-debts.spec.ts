@@ -1,4 +1,3 @@
-import type { Locator, Page } from '@playwright/test';
 import {
   addMember,
   createCounterparty,
@@ -12,15 +11,21 @@ import {
   renameCounterparty,
 } from './api';
 import { expect, test } from './fixtures';
-import { expectRightPanelClosedWithoutAddForm, openTransactions } from './ui';
+import { debtEntry, debtRow, expandDebtRow, openDebtsTab } from './ui';
 
 /**
  * 3f 的 Web 主線（spec `phase-3f-unified-debts.md` §6、SC-F11）：設定指向 → 借還頁總額
- * → 點帳本來源記結清 → 總額更新 → 帳本頁的單一成員清單。
+ * → 帳本來源記結清 → 總額更新 → 帳本頁的單一成員清單。
  *
  * 金額、合併、分組、兩清過濾、有效指向全部來自 API（spec §7 Never），所以這裡不透過畫面
- * 重建那些數字，只斷言畫面「照 API 給的值顯示」：總額箭頭、展開來源、預填的結清表單。
+ * 重建那些數字，只斷言畫面「照 API 給的值顯示」：總額、展開的來源、預填的結清表單。
  * 前置資料（連動、個人往來、共享帳本與分帳支出）走 API 建立（D3），被測的動線才用畫面。
+ *
+ * ## 3g 改了什麼（`docs/specs/phase-3g-debts-inline.md`）
+ *
+ * 總覽的展開區只看不操作（W156），所以 3f「點帳本來源就切到結清、預填」改成：到共享分頁，
+ * 點那一筆轉帳的方塊，預填的表單在方塊那一排下方展開（W158、W159）。作用中帳本只在明細那一排
+ * 顯示（W151），所以 3f 驗「切換作用中帳本」的那一步拿掉了。
  */
 
 /** 個人往來：明哥欠我 500 元。 */
@@ -29,11 +34,7 @@ const PERSONAL_CENTS = 50_000;
 const LEDGER_CENTS = 30_000;
 const EXPENSE_CENTS = LEDGER_CENTS * 3;
 
-function viewSwitch(page: Page): Locator {
-  return page.getByRole('group', { name: '檢視' });
-}
-
-test('3f 主線：指向、借還總額、點帳本來源記結清、總額更新、帳本頁單一成員清單', async ({
+test('3f 主線：指向、借還總額、展開來源、共享分頁記結清、總額更新、帳本頁單一成員清單', async ({
   signedInPage: page,
   userA,
   request,
@@ -106,36 +107,33 @@ test('3f 主線：指向、借還總額、點帳本來源記結清、總額更�
   await pointerDialog.getByRole('button', { name: '儲存' }).click();
   await expect(huaRow).toContainText('→ 房東');
 
-  // --- 借還頁：總額＝個人往來＋帳本來源，展開看來源，未指向的金額掛在房東身上。 ---
-  await openTransactions(page);
-  await viewSwitch(page).getByRole('button', { name: '借還' }).click();
-
-  const mingTotal = page.getByRole('button', { name: /^明哥/ });
+  // --- 借還總覽：總額＝個人往來＋帳本來源，展開看來源，未指向的金額掛在房東身上（W156）。 ---
+  await openDebtsTab(page, '總覽');
+  const mingTotal = page.getByRole('main').getByRole('button', { name: /^明哥/ });
   await expect(mingTotal).toContainText('明哥欠你 $800');
 
-  await page.getByRole('button', { name: '展開明哥的帳本來源' }).click();
-  const personalRow = page.getByRole('button', { name: '開啟明哥的個人往來' });
-  await expect(personalRow).toContainText('個人往來');
-  await expect(personalRow).toContainText('$500');
-  const sourceRow = page.getByRole('button', { name: '開啟 花蓮三日 的結清' });
-  await expect(sourceRow).toContainText('花蓮三日');
-  await expect(sourceRow).toContainText('›');
-  await expect(sourceRow).toContainText('小明');
-  await expect(sourceRow).toContainText('$300');
+  const mingPanel = await expandDebtRow(page, /^明哥/);
+  // 展開區上面是個人往來未還清的紀錄，下面是共享帳本來源。只看，沒有「⋯」也沒有「記一筆」。
+  await expect(debtEntry(mingPanel, '我借給明哥 $500')).toHaveCount(1);
+  await expect(mingPanel.getByRole('heading', { name: '花蓮三日' })).toBeVisible();
+  await expect(mingPanel.getByRole('group', { name: '小明欠你 $300', exact: true })).toBeVisible();
+  await expect(mingPanel.getByRole('button', { name: '更多操作' })).toHaveCount(0);
+  await expect(mingPanel.getByRole('button', { name: '記一筆', exact: true })).toHaveCount(0);
 
-  const landlordRow = page.getByRole('button', { name: /^房東/ });
+  const landlordRow = debtRow(page, /^房東/);
   await expect(landlordRow).toContainText('房東欠你 $300');
 
-  // --- 點帳本來源（W137）：切到花蓮三日的結清檢視，右側欄預填 小明 ─▶ 我 $300。 ---
-  await sourceRow.click();
-  await expect(page.getByRole('group', { name: '作用中帳本' })).toContainText('花蓮三日');
-  await expect(viewSwitch(page).getByRole('button', { name: '結清' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  const settleForm = page.getByRole('dialog', { name: '結清' });
+  // --- 借還共享：花蓮三日的轉帳方塊，點了預填結清表單（3g W158、W159）。 ---
+  await openDebtsTab(page, '共享');
+  const ledgerCard = page.getByRole('region', { name: '花蓮三日' });
+  const mingTransfer = ledgerCard.getByRole('button', { name: '小明欠我 $300', exact: true });
+  await mingTransfer.click();
+  await expect(mingTransfer).toHaveAttribute('aria-expanded', 'true');
+
+  // 表單在那一排下方全寬展開，範圍就是這張卡片：預填 小明 ─▶ 我 $300。
+  const settleForm = ledgerCard;
   const payerSelect = settleForm.getByLabel('付錢的人');
-  const payerOption = payerSelect.getByRole('option', { name: '小明' });
+  const payerOption = payerSelect.getByRole('option', { name: '小明', exact: true });
   await expect(payerSelect).toHaveValue((await payerOption.getAttribute('value')) ?? '');
   const receiverSelect = settleForm.getByLabel('收錢的人');
   const receiverOption = receiverSelect.getByRole('option', { name: '我', exact: true });
@@ -149,14 +147,14 @@ test('3f 主線：指向、借還總額、點帳本來源記結清、總額更�
   );
   await settleForm.getByRole('button', { name: '新增', exact: true }).click();
   expect((await settlementResponse).ok()).toBe(true);
-  // 存檔後右側欄收起；收起時內容不卸載（#84），所以驗收起，不驗表單消失。
-  await expectRightPanelClosedWithoutAddForm(page);
+  // 存檔後小明這一筆已兩清，方塊就不見了（只剩小華還欠的那一塊）。
+  await expect(mingTransfer).toHaveCount(0);
 
-  // --- 回借還頁：總額回到 500，帳本來源那一行沒了（小明兩清，不能展開）。 ---
-  await viewSwitch(page).getByRole('button', { name: '借還' }).click();
+  // --- 回借還總覽：總額回到 500，小明那一段來源沒了（已兩清）。小華仍欠 300：她指向房東，金額照樣掛在房東那一列。 ---
+  await openDebtsTab(page, '總覽');
   await expect(mingTotal).toContainText('明哥欠你 $500');
-  await expect(page.getByRole('button', { name: '展開明哥的帳本來源' })).toHaveCount(0);
-  // 小華仍欠 300：她指向房東，金額照樣掛在房東那一列。
+  const mingPanelAgain = await expandDebtRow(page, /^明哥/);
+  await expect(mingPanelAgain.getByRole('heading', { name: '花蓮三日' })).toHaveCount(0);
   await expect(landlordRow).toContainText('房東欠你 $300');
 
   // --- 帳本頁：單一成員清單、不顯示 email、「新增成員」滑出兩個選項（W140～W143）。 ---
