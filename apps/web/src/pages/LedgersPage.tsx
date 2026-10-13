@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { PageToolbarActions } from '../app/PageToolbar';
 import { RightPanelContent } from '../app/RightPanel';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -47,13 +46,19 @@ export default function LedgersPage() {
 
   return (
     <section className={styles.page}>
-      {/* 頁面層級的主要按鈕放橫條右邊（SC-38.3）；表單從右側欄滑出。 */}
-      <PageToolbarActions>
-        <Button aria-expanded={showCreate} onClick={toggleCreate}>
-          <Icon name="plus" />
-          建立帳本
-        </Button>
-      </PageToolbarActions>
+      {/*
+        「建立帳本」是頁面層級的主要按鈕，放在標題同一排的右邊（開發者 2026-10-07：
+        最上排橫條清空留給 AI 功能）；表單從右側欄滑出。
+      */}
+      <PageHeader
+        title="帳本"
+        actions={
+          <Button aria-expanded={showCreate} onClick={toggleCreate}>
+            <Icon name="plus" />
+            建立帳本
+          </Button>
+        }
+      />
 
       {/*
         右側欄的內容一直掛著，裡面的表單才由 `showCreate` 決定畫不畫。
@@ -63,8 +68,6 @@ export default function LedgersPage() {
       <RightPanelContent>
         {showCreate ? <LedgerDialog open variant="panel" onClose={closeCreate} /> : null}
       </RightPanelContent>
-
-      <PageHeader title="帳本" />
 
       <label className={styles.toggle}>
         <input

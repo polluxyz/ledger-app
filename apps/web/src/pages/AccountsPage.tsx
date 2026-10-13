@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { Account } from '@ledger/shared';
-import { PageToolbarActions } from '../app/PageToolbar';
 import { RightPanelContent } from '../app/RightPanel';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -68,23 +67,26 @@ export default function AccountsPage() {
 
   return (
     <section className={styles.page}>
-      {/*
-        「新增帳戶」是頁面層級的主要按鈕，位置在橫條右邊（SC-38.3）。無障礙名稱
-        與 aria-expanded 一個字都沒改，只有表單改從右側欄滑出。
-      */}
-      <PageToolbarActions>
-        <Button aria-expanded={showCreate} onClick={toggleCreate}>
-          <Icon name="plus" />
-          新增帳戶
-        </Button>
-      </PageToolbarActions>
-
       {/* 右側欄的內容一直掛著，裡面的表單才由 `showCreate` 決定畫不畫。 */}
       <RightPanelContent>
         {showCreate ? <AccountDialog target="new" variant="panel" onClose={closeCreate} /> : null}
       </RightPanelContent>
 
-      <PageHeader title="帳戶" description="餘額由伺服器依交易即時計算" />
+      {/*
+        「新增帳戶」是頁面層級的主要按鈕，放在標題同一排的右邊（開發者 2026-10-07：
+        最上排橫條清空留給 AI 功能）。無障礙名稱與 aria-expanded 一個字都沒改，
+        只有位置換了。
+      */}
+      <PageHeader
+        title="帳戶"
+        description="餘額由伺服器依交易即時計算"
+        actions={
+          <Button aria-expanded={showCreate} onClick={toggleCreate}>
+            <Icon name="plus" />
+            新增帳戶
+          </Button>
+        }
+      />
 
       <AccountList
         accounts={accounts.data ?? []}

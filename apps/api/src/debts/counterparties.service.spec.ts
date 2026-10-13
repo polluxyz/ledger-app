@@ -162,4 +162,78 @@ describe('CounterpartiesService.list', () => {
     ]);
     expect(ledgerDebts.partsByCounterparty).toHaveBeenCalledTimes(1);
   });
+
+  it('filters personal balances independently and finds history from one owner-scoped read', async () => {
+    const dates = [1, 5, 10].map(
+      (day) => new Date(`2026-03-${String(day).padStart(2, '0')}T12:00:00.000Z`),
+    );
+    const rows = [
+      ['shared-only', '共享往來'],
+      ['history-only', '房東'],
+      ['history-and-open', '明哥'],
+      ['open-only', '其他'],
+    ].map(([id, name]) => ({
+      id: id!,
+      ownerId: 'owner',
+      name: name!,
+      askMerge: false,
+      createdAt: dates[0]!,
+      updatedAt: dates[0]!,
+    }));
+    const historyEntries = [
+      { counterpartyId: 'history-only', delta: -100, date: dates[1]!, createdAt: dates[1]! },
+      { counterpartyId: 'history-and-open', delta: 50, date: dates[2]!, createdAt: dates[2]! },
+      { counterpartyId: 'history-and-open', delta: -100, date: dates[1]!, createdAt: dates[1]! },
+      { counterpartyId: 'history-only', delta: 100, date: dates[0]!, createdAt: dates[0]! },
+      { counterpartyId: 'history-and-open', delta: 100, date: dates[0]!, createdAt: dates[0]! },
+    ];
+    const prisma = {
+      counterparty: { findMany: jest.fn().mockResolvedValue(rows) },
+      counterpartyLink: { findMany: jest.fn().mockResolvedValue([]) },
+      debtEntry: {
+        groupBy: jest.fn().mockResolvedValue([
+          { counterpartyId: 'history-and-open', _sum: { delta: 50 } },
+          { counterpartyId: 'open-only', _sum: { delta: 20 } },
+        ]),
+        findMany: jest.fn().mockResolvedValue(historyEntries),
+      },
+    };
+    const ledgerDebts = {
+      partsByCounterparty: jest.fn().mockResolvedValue(
+        new Map([
+          [
+            'shared-only',
+            [
+              {
+                ledgerId: 'book',
+                ledgerName: '帳本',
+                personId: 'person',
+                personName: '人',
+                amount: -20,
+                left: false,
+              },
+            ],
+          ],
+        ]),
+      ),
+    };
+    const service = new CounterpartiesService(
+      prisma as unknown as PrismaService,
+      ledgerDebts as unknown as LedgerDebtsService,
+    );
+
+    const personal = await service.list('owner', { personalNonZero: true, limit: 100 });
+    expect(personal.items.map(({ id }) => id).sort()).toEqual(['history-and-open', 'open-only']);
+    expect(personal.total).toBe(2);
+    expect(prisma.debtEntry.findMany).not.toHaveBeenCalled();
+
+    const history = await service.list('owner', { hasHistory: true, page: 1, limit: 1 });
+    expect(history.total).toBe(2);
+    expect(history.items).toHaveLength(1);
+    expect(prisma.debtEntry.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.debtEntry.findMany).toHaveBeenCalledWith({
+      where: { deletedAt: null, counterparty: { ownerId: 'owner' } },
+      select: { counterpartyId: true, delta: true, date: true, createdAt: true },
+    });
+  });
 });

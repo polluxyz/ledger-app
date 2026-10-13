@@ -20,7 +20,12 @@ import {
   resolveRepayment,
 } from './debt-entry-rules';
 import { PROPOSAL_INCLUDE, mirrorKind, toDebtProposal } from './debt-proposal-rules';
-import { recordDebtTransaction, writeSettlement } from './debt-recording';
+import {
+  recordDebtTransaction,
+  recalculateSettlement,
+  voidRepaymentWithSettlement,
+  writeSettlement,
+} from './debt-recording';
 import { assertLedgerWritable } from './debt-ledger-access';
 
 const DEFAULT_PAGE = 1;
@@ -302,7 +307,8 @@ export class DebtProposalsService {
 
   /**
    * 接受「改金額或日期」：把接受者那筆改成提議的值，交易一起改。那筆已經被接受者自己刪掉、
-   * 或不再在這個連動的對象底下，就照樣接受、什麼都不改（§3.3）。
+   * 或不再在這個連動的對象底下，就照樣接受、什麼都不改（§3.3）。目標是還款且對方那邊綁定
+   * 差額時，重算自己這邊的差額，讓結清後的餘額仍然歸零（3g 決策 158）。
    */
   private async acceptAmend(
     tx: Prisma.TransactionClient,
@@ -313,9 +319,12 @@ export class DebtProposalsService {
     if (target === null) {
       return;
     }
+    // 重算差額要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
+    const newDelta = Math.sign(target.delta) * row.amount;
+    await recalculateSettlement(tx, target, newDelta);
     await tx.debtEntry.update({
       where: { id: target.id },
-      data: { delta: Math.sign(target.delta) * row.amount, date: row.date },
+      data: { delta: newDelta, date: row.date },
     });
     if (target.transactionId !== null) {
       await this.transactions.updateDebtTransaction(tx, target.transactionId, {
@@ -325,7 +334,10 @@ export class DebtProposalsService {
     }
   }
 
-  /** 接受「刪除」：軟刪除接受者那筆與它的交易。配對在發起者刪除時就已清空。 */
+  /**
+   * 接受「刪除」：軟刪除接受者那筆與它的交易。對方撤銷的是還款且自己這邊綁定差額時，差額
+   * 在同一個時間戳一起撤銷（3g 決策 156）。配對在發起者刪除時就已清空。
+   */
   private async acceptDelete(
     tx: Prisma.TransactionClient,
     row: ProposalRow,
@@ -336,12 +348,7 @@ export class DebtProposalsService {
     if (target === null) {
       return;
     }
-    await tx.debtEntry.update({ where: { id: target.id }, data: { deletedAt } });
-    await this.transactions.softDeleteDebtTransactions(
-      tx,
-      target.transactionId === null ? [] : [target.transactionId],
-      deletedAt,
-    );
+    await voidRepaymentWithSettlement(tx, this.transactions, target, deletedAt);
   }
 
   /** 提議的目標：必須還沒刪、而且就在接受者這個連動的對象底下。 */

@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Counterparty } from '@ledger/shared';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import type { Counterparty, LedgerSummary } from '@ledger/shared';
+import { MemoryRouter } from 'react-router-dom';
 import { CounterpartyDetail } from './CounterpartyDetail';
 
 /**
- * CounterpartyDetail 驗 API 餘額、紀錄呈現與帳的操作（修改、刪除、免除）。修訂 2 起
- * 只留帳（W55）：管理按鈕搬到對象頁的 CounterpartyProfile，這裡一顆都不能出現（SC-W63）。
+ * CounterpartyDetail 驗兩種分頁的唯讀內容、未還清分組、歷史與個人操作。
  */
 describe('CounterpartyDetail', () => {
   const fetchMock = vi.fn();
@@ -23,6 +22,7 @@ describe('CounterpartyDetail', () => {
     note: '借款',
     transactionId: 'txn-1',
     splitId: null,
+    settlesEntryId: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
@@ -31,6 +31,28 @@ describe('CounterpartyDetail', () => {
   };
 
   const linkedUser = { userId: 'user-2', userName: '王小明', theirBalance: 987600 };
+  const ledger: LedgerSummary = {
+    id: 'ledger-1',
+    name: '我的帳本',
+    currency: 'TWD',
+    kind: 'PERSONAL',
+    tracksBalance: false,
+    archivedAt: null,
+    role: 'OWNER',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
+  const counterpartyForForm = {
+    id: 'cp-1',
+    name: '小明',
+    displayName: '小明',
+    askMerge: false,
+    balance: 900,
+    totalBalance: 900,
+    ledgerParts: [],
+    link: null,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -51,18 +73,34 @@ describe('CounterpartyDetail', () => {
       name?: string | null;
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
+      entryPages?: Record<number, unknown[]>;
     } = {},
   ) {
-    fetchMock.mockImplementation((url: string) => {
-      const json = (body: unknown) =>
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const json = (body: unknown, status = 200) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
-            status: 200,
+            status,
             headers: { 'Content-Type': 'application/json' },
           }),
         );
-      if (url.includes('/counterparties/cp-1/entries')) {
-        return json({ items, page: 1, limit: 20, total });
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/counterparties/cp-1/entries')) {
+        const page = Number(parsedUrl.searchParams.get('page') ?? 1);
+        const limit = Number(parsedUrl.searchParams.get('limit') ?? 20);
+        return json({ items: options.entryPages?.[page] ?? items, page, limit, total });
+      }
+      if (url.includes('/debt-entries') && init?.method === 'POST') {
+        return json(
+          { counterparty: { ...counterpartyForForm, balance: balance + 100 }, entries: [] },
+          201,
+        );
+      }
+      if (url.endsWith('/counterparties?limit=100')) {
+        return json({ items: [counterpartyForForm], page: 1, limit: 100, total: 1 });
+      }
+      if (url.endsWith('/accounts')) {
+        return json([]);
       }
       if (url.endsWith('/counterparties/cp-1/link')) {
         return json({});
@@ -95,47 +133,90 @@ describe('CounterpartyDetail', () => {
       name?: string | null;
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
+      entryPages?: Record<number, unknown[]>;
     } = {},
+    mode: 'overview' | 'personal' = 'personal',
   ) {
-    const onRecordEntry = vi.fn();
     const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
     const result = render(
       <MemoryRouter initialEntries={['/transactions?view=debts']}>
         <QueryClientProvider client={queryClient}>
           <CounterpartyDetail
+            ledger={ledger}
             counterpartyId="cp-1"
-            onRecordEntry={onRecordEntry}
+            mode={mode}
             onEditSplit={onEditSplit}
           />
         </QueryClientProvider>
-        <LocationProbe />
       </MemoryRouter>,
     );
-    return { onRecordEntry, onEditSplit, ...result };
+    return { onEditSplit, ...result };
   }
 
-  it.each([
-    [900, '小明欠你 $9'],
-    [-1100, '你欠小明 $11'],
-    [0, '兩清'],
-  ])('shows the API balance phrase for balance %i', async (balance, phrase) => {
-    renderDetail(balance);
-    expect(await screen.findByText(phrase)).toBeInTheDocument();
+  it('omits duplicate balance arrow and heading in expanded detail (debts-tabs2)', async () => {
+    renderDetail(900);
+    expect(await screen.findByText('借款')).toBeInTheDocument();
+    expect(screen.queryByText('小明欠你 $9')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '載入更多' })).not.toBeInTheDocument();
   });
 
-  it('passes the current counterparty name to 記一筆', async () => {
+  it('requests outstanding entries and appends the next API page after loading more', async () => {
     const user = userEvent.setup();
-    const { onRecordEntry } = renderDetail();
-    await screen.findByText('小明欠你 $9');
+    const firstEntry = { ...baseEntry, id: 'entry-first', note: '第一頁紀錄' };
+    const secondEntry = { ...baseEntry, id: 'entry-second', note: '第二頁紀錄' };
+    renderDetail(900, [firstEntry], 21, { entryPages: { 2: [secondEntry] } });
+
+    expect(await screen.findByText('第一頁紀錄')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\/cp-1\/entries\?section=outstanding&page=1&limit=20$/),
+      ),
+    ).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: '載入更多' }));
+
+    expect(await screen.findByText('第二頁紀錄')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\/cp-1\/entries\?section=outstanding&page=2&limit=20$/),
+      ),
+    ).toBe(true);
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('title'))).toEqual([
+      '我借給小明 $120',
+      '我借給小明 $120',
+    ]);
+    expect(screen.queryByRole('button', { name: '載入更多' })).not.toBeInTheDocument();
+  });
+
+  it('opens a prefilled form above the entries and lets the user cancel it', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText('借款');
 
     await user.click(screen.getByRole('button', { name: '記一筆' }));
 
-    expect(onRecordEntry).toHaveBeenCalledWith('小明');
+    const form = await screen.findByRole('button', { name: '取消' });
+    expect(screen.getByLabelText('對象')).toHaveValue('小明');
+
+    await user.click(form);
+    await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
   });
 
-  it('shows shared ledgers below the personal balance and opens their settle intent', async () => {
+  it('closes the inline form after a successful entry save', async () => {
     const user = userEvent.setup();
+    renderDetail();
+
+    await user.click(await screen.findByRole('button', { name: '記一筆' }));
+    await user.type(await screen.findByLabelText('金額'), '1');
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    await waitFor(() => expect(screen.queryByLabelText('對象')).not.toBeInTheDocument());
+  });
+
+  it('shows each shared ledger as a heading with read-only rows in the overview', async () => {
     const source = {
       ledgerId: 'ledger-hualien',
       ledgerName: '花蓮三日',
@@ -144,23 +225,36 @@ describe('CounterpartyDetail', () => {
       amount: 51200,
       left: false,
     };
-    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
-    expect(await screen.findByRole('heading', { name: '共享帳本' })).toBeInTheDocument();
-    expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ }));
-
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/transactions',
-      search: '?view=settle',
-      state: {
-        settleIntent: { ledgerId: 'ledger-hualien', personId: 'person-ming', amount: 51200 },
-      },
-    });
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '共享帳本' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '明哥欠你 $512' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /花蓮三日/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /記一筆|免除剩餘|修改|撤銷|分帳/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it('opens the read-only history for an exited shared ledger', async () => {
-    const user = userEvent.setup();
+  it('places outstanding entries before the shared ledger groups', async () => {
+    const source = {
+      ledgerId: 'ledger-hualien',
+      ledgerName: '花蓮三日',
+      personId: 'person-ming',
+      personName: '明哥',
+      amount: 51200,
+      left: false,
+    };
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
+
+    const note = await screen.findByText('借款');
+    const ledgerHeading = await screen.findByRole('heading', { name: '花蓮三日' });
+    expect(
+      note.compareDocumentPosition(ledgerHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps an exited shared source read-only in the overview', async () => {
     const source = {
       ledgerId: 'ledger-old-home',
       ledgerName: '老家',
@@ -169,15 +263,40 @@ describe('CounterpartyDetail', () => {
       amount: -2500,
       left: true,
     };
-    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] });
+    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
-    await user.click(await screen.findByRole('button', { name: /唯讀畫面/ }));
+    expect(await screen.findByText('已退出')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /老家/ })).not.toBeInTheDocument();
+  });
 
-    expect(JSON.parse(screen.getByTestId('location-state').textContent ?? '{}')).toEqual({
-      pathname: '/ledgers/ledger-old-home/history',
-      search: '',
-      state: null,
-    });
+  it('shares avatar labels across the counterparty, ledger people, and entries in the expanded block', async () => {
+    const source = {
+      ledgerId: 'ledger-hualien',
+      ledgerName: '花蓮三日',
+      personId: 'person-hua',
+      personName: '小華',
+      amount: 51200,
+      left: false,
+    };
+    renderDetail(900, [baseEntry], 1, { displayName: '小明', ledgerParts: [source] }, 'overview');
+
+    await screen.findByRole('heading', { name: '花蓮三日' });
+    expect(screen.getByTitle('小華')).toHaveTextContent('華');
+    expect(screen.getByTitle('小明')).toHaveTextContent('明');
+    for (const avatar of screen.getAllByTitle('我')) {
+      expect(avatar).toHaveTextContent('我');
+    }
+  });
+
+  it('renders the outstanding section returned by the API and omits history navigation', async () => {
+    const entries = [{ ...baseEntry, id: 'outstanding', balanceAfter: 3000, note: '未還清' }];
+    renderDetail(3000, entries, entries.length);
+
+    expect(await screen.findByText('未還清')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('section=outstanding'))).toBe(
+      true,
+    );
+    expect(screen.queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {
@@ -187,22 +306,23 @@ describe('CounterpartyDetail', () => {
       displayName: '小明',
     });
 
-    expect(await screen.findByText('小明欠你 $9')).toBeInTheDocument();
-    // 帳的內容都在：餘額、記一筆、免除剩餘（對方欠我時）與往來紀錄。
+    expect(await screen.findByText('借款')).toBeInTheDocument();
+    // 帳的內容都在：記一筆、免除剩餘（對方欠我時），不顯示重複的箭頭與標題。
     expect(screen.getByRole('button', { name: '記一筆' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '免除剩餘' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '往來紀錄' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
     // 管理按鈕搬到對象頁（W53），這裡一顆都不能出現。
     expect(screen.queryByRole('button', { name: '改名' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '設定暱稱' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '合併之前的紀錄' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '解除連動' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除對象' })).not.toBeInTheDocument();
-    // 標題只有名字與連動標記，不再顯示帳號名稱小字（W55）。
+    // 名字與連動標記已由清單列承載，明細不再重複顯示標題。
+    expect(screen.queryByRole('heading', { name: '小明' })).not.toBeInTheDocument();
     expect(screen.queryByText('王小明')).not.toBeInTheDocument();
   });
 
-  it('shows Chinese entry kinds, signed deltas, API balances, notes, and the unrecorded label', async () => {
+  it('labels each entry row with a full sentence and drops verb phrases and running balances', async () => {
     const entries = [
       { ...baseEntry, id: 'lend', kind: 'LEND', delta: 12000, balanceAfter: 12000 },
       {
@@ -222,7 +342,7 @@ describe('CounterpartyDetail', () => {
         id: 'settlement',
         kind: 'SETTLEMENT',
         delta: -800,
-        balanceAfter: 0,
+        balanceAfter: 100,
         transactionId: null,
       },
       {
@@ -230,20 +350,33 @@ describe('CounterpartyDetail', () => {
         id: 'forgive',
         kind: 'FORGIVE',
         delta: -900,
-        balanceAfter: 0,
+        balanceAfter: 200,
         transactionId: null,
       },
     ];
     renderDetail(0, entries, entries.length);
 
-    for (const kind of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
-      expect(await screen.findByText(kind)).toBeInTheDocument();
+    // 每列的 title 就是完整說明句（可存取名稱同值），方向與金額都在句子裡。
+    const rows = await screen.findAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('title'))).toEqual([
+      '我借給小明 $120',
+      '我向小明借 $111',
+      '小明還我 $30',
+      '我還小明 $40',
+      '小明幫我付 $50',
+      '我和小明結清差額 $8',
+      '我免除小明欠我的 $9',
+    ]);
+    // 金額不帶正負號（D1），也不再顯示逐筆「餘額」（D2）與動詞片語。
+    const [firstRow] = rows;
+    if (!firstRow) throw new Error('往來紀錄列不存在');
+    expect(within(firstRow).getByText('$120')).toBeInTheDocument();
+    expect(screen.queryByText('+$120')).not.toBeInTheDocument();
+    expect(screen.queryByText('−$111')).not.toBeInTheDocument();
+    expect(screen.queryByText(/餘額/)).not.toBeInTheDocument();
+    for (const phrase of ['借出', '借入', '對方還我', '我還對方', '幫我付', '結清差額', '免除']) {
+      expect(screen.queryByText(phrase)).not.toBeInTheDocument();
     }
-    expect(screen.getByText('+$120')).toBeInTheDocument();
-    expect(screen.getByText('−$111')).toBeInTheDocument();
-    expect(screen.getAllByText('餘額 $120').length).toBeGreaterThan(0);
-    expect(screen.getByText('餘額 $9')).toBeInTheDocument();
-    expect(screen.getByText('餘額 −$11')).toBeInTheDocument();
     expect(screen.getByText('未記帳')).toBeInTheDocument();
     expect(screen.getAllByText('借款').length).toBeGreaterThan(0);
   });
@@ -264,6 +397,7 @@ describe('CounterpartyDetail', () => {
   });
 
   it('does not offer edit for settlement or forgiveness adjustments', async () => {
+    const user = userEvent.setup();
     const entries = [
       { ...baseEntry, id: 'settlement', kind: 'SETTLEMENT' },
       { ...baseEntry, id: 'forgive', kind: 'FORGIVE' },
@@ -273,45 +407,57 @@ describe('CounterpartyDetail', () => {
     const rows = await screen.findAllByRole('listitem');
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(within(row).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
-      expect(within(row).getByRole('button', { name: '刪除' })).toBeInTheDocument();
+      await user.click(within(row).getByRole('button', { name: '更多操作' }));
+      const menu = within(row).getByRole('menu');
+      expect(within(menu).queryByRole('menuitem', { name: '修改' })).not.toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: '撤銷' })).toBeInTheDocument();
+      await user.keyboard('{Escape}');
     }
   });
 
-  it('opens split entries through the split editor and hides entry edits', async () => {
+  it('labels split entries with a badge and routes both menu actions to the split', async () => {
     const user = userEvent.setup();
     const { onEditSplit } = renderDetail(0, [{ ...baseEntry, splitId: 'split-1' }]);
     const entryRow = (await screen.findAllByRole('listitem'))[0];
     if (!entryRow) throw new Error('往來紀錄列不存在');
 
-    expect(within(entryRow).getByRole('button', { name: '分帳' })).toBeInTheDocument();
-    expect(within(entryRow).queryByRole('button', { name: '修改' })).not.toBeInTheDocument();
-    expect(within(entryRow).queryByRole('button', { name: '刪除' })).not.toBeInTheDocument();
-    await user.click(within(entryRow).getByRole('button', { name: '分帳' }));
+    expect(within(entryRow).getByText('分帳')).toBeInTheDocument();
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    const menu = within(entryRow).getByRole('menu');
+    await user.click(within(menu).getByRole('menuitem', { name: '修改' }));
     expect(onEditSplit).toHaveBeenCalledWith('split-1');
+
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    await user.click(
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }),
+    );
+    expect(await screen.findByRole('dialog', { name: '撤銷這筆？' })).toBeInTheDocument();
   });
 
-  it('confirms entry deletion with its linked transaction and balance consequences', async () => {
+  it('previews the entry undo balance before confirming', async () => {
     const user = userEvent.setup();
     renderDetail();
     const entryRow = (await screen.findAllByRole('listitem'))[0];
     if (!entryRow) {
       throw new Error('往來紀錄列不存在');
     }
-    await user.click(within(entryRow).getByRole('button', { name: '刪除' }));
+    await user.click(within(entryRow).getByRole('button', { name: '更多操作' }));
+    await user.click(
+      within(within(entryRow).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }),
+    );
 
-    const confirmation = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
     expect(
-      within(confirmation).getByText(
-        '刪除這筆往來？對應的交易會一起刪除，帳戶餘額與往來餘額會回到記這筆之前。',
-      ),
+      within(confirmation).getByRole('group', {
+        name: '撤銷後，往來從「小明欠你的金額 $9」變成「你欠小明的金額 $111」。',
+      }),
     ).toBeInTheDocument();
-    expect(confirmation).not.toHaveTextContent('這筆已和');
+    expect(confirmation).not.toHaveTextContent('對應的交易會一起刪除');
   });
 
-  it('adds the paired deletion explanation', async () => {
+  it('shows the synced notification on a paired entry undo preview', async () => {
     const user = userEvent.setup();
-    const pairedEntry = { ...baseEntry, paired: true };
+    const pairedEntry = { ...baseEntry, paired: true, sync: 'SYNCED' as const };
     renderDetail(900, [pairedEntry], 1, {
       link: linkedUser,
       name: '小明',
@@ -321,36 +467,22 @@ describe('CounterpartyDetail', () => {
     if (!row) {
       throw new Error('往來紀錄列不存在');
     }
-    await user.click(within(row).getByRole('button', { name: '刪除' }));
+    await user.click(within(row).getByRole('button', { name: '更多操作' }));
+    await user.click(within(within(row).getByRole('menu')).getByRole('menuitem', { name: '撤銷' }));
 
-    const deleteDialog = await screen.findByRole('dialog', { name: '刪除往來紀錄' });
-    expect(deleteDialog).toHaveTextContent('刪除這筆往來？');
-    expect(deleteDialog).toHaveTextContent('會請小明也刪除');
-    expect(deleteDialog).not.toHaveTextContent('他不接受的話');
+    const undoDialog = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(undoDialog).toHaveTextContent('對方會收到通知');
+    expect(undoDialog).not.toHaveTextContent('會請小明也刪除');
   });
 
   it('confirms forgiveness with the API balance amount', async () => {
     const user = userEvent.setup();
     renderDetail(5000);
-    await screen.findByText('小明欠你 $50');
-    await user.click(screen.getByRole('button', { name: '免除剩餘' }));
+    const forgiveButton = await screen.findByRole('button', { name: '免除剩餘' });
+    await user.click(forgiveButton);
 
     const confirmation = await screen.findByRole('dialog', { name: '免除剩餘' });
     // 免除會把欠款歸零，和錢有關，所以留一句短話說明金額（W44 的例外）。
     expect(within(confirmation).getByText('小明欠你的 $50 將歸零')).toBeInTheDocument();
   });
 });
-
-function LocationProbe() {
-  const location = useLocation();
-  const state: unknown = location.state;
-  return (
-    <output data-testid="location-state">
-      {JSON.stringify({
-        pathname: location.pathname,
-        search: location.search,
-        state,
-      })}
-    </output>
-  );
-}

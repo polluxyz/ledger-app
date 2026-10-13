@@ -5,6 +5,7 @@ import type {
   CreateDebtEntryResponse,
   DebtEntry,
   ListCounterpartiesQuery,
+  ListDebtEntriesQuery,
   Paginated,
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
@@ -27,6 +28,7 @@ import {
   toCounterparty,
   toDebtEntry,
 } from './debt-entry-rules';
+import { filterDebtEntriesBySection } from './debt-entry-sections';
 import { proposeAmend, proposeCreate, syncStatuses } from './debt-proposal-rules';
 
 const DEFAULT_PAGE = 1;
@@ -34,6 +36,10 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
+type HistoryDebtEntry = Pick<
+  Prisma.DebtEntryGetPayload<object>,
+  'counterpartyId' | 'delta' | 'date' | 'createdAt'
+>;
 
 /**
  * 往來對象：新增、清單、單一對象、改名、刪除、往來紀錄、免除、解除連動。規格見
@@ -91,7 +97,7 @@ export class CounterpartiesService {
             ],
           };
 
-    const [rows, sums, parts] = await Promise.all([
+    const [rows, sums, parts, historyEntries] = await Promise.all([
       this.prisma.counterparty.findMany({
         where: {
           ownerId: userId,
@@ -105,8 +111,16 @@ export class CounterpartiesService {
         _sum: { delta: true },
       }),
       this.ledgerDebts.partsByCounterparty(userId),
+      query.hasHistory === true
+        ? this.prisma.debtEntry.findMany({
+            where: { deletedAt: null, counterparty: { ownerId: userId } },
+            select: { counterpartyId: true, delta: true, date: true, createdAt: true },
+          })
+        : Promise.resolve([] as HistoryDebtEntry[]),
     ]);
     const balances = new Map(sums.map((sum) => [sum.counterpartyId, sum._sum.delta ?? 0]));
+    const historyCounterpartyIds =
+      query.hasHistory === true ? counterpartiesWithHistory(historyEntries) : null;
 
     const links = await linkInfoFor(
       this.prisma,
@@ -122,6 +136,8 @@ export class CounterpartiesService {
         ),
       )
       .filter((row) => query.nonZero !== true || row.totalBalance !== 0)
+      .filter((row) => query.personalNonZero !== true || row.balance !== 0)
+      .filter((row) => query.hasHistory !== true || historyCounterpartyIds?.has(row.id) === true)
       .sort(
         (a, b) =>
           Number(a.totalBalance === 0) - Number(b.totalBalance === 0) ||
@@ -215,7 +231,7 @@ export class CounterpartiesService {
   async entries(
     userId: string,
     counterpartyId: string,
-    query: ListCounterpartiesQuery,
+    query: ListDebtEntriesQuery,
   ): Promise<Paginated<DebtEntry>> {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
@@ -226,16 +242,23 @@ export class CounterpartiesService {
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
     const running = runningBalances(rows);
-    const pageRows = rows.slice((page - 1) * limit, page * limit);
-    const sync = await syncStatuses(this.prisma, pageRows);
+    const sectionRows = filterDebtEntriesBySection(
+      rows.map((entry) => ({ entry, balanceAfter: running.get(entry)! })),
+      query.section,
+    );
+    const pageRows = sectionRows.slice((page - 1) * limit, page * limit);
+    const sync = await syncStatuses(
+      this.prisma,
+      pageRows.map(({ entry }) => entry),
+    );
 
     return {
-      items: pageRows.map((entry) =>
-        toDebtEntry(entry, { balanceAfter: running.get(entry), sync: sync.get(entry.id) }),
+      items: pageRows.map(({ entry, balanceAfter }) =>
+        toDebtEntry(entry, { balanceAfter, sync: sync.get(entry.id) }),
       ),
       page,
       limit,
-      total: rows.length,
+      total: sectionRows.length,
     };
   }
 
@@ -434,4 +457,19 @@ function mapNameTaken(error: unknown): unknown {
     );
   }
   return error;
+}
+
+/** 歷史代表曾經有一筆紀錄使個人往來餘額歸零；一次讀取後依明細相同的日期順序累加。 */
+function counterpartiesWithHistory(entries: ReadonlyArray<HistoryDebtEntry>): Set<string> {
+  const ordered = [...entries].sort(
+    (a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime(),
+  );
+  const balances = new Map<string, number>();
+  const history = new Set<string>();
+  for (const entry of ordered) {
+    const balance = (balances.get(entry.counterpartyId) ?? 0) + entry.delta;
+    balances.set(entry.counterpartyId, balance);
+    if (balance === 0) history.add(entry.counterpartyId);
+  }
+  return history;
 }

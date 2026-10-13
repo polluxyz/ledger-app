@@ -9,14 +9,20 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { JwtPayload, SettlementSummary, Transaction } from '@ledger/shared';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import type { JwtPayload, Paginated, SettlementSummary, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { LedgerAccessKind } from '../common/decorators/ledger-access-kind.decorator';
+import type { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
+import { LeftMemberAccess } from '../common/decorators/left-member-access.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
+import { ListLedgerSettlementsQueryDto } from './dto/list-ledger-settlements-query.dto';
+import { PaginatedSettlementTransactionDto } from './dto/list-settlements-response.dto';
 import { SetSettlementAccountDto } from './dto/set-settlement-account.dto';
 import { UpdateSettlementDto } from './dto/update-settlement.dto';
 import { SettlementsService } from './settlements.service';
@@ -36,6 +42,21 @@ export class SettlementsController {
   @RequireLedgerRole('VIEWER')
   summary(@Param('ledgerId') ledgerId: string): Promise<SettlementSummary> {
     return this.settlements.summary(ledgerId);
+  }
+
+  // 結清清單（3g §4.2）：唯讀端點，現任成員與已退出者都可以看——已退出者的範圍
+  // （只回自己是任一方的結清）由 service 在同一條 SQL 裡收斂，寫法比照交易列表的 list。
+  @Get('settlements')
+  @RequireLedgerRole('VIEWER')
+  @LeftMemberAccess('read')
+  @ApiOkResponse({ type: PaginatedSettlementTransactionDto })
+  list(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query() query: ListLedgerSettlementsQueryDto,
+    @LedgerAccessKind() access: LedgerAccess,
+  ): Promise<Paginated<Transaction>> {
+    return this.settlements.list(ledgerId, user.sub, query, access);
   }
 
   @Post('settlements')

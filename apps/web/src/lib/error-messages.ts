@@ -46,6 +46,7 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   ACCOUNT_NOT_PAYERS: '只能選自己的帳戶。',
   SETTLEMENT_SAME_PERSON: '付錢和收錢的人要不同。',
   SETTLEMENT_TRANSACTION_READ_ONLY: '請從結清修改或刪除。',
+  SETTLEMENT_BOUND_TO_REPAYMENT: '請撤銷那筆還款。',
 
   // ── 分類 ──────────────────────────────────────────────────────────────────
   CATEGORY_NAME_TAKEN: '這個名稱已經有同型別的分類在用了，換一個名稱。',

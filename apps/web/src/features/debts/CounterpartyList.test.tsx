@@ -1,15 +1,27 @@
-import type { CounterpartyLedgerPart, LedgerGroup } from '@ledger/shared';
+import type { CounterpartyLedgerPart, LedgerGroup, LedgerSummary } from '@ledger/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { CounterpartyList } from './CounterpartyList';
+import { useState } from 'react';
 
-/** 借還清單驗 API 總額、nonZero、展開來源、未指向群組與來源互動。 */
+/** 借還清單驗兩種餘額來源、總覽唯讀展開與個人分頁的 API 篩選參數。 */
 describe('CounterpartyList', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
   let ledgerGroups: LedgerGroup[];
+  const ledger: LedgerSummary = {
+    id: 'ledger-1',
+    name: '我的帳本',
+    currency: 'TWD',
+    kind: 'PERSONAL',
+    tracksBalance: false,
+    archivedAt: null,
+    role: 'OWNER',
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
 
   const firstSource: CounterpartyLedgerPart = {
     ledgerId: 'ledger-hualien',
@@ -49,6 +61,29 @@ describe('CounterpartyList', () => {
         return json(ledgerGroups);
       }
 
+      const detailId = ['cp-1', 'cp-2'].find((id) =>
+        parsedUrl.pathname.endsWith(`/counterparties/${id}`),
+      );
+      if (detailId) {
+        const displayName = detailId === 'cp-1' ? '小明的暱稱' : '小華';
+        const balance = detailId === 'cp-1' ? 900 : -1100;
+        return json({
+          id: detailId,
+          name: displayName,
+          displayName,
+          askMerge: false,
+          balance,
+          totalBalance: balance,
+          ledgerParts: detailId === 'cp-1' ? [firstSource, leftSource] : [],
+          link: null,
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: '2026-09-01T00:00:00.000Z',
+        });
+      }
+      if (/\/counterparties\/cp-[12]\/entries/.test(parsedUrl.pathname)) {
+        return json({ items: [], page: 1, limit: 20, total: 0 });
+      }
+
       const page = Number(parsedUrl.searchParams.get('page') ?? 1);
       const items =
         page === 1
@@ -66,10 +101,20 @@ describe('CounterpartyList', () => {
               {
                 id: 'cp-2',
                 name: '阿華',
-                displayName: '阿華',
+                displayName: '小華',
                 askMerge: false,
                 balance: -1100,
                 totalBalance: -1100,
+                ledgerParts: [],
+                link: null,
+              },
+              {
+                id: 'cp-3',
+                name: '清零的人',
+                displayName: '清零的人',
+                askMerge: false,
+                balance: 0,
+                totalBalance: 2500,
                 ledgerParts: [],
                 link: null,
               },
@@ -86,32 +131,48 @@ describe('CounterpartyList', () => {
                 link: null,
               },
             ];
-      return json({ items, page, limit: 20, total: 42 });
+      const filteredItems =
+        parsedUrl.searchParams.get('nonZero') === 'true'
+          ? items.filter((item) => item.balance !== 0)
+          : items;
+      return json({ items: filteredItems, page, limit: 20, total: 42 });
     });
   });
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function renderList(onSelectCounterparty = vi.fn(), onOpenLedgerSource = vi.fn()) {
-    render(
-      <QueryClientProvider client={queryClient}>
+  function renderList(mode: 'overview' | 'personal' = 'overview') {
+    function Harness() {
+      const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(null);
+      return (
         <CounterpartyList
-          onSelectCounterparty={onSelectCounterparty}
-          onOpenLedgerSource={onOpenLedgerSource}
+          ledger={ledger}
+          mode={mode}
+          expandedCounterpartyId={expandedCounterpartyId}
+          onExpandedChange={setExpandedCounterpartyId}
+          onEditSplit={vi.fn()}
         />
-      </QueryClientProvider>,
+      );
+    }
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <Harness />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
-    return { onSelectCounterparty, onOpenLedgerSource };
   }
 
   it('shows API total balances and asks the server to omit two-cleared counterparties', async () => {
     renderList();
 
     expect(await screen.findByText('小明的暱稱欠你 $42')).toBeInTheDocument();
-    expect(screen.getByText('你欠阿華 $11')).toBeInTheDocument();
+    expect(screen.getByText('你欠小華 $11')).toBeInTheDocument();
     expect(screen.getByText('連動')).toBeInTheDocument();
     expect(screen.queryByText('兩清')).not.toBeInTheDocument();
     expect(screen.queryByText('老王')).not.toBeInTheDocument();
+    expect(screen.queryByText('清零的人')).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).match(/\/counterparties\?page=1&limit=20&nonZero=true$/),
@@ -119,42 +180,60 @@ describe('CounterpartyList', () => {
     ).toBe(true);
   });
 
-  it('opens the counterparty from the primary row button', async () => {
-    const user = userEvent.setup();
-    const { onSelectCounterparty } = renderList();
+  it('uses one-character labels that distinguish names across the displayed counterparty list', async () => {
+    renderList();
 
-    await user.click(await screen.findByRole('button', { name: /^小明的暱稱/ }));
-
-    expect(onSelectCounterparty).toHaveBeenCalledWith('cp-1');
+    expect(await screen.findByTitle('小明的暱稱')).toHaveTextContent('明');
+    expect(screen.getByTitle('小華')).toHaveTextContent('華');
   });
 
-  it('expands API personal and ledger sources, including the exited label and signed arrows', async () => {
+  it('toggles the inline detail from the primary row button', async () => {
     const user = userEvent.setup();
-    const { onSelectCounterparty, onOpenLedgerSource } = renderList();
-    const toggle = await screen.findByRole('button', { name: '展開小明的暱稱的帳本來源' });
+    renderList();
 
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await user.tab();
-    await user.tab();
-    expect(document.activeElement).toBe(toggle);
-    await user.keyboard('{Enter}');
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('個人往來')).toBeInTheDocument();
-    expect(screen.getByText('小明的暱稱欠你 $9')).toBeInTheDocument();
-    expect(screen.getByText('花蓮三日')).toBeInTheDocument();
-    expect(screen.getByText('明哥欠你 $3')).toBeInTheDocument();
-    expect(screen.getByText('老家')).toBeInTheDocument();
-    expect(screen.getByText('已退出')).toBeInTheDocument();
-    expect(screen.getByText('你欠小明 $15')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '開啟小明的暱稱的個人往來' }));
-    expect(onSelectCounterparty).toHaveBeenCalledWith('cp-1');
-    await user.click(screen.getByRole('button', { name: /開啟 花蓮三日 的結清/ }));
-    expect(onOpenLedgerSource).toHaveBeenCalledWith(firstSource);
+    const row = await screen.findByRole('button', { name: /^小明的暱稱/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(row).toHaveAttribute('aria-controls', 'counterparty-details-cp-1');
+    expect(row).not.toHaveAttribute('aria-label');
     expect(
-      screen.getByRole('button', { name: /開啟已退出帳本 老家 的唯讀畫面/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: '展開小明的暱稱的帳本來源' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '共享帳本' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByText('個人往來')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
+
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '花蓮三日' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('keeps only one counterparty expanded and renders the API shared sources', async () => {
+    const user = userEvent.setup();
+    renderList();
+    const firstRow = await screen.findByRole('button', { name: /^小明的暱稱/ });
+    const secondRow = screen.getByRole('button', { name: /^小華/ });
+
+    await user.click(firstRow);
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '明哥欠你 $3' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '老家' })).toBeInTheDocument();
+    expect(screen.getByText('已退出')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '你欠小明 $15' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /老家|花蓮三日/ })).not.toBeInTheDocument();
+
+    await user.click(secondRow);
+    expect(firstRow).toHaveAttribute('aria-expanded', 'false');
+    expect(secondRow).toHaveAttribute('aria-expanded', 'true');
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '花蓮三日' })).not.toBeInTheDocument(),
+    );
   });
 
   it('shows unpointed people under each API ledger group and preserves the source values', async () => {
@@ -170,26 +249,15 @@ describe('CounterpartyList', () => {
         ],
       },
     ];
-    const user = userEvent.setup();
-    const { onOpenLedgerSource } = renderList();
+    renderList();
 
     expect(await screen.findByRole('heading', { name: /花蓮三日.*已退出/ })).toBeInTheDocument();
     expect(screen.getByText('小華欠你 $1,394')).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledger-groups?unpointed=true')),
     ).toBe(true);
-    await user.click(screen.getByRole('button', { name: /開啟已退出帳本 花蓮三日 的唯讀畫面/ }));
-
-    await waitFor(() =>
-      expect(onOpenLedgerSource).toHaveBeenCalledWith({
-        ledgerId: 'ledger-unpointed',
-        ledgerName: '花蓮三日',
-        personId: 'person-hua',
-        personName: '小華',
-        amount: 139400,
-        left: true,
-      }),
-    );
+    const unpointedGroup = screen.getByRole('region', { name: '沒指向的共享帳本' });
+    expect(within(unpointedGroup).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('requests the next page through the shared pagination control', async () => {
@@ -207,5 +275,19 @@ describe('CounterpartyList', () => {
       ).toBe(true),
     );
     expect(await screen.findByRole('button', { name: /^小美/ })).toBeInTheDocument();
+  });
+
+  it('uses personal balances, requests the server filter, and displays its response as given', async () => {
+    renderList('personal');
+
+    expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
+    expect(screen.getByText('你欠小華 $11')).toBeInTheDocument();
+    // API mock 故意回傳零餘額，確認列表照回應顯示，不在前端再過濾。
+    expect(screen.getByRole('button', { name: /^清零的人/ })).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\?page=1&limit=20&personalNonZero=true$/),
+      ),
+    ).toBe(true);
   });
 });

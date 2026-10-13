@@ -14,7 +14,7 @@
 - 3g（借還頁改版）先做原型給開發者操作，2026-10-13 開發者說原型告一段落。原型與文件都在分支 **`polluxyz/debts-inline`**（worktree `C:/Users/Administrator/orca/workspaces/ledger-app/debts-inline`，資料庫 `ledger_debts_inline_test`），已 push 到 origin 備份，**還沒開 PR**（PR 用整合分支 `feature/debts-inline` 開，見 plan §0）。這條分支以 `main`（`c801558`）為基底，與 `origin/main` 合併沒有衝突。
   - `docs/specs/phase-3g-debts-inline.md`：**已核可**（2026-10-13）。含 schema 變更（`DebtEntry.settlesEntryId`）與 API 變更（spec §3、§4），核可即視為同意；套 migration 前仍要把實際 SQL 列給開發者看。
   - `tasks/phase-3g-plan.md`、`tasks/phase-3g-todo.md`：**待核可**。
-  - `tasks/phase-3g-prototype-notes.md`：原型期間的決定紀錄，已全部併入 spec，PR 時移到 `tasks/archive/`。
+  - `tasks/archive/phase-3g-prototype-notes.md`：原型期間的決定紀錄，已全部併入 spec，PR 時移到 `tasks/archive/`。
 - 開發者的 dev 伺服器在 `web-redesign` worktree，目前 **detached 在原型的 `a23de23`**（不是 `main`）。後端跟 3f 的 `main` 相同，原型只改了前端。
 - Orca Run `run_78a4a8ab6c17`：原型的 worker 都已結束，沒有進行中的任務。紀錄裡的 `coordinator_handle` 是更早的 session，新 session 用 `run-use` 重新綁定。
 - `ledger-split-web` worktree 是協調者寫文件用的（本次交接的 PR 在這裡開），它的 `apps/api/.env(.test)` 指向已刪除的 `ledger_uf_int_test`，要跑 API 前先改。

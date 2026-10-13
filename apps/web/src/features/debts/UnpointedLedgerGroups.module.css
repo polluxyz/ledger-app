@@ -1,4 +1,4 @@
-/* 沒指向的結清依帳本聚在清單下方，避免混進已有對象的往來列。 */
+/* 沒指向的結清依帳本聚在清單下方；列的尺寸與 CounterpartyList 的對象列相同。 */
 .groups {
   display: flex;
   flex-direction: column;
@@ -15,12 +15,13 @@
   align-items: center;
   gap: var(--space-sm);
   margin: 0;
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-md) 0;
+  color: var(--color-text-muted);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .left {
-  color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: 400;
 }
@@ -31,35 +32,42 @@
   list-style: none;
 }
 
-.person {
+.item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
   min-width: 0;
+  width: 100%;
+  min-height: 5.5rem;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border: 0;
-  background: transparent;
   color: var(--color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
-.person:hover {
-  background: var(--color-fill);
-}
-
-.person:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
-}
-
-.personName {
+.name {
+  flex: 0 1 9rem;
   min-width: 0;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balance {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

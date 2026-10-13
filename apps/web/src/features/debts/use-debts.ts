@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -11,7 +12,9 @@ import type {
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
   DebtEntry,
+  DebtEntrySection,
   ListCounterpartiesQuery,
+  ListDebtEntriesQuery,
   MergeCounterpartyRequest,
   Paginated,
   UpdateDebtEntryRequest,
@@ -42,13 +45,18 @@ export const COUNTERPARTIES_KEY = ['counterparties'] as const;
 const counterpartyListKey = (query: ListCounterpartiesQuery) =>
   [...COUNTERPARTIES_KEY, 'list', query] as const;
 const counterpartyKey = (id: string) => [...COUNTERPARTIES_KEY, 'detail', id] as const;
-const entriesKey = (id: string, query: ListCounterpartiesQuery) =>
+const entriesKey = (id: string, query: ListDebtEntriesQuery) =>
   [...COUNTERPARTIES_KEY, 'entries', id, query] as const;
+const entryPagesKey = (id: string, section: DebtEntrySection) =>
+  [...COUNTERPARTIES_KEY, 'entry-pages', id, section] as const;
+
+/** 「載入更多」每次多拿幾筆往來紀錄（3g 決策 155）。 */
+export const DEBT_ENTRY_PAGE_SIZE = 20;
 
 /** 交易快取的前綴（見 `use-transactions.ts` 的 `transactionsKey`），不分帳本。 */
 const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 
-function toQueryString(query: ListCounterpartiesQuery): string {
+function toQueryString(query: ListCounterpartiesQuery | ListDebtEntriesQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) {
@@ -80,7 +88,7 @@ export function useCounterparty(counterpartyId: string | null) {
 /** 某個對象的往來紀錄，新到舊，每筆附 `balanceAfter`。 */
 export function useCounterpartyEntries(
   counterpartyId: string | null,
-  query: ListCounterpartiesQuery = {},
+  query: ListDebtEntriesQuery = {},
 ) {
   return useQuery({
     queryKey: entriesKey(counterpartyId ?? '', query),
@@ -90,6 +98,31 @@ export function useCounterpartyEntries(
       ),
     enabled: counterpartyId !== null,
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * 某個對象的未還清或已還清紀錄，一頁一頁載入（3g 決策 153、155）。分界由後端算（`section`），
+ * 畫面把 `data.pages` 依序攤平顯示，`hasNextPage` 時顯示「載入更多」。`null` 時不發請求。
+ */
+export function useCounterpartyEntryPages(
+  counterpartyId: string | null,
+  section: DebtEntrySection,
+) {
+  return useInfiniteQuery({
+    queryKey: entryPagesKey(counterpartyId ?? '', section),
+    queryFn: ({ pageParam }) =>
+      apiRequest<Paginated<DebtEntry>>(
+        `/counterparties/${counterpartyId!}/entries${toQueryString({
+          section,
+          page: pageParam,
+          limit: DEBT_ENTRY_PAGE_SIZE,
+        })}`,
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (last: Paginated<DebtEntry>) =>
+      last.page * last.limit < last.total ? last.page + 1 : undefined,
+    enabled: counterpartyId !== null,
   });
 }
 

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageToolbarStart } from '../app/PageToolbar';
 import { Icon } from '../components/Icon';
 import { PageContent } from '../components/PageContent';
 import { Pagination } from '../components/Pagination';
@@ -19,42 +18,36 @@ export default function LedgerHistoryPage() {
 
   if (ledger.isLoading) {
     return (
-      <>
+      <PageContent>
         <BackToLedgers />
-        <PageContent>
-          <PageHeader title="帳本" />
-          <p className={styles.status}>載入中…</p>
-        </PageContent>
-      </>
+        <PageHeader title="帳本" />
+        <p className={styles.status}>載入中…</p>
+      </PageContent>
     );
   }
 
   if (ledger.error || !ledger.data) {
     const notFound = ledger.error instanceof ApiError && ledger.error.statusCode === 404;
     return (
-      <>
+      <PageContent>
         <BackToLedgers />
-        <PageContent>
-          <PageHeader title="帳本" />
-          <p className={styles.status}>
-            {notFound ? '找不到這本帳本。' : '無法載入這本帳本，請稍後再試。'}
-          </p>
-        </PageContent>
-      </>
+        <PageHeader title="帳本" />
+        <p className={styles.status}>
+          {notFound ? '找不到這本帳本。' : '無法載入這本帳本，請稍後再試。'}
+        </p>
+      </PageContent>
     );
   }
 
   return (
-    <>
+    <PageContent>
       <BackToLedgers />
-      <PageContent>
-        <header className={styles.header}>
-          <h2 className={styles.title}>{ledger.data.name}</h2>
-          {ledger.data.left === true && <span className={styles.leftTag}>已退出</span>}
-        </header>
-        <LedgerHistoryTransactions key={ledger.data.id} ledgerId={ledger.data.id} />
-      </PageContent>
-    </>
+      <header className={styles.header}>
+        <h2 className={styles.title}>{ledger.data.name}</h2>
+        {ledger.data.left === true && <span className={styles.leftTag}>已退出</span>}
+      </header>
+      <LedgerHistoryTransactions key={ledger.data.id} ledgerId={ledger.data.id} />
+    </PageContent>
   );
 }
 
@@ -82,14 +75,13 @@ function LedgerHistoryTransactions({ ledgerId }: { ledgerId: string }) {
   );
 }
 
+/** 標題左上方的返回連結（開發者 2026-10-07：從最上排橫條移回內容）。 */
 function BackToLedgers() {
   return (
-    <PageToolbarStart>
-      <Link className={styles.back} to="/ledgers" aria-label="回到帳本列表">
-        <Icon name="chevronLeft" size={16} />
-        帳本
-      </Link>
-    </PageToolbarStart>
+    <Link className={styles.back} to="/ledgers" aria-label="回到帳本列表">
+      <Icon name="chevronLeft" size={16} />
+      帳本
+    </Link>
   );
 }
 

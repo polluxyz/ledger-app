@@ -175,6 +175,7 @@ export function toDebtEntry(
     note: row.note,
     transactionId: row.transactionId,
     splitId: row.splitId,
+    settlesEntryId: row.settlesEntryId,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

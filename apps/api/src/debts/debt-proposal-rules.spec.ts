@@ -128,6 +128,7 @@ describe('debt proposal rules', () => {
       transactionId: null,
       splitId: null,
       pairedEntryId: null as string | null,
+      settlesEntryId: null as string | null,
       deletedAt: null,
       createdAt: new Date('2026-09-25T00:00:00.000Z'),
       updatedAt: new Date('2026-09-25T00:00:00.000Z'),

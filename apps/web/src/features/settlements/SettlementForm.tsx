@@ -23,6 +23,8 @@ interface SettlementFormProps {
   ledger: LedgerSummary;
   transaction?: Transaction;
   prefill?: SettlementPrefill;
+  /** 歷史列另有撤銷確認時，避免編輯表單再出現第二個刪除入口。 */
+  showDeleteButton?: boolean;
   onSaved: () => void;
   onDeleted: () => void;
 }
@@ -35,6 +37,7 @@ export function SettlementForm({
   ledger,
   transaction,
   prefill,
+  showDeleteButton = true,
   onSaved,
   onDeleted,
 }: SettlementFormProps) {
@@ -214,7 +217,7 @@ export function SettlementForm({
             {pending ? '儲存中…' : isEditing ? '儲存' : '新增'}
           </Button>
         </div>
-        {isEditing && (
+        {isEditing && showDeleteButton && (
           <Button
             type="button"
             variant="secondary"
@@ -225,16 +228,18 @@ export function SettlementForm({
           </Button>
         )}
       </form>
-      <ConfirmDialog
-        open={confirmDeleteOpen}
-        title="刪除結清"
-        message="確定刪除這筆結清？"
-        confirmLabel="刪除"
-        error={deleteSettlement.error}
-        isPending={deleteSettlement.isPending}
-        onConfirm={handleDelete}
-        onCancel={() => setConfirmDeleteOpen(false)}
-      />
+      {showDeleteButton && (
+        <ConfirmDialog
+          open={confirmDeleteOpen}
+          title="刪除結清"
+          message="確定刪除這筆結清？"
+          confirmLabel="刪除"
+          error={deleteSettlement.error}
+          isPending={deleteSettlement.isPending}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDeleteOpen(false)}
+        />
+      )}
     </>
   );
 }

@@ -1,11 +1,12 @@
 /*
  * 中間區最上方的橫條（spec 2i SC-38）。
  *
- * sticky 在中間欄的最上方：捲到頁面下方時，帳本切換器與「＋ 新增交易」仍然按得到。
- * 底色帶一點透明加模糊，捲動時看得出下面有內容經過，但字不會糊在一起。
+ * sticky 在中間欄的最上方，捲到頁面下方時看得到它在。底色帶一點透明加模糊，
+ * 捲動時看得出下面有內容經過，但字不會糊在一起。
  *
- * 裡層與內容包裝同寬、同樣置中（修訂 3「對齊包裝」），左右兩端才會與下方的標題、
- * 卡片切齊。
+ * 2026-10-07 起橫條沒有內容（保留給之後的 AI 功能），但外觀照舊：裡層與內容
+ * 包裝同寬、同樣置中（修訂 3「對齊包裝」），高度由 `min-height` 撐住——每一頁
+ * 的標題都從它下面開始，高度一變，換頁時標題就會上下跳。
  */
 .bar {
   position: sticky;
@@ -18,27 +19,9 @@
 }
 
 .inner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
   max-width: var(--content-max);
   min-height: 3.5rem;
   margin-inline: auto;
-}
-
-.start {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.end {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
 }
 
 /* ≤ 900px 頂列是顯示的（☰ 在那裡），橫條要接在它下面。 */

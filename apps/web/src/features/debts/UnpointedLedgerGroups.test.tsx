@@ -1,7 +1,6 @@
 import type { LedgerGroup } from '@ledger/shared';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { UnpointedLedgerGroups } from './UnpointedLedgerGroups';
 
 /** 未指向群組只呈現 API 已分好的帳本與人，空回應不佔借還頁版面。 */
@@ -20,28 +19,17 @@ describe('UnpointedLedgerGroups', () => {
   ];
 
   it('hides an empty API result', () => {
-    const { container } = render(<UnpointedLedgerGroups groups={[]} onOpenSource={vi.fn()} />);
+    const { container } = render(<UnpointedLedgerGroups groups={[]} />);
 
     expect(container.firstChild).toBeNull();
   });
 
-  it('labels exited ledgers and forwards the selected person and amount', async () => {
-    const user = userEvent.setup();
-    const onOpenSource = vi.fn();
-    render(<UnpointedLedgerGroups groups={groups} onOpenSource={onOpenSource} />);
+  it('labels exited ledgers and keeps source rows read-only', () => {
+    render(<UnpointedLedgerGroups groups={groups} />);
 
     expect(screen.getByText('花蓮三日')).toBeInTheDocument();
     expect(screen.getByText('已退出')).toBeInTheDocument();
     expect(screen.getByText('你欠小明 $512')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /唯讀畫面/ }));
-
-    expect(onOpenSource).toHaveBeenCalledWith({
-      ledgerId: 'ledger-hualien',
-      ledgerName: '花蓮三日',
-      personId: 'person-xiao',
-      personName: '小明',
-      amount: -51200,
-      left: true,
-    });
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

@@ -1,56 +1,126 @@
 import type { CounterpartyLedgerPart } from '@ledger/shared';
-import { DebtArrow } from '../../components/DebtArrow';
+import { MiniOweArrow } from './MiniOweArrow';
 import { formatMoney } from '../../lib/format';
+import rowStyles from './DebtRow.module.css';
 import styles from './LedgerSourceList.module.css';
 
-/** 共用帳本來源的唯讀入口，讓借還展開區與往來帳明細保持相同的金額方向。 */
 interface LedgerSourceListProps {
   sources: readonly CounterpartyLedgerPart[];
-  onOpenSource: (source: CounterpartyLedgerPart) => void;
+  onOpenSource?: (source: CounterpartyLedgerPart) => void;
+  readOnly?: boolean;
+  reserveActionColumn?: boolean;
+  avatarLabels?: ReadonlyMap<string, string>;
 }
 
-export function LedgerSourceList({ sources, onOpenSource }: LedgerSourceListProps) {
+/** 共享來源依帳本分組；帳本名稱作小標題，列內只留日期欄、箭頭、標籤與金額。 */
+export function LedgerSourceList({
+  sources,
+  onOpenSource,
+  readOnly = false,
+  reserveActionColumn = false,
+  avatarLabels,
+}: LedgerSourceListProps) {
+  const groupsByLedger = new Map<
+    string,
+    { ledgerName: string; sources: CounterpartyLedgerPart[] }
+  >();
+
+  for (const source of sources) {
+    const group = groupsByLedger.get(source.ledgerId) ?? {
+      ledgerName: source.ledgerName,
+      sources: [],
+    };
+    group.sources.push(source);
+    groupsByLedger.set(source.ledgerId, group);
+  }
+
   return (
-    <ul className={styles.list}>
-      {sources.map((source) => (
-        <li key={`${source.ledgerId}-${source.personId}`}>
-          <button
-            type="button"
-            className={styles.row}
-            aria-label={getLedgerSourceLabel(source)}
-            onClick={() => onOpenSource(source)}
-          >
-            <span className={styles.ledgerName}>
-              {source.ledgerName} <span aria-hidden="true">›</span>
-              {source.left && <span className={styles.left}>已退出</span>}
-            </span>
-            <SmallDebtDirection personName={source.personName} amount={source.amount} />
-          </button>
-        </li>
+    <div className={styles.groups}>
+      {[...groupsByLedger.entries()].map(([ledgerId, group]) => (
+        <section key={ledgerId} className={styles.group}>
+          <h4 className={styles.heading}>{group.ledgerName}</h4>
+          <ul className={styles.sourceList}>
+            {group.sources.map((source) => {
+              // amount 正＝對方欠我（同 delta 慣例），箭頭起點永遠是欠錢的人。
+              const from = source.amount > 0 ? source.personName : '我';
+              const to = source.amount > 0 ? '我' : source.personName;
+              const amountText = formatMoney(Math.abs(source.amount));
+              const srText =
+                source.amount > 0
+                  ? `${source.personName}欠你 ${amountText}`
+                  : `你欠${source.personName} ${amountText}`;
+
+              const content = (
+                <SourceRowContents
+                  source={source}
+                  from={from}
+                  to={to}
+                  amountText={amountText}
+                  avatarLabels={avatarLabels}
+                  reserveActionColumn={reserveActionColumn}
+                />
+              );
+
+              return (
+                <li key={`${source.ledgerId}-${source.personId}`} className={rowStyles.item}>
+                  {readOnly ? (
+                    <span className={rowStyles.row} role="group" aria-label={srText}>
+                      {content}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`${rowStyles.row} ${rowStyles.interactive}`}
+                      aria-label={srText}
+                      onClick={() => onOpenSource?.(source)}
+                    >
+                      {content}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }
 
-/** 單行版沿用 DebtArrow 的無頭貼箭頭，金額只讀 API 的原始正負方向。 */
-export function SmallDebtDirection({ personName, amount }: { personName: string; amount: number }) {
-  const from = amount > 0 ? personName : '我';
-  const to = amount > 0 ? '我' : personName;
-  const amountText = formatMoney(Math.abs(amount));
-  const srText = amount > 0 ? `${personName}欠你 ${amountText}` : `你欠${personName} ${amountText}`;
-
+function SourceRowContents({
+  source,
+  from,
+  to,
+  amountText,
+  avatarLabels,
+  reserveActionColumn,
+}: {
+  source: CounterpartyLedgerPart;
+  from: string;
+  to: string;
+  amountText: string;
+  avatarLabels?: ReadonlyMap<string, string>;
+  reserveActionColumn: boolean;
+}) {
   return (
-    <span className={styles.direction}>
-      <DebtArrow compact from={from} to={to} amount={Math.abs(amount)} srText={srText} />
-      <span className={styles.amount}>{amountText}</span>
+    <span className={styles.visual} aria-hidden="true">
+      <span className={rowStyles.date} />
+      <span className={rowStyles.arrow}>
+        <MiniOweArrow
+          from={from}
+          fromLabel={avatarLabels?.get(from)}
+          to={to}
+          toLabel={avatarLabels?.get(to)}
+        />
+      </span>
+      <span className={rowStyles.spacer} />
+      <span className={rowStyles.label}>
+        {source.left && <span className={styles.left}>已退出</span>}
+      </span>
+      <span className={rowStyles.amount}>
+        <span className={rowStyles.amountText}>{amountText}</span>
+      </span>
+      {reserveActionColumn && <span className={rowStyles.actions} />}
     </span>
   );
-}
-
-function getLedgerSourceLabel(source: CounterpartyLedgerPart): string {
-  const direction = source.amount > 0 ? `${source.personName}欠你` : `你欠${source.personName}`;
-  const access = source.left
-    ? `開啟已退出帳本 ${source.ledgerName} 的唯讀畫面`
-    : `開啟 ${source.ledgerName} 的結清`;
-  return `${access}：${direction} ${formatMoney(Math.abs(source.amount))}`;
 }

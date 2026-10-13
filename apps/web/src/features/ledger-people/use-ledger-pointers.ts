@@ -26,14 +26,22 @@ export const LEDGER_GROUPS_KEY = ['ledger-groups'] as const;
 
 const ledgerGroupsKey = (query: ListLedgerGroupsQuery) => [...LEDGER_GROUPS_KEY, query] as const;
 
-/** 我參與過的共享帳本，每本一組。`unpointed: true` 只回沒指向且有金額的人（借還頁）。 */
+/**
+ * 我參與過的共享帳本，每本一組。`unpointed: true` 只回沒指向且有金額的人（借還頁）；
+ * `hasSettlements: true` 只回有已記結清的帳本，每組帶 `settlementCount`（借還 › 歷史，3g）。
+ */
 export function useLedgerGroups(query: ListLedgerGroupsQuery = {}) {
   return useQuery({
     queryKey: ledgerGroupsKey(query),
-    queryFn: () =>
-      apiRequest<LedgerGroup[]>(
-        query.unpointed === true ? '/ledger-groups?unpointed=true' : '/ledger-groups',
-      ),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (query.unpointed === true) params.set('unpointed', 'true');
+      if (query.hasSettlements === true) params.set('hasSettlements', 'true');
+      const queryString = params.toString();
+      return apiRequest<LedgerGroup[]>(
+        queryString === '' ? '/ledger-groups' : `/ledger-groups?${queryString}`,
+      );
+    },
   });
 }
 

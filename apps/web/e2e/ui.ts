@@ -89,7 +89,8 @@ export async function openTransactions(page: Page): Promise<void> {
     .getByRole('navigation', { name: '主要導覽' })
     .getByRole('link', { name: '交易' })
     .click();
-  await page.getByRole('heading', { level: 2, name: '交易' }).waitFor();
+  // 精確比對：右側欄開著「編輯交易」時，那個標題也含「交易」，模糊比對會對到兩個。
+  await page.getByRole('heading', { level: 2, name: '交易', exact: true }).waitFor();
 }
 
 /** 從側欄回到首頁（dashboard）。理由同 `openTransactions`。 */
@@ -144,4 +145,94 @@ export async function typeCounterparty(
  */
 export async function openUserMenu(page: Page): Promise<void> {
   await page.getByRole('button', { name: /的選單$|^帳號選單$/ }).click();
+}
+
+// ---------------------------------------------------------------------------
+// 借還（3g）：子分頁、列內展開、紀錄的「⋯」與撤銷。
+// 3g 拿掉了右側欄的往來帳，展開、操作都在列上，所以下面的輔助都以「那一列」為範圍。
+// ---------------------------------------------------------------------------
+
+/** 借還的四個子分頁（3g W150）。網址是 `?view=debts&tab=…`，預設總覽。 */
+export type DebtsSubTab = '總覽' | '個人' | '共享' | '歷史';
+
+/**
+ * 從交易頁打開借還檢視的某個子分頁。借還的檢視切換與子分頁都在交易頁，所以先走到交易頁。
+ */
+export async function openDebtsTab(page: Page, tab: DebtsSubTab): Promise<void> {
+  await openTransactions(page);
+  const viewButton = page
+    .getByRole('group', { name: '檢視', exact: true })
+    .getByRole('button', { name: '借還', exact: true });
+  await viewButton.click();
+  await expect(viewButton).toHaveAttribute('aria-pressed', 'true');
+
+  const tabButton = page
+    .getByRole('group', { name: '借還', exact: true })
+    .getByRole('button', { name: tab, exact: true });
+  await tabButton.click();
+  // 等子分頁真的切過去。aria-pressed 與新內容在同一次渲染更新；切換前舊分頁的列還在 DOM 裡，
+  // 不等的話，接著展開一列會讀到舊分頁的狀態（例如 aria-expanded 還是 true），判斷就失準。
+  await expect(tabButton).toHaveAttribute('aria-pressed', 'true');
+}
+
+/**
+ * 借還列表裡一個人（或一本帳本）的那一排按鈕。點它就在那一排下方展開（3g W153）。
+ * 列表與歷史都有可能出現同名的列，取第一個就夠用：各測試的名字都是唯一的。
+ */
+export function debtRow(page: Page, name: string | RegExp): Locator {
+  return page.getByRole('main').getByRole('button', { name }).first();
+}
+
+/**
+ * 把一排展開，回傳那一整列（`<li>`）。展開區的內容都在這一列裡，後續的斷言與操作
+ * 限定在它之內，不會誤碰到別的對象。已經展開就不再點，避免點一下又收起。
+ */
+export async function expandDebtRow(page: Page, name: string | RegExp): Promise<Locator> {
+  const row = debtRow(page, name);
+  // 先等列出現再讀狀態，避免讀到還沒換掉的舊 DOM。
+  await row.waitFor({ state: 'visible' });
+  if ((await row.getAttribute('aria-expanded')) !== 'true') {
+    await row.click();
+  }
+  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  return row.locator('xpath=ancestor::li[1]');
+}
+
+/** 收起一排。已經收起就不動。 */
+export async function collapseDebtRow(page: Page, name: string | RegExp): Promise<void> {
+  const row = debtRow(page, name);
+  await row.waitFor({ state: 'visible' });
+  if ((await row.getAttribute('aria-expanded')) === 'true') {
+    await row.click();
+  }
+  await expect(row).toHaveAttribute('aria-expanded', 'false');
+}
+
+/**
+ * 展開區裡的一筆往來紀錄。列的無障礙名稱是完整句子（例如「我借給明哥 $500」，見
+ * `entry-flow.ts`），所以用它定位，不靠視覺上的箭頭或位置。
+ */
+export function debtEntry(scope: Locator, description: string): Locator {
+  return scope.getByLabel(description, { exact: true });
+}
+
+/** 一筆紀錄右邊的「⋯」選單（3g W169）。綁定的差額沒有這顆按鈕。 */
+export function entryMenu(entry: Locator): Locator {
+  return entry.getByRole('button', { name: '更多操作', exact: true });
+}
+
+/**
+ * 撤銷確認框（3g W171）：標題「撤銷這筆？」，按鈕「取消」「撤銷」。點了撤銷並等對話框關掉。
+ */
+export async function confirmUndo(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: '撤銷這筆？' });
+  await dialog.getByRole('button', { name: '撤銷', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+/** 用「⋯」→「撤銷」撤掉一筆紀錄，並確認。 */
+export async function undoEntry(page: Page, entry: Locator): Promise<void> {
+  await entryMenu(entry).click();
+  await page.getByRole('menuitem', { name: '撤銷', exact: true }).click();
+  await confirmUndo(page);
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useCounterparties,
   useCounterpartyEntries,
+  useCounterpartyEntryPages,
   useCreateCounterparty,
   useCreateDebtEntry,
   useDismissMergePrompt,
@@ -84,6 +85,46 @@ describe('Debt hooks', () => {
     renderHook(() => useCounterpartyEntries('cp-1', { page: 1 }), { wrapper });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(lastRequest().url).toMatch(/\/counterparties\/cp-1\/entries\?page=1$/);
+  });
+
+  it('refetches paged counterparty entries after a debt write', async () => {
+    let entryPageRequests = 0;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/counterparties/cp-1/entries')) {
+        entryPageRequests += 1;
+        return Promise.resolve(
+          new Response(JSON.stringify({ items: [], page: 1, limit: 20, total: 0 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 'debt-1', items: [] }), {
+          status: init?.method === 'DELETE' ? 204 : 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    const { result: pages } = renderHook(() => useCounterpartyEntryPages('cp-1', 'outstanding'), {
+      wrapper,
+    });
+    await waitFor(() => expect(pages.current.isSuccess).toBe(true));
+
+    const { result: createEntry } = renderHook(() => useCreateDebtEntry(), { wrapper });
+    await act(() =>
+      createEntry.current.mutateAsync({
+        counterparty: { name: '小明' },
+        kind: 'REPAYMENT',
+        amount: 9000,
+        date: '2026-09-01',
+        record: null,
+        settle: false,
+      }),
+    );
+
+    await waitFor(() => expect(entryPageRequests).toBe(2));
   });
 
   it.each([

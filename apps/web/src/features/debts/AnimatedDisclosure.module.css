@@ -1,0 +1,27 @@
+.disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    grid-template-rows var(--motion-panel) var(--motion-ease),
+    opacity var(--motion-fade) var(--motion-ease);
+}
+
+.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 展開動畫跑完後才解除裁切，讓裡面彈出的選單不被切掉（見元件註解）。 */
+.settled,
+.settled > .content {
+  overflow: visible;
+}

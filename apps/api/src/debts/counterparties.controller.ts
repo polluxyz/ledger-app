@@ -22,6 +22,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CounterpartiesService } from './counterparties.service';
 import { CreateCounterpartyDto } from './dto/create-counterparty.dto';
 import { ListCounterpartiesQueryDto } from './dto/list-counterparties-query.dto';
+import { ListDebtEntriesQueryDto } from './dto/list-debt-entries-query.dto';
 import { MergeCounterpartyDto } from './dto/merge-counterparty.dto';
 import { UpdateCounterpartyDto } from './dto/update-counterparty.dto';
 
@@ -85,7 +86,7 @@ export class CounterpartiesController {
   entries(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Query() query: ListCounterpartiesQueryDto,
+    @Query() query: ListDebtEntriesQueryDto,
   ): Promise<Paginated<DebtEntry>> {
     return this.counterparties.entries(user.sub, id, query);
   }

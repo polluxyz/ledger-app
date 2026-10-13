@@ -1,7 +1,9 @@
+/* 標題左上方的返回連結。下邊距讓它與標題之間有個呼吸。 */
 .back {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
   color: var(--color-accent);
   font-size: var(--text-sm);
   text-decoration: none;

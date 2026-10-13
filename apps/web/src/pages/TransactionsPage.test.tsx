@@ -14,9 +14,8 @@ import App from '../App';
  * 點「明細」回到交易列表。淨額卡片、狀態分頁與列表本身的行為在
  * `features/debts/` 各自的測試檔裡。
  *
- * 橫條的帳本切換器一律用 `within(<main>)` 限定範圍：側欄那一份由另一位 worker
- * 移除，兩邊都在的那段期間整頁會有兩個「作用中帳本」。橫條在 `<main>` 之內，
- * 所以這個範圍同時涵蓋橫條與內容。
+ * 帳本切換器一律用 `within(<main>)` 限定範圍，它住在「明細／借還」那一排（開發者
+ * 2026-10-07），在 `<main>` 之內，這個範圍同時涵蓋那一排與內容。
  */
 describe('Transactions page', () => {
   const fetchMock = vi.fn();
@@ -133,17 +132,8 @@ describe('Transactions page', () => {
     return JSON.parse(options.body) as unknown;
   }
 
-  /** 橫條與內容都在 `<main>` 裡，側欄不在。 */
+  /** 分頁那一排與內容都在 `<main>` 裡，側欄不在。 */
   const page = () => within(screen.getByRole('main'));
-
-  /**
-   * 「在橫條裡」的判準，刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，
-   * 所以它裡面的東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
-   */
-  function expectInToolbar(element: HTMLElement, heading: HTMLElement) {
-    expect(element.closest('header')).toBeNull();
-    expect(element.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-  }
 
   it('lists the ledger transactions with the filters and the pager', async () => {
     render(<App />);
@@ -159,20 +149,31 @@ describe('Transactions page', () => {
     expect(screen.getByRole('navigation', { name: '分頁' })).toBeInTheDocument();
   });
 
-  it('puts the ledger switcher and the add button in the page toolbar', async () => {
+  it('puts the ledger switcher and the add button on the view-switch row', async () => {
     render(<App />);
 
     // 標題在帳本載入前就有了，所以等的是只有載完才出現的「＋ 新增交易」。
     const addButton = await page().findByRole('button', { name: '新增交易' }, WAIT);
-    const heading = screen.getByRole('heading', { name: '交易' });
+    const viewSwitch = page().getByRole('group', { name: '檢視' });
 
-    // 兩者都在橫條裡（SC-38.2、SC-38.3）。
-    expectInToolbar(addButton, heading);
+    /*
+     * 開發者 2026-10-07：最上排橫條清空留給 AI 功能，帳本切換、「＋ 新增交易」
+     * 移進「明細／借還」那一排。判準刻意不看 CSS 類名：「同一排的右邊」就是在
+     * 檢視切換之後（DOM 順序）。
+     */
+    expect(
+      viewSwitch.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+
     // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
-    expectInToolbar(page().getByText('我的帳本'), heading);
+    const switcher = page().getByText('我的帳本');
+    expect(
+      viewSwitch.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
     expect(page().queryByLabelText('作用中帳本')).not.toBeInTheDocument();
 
-    // SC-38.5：標題上方不再有任何一行字。
+    // 標題仍是頁首裡的第一個東西——每一頁的標題高度才會一致。
+    const heading = screen.getByRole('heading', { name: '交易' });
     expect(heading.closest('header')?.firstElementChild).toBe(heading);
   });
 
@@ -233,7 +234,7 @@ describe('Transactions page', () => {
     window.history.pushState({}, '', '/transactions?view=debts');
     render(<App />);
 
-    expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: '借還' }, WAIT)).toBeInTheDocument();
     expect(await screen.findByText('小明欠你 $5,000', undefined, WAIT)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /小明/ }, WAIT)).toBeInTheDocument();
     expect(page().getByRole('button', { name: '借還' })).toHaveAttribute('aria-pressed', 'true');
@@ -241,6 +242,10 @@ describe('Transactions page', () => {
     // 明細那套（篩選列與交易列表）不該同時出現。
     expect(screen.queryByRole('button', { name: '篩選' })).not.toBeInTheDocument();
     expect(screen.queryByText('午餐')).not.toBeInTheDocument();
+
+    // 借還不分帳本：帳本切換與「＋ 新增交易」不跟進這個檢視（它們只屬於明細）。
+    expect(screen.queryByRole('button', { name: '新增交易' })).not.toBeInTheDocument();
+    expect(screen.queryByText('我的帳本')).not.toBeInTheDocument();
   });
 
   it('returns to the transaction list when 明細 is clicked', async () => {
@@ -260,9 +265,8 @@ describe('Transactions page', () => {
     expect(window.location.search).toBe('');
   });
 
-  it('opens the counterparty ledger requested by another page, only once', async () => {
-    // 總覽或邀請頁用 location.state 指定要打開誰（phase-3b2-web W41）。BrowserRouter 把
-    // state 放在 history.state.usr，這裡直接模擬「從別頁導過來」的那一筆 history。
+  it('switches to debts and expands a requested counterparty from another page', async () => {
+    // 其他頁用 location.state 指定對象；交易頁消耗指示後只切檢視並展開清單列。
     window.history.pushState(
       { usr: { openCounterpartyId: 'counterparty-1' }, key: 'from-home', idx: 0 },
       '',
@@ -270,52 +274,33 @@ describe('Transactions page', () => {
     );
     render(<App />);
 
-    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
-    // 指示用過就換掉：重新整理不會再打開一次，網址維持在借還檢視。
+    const row = await screen.findByRole('button', { name: /小明/ }, WAIT);
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'), WAIT);
+    expect(await screen.findByTitle('我借給小明 $5,000', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
     await waitFor(() => {
       const state = window.history.state as { usr?: Record<string, unknown> };
-      expect(state.usr).toEqual({ keepRightPanel: true });
-    });
-    expect(window.location.search).toBe('?view=debts');
-    expect(screen.getByRole('dialog', { name: '借還往來' })).toBeInTheDocument();
+      expect(state.usr ?? {}).not.toHaveProperty('openCounterpartyId');
+    }, WAIT);
+    expect(window.location.search).toBe('?view=debts&tab=overview');
   });
 
-  it('closes the right panel without showing the add form after closing debt detail', async () => {
+  it('opens the debt form in the personal tab without opening the right panel', async () => {
     const user = userEvent.setup();
-    window.history.pushState({}, '', '/transactions?view=debts');
+    window.history.pushState({}, '', '/transactions?view=debts&tab=personal');
     render(<App />);
 
     const debtButton = await screen.findByRole('button', { name: /小明/ }, WAIT);
     await user.click(debtButton);
 
-    const dialog = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    expect(within(dialog).getByText('小明欠你 $5,000')).toBeInTheDocument();
-    expect(within(dialog).getByText('往來紀錄')).toBeInTheDocument();
-
-    const rightPanel = dialog.closest('[data-registered]');
-    await user.click(within(dialog).getByRole('button', { name: '關閉' }));
-    await waitFor(() => expect(rightPanel).not.toHaveAttribute('data-open'), WAIT);
-    // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
-    expect(screen.getByRole('dialog', { name: '借還往來' }).closest('[inert]')).not.toBeNull();
-    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
-  });
-
-  it('starts a prefilled debt entry when 記一筆 is selected in the counterparty panel', async () => {
-    const user = userEvent.setup();
-    window.history.pushState({}, '', '/transactions?view=debts');
-    render(<App />);
-
-    await user.click(await screen.findByRole('button', { name: /小明/ }, WAIT));
-    const detail = await screen.findByRole('dialog', { name: '借還往來' }, WAIT);
-    await user.click(within(detail).getByRole('button', { name: '記一筆' }));
-
-    const form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByRole('button', { name: '借還' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(within(form).getByLabelText('對象')).toHaveValue('小明');
+    expect(debtButton).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('button', { name: '記一筆' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '記一筆' }));
+    expect(await screen.findByLabelText('對象', undefined, WAIT)).toHaveValue('小明');
+    expect(screen.queryByRole('dialog', { name: '借還往來' })).not.toBeInTheDocument();
   });
 
   it('edits a linked debt transaction directly and closes after sending only the changed amount', async () => {
@@ -497,15 +482,70 @@ describe('Transactions page', () => {
     await user.click(page().getByRole('button', { name: '借還' }));
 
     expect(panel).toHaveAttribute('data-open');
-    expect(await screen.findByText('借還紀錄不分帳本', undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: '借還' }, WAIT)).toBeInTheDocument();
   });
 
-  it('shows the settle view only for a shared ledger and opens a suggested settlement', async () => {
-    const sharedLedger = { ...ledger, kind: 'SHARED', role: 'EDITOR' };
+  it('has two main tabs, defaults to overview, and writes debt subtabs to the URL', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const mainTabs = await page().findByRole('group', { name: '檢視' }, WAIT);
+    expect(within(mainTabs).getAllByRole('button')).toHaveLength(2);
+    expect(within(mainTabs).queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
+    await user.click(within(mainTabs).getByRole('button', { name: '借還' }));
+
+    const debtsTabs = await page().findByRole('group', { name: '借還' }, WAIT);
+    expect(within(debtsTabs).getByRole('button', { name: '總覽' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(window.location.search).toBe('?view=debts&tab=overview');
+
+    await user.click(within(debtsTabs).getByRole('button', { name: '個人' }));
+    expect(window.location.search).toBe('?view=debts&tab=personal');
+    expect(page().queryByRole('button', { name: '＋ 新增' })).not.toBeInTheDocument();
+
+    await user.click(within(debtsTabs).getByRole('button', { name: '共享' }));
+    expect(window.location.search).toBe('?view=debts&tab=shared');
+    expect(await screen.findByText('目前沒有共享帳本。', undefined, WAIT)).toBeInTheDocument();
+
+    await user.click(within(debtsTabs).getByRole('button', { name: '歷史' }));
+    expect(window.location.search).toBe('?view=debts&tab=history');
+  });
+
+  it('shows every shared ledger, expands its settlement form inline on transfer row click', async () => {
+    const sharedLedger = {
+      ...ledger,
+      id: 'ledger-2',
+      name: '旅行帳本',
+      kind: 'SHARED',
+      role: 'EDITOR',
+      tracksBalance: false,
+    };
+    const archivedLedger = {
+      ...sharedLedger,
+      id: 'ledger-archived',
+      name: '封存帳本',
+      archivedAt: '2026-09-01T00:00:00.000Z',
+    };
     const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
     const min = { id: 'person-min', name: '小明', userId: 'user-2', status: 'MEMBER' };
-    const sharedPeople = [me, min];
-    fetchMock.mockImplementation((url: string) => {
+    const settlementHistory = {
+      ...lunch,
+      id: 'settlement-tx',
+      type: 'TRANSFER',
+      amount: 205000,
+      title: null,
+      settlement: { id: 'settlement-1', from: min, to: me },
+    };
+    const ordinaryTransfer = {
+      ...settlementHistory,
+      id: 'ordinary-transfer',
+      settlement: null,
+      title: '普通轉帳',
+    };
+    let createCalled = false;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -514,8 +554,9 @@ describe('Transactions page', () => {
           }),
         );
       if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
-      if (url.endsWith('/ledgers/ledger-1/people')) return json(sharedPeople);
-      if (url.endsWith('/ledgers/ledger-1/settlement-summary')) {
+      if (url.endsWith('/ledgers/ledger-2/people')) return json([me, min]);
+      if (url.endsWith('/ledgers/ledger-archived/people')) return json([me, min]);
+      if (url.endsWith('/ledgers/ledger-2/settlement-summary')) {
         return json({
           people: [
             { person: me, net: 205000 },
@@ -524,109 +565,81 @@ describe('Transactions page', () => {
           suggestions: [{ fromPersonId: min.id, toPersonId: me.id, amount: 205000 }],
         });
       }
+      if (url.endsWith('/ledgers/ledger-archived/settlement-summary')) {
+        return json({ people: [], suggestions: [] });
+      }
+      if (url.endsWith('/ledgers/ledger-2/settlements') && init?.method === 'POST') {
+        createCalled = true;
+        return Promise.resolve(
+          new Response(JSON.stringify({}), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
       if (url.includes('/transactions')) {
-        return json({ items: [lunch], page: 1, limit: 20, total: 1 });
+        return json({
+          items: [settlementHistory, ordinaryTransfer],
+          page: 1,
+          limit: 100,
+          total: 2,
+        });
       }
       if (url.includes('/categories')) return json([expenseCategory]);
       if (url.includes('/accounts')) return json([account]);
+      if (url.includes('/ledger-groups')) return json([]);
+      if (url.includes('/ledgers?includeArchived=true'))
+        return json([sharedLedger, archivedLedger]);
+      if (url.endsWith('/ledgers')) return json([ledger]);
       return json([sharedLedger]);
     });
 
     const user = userEvent.setup();
     render(<App />);
 
-    const viewSwitch = await page().findByRole('group', { name: '檢視' }, WAIT);
-    expect(within(viewSwitch).getAllByRole('button')).toHaveLength(3);
-    await user.click(within(viewSwitch).getByRole('button', { name: '結清' }));
+    await user.click(await page().findByRole('button', { name: '借還' }, WAIT));
+    await user.click(await page().findByRole('button', { name: '共享' }, WAIT));
+    const group = await screen.findByRole('region', { name: '旅行帳本' }, WAIT);
+    const archivedGroup = screen.getByRole('region', { name: '封存帳本' });
+    expect(within(group).queryByRole('heading', { name: '淨額' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: '新增結清' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
+    expect(
+      within(archivedGroup).queryByRole('button', { name: '新增結清' }),
+    ).not.toBeInTheDocument();
 
-    expect(window.location.search).toBe('?view=settle');
-    expect(await screen.findByRole('heading', { name: '淨額' }, WAIT)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '篩選' })).not.toBeInTheDocument();
-    expect(page().getByRole('button', { name: '新增結清' })).toBeInTheDocument();
-
-    const suggestions = screen.getByRole('region', { name: '轉帳' });
-    await user.click(within(suggestions).getByRole('button', { name: '結清' }));
-    const form = await screen.findByRole('dialog', { name: '結清' }, WAIT);
-    expect(within(form).getByLabelText('付錢的人')).toHaveValue(min.id);
-    expect(within(form).getByLabelText('收錢的人')).toHaveValue(me.id);
-    expect(within(form).getByLabelText('金額')).toHaveValue(2050);
+    const transferRow = within(group).getByRole('button', { name: '小明欠我 $2,050' });
+    await user.click(transferRow);
+    const form = within(group).getByLabelText('付錢的人').closest('form');
+    expect(form).not.toBeNull();
+    expect(screen.queryByRole('dialog', { name: '結清' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(form as HTMLFormElement).getByLabelText('付錢的人')).toHaveValue(min.id);
+      expect(within(form as HTMLFormElement).getByLabelText('收錢的人')).toHaveValue(me.id);
+      expect(within(form as HTMLFormElement).getByLabelText('金額')).toHaveValue(2050);
+    }, WAIT);
+    await user.click(within(form as HTMLFormElement).getByRole('button', { name: '新增' }));
+    await waitFor(() => expect(createCalled).toBe(true), WAIT);
+    await waitFor(
+      () => expect(within(group).queryByLabelText('金額')).not.toBeInTheDocument(),
+      WAIT,
+    );
   });
 
-  it.each([
-    { amount: 51200, fromPersonId: 'person-other', toPersonId: 'person-me' },
-    { amount: -51200, fromPersonId: 'person-me', toPersonId: 'person-other' },
-  ])(
-    'receives a settlement intent, switches ledger and prefills the direction for $amount cents',
-    async ({ amount, fromPersonId, toPersonId }) => {
-      const sharedLedger = { ...ledger, id: 'ledger-2', name: '旅行帳本', kind: 'SHARED' };
-      const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
-      const other = { id: 'person-other', name: '小明', userId: 'user-2', status: 'MEMBER' };
-      window.history.pushState(
-        {
-          usr: {
-            settleIntent: { ledgerId: sharedLedger.id, personId: other.id, amount },
-          },
-          key: 'from-debts',
-          idx: 0,
-        },
-        '',
-        '/transactions?view=settle',
-      );
-      fetchMock.mockImplementation((url: string) => {
-        const json = (body: unknown) =>
-          Promise.resolve(
-            new Response(JSON.stringify(body), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          );
-        if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
-        if (url.endsWith('/ledgers/ledger-2/people')) return json([me, other]);
-        if (url.endsWith('/ledgers/ledger-2/settlement-summary')) {
-          return json({
-            people: [
-              { person: me, net: 51200 },
-              { person: other, net: -51200 },
-            ],
-            suggestions: [{ fromPersonId: other.id, toPersonId: me.id, amount: 51200 }],
-          });
-        }
-        if (url.includes('/transactions')) {
-          return json({ items: [lunch], page: 1, limit: 20, total: 1 });
-        }
-        if (url.endsWith('/accounts')) return json([account]);
-        if (url.endsWith('/categories')) return json([expenseCategory]);
-        if (url.endsWith('/ledgers')) return json([ledger, sharedLedger]);
-        return json([ledger]);
-      });
-
-      render(<App />);
-
-      const form = await screen.findByRole('dialog', { name: '結清' }, WAIT);
-      expect(within(form).getByLabelText('付錢的人')).toHaveValue(fromPersonId);
-      expect(within(form).getByLabelText('收錢的人')).toHaveValue(toPersonId);
-      expect(within(form).getByLabelText('金額')).toHaveValue(512);
-      expect(window.location.search).toBe('?view=settle');
-      await waitFor(() => {
-        expect(localStorage.getItem('ledger.activeLedgerId')).toBe(sharedLedger.id);
-        expect((window.history.state as { usr?: Record<string, unknown> }).usr).toEqual({
-          keepRightPanel: true,
-        });
-      });
-      const switcher = page().getByRole('group', { name: '作用中帳本' });
-      expect(within(switcher).getByRole('button')).toHaveTextContent('旅行帳本');
-    },
-  );
-
-  it('refetches a stale ledger list before giving up on a settlement intent', async () => {
-    // App 開著時被加進新帳本：第一次抓到的清單沒有它，重抓後才有。
-    const sharedLedger = { ...ledger, id: 'ledger-2', name: '旅行帳本', kind: 'SHARED' };
+  it('opens an old settle URL in shared and prefills without changing the active ledger', async () => {
+    const sharedLedger = {
+      ...ledger,
+      id: 'ledger-2',
+      name: '旅行帳本',
+      kind: 'SHARED',
+      role: 'EDITOR',
+      tracksBalance: false,
+    };
     const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
     const other = { id: 'person-other', name: '小明', userId: 'user-2', status: 'MEMBER' };
-    let ledgerListCalls = 0;
     window.history.pushState(
       {
-        usr: { settleIntent: { ledgerId: sharedLedger.id, personId: other.id, amount: 51200 } },
+        usr: { settleIntent: { ledgerId: sharedLedger.id, personId: other.id, amount: -51200 } },
         key: 'from-debts',
         idx: 0,
       },
@@ -643,70 +656,37 @@ describe('Transactions page', () => {
         );
       if (url.endsWith('/users/me')) return json({ id: 'user-1', name: 'Alice' });
       if (url.endsWith('/ledgers/ledger-2/people')) return json([me, other]);
-      if (url.endsWith('/ledgers/ledger-2/settlement-summary')) {
-        return json({ people: [], suggestions: [] });
-      }
-      if (url.includes('/transactions')) {
+      if (url.endsWith('/ledgers/ledger-2/settlement-summary'))
+        return json({
+          people: [me, other],
+          suggestions: [{ fromPersonId: me.id, toPersonId: other.id, amount: 51200 }],
+        });
+      if (url.includes('/transactions'))
         return json({ items: [lunch], page: 1, limit: 20, total: 1 });
-      }
       if (url.endsWith('/accounts')) return json([account]);
       if (url.endsWith('/categories')) return json([expenseCategory]);
-      if (url.endsWith('/ledgers')) {
-        ledgerListCalls += 1;
-        return json(ledgerListCalls === 1 ? [ledger] : [ledger, sharedLedger]);
-      }
+      if (url.endsWith('/ledgers?includeArchived=true')) return json([ledger, sharedLedger]);
+      if (url.endsWith('/ledgers')) return json([ledger]);
       return json([ledger]);
     });
 
     render(<App />);
 
-    const form = await screen.findByRole('dialog', { name: '結清' }, WAIT);
-    expect(within(form).getByLabelText('付錢的人')).toHaveValue(other.id);
-    expect(within(form).getByLabelText('收錢的人')).toHaveValue(me.id);
-    expect(ledgerListCalls).toBeGreaterThanOrEqual(2);
-  });
-
-  it('ignores and clears a settlement intent when its ledger is not in my ledger list', async () => {
-    window.history.pushState(
-      {
-        usr: {
-          settleIntent: { ledgerId: 'not-mine', personId: 'person-other', amount: 51200 },
-        },
-        key: 'from-debts',
-        idx: 0,
-      },
-      '',
-      '/transactions?view=settle',
-    );
-
-    render(<App />);
-
-    expect(await screen.findByText('午餐', undefined, WAIT)).toBeInTheDocument();
+    const group = await screen.findByRole('region', { name: '旅行帳本' }, WAIT);
     await waitFor(() => {
-      expect(window.location.search).toBe('');
-      expect((window.history.state as { usr?: Record<string, unknown> }).usr).toEqual({
-        keepRightPanel: true,
-      });
-    });
-    expect(screen.queryByRole('dialog', { name: '結清' })).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/ledgers/not-mine/'))).toBe(
-      false,
-    );
+      expect(within(group).getByLabelText('付錢的人')).toHaveValue(me.id);
+      expect(within(group).getByLabelText('收錢的人')).toHaveValue(other.id);
+      expect(within(group).getByLabelText('金額')).toHaveValue(512);
+    }, WAIT);
+    await waitFor(() => {
+      expect(window.location.search).toBe('?view=debts&tab=shared');
+      expect(localStorage.getItem('ledger.activeLedgerId')).toBe(ledger.id);
+      expect((window.history.state as { usr?: Record<string, unknown> }).usr).toBeNull();
+    }, WAIT);
   });
 
-  it('returns a personal ledger from ?view=settle to the two-tab details view', async () => {
-    window.history.pushState({}, '', '/transactions?view=settle');
-    render(<App />);
-
-    const viewSwitch = await page().findByRole('group', { name: '檢視' }, WAIT);
-    expect(within(viewSwitch).getAllByRole('button')).toHaveLength(2);
-    expect(await screen.findByText('午餐', undefined, WAIT)).toBeInTheDocument();
-    await waitFor(() => expect(window.location.search).toBe(''), WAIT);
-    expect(screen.getByRole('button', { name: '篩選' })).toBeInTheDocument();
-  });
-
-  it('keeps the settle view for viewers while hiding settlement actions', async () => {
-    const viewerLedger = { ...ledger, kind: 'SHARED', role: 'VIEWER' };
+  it('keeps shared summary visible for viewers while hiding write buttons', async () => {
+    const viewerLedger = { ...ledger, kind: 'SHARED', role: 'VIEWER', tracksBalance: false };
     const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
     const min = { id: 'person-min', name: '小明', userId: 'user-2', status: 'MEMBER' };
     fetchMock.mockImplementation((url: string) => {
@@ -732,14 +712,17 @@ describe('Transactions page', () => {
       }
       if (url.includes('/categories')) return json([expenseCategory]);
       if (url.includes('/accounts')) return json([account]);
+      if (url.includes('/ledgers?includeArchived=true')) return json([viewerLedger]);
+      if (url.endsWith('/ledgers')) return json([viewerLedger]);
       return json([viewerLedger]);
     });
-    window.history.pushState({}, '', '/transactions?view=settle');
+    window.history.pushState({}, '', '/transactions?view=debts&tab=shared');
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: '淨額' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText('小明欠我 $10', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '淨額' })).not.toBeInTheDocument();
     expect(page().queryByRole('button', { name: '新增結清' })).not.toBeInTheDocument();
-    const suggestions = screen.getByRole('region', { name: '轉帳' });
-    expect(within(suggestions).queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '小明欠我 $10' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '結清' })).not.toBeInTheDocument();
   });
 });

@@ -4,16 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
 /**
- * 帳戶頁的版面（spec 2i SC-38.3、SC-38.5）。
+ * 帳戶頁的版面（spec 2i SC-38.5、開發者 2026-10-07 修訂）。
  *
  * 帳戶頁本身的流程（新增、改名、刪除、錯誤路徑）由
- * `features/accounts/accounts.test.tsx` 負責，這一檔只驗「＋ 新增帳戶」搬到橫條
- * 之後**位置變了、行為沒變**：無障礙名稱一樣、`aria-expanded` 一樣。第三輪起
- * 表單從右側欄滑出（SC-42），不再往下展開。
- *
- * 橫條的內容是 portal 進外殼的，第一次 render 可能晚一拍，所以用 `findBy*`。
+ * `features/accounts/accounts.test.tsx` 負責，這一檔只驗「＋ 新增帳戶」從最上排
+ * 橫條回到頁面內容之後**位置變了、行為沒變**：無障礙名稱一樣、`aria-expanded`
+ * 一樣。表單從右側欄滑出（SC-42），不往下展開。
  */
-describe('Accounts page toolbar', () => {
+describe('Accounts page header actions', () => {
   const fetchMock = vi.fn();
 
   const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
@@ -41,19 +39,20 @@ describe('Accounts page toolbar', () => {
   const WAIT = { timeout: 5000 };
 
   /**
-   * 「在橫條裡」的判準，刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列之外，
-   * 所以它裡面的東西一定不在 `<header>` 裡，而且在 DOM 順序上排在標題之前。
+   * 「在標題那一排」的判準，刻意不看 CSS 類名：按鈕在頁首的 `<header>` 裡、
+   * 標題後面，就是「標題同一排右邊」。
    */
-  function expectInToolbar(element: HTMLElement, heading: HTMLElement) {
-    expect(element.closest('header')).toBeNull();
-    expect(element.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  function expectBesideTitle(element: HTMLElement, heading: HTMLElement) {
+    const header = heading.closest('header');
+    expect(element.closest('header')).toBe(header);
+    expect(heading.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   }
 
-  it('puts 新增帳戶 in the toolbar instead of next to the title', async () => {
+  it('puts 新增帳戶 on the title row of the page content', async () => {
     render(<App />);
 
     const button = await screen.findByRole('button', { name: '新增帳戶' }, WAIT);
-    expectInToolbar(button, screen.getByRole('heading', { name: '帳戶' }));
+    expectBesideTitle(button, screen.getByRole('heading', { name: '帳戶' }));
   });
 
   it('keeps the description under the title and nothing above it', async () => {

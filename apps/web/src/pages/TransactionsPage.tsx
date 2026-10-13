@@ -1,8 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { LedgerSummary, Transaction } from '@ledger/shared';
-import { PageToolbarActions, PageToolbarStart } from '../app/PageToolbar';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -12,16 +10,11 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
-import { LEDGERS_KEY } from '../features/ledgers/use-ledgers';
-import { useCurrentUser } from '../features/auth/use-current-user';
+import { DebtHistoryView } from '../features/debts/DebtHistoryView';
 import { DebtsView } from '../features/debts/DebtsView';
-import { useLedgerPeople } from '../features/ledger-people/use-ledger-people';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
-import { SettlementView } from '../features/settlements/SettlementView';
-import {
-  readSettleIntentState,
-  SETTLE_INTENT_STATE_KEY,
-} from '../features/settlements/settle-intent';
+import { SharedSettlementsView } from '../features/settlements/SharedSettlementsView';
+import { readSettleIntentState } from '../features/settlements/settle-intent';
 import {
   TransactionFilterDrawer,
   TransactionFilterToggle,
@@ -56,134 +49,7 @@ import styles from './TransactionsPage.module.css';
  * 可以記帳，留一張記不進去的表單只會讓人以為壞了。
  */
 export default function TransactionsPage() {
-  const {
-    ledger,
-    ledgers,
-    isLoading: ledgerLoading,
-    error: ledgerError,
-    setActiveLedgerId,
-  } = useActiveLedger();
-  const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const settleIntent = readSettleIntentState(location.state);
-  const [handledSettleLocationKey, setHandledSettleLocationKey] = useState<string | null>(null);
-  const queryClient = useQueryClient();
-  // 為哪一次導覽（location key）重抓過帳本清單：開始用 ref 記（不觸發重繪），完成才寫 state。
-  const ledgerRefetchStartedFor = useRef<string | null>(null);
-  const [ledgerRefetchDoneFor, setLedgerRefetchDoneFor] = useState<string | null>(null);
-  const settleIntentLedgerId = settleIntent?.ledgerId ?? null;
-  const settleIntentPersonId = settleIntent?.personId ?? null;
-  const settleIntentAmount = settleIntent?.amount ?? null;
-  const settleIntentState = useMemo(
-    () =>
-      settleIntentLedgerId !== null && settleIntentPersonId !== null && settleIntentAmount !== null
-        ? {
-            [SETTLE_INTENT_STATE_KEY]: {
-              ledgerId: settleIntentLedgerId,
-              personId: settleIntentPersonId,
-              amount: settleIntentAmount,
-            },
-          }
-        : null,
-    [settleIntentAmount, settleIntentLedgerId, settleIntentPersonId],
-  );
-
-  // 清單載入後才判斷目標帳本是否可切換，避免把尚未回來的資料誤判成「不在清單」。
-  if (
-    settleIntentLedgerId !== null &&
-    !ledgerLoading &&
-    ledgerError === null &&
-    handledSettleLocationKey !== location.key
-  ) {
-    setHandledSettleLocationKey(location.key);
-  }
-
-  useEffect(() => {
-    if (
-      settleIntentLedgerId === null ||
-      ledgerLoading ||
-      ledgerError !== null ||
-      handledSettleLocationKey !== location.key
-    ) {
-      return;
-    }
-
-    const targetLedger = ledgers.find((item) => item.id === settleIntentLedgerId);
-    if (!targetLedger || targetLedger.kind !== 'SHARED') {
-      // 帳本清單是快取：App 開著時被別人加進新帳本，快取裡就沒有它。先重抓一次，
-      // 抓完還找不到才當成不可用，否則點借還頁的帳本來源會悄悄退回明細。
-      if (ledgerRefetchStartedFor.current !== location.key) {
-        const key = location.key;
-        ledgerRefetchStartedFor.current = key;
-        void queryClient
-          .refetchQueries({ queryKey: LEDGERS_KEY })
-          .finally(() => setLedgerRefetchDoneFor(key));
-        return;
-      }
-      if (ledgerRefetchDoneFor !== location.key) {
-        return;
-      }
-      // state 裡的帳本已不可用時整個忽略該指示，連 `?view=settle` 也一併移除。
-      const next = new URLSearchParams(searchParams);
-      next.delete('view');
-      setSearchParams(next, { replace: true, state: { keepRightPanel: true } });
-      return;
-    }
-
-    // 先切換作用中帳本，等 context 真的換過來後再切結清檢視，避免面板對錯帳本。
-    if (ledger?.id !== settleIntentLedgerId) {
-      setActiveLedgerId(settleIntentLedgerId);
-      return;
-    }
-
-    if (searchParams.get('view') !== 'settle') {
-      const next = new URLSearchParams(searchParams);
-      next.set('view', 'settle');
-      setSearchParams(next, { replace: true, state: settleIntentState ?? {} });
-    }
-  }, [
-    handledSettleLocationKey,
-    ledger?.id,
-    ledgerError,
-    ledgerLoading,
-    ledgerRefetchDoneFor,
-    ledgers,
-    location.key,
-    queryClient,
-    searchParams,
-    setActiveLedgerId,
-    setSearchParams,
-    settleIntentState,
-    settleIntentLedgerId,
-  ]);
-
-  const intentTarget = ledgers.find((item) => item.id === settleIntentLedgerId);
-  const intentTargetExists = intentTarget?.kind === 'SHARED';
-  const waitingForIntentLedger =
-    settleIntentLedgerId !== null &&
-    !ledgerError &&
-    (ledgerLoading ||
-      !intentTargetExists ||
-      ledger?.id !== settleIntentLedgerId ||
-      searchParams.get('view') !== 'settle');
-
-  if (waitingForIntentLedger) {
-    return (
-      <PageContent>
-        <PageHeader title="交易" />
-        <p className={styles.note}>載入中…</p>
-      </PageContent>
-    );
-  }
-
-  if (settleIntentLedgerId !== null && ledgerError) {
-    return (
-      <PageContent>
-        <PageHeader title="交易" />
-        <FormError error={ledgerError} />
-      </PageContent>
-    );
-  }
+  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
 
   if (ledger) {
     return <LedgerTransactions key={ledger.id} ledger={ledger} />;
@@ -204,10 +70,10 @@ export default function TransactionsPage() {
 }
 
 /**
- * 檢視切換的兩個值。狀態放在網址查詢參數（`?view=debts`）：重整後停在同一個
- * 檢視，也能直接把借還檢視的網址分享出去（spec 4.2、SC-W9）。
+ * 交易頁只有明細與借還兩個檢視，子分頁只在借還檢視內選擇。
  */
-type TransactionsView = 'details' | 'debts' | 'settle';
+type TransactionsView = 'details' | 'debts';
+type DebtsTab = 'overview' | 'personal' | 'shared' | 'history';
 
 /**
  * 一本帳本的交易列表。
@@ -225,38 +91,58 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const settleIntent = readSettleIntentState(location.state);
-  const currentUser = useCurrentUser();
-  const ledgerPeople = useLedgerPeople(
-    ledger.id,
-    ledger.kind === 'SHARED' && settleIntent?.ledgerId === ledger.id,
-  );
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterPanelId = useId();
   const [page, setPage] = useState(1);
   // 檢視放在網址而非 state（spec 4.2）：重整要留在同一個檢視。
   const requestedView = searchParams.get('view');
-  const view: TransactionsView =
-    requestedView === 'debts'
-      ? 'debts'
-      : ledger.kind === 'SHARED' && requestedView === 'settle'
-        ? 'settle'
-        : 'details';
+  const requestedTab = searchParams.get('tab');
+  const routeState: unknown = location.state;
+  const routeToShared = requestedView === 'settle' || settleIntent !== null;
+  const view: TransactionsView = requestedView === 'debts' || routeToShared ? 'debts' : 'details';
+  const debtsTab: DebtsTab = routeToShared
+    ? 'shared'
+    : requestedTab === 'personal' || requestedTab === 'shared' || requestedTab === 'history'
+      ? requestedTab
+      : 'overview';
+  const sharedSettleIntent =
+    requestedView === 'debts' && requestedTab === 'shared' ? settleIntent : null;
 
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
+  const [pendingCounterpartyId, setPendingCounterpartyId] = useState<string | null>(null);
+  const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(null);
 
-  // 個人帳本沒有結清檢視；直接進入舊連結時移除無效參數，回到明細。
+  // 舊的結清網址與一次性指示都進共享分頁；未指定子分頁時補上預設總覽。
   useEffect(() => {
-    if (ledger.kind === 'PERSONAL' && requestedView === 'settle') {
-      setSearchParams({}, { replace: true, state: { keepRightPanel: true } });
+    if (routeToShared) {
+      if (requestedView !== 'debts' || requestedTab !== 'shared') {
+        setSearchParams({ view: 'debts', tab: 'shared' }, { replace: true, state: routeState });
+      }
+      return;
     }
-  }, [ledger.kind, requestedView, setSearchParams]);
+    if (
+      requestedView === 'debts' &&
+      requestedTab !== 'overview' &&
+      requestedTab !== 'personal' &&
+      requestedTab !== 'shared' &&
+      requestedTab !== 'history'
+    ) {
+      setSearchParams({ view: 'debts', tab: 'overview' }, { replace: true, state: routeState });
+    }
+  }, [requestedTab, requestedView, routeState, routeToShared, setSearchParams]);
 
   /** 切換檢視寫回網址；「明細」時清掉參數，回到乾淨的 /transactions。 */
   function switchView(next: TransactionsView) {
-    setSearchParams(next === 'details' ? {} : { view: next }, { state: { keepRightPanel: true } });
+    setSearchParams(next === 'details' ? {} : { view: 'debts', tab: 'overview' }, {
+      state: { keepRightPanel: true },
+    });
+  }
+
+  function switchDebtsTab(next: DebtsTab) {
+    setSearchParams({ view: 'debts', tab: next }, { state: { keepRightPanel: true } });
   }
 
   /**
@@ -270,8 +156,6 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   function startEditing(transaction: Transaction) {
     if (transaction.settlement) {
-      setPanelTarget({ kind: 'settlement', settlement: transaction });
-      open();
       return;
     }
     setPanelTarget({ kind: 'transaction', transaction });
@@ -288,89 +172,38 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     open();
   }
 
-  function openCounterparty(counterpartyId: string) {
-    setPanelTarget({ kind: 'counterparty', counterpartyId });
-    open();
-  }
-
   /*
-    從總覽或邀請頁過來、要直接打開某人的往來帳（phase-3b2-web W41，見
-    features/linking/navigation.ts）。打開後把 state 換掉，重新整理或回上一頁就不會再開一次。
-
-    換掉 state 是一次 replace 導覽，會換 location key；帶 keepRightPanel 讓右側欄把開啟記號
-    搬過去（RightPanelProvider 的 W15 機制），否則剛打開就被收起。用 passive effect：它在
-    RightPanelProvider 的 layout effect 之後才跑，不會被「換頁就收起」蓋掉。
-
-    面板內容在 render 期間就換（React 的「依 props 調整 state」寫法，以 location key 防止
-    重複），effect 只負責打開右側欄與換掉 state 這兩件外部的事。
+    從總覽或邀請頁帶來的對象 id 只要求切到借還檢視；清單載入後會在目前頁面有該對象時展開，
+    並把導覽 state 清掉，避免重新整理或返回時重複處理。
   */
   const openCounterpartyId = readOpenCounterpartyState(location.state);
-  const [handledLocationKey, setHandledLocationKey] = useState<string | null>(null);
-  if (openCounterpartyId !== null && handledLocationKey !== location.key) {
-    setHandledLocationKey(location.key);
-    setPanelTarget({ kind: 'counterparty', counterpartyId: openCounterpartyId });
+  const [handledCounterpartyLocationKey, setHandledCounterpartyLocationKey] = useState<
+    string | null
+  >(null);
+  if (openCounterpartyId !== null && handledCounterpartyLocationKey !== location.key) {
+    setHandledCounterpartyLocationKey(location.key);
+    setPendingCounterpartyId(openCounterpartyId);
+    setExpandedCounterpartyId(openCounterpartyId);
   }
   useEffect(() => {
     if (openCounterpartyId === null) {
       return;
     }
-    open();
-    setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
-  }, [open, openCounterpartyId, setSearchParams]);
+    const next = new URLSearchParams(searchParams);
+    next.set('view', 'debts');
+    next.set('tab', 'overview');
+    setSearchParams(next, { replace: true, state: null });
+  }, [location.key, openCounterpartyId, searchParams, setSearchParams]);
 
-  const settleIntentReady =
-    settleIntent?.ledgerId === ledger.id &&
-    requestedView === 'settle' &&
-    !ledgerPeople.isLoading &&
-    !currentUser.isLoading;
-  const settleIntentPersonId = settleIntent?.personId;
-  const settleIntentAmount = settleIntent?.amount;
-  const currentPerson = ledgerPeople.data?.find((person) => person.userId === currentUser.data?.id);
-  const settlePrefill = useMemo(() => {
-    if (
-      !settleIntentReady ||
-      !currentPerson ||
-      settleIntentPersonId === undefined ||
-      settleIntentAmount === undefined ||
-      settleIntentAmount === 0
-    ) {
-      return null;
-    }
-    return {
-      fromPersonId: settleIntentAmount > 0 ? settleIntentPersonId : currentPerson.id,
-      toPersonId: settleIntentAmount > 0 ? currentPerson.id : settleIntentPersonId,
-      amount: Math.abs(settleIntentAmount),
-    };
-  }, [currentPerson, settleIntentAmount, settleIntentPersonId, settleIntentReady]);
-  const [handledSettleLocationKey, setHandledSettleLocationKey] = useState<string | null>(null);
-  if (settleIntentReady && handledSettleLocationKey !== location.key) {
-    setHandledSettleLocationKey(location.key);
-    if (settlePrefill) {
-      setPanelTarget({ kind: 'settlement', prefill: settlePrefill });
-    }
-  }
-  useEffect(() => {
-    if (!settleIntentReady || handledSettleLocationKey !== location.key) {
-      return;
-    }
-    if (settlePrefill) {
-      open();
-    }
-    setSearchParams((current) => current, { replace: true, state: { keepRightPanel: true } });
-  }, [
-    handledSettleLocationKey,
-    location.key,
-    open,
-    setSearchParams,
-    settleIntentReady,
-    settlePrefill,
-  ]);
-
-  /** 往來帳的「記一筆」回到借還表單，預帶對象並把面板焦點移入表單。 */
-  function recordEntry(name: string) {
-    setPanelTarget({ kind: 'new', debtCounterparty: name });
-    requestFocus();
-  }
+  const handleCounterpartyRequestHandled = useCallback(
+    (counterpartyId: string, foundInCurrentPage: boolean) => {
+      setPendingCounterpartyId((current) => (current === counterpartyId ? null : current));
+      if (!foundInCurrentPage) {
+        setExpandedCounterpartyId((current) => (current === counterpartyId ? null : current));
+      }
+    },
+    [],
+  );
 
   /*
    * 關閉只收起右側欄，不換內容（W57）：收起有滑出動畫，這時先換成新增表單，動畫裡滑出去
@@ -387,16 +220,8 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     requestFocus();
   }
 
-  /** 結清檢視的主按鈕開一張空白結清表單。 */
-  function startAddingSettlement() {
-    setPanelTarget({ kind: 'settlement' });
-    open();
-  }
-
-  function openSuggestedSettlement(
-    prefill: NonNullable<Extract<PanelTarget, { kind: 'settlement' }>['prefill']>,
-  ) {
-    setPanelTarget({ kind: 'settlement', prefill });
+  function editSplit(splitId: string) {
+    setPanelTarget({ kind: 'split', splitId });
     open();
   }
 
@@ -407,85 +232,115 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         ? panelTarget.transaction.id
         : isOpen && panelTarget.kind === 'fillAccount'
           ? panelTarget.transaction.id
-          : isOpen && panelTarget.kind === 'settlement'
-            ? (panelTarget.settlement?.id ?? null)
-            : null;
+          : null;
 
   return (
     <>
-      {/* 橫條左邊是作用中帳本（SC-38.2），右邊是這一頁的主要按鈕（SC-38.3）。 */}
-      <PageToolbarStart>
-        <LedgerSwitcher />
-      </PageToolbarStart>
-      <PageToolbarActions>
-        {view === 'settle' ? (
-          ledger.role !== 'VIEWER' &&
-          ledger.archivedAt === null && (
-            <Button onClick={startAddingSettlement}>
-              <Icon name="plus" />
-              新增結清
-            </Button>
-          )
-        ) : (
-          <Button onClick={startAdding}>
-            <Icon name="plus" />
-            新增交易
-          </Button>
-        )}
-      </PageToolbarActions>
-
       <PageContent>
         <PageHeader title="交易" />
 
         {/*
           「明細／借還」的檢視切換（spec 4.2）。狀態在網址上，這裡只反映目前值。
           借還也是交易（錢進出帳戶），所以它住在交易頁，側欄不加項目（決策 W1）。
+
+          帳本切換、「＋ 新增交易」與篩選都只跟著「明細」出現（開發者 2026-10-07）：
+          明細記進作用中帳本，借還已不分帳本，那一排不需要它們。
         */}
-        {/* 檢視切換與漏斗同一列（3d T6）：漏斗只在明細時出現。 */}
         <div className={styles.toolbarRow}>
-          <div className={styles.viewSwitch} role="group" aria-label="檢視">
-            <button
-              type="button"
-              className={styles.viewSwitchButton}
-              aria-pressed={view === 'details'}
-              onClick={() => switchView('details')}
-            >
-              明細
-            </button>
-            <button
-              type="button"
-              className={styles.viewSwitchButton}
-              aria-pressed={view === 'debts'}
-              onClick={() => switchView('debts')}
-            >
-              借還
-            </button>
-            {ledger.kind === 'SHARED' && (
+          <div className={styles.toolbarMain}>
+            <div className={styles.viewSwitch} role="group" aria-label="檢視">
               <button
                 type="button"
                 className={styles.viewSwitchButton}
-                aria-pressed={view === 'settle'}
-                onClick={() => switchView('settle')}
+                aria-pressed={view === 'details'}
+                onClick={() => switchView('details')}
               >
-                結清
+                明細
               </button>
-            )}
+              <button
+                type="button"
+                className={styles.viewSwitchButton}
+                aria-pressed={view === 'debts'}
+                onClick={() => switchView('debts')}
+              >
+                借還
+              </button>
+            </div>
+            {view === 'details' && <LedgerSwitcher />}
           </div>
           {view === 'details' && (
-            <TransactionFilterToggle
-              filters={filters}
-              expanded={filtersOpen}
-              controlsId={filterPanelId}
-              onToggle={() => setFiltersOpen((current) => !current)}
-            />
+            <div className={styles.toolbarSide}>
+              <Button onClick={startAdding}>
+                <Icon name="plus" />
+                新增交易
+              </Button>
+              <TransactionFilterToggle
+                filters={filters}
+                expanded={filtersOpen}
+                controlsId={filterPanelId}
+                onToggle={() => setFiltersOpen((current) => !current)}
+              />
+            </div>
           )}
         </div>
 
+        {view === 'debts' && (
+          <div
+            className={`${styles.viewSwitch} ${styles.debtsTabs}`}
+            role="group"
+            aria-label="借還"
+          >
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={debtsTab === 'overview'}
+              onClick={() => switchDebtsTab('overview')}
+            >
+              總覽
+            </button>
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={debtsTab === 'personal'}
+              onClick={() => switchDebtsTab('personal')}
+            >
+              個人
+            </button>
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={debtsTab === 'shared'}
+              onClick={() => switchDebtsTab('shared')}
+            >
+              共享
+            </button>
+            <button
+              type="button"
+              className={styles.viewSwitchButton}
+              aria-pressed={debtsTab === 'history'}
+              onClick={() => switchDebtsTab('history')}
+            >
+              歷史
+            </button>
+          </div>
+        )}
+
         {view === 'debts' ? (
-          // 借還檢視不吃帳本（債務屬於使用者），整組換掉而不是疊在明細之上。
-          <DebtsView onSelectCounterparty={openCounterparty} />
-        ) : view === 'settle' ? (
-          <SettlementView ledger={ledger} onSettle={openSuggestedSettlement} />
+          debtsTab === 'shared' ? (
+            <SharedSettlementsView settleIntent={sharedSettleIntent} />
+          ) : debtsTab === 'history' ? (
+            <DebtHistoryView ledger={ledger} onEditSplit={editSplit} />
+          ) : (
+            <DebtsView
+              ledger={ledger}
+              mode={debtsTab}
+              expandedCounterpartyId={expandedCounterpartyId}
+              onExpandedChange={setExpandedCounterpartyId}
+              openCounterpartyId={pendingCounterpartyId}
+              onOpenRequestHandled={handleCounterpartyRequestHandled}
+              onEditSplit={editSplit}
+            />
+          )
         ) : (
           // 篩選是獨立的一張卡片，列表與分頁收在下面那一張。
           <>
@@ -522,12 +377,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         )}
       </PageContent>
 
-      <TransactionWorkbench
-        ledger={ledger}
-        target={panelTarget}
-        onClose={closeWorkbench}
-        onRecordEntry={recordEntry}
-      />
+      <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
   );
 }

@@ -54,6 +54,11 @@ export interface LedgerGroup {
     left: boolean;
   };
   people: LedgerGroupPerson[];
+  /**
+   * 這本帳本裡我看得到的已記結清筆數（3g W161）。只有帶 `hasSettlements=true` 時回；
+   * 已退出的帳本只算我是任一方的結清。
+   */
+  settlementCount?: number;
 }
 
 /** `GET /ledger-groups` 的查詢參數。 */
@@ -63,4 +68,9 @@ export interface ListLedgerGroupsQuery {
    * 整組沒有人時那組不回。
    */
   unpointed?: boolean;
+  /**
+   * `true`（借還 › 歷史，3g W161）：只回有我看得到的已記結清的帳本（含已退出的帳本，不受
+   * 上面「已退出只在還有轉帳時列」的限制），每組帶 `settlementCount`。`people` 照上面的規則。
+   */
+  hasSettlements?: boolean;
 }

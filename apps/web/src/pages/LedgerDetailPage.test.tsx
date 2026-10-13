@@ -172,25 +172,26 @@ describe('Ledger detail page', () => {
     expect(screen.queryByText(/家庭帳本/)).not.toBeInTheDocument();
   });
 
-  it('puts the back link and the rename button in the page toolbar', async () => {
-    // SC-38.2、SC-38.3。判準刻意不看 CSS 類名：橫條在中間區的最上方、頁面標題列
-    // 之外，所以它裡面的東西一定不在 `<header>` 裡，而且排在標題之前。
+  it('puts the back link above the title and the rename button beside it', async () => {
+    // 開發者 2026-10-07：最上排橫條清空留給 AI 功能，返回連結回到標題左上、
+    // 「改名」回到標題同一排右邊。判準刻意不看 CSS 類名，只看相對位置。
     routeFetch();
 
     render(<App />);
 
     const heading = await screen.findByRole('heading', { name: '家庭帳本' });
 
+    // 返回連結在標題之前（標題左上），而且只指向列表。
     const back = screen.getByRole('link', { name: '回到帳本列表' });
     expect(back).toHaveAttribute('href', '/ledgers');
-    expect(back.closest('header')).toBeNull();
     expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 
+    // 「改名」在頁首的 <header> 裡、標題後面（標題同一排右邊）。
     const rename = screen.getByRole('button', { name: '改名' });
-    expect(rename.closest('header')).toBeNull();
-    expect(rename.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(rename.closest('header')).toBe(heading.closest('header'));
+    expect(heading.compareDocumentPosition(rename) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 
-    // SC-38.5：標題上方不再有任何一行字。
+    // 標題仍是頁首裡的第一個東西。
     expect(heading.closest('header')?.firstElementChild).toBe(heading);
   });
 

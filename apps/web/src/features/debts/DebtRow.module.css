@@ -1,0 +1,87 @@
+/* 共享來源與往來紀錄共用欄位，日期、箭頭和金額才能沿同一條垂直線閱讀。 */
+.item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-sm) 0;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.date {
+  flex: 0 0 3rem;
+  width: 3rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.arrow {
+  display: flex;
+  flex: 0 0 6.125rem;
+  align-items: center;
+  width: 6.125rem;
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.amount {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  min-width: 5rem;
+}
+
+.amountText {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 2rem;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+}
+
+.interactive {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.interactive:hover {
+  background: var(--color-fill);
+}
+
+.interactive:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
