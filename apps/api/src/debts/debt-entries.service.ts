@@ -7,7 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { proposeAmend, proposeCreate, proposeDelete, syncStatuses } from './debt-proposal-rules';
-import { recordDebtTransaction, writeSettlement } from './debt-recording';
+import {
+  recordDebtTransaction,
+  recalculateSettlement,
+  voidRepaymentWithSettlement,
+  writeSettlement,
+} from './debt-recording';
 import {
   badRequest,
   currentBalance,
@@ -120,8 +125,10 @@ export class DebtEntriesService {
    * 改金額、日期、備註（決策 41）。對應的交易一起改，否則帳戶餘額與往來餘額會對不起來。
    * 調整紀錄是系統算出來的，不能改（決策 40）；要調整就刪掉重記。
    *
-   * 已配對或還在等對方確認的紀錄，改金額或日期會送變更給對方（決策 67）；只改備註不送，
-   * 備註各記各的。先鎖對象：與對方同時接受提議時，兩邊對配對狀態的讀寫要排隊。
+   * 綁定差額的還款改金額時，差額跟著重算，讓餘額仍然歸零（3g 決策 158）；改成超過原本
+   * 欠款也可以（差額方向反過來），不做超額檢查。已配對或還在等對方確認的紀錄，改金額或日期
+   * 會送變更給對方（決策 67）；只改備註不送，備註各記各的。先鎖對象：與對方同時接受提議時，
+   * 兩邊對配對狀態的讀寫要排隊。
    */
   update(userId: string, entryId: string, input: UpdateDebtEntryRequest): Promise<DebtEntry> {
     return this.prisma.$transaction(async (tx) => {
@@ -145,6 +152,11 @@ export class DebtEntriesService {
       const delta =
         input.amount === undefined ? undefined : Math.sign(existing.delta) * input.amount;
       const date = input.date === undefined ? undefined : new Date(input.date);
+
+      // 差額重算要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
+      if (delta !== undefined) {
+        await recalculateSettlement(tx, existing, delta);
+      }
 
       const updated = await tx.debtEntry.update({
         where: { id: existing.id },
@@ -174,8 +186,10 @@ export class DebtEntriesService {
   }
 
   /**
-   * 軟刪除一筆往來紀錄，連同它的交易（決策 42）。用同一個時間戳，稽核時看得出是同一次刪除。
-   * 已配對的紀錄同時送刪除給對方；還在等對方確認的新增直接作廢（決策 67）。
+   * 軟刪除一筆往來紀錄，連同它的交易（決策 42）。還款有綁定差額時，差額在同一個時間戳一起
+   * 撤銷（3g 決策 156）；綁定的差額不能單獨撤銷（決策 157），要撤就撤那筆還款。已配對的
+   * 紀錄同時送刪除給對方（只送還款那筆——差額本來就不配對）；還在等對方確認的新增直接作廢
+   * （決策 67）。
    */
   remove(userId: string, entryId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
@@ -187,13 +201,15 @@ export class DebtEntriesService {
           'Change this entry through its split.',
         );
       await lockCounterparty(tx, existing.counterpartyId);
+      if (existing.kind === 'SETTLEMENT' && existing.settlesEntryId !== null) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.SETTLEMENT_BOUND_TO_REPAYMENT,
+          'This settlement belongs to a repayment; withdraw the repayment instead.',
+        );
+      }
       const deletedAt = new Date();
-      await tx.debtEntry.update({ where: { id: existing.id }, data: { deletedAt } });
-      await this.transactions.softDeleteDebtTransactions(
-        tx,
-        existing.transactionId === null ? [] : [existing.transactionId],
-        deletedAt,
-      );
+      await voidRepaymentWithSettlement(tx, this.transactions, existing, deletedAt);
       await proposeDelete(tx, { fromUserId: userId, entry: existing, now: deletedAt });
     });
   }
