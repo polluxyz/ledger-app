@@ -73,6 +73,7 @@ describe('CounterpartyDetail', () => {
       name?: string | null;
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
+      entryPages?: Record<number, unknown[]>;
     } = {},
   ) {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -83,8 +84,11 @@ describe('CounterpartyDetail', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
-      if (url.includes('/counterparties/cp-1/entries')) {
-        return json({ items, page: 1, limit: 100, total });
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/counterparties/cp-1/entries')) {
+        const page = Number(parsedUrl.searchParams.get('page') ?? 1);
+        const limit = Number(parsedUrl.searchParams.get('limit') ?? 20);
+        return json({ items: options.entryPages?.[page] ?? items, page, limit, total });
       }
       if (url.includes('/debt-entries') && init?.method === 'POST') {
         return json(
@@ -129,6 +133,7 @@ describe('CounterpartyDetail', () => {
       name?: string | null;
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
+      entryPages?: Record<number, unknown[]>;
     } = {},
     mode: 'overview' | 'personal' = 'personal',
   ) {
@@ -154,6 +159,36 @@ describe('CounterpartyDetail', () => {
     expect(await screen.findByText('借款')).toBeInTheDocument();
     expect(screen.queryByText('小明欠你 $9')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '往來紀錄' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '載入更多' })).not.toBeInTheDocument();
+  });
+
+  it('requests outstanding entries and appends the next API page after loading more', async () => {
+    const user = userEvent.setup();
+    const firstEntry = { ...baseEntry, id: 'entry-first', note: '第一頁紀錄' };
+    const secondEntry = { ...baseEntry, id: 'entry-second', note: '第二頁紀錄' };
+    renderDetail(900, [firstEntry], 21, { entryPages: { 2: [secondEntry] } });
+
+    expect(await screen.findByText('第一頁紀錄')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\/cp-1\/entries\?section=outstanding&page=1&limit=20$/),
+      ),
+    ).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: '載入更多' }));
+
+    expect(await screen.findByText('第二頁紀錄')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\/cp-1\/entries\?section=outstanding&page=2&limit=20$/),
+      ),
+    ).toBe(true);
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('title'))).toEqual([
+      '我借給小明 $120',
+      '我借給小明 $120',
+    ]);
+    expect(screen.queryByRole('button', { name: '載入更多' })).not.toBeInTheDocument();
   });
 
   it('opens a prefilled form above the entries and lets the user cancel it', async () => {
@@ -253,17 +288,14 @@ describe('CounterpartyDetail', () => {
     }
   });
 
-  it('shows only outstanding records and omits settled records and history button', async () => {
-    const entries = [
-      { ...baseEntry, id: 'outstanding', balanceAfter: 3000, note: '未還清' },
-      { ...baseEntry, id: 'zero', balanceAfter: 0, note: '歸零' },
-      { ...baseEntry, id: 'older', balanceAfter: -2000, note: '更舊' },
-    ];
+  it('renders the outstanding section returned by the API and omits history navigation', async () => {
+    const entries = [{ ...baseEntry, id: 'outstanding', balanceAfter: 3000, note: '未還清' }];
     renderDetail(3000, entries, entries.length);
 
     expect(await screen.findByText('未還清')).toBeInTheDocument();
-    expect(screen.queryByText('歸零')).not.toBeInTheDocument();
-    expect(screen.queryByText('更舊')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('section=outstanding'))).toBe(
+      true,
+    );
     expect(screen.queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
   });
 

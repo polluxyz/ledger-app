@@ -33,13 +33,12 @@ export function CounterpartyList({
 }: CounterpartyListProps) {
   const [page, setPage] = useState(1);
   const counterparties = useCounterparties(
-    mode === 'overview' ? { page, limit: 20, nonZero: true } : { page, limit: 20 },
+    mode === 'overview'
+      ? { page, limit: 20, nonZero: true }
+      : { page, limit: 20, personalNonZero: true },
   );
   const unpointedGroups = useLedgerGroups({ unpointed: true });
-  const items = useMemo(() => {
-    const items = counterparties.data?.items ?? [];
-    return mode === 'personal' ? items.filter((item) => item.balance !== 0) : items;
-  }, [counterparties.data?.items, mode]);
+  const items = useMemo(() => counterparties.data?.items ?? [], [counterparties.data?.items]);
   const avatarLabels = useMemo(
     () => getAvatarLabels(['我', ...items.map((item) => item.displayName)]),
     [items],

@@ -124,7 +124,7 @@ export function DebtEntriesList({
                 <span className={rowStyles.amount}>
                   <span className={rowStyles.amountText}>{formatMoney(Math.abs(entry.delta))}</span>
                 </span>
-                {editable && (
+                {editable && entry.settlesEntryId === null && (
                   <span className={rowStyles.actions}>
                     <EntryMenu
                       hasEdit={!isAdjustment}

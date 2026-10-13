@@ -8,9 +8,8 @@ import { getAvatarLabels } from '../../lib/avatar-labels';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntriesList } from './DebtEntriesList';
 import { DebtEntryForm } from './DebtEntryForm';
-import { useCounterparty, useCounterpartyEntries, useForgiveCounterparty } from './use-debts';
+import { useCounterparty, useCounterpartyEntryPages, useForgiveCounterparty } from './use-debts';
 import { LedgerSourceList } from './LedgerSourceList';
-import { splitDebtEntriesByBalanceZero } from './debt-entry-history';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
@@ -38,7 +37,7 @@ export function CounterpartyDetail({
   onEditSplit,
 }: CounterpartyDetailProps) {
   const counterparty = useCounterparty(counterpartyId);
-  const entries = useCounterpartyEntries(counterpartyId, { limit: 100 });
+  const entries = useCounterpartyEntryPages(counterpartyId, 'outstanding');
   const forgive = useForgiveCounterparty();
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
@@ -66,7 +65,7 @@ export function CounterpartyDetail({
   const person = counterparty.data;
   const { ledgerParts } = person;
   const entryFormId = `counterparty-entry-form-${counterpartyId}`;
-  const { outstanding } = splitDebtEntriesByBalanceZero(entries.data?.items ?? []);
+  const outstandingEntries = entries.data?.pages.flatMap((page) => page.items) ?? [];
   const canWrite = mode === 'personal';
   const computedLabels = getAvatarLabels([
     '我',
@@ -85,17 +84,29 @@ export function CounterpartyDetail({
           <p className={styles.status}>載入中…</p>
         ) : entries.error ? (
           <FormError error={entries.error} />
-        ) : outstanding.length === 0 ? (
+        ) : outstandingEntries.length === 0 ? (
           <p className={styles.empty}>目前沒有未還清紀錄。</p>
         ) : (
           <DebtEntriesList
-            entries={outstanding}
+            entries={outstandingEntries}
             balance={person.balance}
             editable={canWrite}
             displayName={person.displayName}
             avatarLabels={avatarLabels}
             onEditSplit={onEditSplit}
           />
+        )}
+        {entries.hasNextPage && (
+          <div className={styles.loadMore}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={entries.isFetchingNextPage}
+              onClick={() => void entries.fetchNextPage()}
+            >
+              {entries.isFetchingNextPage ? '載入中…' : '載入更多'}
+            </Button>
+          </div>
         )}
       </section>
 
