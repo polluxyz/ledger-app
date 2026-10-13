@@ -1,10 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateSettlementRequest,
+  Paginated,
   SetAccountRequest,
   SetAccountResponse,
   SettlementResponse,
   SettlementSummary,
+  Transaction,
   UpdateSettlementRequest,
 } from '@ledger/shared';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
@@ -22,6 +24,16 @@ export function settlementSummaryKey(ledgerId: string | null) {
   return ['settlement-summary', ledgerId] as const;
 }
 
+/** 某本帳本已記的結清清單（3g §4.2）的共同前綴。 */
+export const LEDGER_SETTLEMENTS_KEY = ['ledger-settlements'] as const;
+
+export function ledgerSettlementsKey(ledgerId: string | null) {
+  return [...LEDGER_SETTLEMENTS_KEY, ledgerId] as const;
+}
+
+/** 「載入更多」每次多拿幾筆結清。 */
+export const LEDGER_SETTLEMENT_PAGE_SIZE = 20;
+
 /**
  * 結清與補帳戶會改變交易列表、淨額、帳戶餘額，也會改變借還頁的對象總額與帳本群組。
  * 少了任何一份都不會報錯，只會讓畫面停在舊數字，所以集中在這裡一起失效。
@@ -34,6 +46,7 @@ function useInvalidateSettlementWrites(ledgerId: string) {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ['transactions', ledgerId] });
     void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
+    void queryClient.invalidateQueries({ queryKey: ledgerSettlementsKey(ledgerId) });
     void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
     void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
     void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
@@ -47,6 +60,24 @@ export function useSettlementSummary(ledgerId: string | null, enabled = true) {
     queryFn: () =>
       apiRequest<SettlementSummary>(`/ledgers/${ledgerId as string}/settlement-summary`),
     enabled: ledgerId !== null && enabled,
+  });
+}
+
+/**
+ * 某本帳本已記的結清，新到舊，一頁一頁載入（借還 › 歷史，3g W161）。已退出的帳本後端只回
+ * 我是任一方的結清。畫面把 `data.pages` 依序攤平，`hasNextPage` 時顯示「載入更多」。
+ */
+export function useLedgerSettlementPages(ledgerId: string | null) {
+  return useInfiniteQuery({
+    queryKey: ledgerSettlementsKey(ledgerId),
+    queryFn: ({ pageParam }) =>
+      apiRequest<Paginated<Transaction>>(
+        `/ledgers/${ledgerId as string}/settlements?page=${pageParam}&limit=${LEDGER_SETTLEMENT_PAGE_SIZE}`,
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (last: Paginated<Transaction>) =>
+      last.page * last.limit < last.total ? last.page + 1 : undefined,
+    enabled: ledgerId !== null,
   });
 }
 
