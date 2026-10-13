@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { CounterpartyList } from './CounterpartyList';
 import { useState } from 'react';
 
-/** 借還清單驗兩種餘額來源、總覽唯讀展開與個人分頁的前端零值過濾。 */
+/** 借還清單驗兩種餘額來源、總覽唯讀展開與個人分頁的 API 篩選參數。 */
 describe('CounterpartyList', () => {
   const fetchMock = vi.fn();
   let queryClient: QueryClient;
@@ -277,15 +277,17 @@ describe('CounterpartyList', () => {
     expect(await screen.findByRole('button', { name: /^小美/ })).toBeInTheDocument();
   });
 
-  it('uses personal balance, filters zero balances in the browser, and omits the server filter', async () => {
+  it('uses personal balances, requests the server filter, and displays its response as given', async () => {
     renderList('personal');
 
     expect(await screen.findByText('小明的暱稱欠你 $9')).toBeInTheDocument();
     expect(screen.getByText('你欠小華 $11')).toBeInTheDocument();
-    expect(screen.queryByText('清零的人')).not.toBeInTheDocument();
+    // API mock 故意回傳零餘額，確認列表照回應顯示，不在前端再過濾。
+    expect(screen.getByRole('button', { name: /^清零的人/ })).toBeInTheDocument();
     expect(
-      fetchMock.mock.calls.some(([url]) => String(url).match(/\/counterparties\?page=1&limit=20$/)),
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).match(/\/counterparties\?page=1&limit=20&personalNonZero=true$/),
+      ),
     ).toBe(true);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('nonZero=true'))).toBe(false);
   });
 });

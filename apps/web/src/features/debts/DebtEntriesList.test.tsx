@@ -115,6 +115,17 @@ describe('DebtEntriesList', () => {
     expect(screen.getByText('分帳')).toBeInTheDocument();
   });
 
+  it('hides row actions for a settlement bound to its repayment and keeps them for an unbound one', () => {
+    renderList([
+      entry({ id: 'bound-settlement', kind: 'SETTLEMENT', settlesEntryId: 'repayment-1' }),
+      entry({ id: 'legacy-settlement', kind: 'SETTLEMENT', settlesEntryId: null }),
+    ]);
+
+    const [boundRow, unboundRow] = screen.getAllByRole('listitem');
+    expect(within(boundRow!).queryByRole('button', { name: '更多操作' })).not.toBeInTheDocument();
+    expect(within(unboundRow!).getByRole('button', { name: '更多操作' })).toBeInTheDocument();
+  });
+
   it('opens the menu with edit and undo, then closes on Escape and refocuses the trigger', async () => {
     const user = userEvent.setup();
     renderList([entry()]);

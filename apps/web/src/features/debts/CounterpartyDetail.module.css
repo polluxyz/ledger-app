@@ -30,6 +30,11 @@
   gap: var(--space-sm);
 }
 
+.loadMore {
+  display: flex;
+  justify-content: center;
+}
+
 .empty,
 .status {
   margin: 0;
