@@ -17,6 +17,6 @@ export class LedgerGroupsController {
     @CurrentUser() user: JwtPayload,
     @Query() query: ListLedgerGroupsQueryDto,
   ): Promise<LedgerGroup[]> {
-    return this.debts.groups(user.sub, query.unpointed);
+    return this.debts.groups(user.sub, query.unpointed, query.hasSettlements);
   }
 }

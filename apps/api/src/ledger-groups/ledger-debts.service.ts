@@ -5,6 +5,7 @@ import {
   type LedgerGroup,
   type LedgerGroupPerson,
 } from '@ledger/shared';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { loadEffectivePointers } from '../ledger-people/ledger-pointers';
@@ -83,8 +84,11 @@ export class LedgerDebtsService {
     return parts;
   }
 
-  async groups(userId: string, unpointed = false): Promise<LedgerGroup[]> {
+  async groups(userId: string, unpointed = false, hasSettlements = false): Promise<LedgerGroup[]> {
     const debts = await this.loadMyLedgerDebts(userId);
+    // hasSettlements 需要每組的結清筆數；一次查詢取回所有帳本，不逐本帳本查。
+    // counts 為 null 時回應與現行完全相同（不帶 settlementCount）。
+    const counts = hasSettlements ? await this.settlementCounts(userId) : null;
     return debts
       .map(({ ledger, people }) => ({
         ledger,
@@ -95,8 +99,38 @@ export class LedgerDebtsService {
               ? amount !== 0
               : person.status !== 'LEFT' || amount !== 0,
         ),
+        ...(counts ? { settlementCount: counts.get(ledger.id) ?? 0 } : {}),
       }))
-      .filter(({ ledger, people }) => (!unpointed && !ledger.left) || people.length > 0)
+      .filter(({ ledger, people }) =>
+        counts
+          ? // 歷史分頁（3g W161）：只回有我看得到的結清的帳本，已退出的帳本不受
+            // 「已退出只在還有轉帳時列」的限制，即使 people 是空的也列出。
+            (counts.get(ledger.id) ?? 0) > 0
+          : (!unpointed && !ledger.left) || people.length > 0,
+      )
       .sort((a, b) => a.ledger.name.localeCompare(b.ledger.name, 'zh-Hant'));
+  }
+
+  /**
+   * 一次查詢算出我在每本共享帳本看得到的未刪除結清筆數（3g §4.2）。現任成員算全部；
+   * 已退出只算我是付錢或收錢一方的結清（3f 決策 151 的範圍）。
+   *
+   * 以 `LedgerPerson`（曾參與過就有列）對上 `LedgerMember`（仍在名單）判別身分：
+   * 成員資格在則全部可見；不在則用 `me."id"` 比對結清的兩位。查不到的帳本不會
+   * 出現在回傳的 Map，呼叫端以 `?? 0` 視為沒有結清。
+   */
+  private async settlementCounts(userId: string): Promise<Map<string, number>> {
+    const rows = await this.prisma.$queryRaw<Array<{ ledgerId: string; count: number | bigint }>>(
+      Prisma.sql`
+        SELECT t."ledgerId" AS "ledgerId", COUNT(*)::int AS "count"
+        FROM "LedgerSettlement" st
+        JOIN "Transaction" t ON t."id" = st."transactionId" AND t."deletedAt" IS NULL
+        JOIN "LedgerPerson" me ON me."ledgerId" = t."ledgerId" AND me."userId" = ${userId}
+        LEFT JOIN "LedgerMember" mem ON mem."ledgerId" = t."ledgerId" AND mem."userId" = ${userId}
+        WHERE mem."userId" IS NOT NULL OR st."fromPersonId" = me."id" OR st."toPersonId" = me."id"
+        GROUP BY t."ledgerId"
+      `,
+    );
+    return new Map(rows.map((row) => [row.ledgerId, Number(row.count)]));
   }
 }

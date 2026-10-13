@@ -16,6 +16,7 @@ describe('TransactionsService', () => {
     account: { findUnique: jest.Mock };
     debtEntry: { findUnique: jest.Mock };
     ledgerSettlement: { findUnique: jest.Mock };
+    ledgerPerson: { findUnique: jest.Mock };
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
     transaction: {
@@ -75,6 +76,7 @@ describe('TransactionsService', () => {
       account: { findUnique: jest.fn() },
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
+      ledgerPerson: { findUnique: jest.fn().mockResolvedValue({ id: 'person-1' }) },
       $transaction: jest.fn((callback: (client: unknown) => unknown) => callback(prisma)),
       $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
@@ -330,6 +332,61 @@ describe('TransactionsService', () => {
         page: 1,
         limit: 20,
         total: 1,
+      });
+    });
+
+    describe('settlementsOnly (internal option for the settlements list)', () => {
+      /** 取第 n 次交給 $queryRaw 的 SQL 物件（Prisma.Sql，`.sql` 是含 ? 占位的字串）。 */
+      function rawSql(call = 0): string {
+        const calls = prisma.$queryRaw.mock.calls as Array<[{ sql: string }]>;
+        return calls[call]![0].sql;
+      }
+
+      it('restricts the query to transactions with a LedgerSettlement row', async () => {
+        await service.list(ledgerId, creatorId, { page: 1 }, 'MEMBER', {
+          settlementsOnly: true,
+        });
+
+        expect(rawSql()).toContain('FROM "LedgerSettlement" st');
+        // 沒帶內部選項時，同一條 SQL 不應出現結清過濾——證明它是內部選項而非預設行為。
+        prisma.$queryRaw.mockClear();
+        await service.list(ledgerId, creatorId, { page: 1 });
+        expect(rawSql()).not.toContain('FROM "LedgerSettlement" st');
+      });
+
+      it('narrows the LEFT scope to settlements where the viewer is either side', async () => {
+        await service.list(ledgerId, creatorId, { page: 1 }, 'LEFT', {
+          settlementsOnly: true,
+        });
+
+        expect(prisma.ledgerPerson.findUnique).toHaveBeenCalledWith({
+          where: { ledgerId_userId: { ledgerId, userId: creatorId } },
+          select: { id: true },
+        });
+        const sql = rawSql();
+        expect(sql).toContain('st."fromPersonId" = ? OR st."toPersonId" = ?');
+        // 一般交易的退出範圍（payer／creator 條款）對結清清單刻意不打開：
+        // 退出者以前代替別人記的結清，不能因為他是 creator 就看得到。
+        expect(sql).not.toContain('t."payerPersonId" = ?');
+        expect(sql).not.toContain('t."creatorId" = ?');
+        expect(sql).not.toContain('FROM "LedgerSplit" ls');
+      });
+
+      it('keeps the broad LEFT scope for the ordinary transaction list', async () => {
+        await service.list(ledgerId, creatorId, { page: 1 }, 'LEFT');
+
+        const sql = rawSql();
+        expect(sql).toContain('t."payerPersonId" = ?');
+        expect(sql).toContain('t."creatorId" = ?');
+        expect(sql).toContain('FROM "LedgerSplit" ls');
+      });
+
+      it('404s for a LEFT access without a ledger person row', async () => {
+        prisma.ledgerPerson.findUnique.mockResolvedValueOnce(null);
+
+        await expect(
+          service.list(ledgerId, creatorId, { page: 1 }, 'LEFT', { settlementsOnly: true }),
+        ).rejects.toMatchObject({ constructor: AppException, errorCode: 'NOT_FOUND' });
       });
     });
   });
