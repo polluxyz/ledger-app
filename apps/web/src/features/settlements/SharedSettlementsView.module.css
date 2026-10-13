@@ -21,6 +21,47 @@
   font-size: var(--text-lg);
 }
 
+.leftBadge {
+  margin-inline-start: var(--space-xs);
+  padding: var(--space-xs);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  vertical-align: middle;
+}
+
+.readOnlyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.readOnlyTileItem {
+  display: flex;
+  min-width: 0;
+}
+
+.readOnlyTile {
+  display: flex;
+  width: 100%;
+  min-height: 5.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  box-sizing: border-box;
+  cursor: default;
+  text-align: center;
+}
+
 .status {
   margin: 0;
   padding: var(--space-lg) 0;
@@ -30,5 +71,11 @@
 @media (max-width: 36rem) {
   .group {
     padding: var(--space-md);
+  }
+}
+
+@media (max-width: 40rem) {
+  .readOnlyGrid {
+    grid-template-columns: 1fr;
   }
 }
