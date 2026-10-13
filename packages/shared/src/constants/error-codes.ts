@@ -132,6 +132,8 @@ export const ErrorCode = {
   SETTLEMENT_TRANSACTION_READ_ONLY: 'SETTLEMENT_TRANSACTION_READ_ONLY',
   /** 已退出帳本的人對那本帳本做寫入，含設定指向（3f §4.5）。409。 */
   LEDGER_LEFT: 'LEDGER_LEFT',
+  /** 單獨撤銷綁定在還款上的結清差額；要撤銷就撤銷那筆還款（3g 決策 157）。409。 */
+  SETTLEMENT_BOUND_TO_REPAYMENT: 'SETTLEMENT_BOUND_TO_REPAYMENT',
   /** 用沒連動的對象加入帳本成員（3f §4.3）。400。 */
   COUNTERPARTY_NOT_LINKED: 'COUNTERPARTY_NOT_LINKED',
   /** 請求過於頻繁（被限流）。 */

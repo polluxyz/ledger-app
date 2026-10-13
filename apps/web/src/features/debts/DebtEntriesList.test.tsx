@@ -25,6 +25,7 @@ describe('DebtEntriesList', () => {
     note: null,
     transactionId: 'txn-1',
     splitId: null,
+    settlesEntryId: null,
     sync: 'NONE',
     paired: false,
     createdAt: '2026-09-01T04:00:00.000Z',

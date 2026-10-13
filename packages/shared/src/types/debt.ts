@@ -129,6 +129,12 @@ export interface DebtEntry {
    */
   splitId: string | null;
   /**
+   * 「以此結清」產生的差額（`SETTLEMENT`）指向它的還款（3g 決策 156）；其他紀錄與 3g 之前的
+   * 差額為 `null`。有值時這筆不能單獨撤銷（`409 SETTLEMENT_BOUND_TO_REPAYMENT`，決策 157），
+   * 撤銷或修改那筆還款時由後端一併處理。
+   */
+  settlesEntryId: string | null;
+  /**
    * 寫入這筆之後的累計往來餘額，單位：分（依日期、再依建立時間由舊到新累加）。
    * 只在 `GET /counterparties/{id}/entries` 回傳。
    */
@@ -210,19 +216,36 @@ export interface UpdateCounterpartyRequest {
   name: string | null;
 }
 
-/** `GET /counterparties` 與 `GET /counterparties/{id}/entries` 的查詢參數。 */
+/** `GET /counterparties` 的查詢參數。 */
 export interface ListCounterpartiesQuery {
   page?: number;
   limit?: number;
-  /**
-   * 只有 `GET /counterparties` 使用：名字或連動使用者的帳號名稱包含這段文字（不分大小寫，
-   * 決策 79）。
-   */
+  /** 名字或連動使用者的帳號名稱包含這段文字（不分大小寫，決策 79）。 */
   q?: string;
-  /** 只有 `GET /counterparties` 使用：`true` 時只列待詢問的對象（總覽的待確認卡片）。 */
+  /** `true` 時只列待詢問的對象（總覽的待確認卡片）。 */
   askMerge?: boolean;
-  /** 只有 `GET /counterparties` 使用：`true` 時只列 `totalBalance ≠ 0` 的對象（借還頁，W136）。 */
+  /** `true` 時只列 `totalBalance ≠ 0` 的對象（借還總覽，W136）。 */
   nonZero?: boolean;
+  /** `true` 時只列個人往來 `balance ≠ 0` 的對象，不看共享帳本金額（借還 › 個人，3g W157）。 */
+  personalNonZero?: boolean;
+  /** `true` 時只列至少有一筆已還清紀錄的對象（借還 › 歷史，3g W161、決策 153）。 */
+  hasHistory?: boolean;
+}
+
+/**
+ * 往來紀錄的分段（3g 決策 153，餘額歸零為界）：由新到舊找第一筆 `balanceAfter === 0` 的紀錄，
+ * 那一筆與更早的是 `history`（已還清），之後的是 `outstanding`（未還清）。從沒歸零過就全部是
+ * `outstanding`。分界由後端算，前端不可自己切。
+ */
+export const DEBT_ENTRY_SECTIONS = ['outstanding', 'history'] as const;
+export type DebtEntrySection = (typeof DEBT_ENTRY_SECTIONS)[number];
+
+/** `GET /counterparties/{id}/entries` 的查詢參數。 */
+export interface ListDebtEntriesQuery {
+  page?: number;
+  limit?: number;
+  /** 不帶時回全部紀錄（照 3g 之前的行為）。分頁套用在篩選後的結果。 */
+  section?: DebtEntrySection;
 }
 
 /** `POST /counterparties` 的 body：不記帳先新增一個人（3b-2 決策 55）。 */

@@ -2,7 +2,7 @@
 
 plan：`tasks/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`。
 
-- [ ] **G0 整合分支、契約與隔離測試**（協調者）：從 `polluxyz/debts-inline` 開 `feature/debts-inline`；plan §1.1。
+- [x] **G0 整合分支、契約與隔離測試**（協調者）：從 `polluxyz/debts-inline` 開 `feature/debts-inline`；plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`debts-inline-isolation.e2e-spec.ts` 紅燈（端點或參數還不存在）；API／Web typecheck 只剩「新欄位未實作」的錯誤。
 - [ ] **G1 綁定差額**（依賴 G0；`di-bind`，與 G2～G5 平行）：plan §1.2 第 1 項。先把 migration SQL 列給開發者看，同意後才套用到 worker 資料庫以外的地方。
       驗收：`prisma migrate status` 無 pending；單元測試涵蓋少收、多收、剛好還清、沒綁定的舊差額、修改前後兩筆合計不變；SC-G3、G4、G5 的 API e2e 通過。

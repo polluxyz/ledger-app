@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3g-debts-inline.md`（決策 153～158、W149～W171、SC-G1～SC-G9）。後端、畫面、e2e 合成一個 PR（spec 開頭的執行順序）。
 
-> 核可：待核可。
+> 核可：**已核可**（2026-10-13）。
 
 ## 0. 起點
 
@@ -117,7 +117,7 @@ spec：`docs/specs/phase-3g-debts-inline.md`（決策 153～158、W149～W171、
 | 2    | `di-api-e2e`         | `default` | `debts-inline.e2e-spec.ts`；既有 API e2e 回歸                 | 新舊 API e2e 全綠                                                   |
 | 2    | `di-web-e2e`         | `default` | 受影響的 Web e2e 改版面；spec §6 的兩條主線                   | 兩套 Web e2e 全綠                                                   |
 
-- 檔案歸屬：`debt-recording.ts`、`debt-entries.service.*`、`debt-proposals.service.*`、`prisma/` 只歸 `di-bind`；`counterparties.service.*` 與 `dto/` 歸 `di-history-api`；`settlements/`、`ledger-groups/`、`transactions/` 的範圍函式匯出歸 `di-settlements-api`。
+- 檔案歸屬：`debt-recording.ts`、`debt-entry-rules.ts`（`toDebtEntry` 回應轉換，G0 先放 `settlesEntryId: null` 佔位）、`debt-entries.service.*`、`debt-proposals.service.*`、`prisma/` 只歸 `di-bind`；`counterparties.service.*` 與 `dto/` 歸 `di-history-api`；`settlements/`、`ledger-groups/`、`transactions/` 的範圍函式匯出歸 `di-settlements-api`。
 - 畫面：`features/debts/` 歸 `di-web-debts`，但 `DebtHistoryView.*` 歸 `di-web-history`；`features/settlements/` 歸 `di-web-history`。`DebtEntriesList` 若 `di-web-history` 需要新屬性，先問協調者，由協調者在契約 commit 加。
 - worker 不改 `packages/shared`（要改先問協調者）。
 

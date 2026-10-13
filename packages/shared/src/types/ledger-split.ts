@@ -140,6 +140,16 @@ export type UpdateSettlementRequest = Partial<CreateSettlementRequest>;
 export type SettlementResponse = Transaction;
 
 /**
+ * `GET /ledgers/{ledgerId}/settlements` 的查詢參數（3g §4.2）。回應是 `Paginated<Transaction>`，
+ * 每筆都帶 `settlement`，依日期、再依建立時間由新到舊。現任成員看到全部結清；已退出的人只看到
+ * 自己是付錢或收錢一方的結清（3f 決策 151）。
+ */
+export interface ListLedgerSettlementsQuery {
+  page?: number;
+  limit?: number;
+}
+
+/**
  * 補帳戶（帳戶待補，決策 124）：
  * `PUT /ledgers/{ledgerId}/transactions/{id}/account` 與 `PUT /ledgers/{ledgerId}/settlements/{id}/account`。
  *

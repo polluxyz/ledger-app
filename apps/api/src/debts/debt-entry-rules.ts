@@ -175,6 +175,8 @@ export function toDebtEntry(
     note: row.note,
     transactionId: row.transactionId,
     splitId: row.splitId,
+    // 3g 契約佔位：G1（di-bind）加上 `DebtEntry.settlesEntryId` 欄位後改成 `row.settlesEntryId`。
+    settlesEntryId: null,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

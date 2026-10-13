@@ -17,6 +17,7 @@ describe('DebtEntryEditDialog', () => {
     note: '原備註',
     transactionId: 'txn-1',
     splitId: null,
+    settlesEntryId: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
