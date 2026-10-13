@@ -18,7 +18,7 @@ plan：`tasks/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`�
       驗收：新舊 API e2e 全綠；`hasHistory` 在 100 個對象、每個 20 筆時 < 500ms（數字記進 plan §6）。
 - [x] **G7 Web e2e**（依賴 G1～G5；`di-web-e2e`）：受影響的 Web e2e 改成新版面；spec §6 的兩條主線。
       驗收：兩套 Web e2e 全綠。
-- [ ] **G8 整體驗收與 PR**（協調者）：plan §4。
+- [x] **G8 整體驗收與 PR**（協調者）：plan §4。
       驗收：隔離測試由紅轉綠；前端捷徑 grep 無結果；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §8 的文件影響都改了（3f、3e-web 標「由 3g 取代」，原型筆記移到 `tasks/archive/`）；PR 依模板填寫、CI 全綠、squash merge。
-- [ ] **G9 部署與收尾**（協調者）：問開發者要不要部署到 dev；要的話先 `pg_dump` 備份 `ledger_dev` 再 `migrate deploy`。清 worker 與整合分支的 worktree、分支、終端機；測試資料庫的刪除清單先給開發者看，保留 `ledger_dev` 與 `ledger_test`。
+- [x] **G9 部署與收尾**（協調者）：問開發者要不要部署到 dev；要的話先 `pg_dump` 備份 `ledger_dev` 再 `migrate deploy`。清 worker 與整合分支的 worktree、分支、終端機；測試資料庫的刪除清單先給開發者看，保留 `ledger_dev` 與 `ledger_test`。
       驗收：`orca worktree list` 沒有 `di-*` 與 `debts-inline`；`git branch` 沒有已合併的分支；memory「階段三進度」更新。
