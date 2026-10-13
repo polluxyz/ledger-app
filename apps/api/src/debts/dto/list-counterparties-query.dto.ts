@@ -47,4 +47,20 @@ export class ListCounterpartiesQueryDto implements ListCounterpartiesQuery {
   )
   @IsBoolean()
   nonZero?: boolean;
+
+  @ApiPropertyOptional({ enum: ['true', 'false'] })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  personalNonZero?: boolean;
+
+  @ApiPropertyOptional({ enum: ['true', 'false'] })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  hasHistory?: boolean;
 }
