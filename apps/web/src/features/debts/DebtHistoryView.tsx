@@ -1,16 +1,21 @@
 import { useMemo, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
-import type { Counterparty, LedgerSummary, Paginated, Transaction } from '@ledger/shared';
+import type { Counterparty, LedgerSummary, Transaction } from '@ledger/shared';
+import { MoreHorizontal } from 'lucide-react';
+import { Button } from '../../components/Button';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
-import { apiRequest } from '../../lib/api-client';
 import { getAvatarLabels } from '../../lib/avatar-labels';
+import { formatDate, formatMoney } from '../../lib/format';
+import { useCurrentUser } from '../auth/use-current-user';
+import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { useLedgers } from '../ledgers/use-ledgers';
-import { TransactionList } from '../transactions/TransactionList';
-import { transactionsKey } from '../transactions/use-transactions';
+import { SettlementForm } from '../settlements/SettlementForm';
+import { useDeleteSettlement, useLedgerSettlementPages } from '../settlements/use-settlements';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntriesList } from './DebtEntriesList';
-import { splitDebtEntriesByBalanceZero } from './debt-entry-history';
-import { useCounterparties, useCounterpartyEntries } from './use-debts';
+import rowStyles from './DebtRow.module.css';
+import { MiniOweArrow } from './MiniOweArrow';
+import { useCounterparties, useCounterpartyEntryPages } from './use-debts';
 import styles from './DebtHistoryView.module.css';
 
 interface DebtHistoryViewProps {
@@ -18,75 +23,50 @@ interface DebtHistoryViewProps {
   onEditSplit: (splitId: string) => void;
 }
 
-/**
- * 借還歷史子分頁（debts-tabs2）。
- *
- * ## 為什麼將歷史統一至獨立分頁
- *
- * 原先散落在各個對象展開明細與共享帳本組底部的歷史按鈕，集中在此處分段管理。
- * - 個人往來：列出所有有往來紀錄的對象（點擊展開已歸零／還清的紀錄，可修改、撤銷）。
- * - 共享帳本：列出有已記結清的共享帳本（點擊展開唯讀交易清單）。
- * 某段無資料時隱藏，兩段皆無資料時呈現「沒有歷史紀錄」。
- */
+/** 借還歷史分成個人往來與共享結清兩段，分組和紀錄範圍都由 API 回應決定。 */
 export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
-  const counterparties = useCounterparties({ limit: 100 });
+  const counterparties = useCounterparties({ hasHistory: true });
+  const ledgerGroups = useLedgerGroups({ hasSettlements: true });
   const ledgers = useLedgers(true);
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [expandedLedgerId, setExpandedLedgerId] = useState<string | null>(null);
-
-  const sharedLedgers = useMemo(
-    () => (ledgers.data ?? []).filter((l) => l.kind === 'SHARED'),
-    [ledgers.data],
-  );
-
-  const sharedTransferQueries = useQueries({
-    queries: sharedLedgers.map((l) => ({
-      queryKey: [...transactionsKey(l.id), { type: 'TRANSFER' as const, limit: 100 }],
-      queryFn: () =>
-        apiRequest<Paginated<Transaction>>(`/ledgers/${l.id}/transactions?type=TRANSFER&limit=100`),
-    })),
-  });
-
-  const settledSharedLedgers = useMemo(() => {
-    return sharedLedgers
-      .map((ledger, index) => {
-        const query = sharedTransferQueries[index];
-        const settlements = (query?.data?.items ?? []).filter((item) => Boolean(item.settlement));
-        return {
-          ledger,
-          settlements,
-          isLoading: query?.isLoading ?? false,
-        };
-      })
-      .filter((item) => item.settlements.length > 0);
-  }, [sharedLedgers, sharedTransferQueries]);
 
   const counterpartyItems = useMemo(
     () => counterparties.data?.items ?? [],
     [counterparties.data?.items],
   );
+  const historyGroups = ledgerGroups.data ?? [];
   const avatarLabels = useMemo(
     () => getAvatarLabels(['我', ...counterpartyItems.map((person) => person.displayName)]),
     [counterpartyItems],
   );
+  const ledgersById = useMemo(
+    () => new Map((ledgers.data ?? []).map((item) => [item.id, item])),
+    [ledgers.data],
+  );
 
-  const isLoading =
-    counterparties.isLoading || ledgers.isLoading || sharedTransferQueries.some((q) => q.isLoading);
-
-  if (isLoading) {
+  if (counterparties.isLoading || ledgerGroups.isLoading || ledgers.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
 
   const hasPersonal = counterpartyItems.length > 0;
-  const hasShared = settledSharedLedgers.length > 0;
+  const hasShared = historyGroups.length > 0;
 
   if (!hasPersonal && !hasShared) {
-    return <p className={styles.empty}>沒有歷史紀錄。</p>;
+    return (
+      <>
+        {counterparties.error && <FormError error={counterparties.error} />}
+        {ledgerGroups.error && <FormError error={ledgerGroups.error} />}
+        {ledgers.error && <FormError error={ledgers.error} />}
+        <p className={styles.empty}>沒有歷史紀錄</p>
+      </>
+    );
   }
 
   return (
     <div className={styles.view}>
       {counterparties.error && <FormError error={counterparties.error} />}
+      {ledgerGroups.error && <FormError error={ledgerGroups.error} />}
       {ledgers.error && <FormError error={ledgers.error} />}
 
       {hasPersonal && (
@@ -97,7 +77,7 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
           <ul className={styles.list}>
             {counterpartyItems.map((person) => {
               const expanded = expandedPersonId === person.id;
-              const detailsId = `history-person-${person.id}`;
+              const detailsId = 'history-person-' + person.id;
 
               return (
                 <li key={person.id} className={styles.item}>
@@ -130,32 +110,26 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
             共享帳本
           </h3>
           <ul className={styles.list}>
-            {settledSharedLedgers.map(({ ledger: sharedLedger, settlements }) => {
-              const expanded = expandedLedgerId === sharedLedger.id;
-              const detailsId = `history-ledger-${sharedLedger.id}`;
+            {historyGroups.map((group) => {
+              const expanded = expandedLedgerId === group.ledger.id;
+              const detailsId = 'history-ledger-' + group.ledger.id;
 
               return (
-                <li key={sharedLedger.id} className={styles.item}>
+                <li key={group.ledger.id} className={styles.item}>
                   <button
                     type="button"
                     className={styles.row}
                     aria-expanded={expanded}
                     aria-controls={detailsId}
-                    onClick={() => setExpandedLedgerId(expanded ? null : sharedLedger.id)}
+                    onClick={() => setExpandedLedgerId(expanded ? null : group.ledger.id)}
                   >
-                    <span className={styles.name}>{sharedLedger.name}</span>
+                    <span className={styles.name}>{group.ledger.name}</span>
                   </button>
                   <AnimatedDisclosure id={detailsId} open={expanded}>
-                    <div className={styles.ledgerHistoryList}>
-                      <TransactionList
-                        transactions={settlements}
-                        isLoading={false}
-                        error={null}
-                        readOnly
-                        emptyMessage="沒有歷史紀錄。"
-                        onEdit={() => undefined}
-                      />
-                    </div>
+                    <LedgerHistoryDetail
+                      ledgerId={group.ledger.id}
+                      ledger={ledgersById.get(group.ledger.id)}
+                    />
                   </AnimatedDisclosure>
                 </li>
               );
@@ -176,29 +150,263 @@ function PersonHistoryDetail({
   avatarLabels: ReadonlyMap<string, string>;
   onEditSplit: (splitId: string) => void;
 }) {
-  const entries = useCounterpartyEntries(person.id, { limit: 100 });
-  const { history } = splitDebtEntriesByBalanceZero(entries.data?.items ?? []);
+  const entriesQuery = useCounterpartyEntryPages(person.id, 'history');
 
-  if (entries.isLoading) {
+  if (entriesQuery.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
-  if (entries.error) {
-    return <FormError error={entries.error} />;
+  if (entriesQuery.error) {
+    return <FormError error={entriesQuery.error} />;
   }
-  if (history.length === 0) {
-    return <p className={styles.empty}>沒有歷史紀錄。</p>;
+
+  const entries = entriesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  if (entries.length === 0) {
+    return <p className={styles.empty}>沒有歷史紀錄</p>;
   }
 
   return (
     <div className={styles.personHistoryDetail}>
       <DebtEntriesList
-        entries={history}
+        entries={entries}
         balance={person.balance}
         displayName={person.displayName}
         avatarLabels={avatarLabels}
         editable
         onEditSplit={onEditSplit}
       />
+      {entriesQuery.hasNextPage && (
+        <div className={styles.loadMore}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={entriesQuery.isFetchingNextPage}
+            onClick={() => void entriesQuery.fetchNextPage()}
+          >
+            {entriesQuery.isFetchingNextPage ? '載入中…' : '載入更多'}
+          </Button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function LedgerHistoryDetail({
+  ledgerId,
+  ledger,
+}: {
+  ledgerId: string;
+  ledger: LedgerSummary | undefined;
+}) {
+  const settlementsQuery = useLedgerSettlementPages(ledgerId);
+  const deleteSettlement = useDeleteSettlement(ledgerId);
+  const currentUser = useCurrentUser();
+  const [editingSettlementId, setEditingSettlementId] = useState<string | null>(null);
+  const [revokeSettlementId, setRevokeSettlementId] = useState<string | null>(null);
+  const settlements = useMemo(
+    () => settlementsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [settlementsQuery.data?.pages],
+  );
+  const currentUserId = currentUser.data?.id;
+  const avatarLabels = useMemo(
+    () =>
+      getAvatarLabels([
+        '我',
+        ...settlements.flatMap((transaction) => {
+          const settlement = transaction.settlement!;
+          return [
+            settlement.from.userId === currentUserId ? '我' : settlement.from.name,
+            settlement.to.userId === currentUserId ? '我' : settlement.to.name,
+          ];
+        }),
+      ]),
+    [currentUserId, settlements],
+  );
+  const canWrite = ledger !== undefined && ledger.role !== 'VIEWER' && ledger.archivedAt === null;
+
+  if (settlementsQuery.isLoading) {
+    return <p className={styles.status}>載入中…</p>;
+  }
+  if (settlementsQuery.error) {
+    return <FormError error={settlementsQuery.error} />;
+  }
+
+  function confirmRevoke() {
+    if (revokeSettlementId === null) {
+      return;
+    }
+    deleteSettlement.mutate(revokeSettlementId, {
+      onSuccess: () => setRevokeSettlementId(null),
+    });
+  }
+
+  return (
+    <>
+      <div className={styles.ledgerHistoryList}>
+        {settlements.length === 0 ? (
+          <p className={styles.empty}>沒有歷史紀錄</p>
+        ) : (
+          <ul className={styles.settlementList}>
+            {settlements.map((transaction) => {
+              const settlement = transaction.settlement!;
+              const from = settlement.from.userId === currentUserId ? '我' : settlement.from.name;
+              const to = settlement.to.userId === currentUserId ? '我' : settlement.to.name;
+              const isEditing = editingSettlementId === settlement.id;
+
+              return (
+                <SettlementHistoryRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  ledger={ledger}
+                  from={from}
+                  to={to}
+                  avatarLabels={avatarLabels}
+                  canWrite={canWrite}
+                  isEditing={isEditing}
+                  onEdit={() => setEditingSettlementId(settlement.id)}
+                  onCancelEdit={() => setEditingSettlementId(null)}
+                  onRevoke={() => {
+                    setEditingSettlementId(null);
+                    deleteSettlement.reset();
+                    setRevokeSettlementId(settlement.id);
+                  }}
+                />
+              );
+            })}
+          </ul>
+        )}
+        {settlementsQuery.hasNextPage && (
+          <div className={styles.loadMore}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={settlementsQuery.isFetchingNextPage}
+              onClick={() => void settlementsQuery.fetchNextPage()}
+            >
+              {settlementsQuery.isFetchingNextPage ? '載入中…' : '載入更多'}
+            </Button>
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={revokeSettlementId !== null}
+        title="撤銷這筆？"
+        message=""
+        confirmLabel="撤銷"
+        error={deleteSettlement.error}
+        isPending={deleteSettlement.isPending}
+        onConfirm={confirmRevoke}
+        onCancel={() => {
+          setRevokeSettlementId(null);
+          deleteSettlement.reset();
+        }}
+      />
+    </>
+  );
+}
+
+function SettlementHistoryRow({
+  transaction,
+  ledger,
+  from,
+  to,
+  avatarLabels,
+  canWrite,
+  isEditing,
+  onEdit,
+  onCancelEdit,
+  onRevoke,
+}: {
+  transaction: Transaction;
+  ledger: LedgerSummary | undefined;
+  from: string;
+  to: string;
+  avatarLabels: ReadonlyMap<string, string>;
+  canWrite: boolean;
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onRevoke: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const settlement = transaction.settlement!;
+
+  return (
+    <li className={rowStyles.item}>
+      <div className={rowStyles.row + ' ' + styles.settlementRow}>
+        <time className={rowStyles.date} dateTime={transaction.date}>
+          {formatDate(transaction.date).slice(5)}
+        </time>
+        <span className={rowStyles.arrow}>
+          <MiniOweArrow
+            from={from}
+            fromLabel={avatarLabels.get(from)}
+            to={to}
+            toLabel={avatarLabels.get(to)}
+          />
+        </span>
+        <span className={rowStyles.spacer} />
+        <span className={rowStyles.amount}>
+          <span className={rowStyles.amountText}>{formatMoney(transaction.amount)}</span>
+        </span>
+        {canWrite && (
+          <span className={rowStyles.actions + ' ' + styles.menuWrap}>
+            <button
+              type="button"
+              className={styles.menuButton}
+              aria-label="更多操作"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal size={18} strokeWidth={2} />
+            </button>
+            {menuOpen && (
+              <div className={styles.menu} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onEdit();
+                  }}
+                >
+                  修改
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRevoke();
+                  }}
+                >
+                  撤銷
+                </button>
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+      <AnimatedDisclosure id={'settlement-edit-' + settlement.id} open={isEditing}>
+        {isEditing && ledger && (
+          <div className={styles.settlementForm}>
+            <SettlementForm
+              ledger={ledger}
+              transaction={transaction}
+              showDeleteButton={false}
+              onSaved={onCancelEdit}
+              onDeleted={onCancelEdit}
+            />
+            <div className={styles.formActions}>
+              <Button type="button" variant="secondary" onClick={onCancelEdit}>
+                取消
+              </Button>
+            </div>
+          </div>
+        )}
+      </AnimatedDisclosure>
+    </li>
   );
 }
