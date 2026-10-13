@@ -416,6 +416,12 @@ model DebtEntry {
   pairedEntry   DebtEntry? @relation("DebtEntryPair", fields: [pairedEntryId], references: [id], onDelete: SetNull)
   pairedBy      DebtEntry? @relation("DebtEntryPair")
 
+  /// 這筆結清差額屬於哪一筆還款（3g 決策 156）。只有 SETTLEMENT 會有值；3g 之前的差額為 null。
+  /// 一筆還款最多一筆差額，所以 unique。往來只做軟刪除，Restrict 是最後防線。
+  settlesEntryId String?    @unique
+  settlesEntry   DebtEntry? @relation("SettlementOfRepayment", fields: [settlesEntryId], references: [id], onDelete: Restrict)
+  settledBy      DebtEntry? @relation("SettlementOfRepayment")
+
   proposalsAsSource DebtProposal[] @relation("DebtProposalSource")
   proposalsAsTarget DebtProposal[] @relation("DebtProposalTarget")
 
