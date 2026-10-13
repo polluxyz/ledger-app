@@ -3,6 +3,7 @@ import { listAccounts, listCategories, createLedger, addMember } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   newTransactionForm,
+  openDebtsTab,
   openNewTransaction,
   openTransactions,
   selectCategory,
@@ -123,42 +124,38 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   // 等後端回應再查餘額，避免把尚未完成的儲存誤判成沒有更新。
   expect((await cashAccount(request, userB.token)).balance).toBe(bCashBefore.balance - 150_000);
 
-  const bViewSwitch = pageB.getByRole('group', { name: '檢視' });
-  await bViewSwitch.getByRole('button', { name: '結清', exact: true }).click();
-  const bNets = pageB.getByRole('region', { name: '淨額' });
-  await expect(bNets.getByRole('listitem').filter({ hasText: '甲' })).toContainText('+$2,250');
-  await expect(bNets.getByRole('listitem').filter({ hasText: '我' })).toContainText('−$2,250');
+  // 3g：借還 › 共享（W149～W150）。共享分頁只列轉帳，不列淨額（W158），所以這裡驗的是轉帳方塊。
+  await openDebtsTab(pageB, '共享');
+  const sharedCard = pageB.getByRole('region', { name: ledger.name });
+  // 一本帳本一張卡片，一筆轉帳一個方塊（W159）。方塊的無障礙名稱就是那句話。
+  // 乙（我）付給甲 2,250：從乙的視角，是「我欠甲」。
+  const transfer = sharedCard.getByRole('button', { name: '我欠甲 $2,250', exact: true });
+  await expect(sharedCard.getByRole('listitem')).toHaveCount(1);
+  await transfer.click();
 
-  // 3f W148：結清檢視的分兩張卡片，「建議」改名「轉帳」且不寫建議二字。
-  const suggestions = pageB.getByRole('region', { name: '轉帳' });
-  await expect(suggestions.getByRole('listitem')).toHaveCount(1);
-  const suggestion = suggestions.getByRole('listitem');
-  await expect(suggestion).toContainText('我');
-  await expect(suggestion).toContainText('甲');
-  await expect(suggestion).toContainText('$2,250');
-  await suggestion.getByRole('button', { name: '結清', exact: true }).click();
-
-  const settlementDialog = pageB.getByRole('dialog', { name: '結清' });
-  const payerOption = settlementDialog
+  // 點了方塊，預填的結清表單在那一排下方展開（W159）。表單的範圍就是這張卡片。
+  await expect(transfer).toHaveAttribute('aria-expanded', 'true');
+  const settlementForm = sharedCard;
+  const payerOption = settlementForm
     .getByLabel('付錢的人')
     .getByRole('option', { name: '我', exact: true });
-  const receiverOption = settlementDialog
+  const receiverOption = settlementForm
     .getByLabel('收錢的人')
     .getByRole('option', { name: '甲', exact: true });
-  await expect(settlementDialog.getByLabel('付錢的人')).toHaveValue(
+  await expect(settlementForm.getByLabel('付錢的人')).toHaveValue(
     (await payerOption.getAttribute('value')) ?? '',
   );
-  await expect(settlementDialog.getByLabel('收錢的人')).toHaveValue(
+  await expect(settlementForm.getByLabel('收錢的人')).toHaveValue(
     (await receiverOption.getAttribute('value')) ?? '',
   );
-  await expect(settlementDialog.getByLabel('金額')).toHaveValue('2250');
-  await settlementDialog.getByLabel('帳戶').selectOption(bCashBefore.id);
+  await expect(settlementForm.getByLabel('金額')).toHaveValue('2250');
+  await settlementForm.getByLabel('帳戶').selectOption(bCashBefore.id);
   const settlementResponse = pageB.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
       response.url().endsWith(`/ledgers/${ledger.id}/settlements`),
   );
-  await settlementDialog.getByRole('button', { name: '新增', exact: true }).click();
+  await settlementForm.getByRole('button', { name: '新增', exact: true }).click();
   expect((await settlementResponse).ok()).toBe(true);
   expect((await cashAccount(request, userB.token)).balance).toBe(bCashBefore.balance - 375_000);
 
@@ -181,10 +178,8 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   expect((await cashAccount(request, userA.token)).balance).toBe(aCashBefore.balance - 375_000);
   expect((await cashAccount(request, userB.token)).balance).toBe(bCashBefore.balance - 375_000);
 
-  const aViewSwitch = pageA.getByRole('group', { name: '檢視' });
-  await aViewSwitch.getByRole('button', { name: '結清', exact: true }).click();
-  const aNets = pageA.getByRole('region', { name: '淨額' });
-  await expect(aNets.getByRole('listitem')).toHaveCount(2);
-  await expect(aNets.getByText('$0', { exact: true })).toHaveCount(2);
+  // 結清之後共享分頁沒有轉帳了，只剩「兩清」（W158）。
+  await openDebtsTab(pageA, '共享');
   await expect(pageA.getByRole('region', { name: '轉帳' })).toHaveCount(0);
+  await expect(pageA.getByText('兩清', { exact: true })).toBeVisible();
 });
