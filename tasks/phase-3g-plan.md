@@ -129,4 +129,8 @@ spec：`docs/specs/phase-3g-debts-inline.md`（決策 153～158、W149～W171、
 4. **前端捷徑 grep 的範圍**：§3 的 grep 會命中 `CounterpartyPicker`、`DebtEntryForm`、`MergeDialog`、`MergePrompt` 的 `limit: 100` 與 `balance !== 0`。這些是 3b 起就有的選單與表單判斷，不是 3g 原型的捷徑，不在本步範圍。驗收改成只檢查 `CounterpartyList`、`CounterpartyDetail`、`DebtHistoryView`、`features/settlements/`。`debt-entry-history.ts` 已刪除。
 5. **`RESTRICT` 外鍵與刪除對象**：刪除對象時，已軟刪除的紀錄會連帶硬刪除。協調者在 `ledger_di_bind_test` 用 SQL 重現「已撤銷的還款＋綁定差額」再刪對象，兩種列順序都成功：PostgreSQL 在同一個陳述式的連帶刪除做完後才檢查，所以 `RESTRICT` 不會擋。schema 照 spec §3，不改。
 6. **退出後的結清範圍比交易列表窄**：交易列表的退出範圍包含「我建立的、沒有付款人的交易」，結清清單刻意不套這一條，只看付錢或收錢的人是不是我（`TransactionsService.list` 的內部選項 `settlementsOnly`）。
-7. **驗證數字**（第 1 波合併後的整合分支）：隔離測試 8 個由紅轉綠；API e2e 257 個、API 單元測試 412 個、Web 745 個、shared 105 個全綠。
+7. **第 2 波換到 Haiku**：G6、G7 先派 GLM，跑到一半 GLM 回 `429 Usage limit reached for 5 hour`，照開發者指示以 `--retry-of` 改派 Claude Haiku 5.5 xhigh（`launch.effective` 相符）。G6 沿用 GLM 留下的未 commit 檔案。
+8. **G6 結果**：`debts-inline.e2e-spec.ts` 走完 SC-G1～G6；`hasHistory` 在 100 個對象、每個 20 筆時中位數 **18.7ms**（5 次：24、19、17、19、17ms），遠低於 500ms 目標。情境在 SC-G5 前先讓明哥還清 500：「以此結清」會把整個餘額歸零，不先還清會吃掉前面的欠款。這是測試資料的安排，不是產品行為的偏離。
+9. **G7 結果**：基準時 Web e2e 53 個有 13 個失敗（右側欄、交易頁「結清」分頁、淨額卡片拿掉了；版面測試沒算進 W152 預留的捲軸寬度）。逐一改成 3g 的流程、意圖不變；每筆「餘額」的斷言隨 D2 拿掉。新增 `debts-inline.spec.ts` 兩條主線。整套 55 個連續兩次全綠。
+10. **撤銷試算漏算綁定差額**（G7 讀程式發現）：W171 的試算只減這筆的 `delta`，但撤銷綁定差額的還款時後端會連差額一起撤。房東的例子會顯示「欠我 $90」，實際是 $93。協調者改成連綁定差額一起減（`DebtEntriesList.tsx` 的 `undoDeltaOf`），補元件測試，spec W171 的公式同步補上。差額緊接在還款之後寫入，看得到還款時差額一定已載入。G7 另外回報「首頁還有帳本切換與新增交易」：它們在頁面標題那一排、不在最上排，是開發者 2026-10-07 定的做法，符合 W151，不改。
+11. **驗證數字**（第 1 波合併後的整合分支）：隔離測試 8 個由紅轉綠；API e2e 257 個、API 單元測試 412 個、Web 745 個、shared 105 個全綠。

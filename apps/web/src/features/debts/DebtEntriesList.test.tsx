@@ -217,6 +217,32 @@ describe('DebtEntriesList', () => {
     expect(preview.querySelectorAll(`.${miniStyles.mini}`)).toHaveLength(1);
   });
 
+  it('includes the bound settlement difference in the undo preview of a repayment', async () => {
+    const user = userEvent.setup();
+    // 房東：借出 93、還 90 以此結清（差額 −3），餘額 0。撤銷還款時後端連差額一起撤，回到 93。
+    renderList(
+      [
+        entry({ id: 'settle', kind: 'SETTLEMENT', delta: -300, settlesEntryId: 'repay' }),
+        entry({ id: 'repay', kind: 'COLLECT', delta: -9_000 }),
+        entry({ id: 'lend', kind: 'LEND', delta: 9_300 }),
+      ],
+      true,
+      undefined,
+      0,
+    );
+
+    const repayment = screen.getAllByRole('listitem')[1]!;
+    const menu = await openMenu(repayment, user);
+    await user.click(within(menu).getByRole('menuitem', { name: '撤銷' }));
+
+    const confirmation = await screen.findByRole('dialog', { name: '撤銷這筆？' });
+    expect(
+      within(confirmation).getByRole('group', {
+        name: '撤銷後，往來從「兩清」變成「小明欠你的金額 $93」。',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('reverses the preview arrow when undo crosses zero', async () => {
     const user = userEvent.setup();
     renderList([entry({ delta: 10_000 })], true, undefined, 5_000);

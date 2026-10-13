@@ -153,6 +153,7 @@ export function DebtEntriesList({
 
       <UndoConfirmation
         entry={entryToUndo}
+        undoDelta={entryToUndo === null ? 0 : undoDeltaOf(entryToUndo, entries)}
         balance={balance}
         displayName={displayName}
         avatarLabels={avatarLabels}
@@ -163,6 +164,7 @@ export function DebtEntriesList({
       />
       <UndoConfirmation
         entry={splitToUndo}
+        undoDelta={splitToUndo?.delta ?? 0}
         balance={balance}
         displayName={displayName}
         avatarLabels={avatarLabels}
@@ -181,11 +183,22 @@ export function DebtEntriesList({
 }
 
 /**
+ * 撤銷這筆會讓往來餘額少掉多少（畫面試算用）。還款綁定了結清差額時，後端會一起撤銷差額
+ * （3g 決策 156），所以要連差額一起扣，否則試算會少算差額那一段。差額緊接在還款之後寫入、
+ * 日期相同，清單新到舊排在還款前面，看得到還款時差額一定已經載入。
+ */
+function undoDeltaOf(entry: DebtEntry, entries: readonly DebtEntry[]): number {
+  const bound = entries.find((candidate) => candidate.settlesEntryId === entry.id);
+  return entry.delta + (bound?.delta ?? 0);
+}
+
+/**
  * 把撤銷前後的個人往來餘額並排，讓使用者直接看見這筆紀錄會怎麼改變結果。
  * 這只是畫面試算；送出後的個人往來餘額仍以伺服器回應為準。
  */
 function UndoConfirmation({
   entry,
+  undoDelta,
   balance,
   displayName,
   avatarLabels,
@@ -195,6 +208,8 @@ function UndoConfirmation({
   onCancel,
 }: {
   entry: DebtEntry | null;
+  /** 撤銷後往來餘額減少的量：這筆的 `delta`，綁定差額的還款再加上差額。 */
+  undoDelta: number;
   balance: number;
   displayName: string;
   avatarLabels?: ReadonlyMap<string, string>;
@@ -203,7 +218,7 @@ function UndoConfirmation({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const after = entry === null ? balance : balance - entry.delta;
+  const after = entry === null ? balance : balance - undoDelta;
   const description = entry === null ? '' : describeUndo(balance, after, displayName);
 
   return (
