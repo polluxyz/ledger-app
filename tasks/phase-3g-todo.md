@@ -4,15 +4,15 @@ plan：`tasks/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`�
 
 - [x] **G0 整合分支、契約與隔離測試**（協調者）：從 `polluxyz/debts-inline` 開 `feature/debts-inline`；plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`debts-inline-isolation.e2e-spec.ts` 紅燈（端點或參數還不存在）；API／Web typecheck 只剩「新欄位未實作」的錯誤。
-- [ ] **G1 綁定差額**（依賴 G0；`di-bind`，與 G2～G5 平行）：plan §1.2 第 1 項。先把 migration SQL 列給開發者看，同意後才套用到 worker 資料庫以外的地方。
+- [x] **G1 綁定差額**（依賴 G0；`di-bind`，與 G2～G5 平行）：plan §1.2 第 1 項。先把 migration SQL 列給開發者看，同意後才套用到 worker 資料庫以外的地方。
       驗收：`prisma migrate status` 無 pending；單元測試涵蓋少收、多收、剛好還清、沒綁定的舊差額、修改前後兩筆合計不變；SC-G3、G4、G5 的 API e2e 通過。
-- [ ] **G2 已還清與過濾**（依賴 G0；`di-history-api`）：plan §1.2 第 2 項。
+- [x] **G2 已還清與過濾**（依賴 G0；`di-history-api`）：plan §1.2 第 2 項。
       驗收：SC-G1、G2 的 API e2e 通過；不帶新參數時回應與現在相同；隔離測試的對象部分轉綠。
-- [ ] **G3 結清清單**（依賴 G0；`di-settlements-api`）：plan §1.2 第 3 項。
+- [x] **G3 結清清單**（依賴 G0；`di-settlements-api`）：plan §1.2 第 3 項。
       驗收：SC-G6 的 API e2e 通過；隔離測試的帳本部分轉綠；沒標 `@LeftMemberAccess` 的路由行為不變。
-- [ ] **G4 借還畫面：總覽、個人、往來紀錄**（依賴 G0；`di-web-debts`）：plan §1.3 第一列。
+- [x] **G4 借還畫面：總覽、個人、往來紀錄**（依賴 G0；`di-web-debts`）：plan §1.3 第一列。
       驗收：元件測試涵蓋個人分頁帶 `personalNonZero`、展開區帶 `section=outstanding`、載入更多、綁定差額沒有「⋯」；`debt-entry-history.ts` 已刪除；Web 檢查全綠。
-- [ ] **G5 借還畫面：共享、歷史**（依賴 G0；`di-web-history`）：plan §1.3 第二列。
+- [x] **G5 借還畫面：共享、歷史**（依賴 G0；`di-web-history`）：plan §1.3 第二列。
       驗收：元件測試涵蓋已退出且未結清的唯讀卡片、已結清的已退出帳本不出現、歷史兩段改用 API、結清的修改與撤銷、已退出帳本的結清沒有「⋯」；Web 檢查全綠。
 - [ ] **G6 API e2e**（依賴 G1～G3；`di-api-e2e`）：`debts-inline.e2e-spec.ts` 一條情境走完 SC-G1～G6；既有 API e2e 回歸。
       驗收：新舊 API e2e 全綠；`hasHistory` 在 100 個對象、每個 20 筆時 < 500ms（數字記進 plan §6）。

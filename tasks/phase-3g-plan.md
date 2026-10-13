@@ -123,4 +123,10 @@ spec：`docs/specs/phase-3g-debts-inline.md`（決策 153～158、W149～W171、
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+1. **G0 多做的契約**（2026-10-13）：兩個畫面 worker 都要「載入更多」，為了不讓兩人同時改 hook 檔，協調者先寫好 `useCounterpartyEntryPages`（`use-debts.ts`）、`useLedgerSettlementPages`（`use-settlements.ts`）與 `useLedgerGroups` 的 `hasSettlements`（`use-ledger-pointers.ts`），結清寫入時一併失效結清清單。`toDebtEntry` 先放 `settlesEntryId: null` 佔位，G1 改成讀欄位。
+2. **檔案歸屬補一條**：`debt-entry-rules.ts`（`toDebtEntry`）原本沒寫歸屬，歸給 `di-bind`（開工前已向開發者說明）。
+3. **換模型**：`backend`（`gpt-6-sol`）派工時被 Codex 拒絕（`The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account.`），模型清單也沒有 sol。開發者說 Codex 方案沒了、暫時不用，改成先用 `fallback-1`（Pi GLM 5.3），GLM 用完再用 Claude Haiku 5.5 xhigh。G1、G3 以 `--retry-of` 改派 GLM；G2、G4、G5 已在跑的 luna 讓它做完。第 2 波（G6、G7）派 GLM。
+4. **前端捷徑 grep 的範圍**：§3 的 grep 會命中 `CounterpartyPicker`、`DebtEntryForm`、`MergeDialog`、`MergePrompt` 的 `limit: 100` 與 `balance !== 0`。這些是 3b 起就有的選單與表單判斷，不是 3g 原型的捷徑，不在本步範圍。驗收改成只檢查 `CounterpartyList`、`CounterpartyDetail`、`DebtHistoryView`、`features/settlements/`。`debt-entry-history.ts` 已刪除。
+5. **`RESTRICT` 外鍵與刪除對象**：刪除對象時，已軟刪除的紀錄會連帶硬刪除。協調者在 `ledger_di_bind_test` 用 SQL 重現「已撤銷的還款＋綁定差額」再刪對象，兩種列順序都成功：PostgreSQL 在同一個陳述式的連帶刪除做完後才檢查，所以 `RESTRICT` 不會擋。schema 照 spec §3，不改。
+6. **退出後的結清範圍比交易列表窄**：交易列表的退出範圍包含「我建立的、沒有付款人的交易」，結清清單刻意不套這一條，只看付錢或收錢的人是不是我（`TransactionsService.list` 的內部選項 `settlementsOnly`）。
+7. **驗證數字**（第 1 波合併後的整合分支）：隔離測試 8 個由紅轉綠；API e2e 257 個、API 單元測試 412 個、Web 745 個、shared 105 個全綠。

@@ -1,7 +1,7 @@
 # Spec：階段三 (3g) — 借還頁改成列內展開與四個子分頁
 
 > 狀態：**已核可**（2026-10-13）
-> 依據：開發者 2026-10-07～13 看原型（分支 `polluxyz/debts-inline`）逐步給的回饋，記在 `tasks/phase-3g-prototype-notes.md`；符號提案頁 `docs/artifacts/step-debts-entry-symbols.html`（不進版控）。2026-10-13 確認假設清單與三個選擇（已退出帳本、結清歷史、差額撤銷）。
+> 依據：開發者 2026-10-07～13 看原型（分支 `polluxyz/debts-inline`）逐步給的回饋，記在 `tasks/archive/phase-3g-prototype-notes.md`；符號提案頁 `docs/artifacts/step-debts-entry-symbols.html`（不進版控）。2026-10-13 確認假設清單與三個選擇（已退出帳本、結清歷史、差額撤銷）。
 > 前置：3f（#113）已合併並部署到 dev。
 > 改寫 3f 的決策：W137～W139（點帳本來源切到結清、右側欄）、W148（結清檢視兩張卡片）。
 > 執行順序：本 spec → plan 與 todo → 一個 PR（後端＋畫面＋e2e）。原型分支的程式當起點，不重寫。
@@ -192,7 +192,7 @@ model DebtEntry {
 - `phase-3f-unified-debts.md`：W137～W139、W148 標「由 3g 取代」。
 - `phase-3e-web.md`：交易頁「結清」分頁的相關決策標「由 3g 取代」。
 - `docs/README.md`：spec 表加 3g。
-- `tasks/phase-3g-prototype-notes.md`：內容併入本 spec 後移到 `tasks/archive/`。
+- `tasks/archive/phase-3g-prototype-notes.md`：內容併入本 spec 後移到 `tasks/archive/`。
 
 ---
 
