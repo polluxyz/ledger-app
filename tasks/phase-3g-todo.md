@@ -14,9 +14,9 @@ plan：`tasks/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`�
       驗收：元件測試涵蓋個人分頁帶 `personalNonZero`、展開區帶 `section=outstanding`、載入更多、綁定差額沒有「⋯」；`debt-entry-history.ts` 已刪除；Web 檢查全綠。
 - [x] **G5 借還畫面：共享、歷史**（依賴 G0；`di-web-history`）：plan §1.3 第二列。
       驗收：元件測試涵蓋已退出且未結清的唯讀卡片、已結清的已退出帳本不出現、歷史兩段改用 API、結清的修改與撤銷、已退出帳本的結清沒有「⋯」；Web 檢查全綠。
-- [ ] **G6 API e2e**（依賴 G1～G3；`di-api-e2e`）：`debts-inline.e2e-spec.ts` 一條情境走完 SC-G1～G6；既有 API e2e 回歸。
+- [x] **G6 API e2e**（依賴 G1～G3；`di-api-e2e`）：`debts-inline.e2e-spec.ts` 一條情境走完 SC-G1～G6；既有 API e2e 回歸。
       驗收：新舊 API e2e 全綠；`hasHistory` 在 100 個對象、每個 20 筆時 < 500ms（數字記進 plan §6）。
-- [ ] **G7 Web e2e**（依賴 G1～G5；`di-web-e2e`）：受影響的 Web e2e 改成新版面；spec §6 的兩條主線。
+- [x] **G7 Web e2e**（依賴 G1～G5；`di-web-e2e`）：受影響的 Web e2e 改成新版面；spec §6 的兩條主線。
       驗收：兩套 Web e2e 全綠。
 - [ ] **G8 整體驗收與 PR**（協調者）：plan §4。
       驗收：隔離測試由紅轉綠；前端捷徑 grep 無結果；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §8 的文件影響都改了（3f、3e-web 標「由 3g 取代」，原型筆記移到 `tasks/archive/`）；PR 依模板填寫、CI 全綠、squash merge。

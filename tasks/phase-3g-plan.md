@@ -134,3 +134,4 @@ spec：`docs/specs/phase-3g-debts-inline.md`（決策 153～158、W149～W171、
 9. **G7 結果**：基準時 Web e2e 53 個有 13 個失敗（右側欄、交易頁「結清」分頁、淨額卡片拿掉了；版面測試沒算進 W152 預留的捲軸寬度）。逐一改成 3g 的流程、意圖不變；每筆「餘額」的斷言隨 D2 拿掉。新增 `debts-inline.spec.ts` 兩條主線。整套 55 個連續兩次全綠。
 10. **撤銷試算漏算綁定差額**（G7 讀程式發現）：W171 的試算只減這筆的 `delta`，但撤銷綁定差額的還款時後端會連差額一起撤。房東的例子會顯示「欠我 $90」，實際是 $93。協調者改成連綁定差額一起減（`DebtEntriesList.tsx` 的 `undoDeltaOf`），補元件測試，spec W171 的公式同步補上。差額緊接在還款之後寫入，看得到還款時差額一定已載入。G7 另外回報「首頁還有帳本切換與新增交易」：它們在頁面標題那一排、不在最上排，是開發者 2026-10-07 定的做法，符合 W151，不改。
 11. **驗證數字**（第 1 波合併後的整合分支）：隔離測試 8 個由紅轉綠；API e2e 257 個、API 單元測試 412 個、Web 745 個、shared 105 個全綠。
+12. **G8 整體驗收**（全部合併後的整合分支）：lint、typecheck、build、format:check 全綠；單元測試 shared 105、API 412、Web 746；API e2e 259；Web e2e 55。前端捷徑 grep（`CounterpartyList`、`CounterpartyDetail`、`DebtHistoryView`、`features/settlements/`）沒有結果。
