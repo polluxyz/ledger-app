@@ -42,6 +42,18 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
+/**
+ * `TransactionsService.list` 的內部選項——不是公開查詢參數，只有後端自己的端點能指定。
+ * 對外開放會讓一般交易列表被「只看結清」這類檢視角度穿透，這裡刻意收在 service 邊界內。
+ */
+export interface ListTransactionsInternalOptions {
+  /**
+   * 結清清單（3g §4.2 `GET /ledgers/{id}/settlements`）專用：只取有 `LedgerSettlement`
+   * 的交易。條件以 AND 加進 SQL，與退出範圍、分頁、`total` 一起受限，查詢參數放寬不了。
+   */
+  settlementsOnly?: boolean;
+}
+
 /** 交易所引用的帳戶資料列；多帶 `userId` 是為了判斷該不該對檢視者顯示。 */
 interface AccountRef {
   id: string;
@@ -314,9 +326,11 @@ export class TransactionsService {
     viewerUserId: string,
     query: ListTransactionsQuery,
     access: LedgerAccess = 'MEMBER',
+    options: ListTransactionsInternalOptions = {},
   ): Promise<Paginated<Transaction>> {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const settlementsOnly = options.settlementsOnly === true;
     let leftScope = Prisma.empty;
     if (access === 'LEFT') {
       const person = await this.prisma.ledgerPerson.findUnique({
@@ -327,7 +341,15 @@ export class TransactionsService {
         throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
       }
       // 與既有條件以 AND 合併，且同時用於分頁及 total；查詢參數不能擴大退出者的範圍。
-      leftScope = Prisma.sql`AND (
+      // 結清清單的範圍更窄：退出者只看得到自己是付錢或收錢一方的結清（3g §4.2），連他
+      // 退出前代替別人記的都不算——一般交易的退出範圍（payer／creator 條款）這裡刻意不打開。
+      leftScope = settlementsOnly
+        ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM "LedgerSettlement" st
+          WHERE st."transactionId" = t."id"
+            AND (st."fromPersonId" = ${person.id} OR st."toPersonId" = ${person.id})
+        )`
+        : Prisma.sql`AND (
         t."payerPersonId" = ${person.id}
         OR (t."payerPersonId" IS NULL AND t."creatorId" = ${viewerUserId})
         OR EXISTS (
@@ -342,6 +364,13 @@ export class TransactionsService {
         )
       )`;
     }
+    // 結清清單只取有 LedgerSettlement 的交易；同樣以 AND 合併，與 leftScope（若有）重疊無妨。
+    const settlementOnly = settlementsOnly
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM "LedgerSettlement" st
+          WHERE st."transactionId" = t."id"
+        )`
+      : Prisma.empty;
 
     // SQL 先依分帳擁有者合併，再篩選、分頁與計數；先取交易再在記憶體合併會讓
     // 第 2 頁筆數和 total 都錯。其他帳本成員的 s 為 null，因此逐筆看見原交易。
@@ -356,6 +385,7 @@ export class TransactionsService {
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
         WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
           ${leftScope}
+          ${settlementOnly}
           ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
           ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
           ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
@@ -384,6 +414,7 @@ export class TransactionsService {
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
       WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
         ${leftScope}
+        ${settlementOnly}
         ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
         ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
         ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}

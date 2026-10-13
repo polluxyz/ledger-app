@@ -26,14 +26,17 @@ describe('SettlementsService', () => {
     ledgerSettlement: { create: jest.Mock; update: jest.Mock };
     $queryRawUnsafe: jest.Mock;
   };
-  let prisma: { $transaction: jest.Mock };
+  let prisma: {
+    $transaction: jest.Mock;
+    ledger: { findUnique: jest.Mock };
+  };
   let people: {
     findCallerPerson: jest.Mock;
     lockPeople: jest.Mock;
     listPeople: jest.Mock;
     toView: jest.Mock;
   };
-  let transactions: { getById: jest.Mock };
+  let transactions: { getById: jest.Mock; list: jest.Mock };
   let records: Map<string, LedgerPersonRecord>;
 
   function makePerson(
@@ -83,6 +86,7 @@ describe('SettlementsService', () => {
     };
     prisma = {
       $transaction: jest.fn((callback: (client: unknown) => Promise<unknown>) => callback(tx)),
+      ledger: { findUnique: jest.fn().mockResolvedValue({ kind: 'SHARED', tracksBalance: true }) },
     };
     people = {
       findCallerPerson: jest.fn().mockResolvedValue(alice),
@@ -102,6 +106,7 @@ describe('SettlementsService', () => {
     };
     transactions = {
       getById: jest.fn().mockResolvedValue({ id: 'transaction-1' }),
+      list: jest.fn().mockResolvedValue({ items: [], page: 1, limit: 20, total: 0 }),
     };
     service = new SettlementsService(
       prisma as unknown as PrismaService,
@@ -416,6 +421,33 @@ describe('SettlementsService', () => {
         expect.not.stringMatching(/SUM|CASE/i),
         ledgerId,
       );
+    });
+  });
+
+  describe('list (settlements list)', () => {
+    it('delegates to the transaction list with the internal settlements-only scope', async () => {
+      const query = { page: 2, limit: 50 };
+      await service.list(ledgerId, callerId, query, 'LEFT');
+
+      expect(transactions.list).toHaveBeenCalledWith(ledgerId, callerId, query, 'LEFT', {
+        settlementsOnly: true,
+      });
+      // 範圍與轉換重用交易列表：這裡不另外查結清，確保遮蔽規則只有一份。
+      expect(prisma.ledger.findUnique).toHaveBeenCalledWith({
+        where: { id: ledgerId },
+        select: { kind: true, tracksBalance: true },
+      });
+    });
+
+    it('returns 404 for personal ledgers before touching the transaction list', async () => {
+      prisma.ledger.findUnique.mockResolvedValueOnce({ kind: 'PERSONAL', tracksBalance: true });
+
+      await expect(service.list(ledgerId, callerId, {}, 'MEMBER')).rejects.toMatchObject({
+        constructor: AppException,
+        status: 404,
+        errorCode: 'NOT_FOUND',
+      });
+      expect(transactions.list).not.toHaveBeenCalled();
     });
   });
 
