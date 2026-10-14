@@ -47,6 +47,11 @@ export function differenceFor(
   };
 }
 
+/** 免除與被免除是相反的損益方向，兩邊都不經過帳戶。 */
+export function forgivenessTypeFor(kind: 'FORGIVE' | 'FORGIVEN'): 'EXPENSE' | 'INCOME' {
+  return kind === 'FORGIVE' ? 'EXPENSE' : 'INCOME';
+}
+
 /** 新結清只有一筆往來紀錄；分支是同帳本、同帳戶的普通收支交易。 */
 export async function writeDifference(
   tx: Prisma.TransactionClient,

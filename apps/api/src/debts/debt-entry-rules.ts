@@ -103,7 +103,7 @@ export function transactionTypeFor(
   return kind === 'PAID_FOR_THEM' ? 'LEND' : kind === 'RECEIVED_FOR_THEM' ? 'BORROW' : kind;
 }
 
-/** 調整紀錄（結清差額、免除、被免除）：系統算出來的，不產生交易，不能改金額（決策 40）。 */
+/** 調整紀錄由系統算出，不能直接改金額；新免除會另有呆帳交易。 */
 export function isAdjustment(kind: DebtEntryKind): boolean {
   return kind === 'SETTLEMENT' || kind === 'FORGIVE' || kind === 'FORGIVEN';
 }

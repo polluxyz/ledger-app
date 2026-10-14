@@ -200,6 +200,11 @@ describe('Every entry has an account — debts (e2e)', () => {
     await request(server())
       .post(`/api/debt-proposals/${loan.id}/accept`)
       .set(auth(b.token))
+      .send({ record: null })
+      .expect(400);
+    await request(server())
+      .post(`/api/debt-proposals/${loan.id}/accept`)
+      .set(auth(b.token))
       .send({ record: record(b) })
       .expect(200);
     const paid = await repayment(a, pair.aCounterpartyId, 9000);
@@ -215,6 +220,24 @@ describe('Every entry has an account — debts (e2e)', () => {
       (entry) => entry.kind === 'REPAY',
     )!;
     expect(mirrored.difference).toMatchObject({ type: 'INCOME', amount: 300 });
+    await request(server())
+      .patch(`/api/debt-entries/${paid.id}`)
+      .set(auth(a.token))
+      .send({ amount: 9100 })
+      .expect(200);
+    const amendment = (await proposals(app, b, 'incoming')).find(
+      (proposal) => proposal.type === 'AMEND',
+    )!;
+    await request(server())
+      .post(`/api/debt-proposals/${amendment.id}/accept`)
+      .set(auth(b.token))
+      .send({})
+      .expect(200);
+    const changed = (await entries(b, pair.bCounterpartyId)).find(
+      (entry) => entry.id === mirrored.id,
+    )!;
+    expect(changed.difference).toMatchObject({ type: 'INCOME', amount: 200 });
+    expect(changed.delta).toBe(9300);
     await request(server()).delete(`/api/debt-entries/${paid.id}`).set(auth(a.token)).expect(204);
     const deletion = (await proposals(app, b, 'incoming')).find(
       (proposal) => proposal.type === 'DELETE',
@@ -227,5 +250,84 @@ describe('Every entry has an account — debts (e2e)', () => {
     expect((await entries(b, pair.bCounterpartyId)).some((entry) => entry.id === mirrored.id)).toBe(
       false,
     );
+  });
+
+  it('SC-H14 mirrors forgiveness as income without an account', async () => {
+    const a = await person(app, 'a@example.com', 'A');
+    const b = await person(app, 'b@example.com', 'B');
+    const pair = await linkPair(app, a, b);
+    await post(a, {
+      counterparty: { id: pair.aCounterpartyId },
+      kind: 'LEND',
+      amount: 50000,
+    }).expect(201);
+    const loan = (await proposals(app, b, 'incoming')).find(
+      (proposal) => proposal.type === 'CREATE',
+    )!;
+    await request(server())
+      .post(`/api/debt-proposals/${loan.id}/accept`)
+      .set(auth(b.token))
+      .send({ record: record(b) })
+      .expect(200);
+    await request(server())
+      .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(auth(a.token))
+      .send({ ledgerId: a.ledgerId })
+      .expect(201);
+    const forgiveness = (await proposals(app, b, 'incoming')).find(
+      (proposal) => proposal.type === 'CREATE' && proposal.entryKind === 'FORGIVEN',
+    )!;
+    await request(server())
+      .post(`/api/debt-proposals/${forgiveness.id}/accept`)
+      .set(auth(b.token))
+      .send({})
+      .expect(400);
+    await request(server())
+      .post(`/api/debt-proposals/${forgiveness.id}/accept`)
+      .set(auth(b.token))
+      .send({ record: { ledgerId: b.ledgerId, accountId: b.cashId } })
+      .expect(400);
+    await request(server())
+      .post(`/api/debt-proposals/${forgiveness.id}/accept`)
+      .set(auth(b.token))
+      .send({ record: { ledgerId: b.ledgerId } })
+      .expect(200);
+    const received = (await entries(b, pair.bCounterpartyId)).find(
+      (entry) => entry.kind === 'FORGIVEN',
+    )!;
+    expect(received.delta).toBe(50000);
+    expect(await transaction(b, received.transactionId!)).toMatchObject({
+      type: 'INCOME',
+      amount: 50000,
+      account: null,
+      category: null,
+    });
+  });
+
+  it('accepts forgiveness without a record when the recipient has no debt', async () => {
+    const a = await person(app, 'a@example.com', 'A');
+    const b = await person(app, 'b@example.com', 'B');
+    const pair = await linkPair(app, a, b);
+    await post(a, {
+      counterparty: { id: pair.aCounterpartyId },
+      kind: 'LEND',
+      amount: 50000,
+    }).expect(201);
+    await request(server())
+      .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(auth(a.token))
+      .send({ ledgerId: a.ledgerId })
+      .expect(201);
+    const forgiveness = (await proposals(app, b, 'incoming')).find(
+      (proposal) => proposal.type === 'CREATE' && proposal.entryKind === 'FORGIVEN',
+    )!;
+    await request(server())
+      .post(`/api/debt-proposals/${forgiveness.id}/accept`)
+      .set(auth(b.token))
+      .send({})
+      .expect(200);
+    expect(
+      (await entries(b, pair.bCounterpartyId)).some((entry) => entry.kind === 'FORGIVEN'),
+    ).toBe(false);
   });
 });

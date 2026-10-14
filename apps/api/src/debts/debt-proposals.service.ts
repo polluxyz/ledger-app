@@ -22,6 +22,7 @@ import {
 import { PROPOSAL_INCLUDE, mirrorKind, toDebtProposal } from './debt-proposal-rules';
 import {
   recordDebtTransaction,
+  forgivenessTypeFor,
   recalculateSettlement,
   voidRepaymentWithSettlement,
   writeDifference,
@@ -34,7 +35,7 @@ const MAX_LIMIT = 100;
 
 type ProposalRow = Prisma.DebtProposalGetPayload<{ include: typeof PROPOSAL_INCLUDE }>;
 
-/** 接受「新增」時需要帳本與帳戶的種類：會產生交易的四種。免除只改往來餘額。 */
+/** 接受「新增」時必須指定交易位置的種類；免除另依接受者有無欠款判斷。 */
 const RECORDABLE_KINDS = new Set([
   'LEND',
   'BORROW',
@@ -202,7 +203,7 @@ export class DebtProposalsService {
       const transactionId = await this.transactions.createDebtForgiveness(tx, {
         ledgerId: record.ledgerId,
         creatorId: userId,
-        type: 'INCOME',
+        type: forgivenessTypeFor('FORGIVEN'),
         amount: -balance,
         date: row.date,
       });

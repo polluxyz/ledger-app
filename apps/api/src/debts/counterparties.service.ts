@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { assertLedgerWritable } from './debt-ledger-access';
+import { forgivenessTypeFor } from './debt-recording';
 import {
   counterpartyLinked,
   findLinkOfCounterparty,
@@ -269,23 +270,20 @@ export class CounterpartiesService {
     );
 
     return {
-      items: pageRows.map(({ entry, balanceAfter }) =>
-        toDebtEntry(entry, {
+      items: pageRows.map(({ entry, balanceAfter }) => {
+        const branch = entry.transactionId ? byRepayment.get(entry.transactionId) : undefined;
+        return toDebtEntry(entry, {
           balanceAfter,
           sync: sync.get(entry.id),
-          difference:
-            entry.transactionId && byRepayment.has(entry.transactionId)
-              ? (() => {
-                  const branch = byRepayment.get(entry.transactionId!)!;
-                  return {
-                    transactionId: branch.id,
-                    type: branch.type as 'EXPENSE' | 'INCOME',
-                    amount: branch.amount,
-                  };
-                })()
-              : null,
-        }),
-      ),
+          difference: branch
+            ? {
+                transactionId: branch.id,
+                type: branch.type as 'EXPENSE' | 'INCOME',
+                amount: branch.amount,
+              }
+            : null,
+        });
+      }),
       page,
       limit,
       total: sectionRows.length,
@@ -293,7 +291,7 @@ export class CounterpartiesService {
   }
 
   /**
-   * 免除剩餘（決策 39）：對方欠我時，補一筆 `FORGIVE` 讓往來餘額歸零，不產生交易。
+   * 免除剩餘（決策 162、175）：對方欠我時，補一筆 `FORGIVE` 與沒有帳戶的呆帳支出。
    * 餘額 ≤ 0（對方沒欠我、或是我欠對方）時沒有東西可以免除。連動中會送提議給對方（決策 62）。
    */
   forgive(
@@ -317,7 +315,7 @@ export class CounterpartiesService {
       const transactionId = await this.transactions.createDebtForgiveness(tx, {
         ledgerId,
         creatorId: userId,
-        type: 'EXPENSE',
+        type: forgivenessTypeFor('FORGIVE'),
         amount: balance,
         date,
       });

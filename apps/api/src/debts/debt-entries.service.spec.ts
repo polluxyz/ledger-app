@@ -3,6 +3,7 @@ import type { TransactionsService } from '../transactions/transactions.service';
 import { deltaFor } from './debt-entry-rules';
 import {
   differenceFor,
+  forgivenessTypeFor,
   recalculateSettlement,
   voidRepaymentWithSettlement,
   writeDifference,
@@ -70,7 +71,10 @@ describe('debt settlement differences', () => {
       data: { type: 'INCOME', amount: 200 },
     });
     expect(await recalculateSettlement(tx, repayment, 9300)).toBe(true);
-    expect(transaction.update.mock.lastCall?.[0].data.deletedAt).toBeInstanceOf(Date);
+    expect(transaction.update).toHaveBeenLastCalledWith({
+      where: { id: 'branch' },
+      data: { deletedAt: expect.any(Date) as Date },
+    });
   });
 
   it('withdraws the repayment, branch, and old settlement with one timestamp', async () => {
@@ -98,5 +102,13 @@ describe('debt settlement differences', () => {
       ['repayment'],
       deletedAt,
     );
+  });
+});
+
+/** 免除的損益方向固定，由往來紀錄種類決定。 */
+describe('forgiveness transaction directions', () => {
+  it('records FORGIVE as expense and FORGIVEN as income', () => {
+    expect(forgivenessTypeFor('FORGIVE')).toBe('EXPENSE');
+    expect(forgivenessTypeFor('FORGIVEN')).toBe('INCOME');
   });
 });
