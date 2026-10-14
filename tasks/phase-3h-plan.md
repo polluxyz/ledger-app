@@ -132,3 +132,4 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
    - 刪掉兩個測舊行為的單元測試（`rename` 帶 `tracksBalance`、`record: null` 不產生交易）。
    - 仍有 6 個單元測試在測「不計入餘額」，留給 H1（`AccountsService` 1 個）與 H2（`TransactionsService` 3 個、`SettlementsService` 2 個）改。既有 API e2e 的 `record: null`、`tracksBalance` 型別錯誤留給 H7。
 2. **隔離測試紅燈**：`every-entry-account-isolation.e2e-spec.ts` 8 個全紅（2026-10-14）。
+3. **`assertSelectableAccount` 改由協調者在 H0 寫**：原本排給 H1 先交，H2 要等。協調者直接寫進契約（`apps/api/src/accounts/account-selection.ts`，另附 `temporaryAccountIdOf`，6 個單元測試），H1～H4 同時開工。
