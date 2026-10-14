@@ -11,14 +11,6 @@ ALTER TABLE "Transaction" ADD CONSTRAINT "Transaction_differenceOfId_fkey" FOREI
 -- 每個使用者剛好一個臨時帳戶（決策 167）。Prisma schema 寫不出部分索引，只在這裡。
 CREATE UNIQUE INDEX "Account_userId_temporary_key" ON "Account"("userId") WHERE "isTemporary";
 
--- 免除改記呆帳與債務免除（決策 162）：FORGIVE、FORGIVEN 現在會帶交易。舊的免除仍是 null，所以只放寬、不強制。
--- 結清差額（SETTLEMENT）照舊不帶交易：3h 起不再新增，只剩舊資料。
-ALTER TABLE "DebtEntry" DROP CONSTRAINT "DebtEntry_transaction_by_kind";
-ALTER TABLE "DebtEntry" ADD CONSTRAINT "DebtEntry_transaction_by_kind" CHECK (
-  ("kind"::text <> 'SETTLEMENT' OR "transactionId" IS NULL)
-  AND ("kind"::text NOT IN ('PAID_FOR_ME', 'RECEIVED_FOR_ME') OR "transactionId" IS NOT NULL)
-);
-
 -- 2. 替每個既有使用者建臨時帳戶。已經有同名帳戶的人取名「臨時帳戶 2」（Account 有 userId＋name 唯一約束）。
 INSERT INTO "Account" ("id", "userId", "name", "initialBalance", "isTemporary", "createdAt", "updatedAt")
 SELECT
