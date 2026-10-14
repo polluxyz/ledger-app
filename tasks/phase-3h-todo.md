@@ -16,7 +16,7 @@ plan：`tasks/phase-3h-plan.md`；spec：`docs/specs/phase-3h-every-entry-has-ac
       驗收：元件測試涵蓋帳本對話框沒有「計入餘額」、帳戶頁的臨時帳戶有交易才顯示且不能改名刪除、交易表單與結清表單帶入這本帳本最近用的帳戶；Web 檢查全綠。
 - [x] **H6 畫面：借還與明細**（依賴 H0；`eea-web-debts`）：plan §1.3 G6。
       驗收：元件測試涵蓋借還表單沒有「不記入帳本」且帶入預設、免除先選帳本、分支畫在還款下面且沒有「⋯」、呆帳的名稱、交易列顯示「臨時帳戶」；Web 檢查全綠。
-- [ ] **H7 API e2e**（依賴 H1～H4；`eea-api-e2e`）：plan §1.4 G7。
+- [x] **H7 API e2e**（依賴 H1～H4；`eea-api-e2e`）：plan §1.4 G7。
       驗收：`every-entry-account.e2e-spec.ts` 走完 SC-H1～H10、SC-H14；既有 API e2e 全綠。
 - [ ] **H8 Web e2e**（依賴 H1～H6；`eea-web-e2e`）：plan §1.4 G8。
       驗收：兩套 Web e2e 全綠，含 spec §6 的兩條主線。
