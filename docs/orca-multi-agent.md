@@ -32,7 +32,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
   1. Orca 不支援這個 agent 的 `--model`。Pi 屬於這種。
   2. Orca 不接受這個強度。Orca 1.4.218 對 `gpt-6-luna` 拒絕 `--effort max`（`does not support effort max`），但 Codex 本身支援。改成 `xhigh` 就能用一行。
 - 一行派工不用自己帶跳過許可的旗標。Orca 設定的 `agentDefaultArgs` 已經替 codex 與 antigravity 加上。兩段式是自己開終端機，旗標要寫在 `--command` 裡，表上的指令已經寫好。
-- 換模型前先查可用清單，不要憑記憶填：Codex 看 `~/.codex/models_cache.json`，Pi 跑 `pi --list-models`，agy 跑 `agy models`。Claude 的模型 id 是 `claude-<家族>-<版本>`，例如 `claude-sonnet-5-5`。
+- 換模型前先查可用清單，不要憑記憶填：Codex 看 Orca 帳號目錄裡的 `models_cache.json`（見 §5 Codex，不是 `~/.codex`），Pi 跑 `pi --list-models`，agy 跑 `agy models`。Claude 的模型 id 是 `claude-<家族>-<版本>`，例如 `claude-sonnet-5-5`。
 - 2026-10-03 實測過一行派 Codex（`gpt-6-luna xhigh`），`launch.effective` 相符，worker 回報是 full access、沒有許可提示。`fallback-2` 的一行寫法還沒實測。失敗的話改用兩段式。
 
 ## 1. 分工
@@ -140,6 +140,7 @@ Constraints 每次都寫這六條：
 **Codex**
 
 - 第一次在某個 repo 啟動會問「信任這個資料夾」，有新版時會問「是否更新」（選 3「Skip until next version」）。答完要關掉終端機重開，否則 Orca 會一直判定卡住（`codex-trust-workspace`、`codex-update-prompt`）。
+- Orca 派的 Codex 用 Orca 管理的帳號（`orca account list` 的 `codex.activeAccountId`），不是系統預設的 `~/.codex`。協調者在自己的終端機直接跑 `codex` 用的是後者，2026-10-14 那是免費帳號，`gpt-6-sol` 會回「not supported when using Codex with a ChatGPT account」，`~/.codex/models_cache.json` 也沒有 sol。要手動測模型，設 `CODEX_HOME` 指向 Orca 的帳號目錄（`%APPDATA%/Orca/codex-accounts/<activeAccountId>/home`），或直接派一個 worker 看 `launch.effective`。
 
 **Pi**
 
