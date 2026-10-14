@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W172～W177、SC-H1～SC-H14）。後端、migration、畫面、e2e 合成一個 PR。
 
-> 核可：**待核可**。
+> 核可：**已核可**（2026-10-14）。
 
 ## 0. 起點
 
