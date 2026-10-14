@@ -19,7 +19,6 @@ describe('Ledger detail page', () => {
     name: '家庭帳本',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     members: [
@@ -107,9 +106,8 @@ describe('Ledger detail page', () => {
 
     expect(await screen.findByRole('heading', { name: '家庭帳本' })).toBeInTheDocument();
     expect(screen.getByText('共享')).toBeInTheDocument();
-    expect(screen.getByText('連動')).toBeInTheDocument();
-    // 兩個不可更改的欄位都要把這件事寫在畫面上。
-    expect(screen.getAllByText('建立後不可更改')).toHaveLength(2);
+    expect(screen.queryByText('連動')).not.toBeInTheDocument();
+    expect(screen.getAllByText('建立後不可更改')).toHaveLength(1);
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '成員（2）' })).toBeInTheDocument();
@@ -244,7 +242,7 @@ describe('Ledger detail page', () => {
       );
       expect(patch).toBeDefined();
       const body = (patch?.[1] as RequestInit | undefined)?.body;
-      // 只送名稱。`kind` 與 `tracksBalance` 帶上去都會被後端退回 400。
+      // 只送名稱；帳本類型建立後不可更改。
       expect(JSON.parse(typeof body === 'string' ? body : '{}')).toEqual({ name: '我們家' });
     });
   });

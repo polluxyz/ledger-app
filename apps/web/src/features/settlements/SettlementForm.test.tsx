@@ -19,7 +19,6 @@ describe('SettlementForm', () => {
     name: '花蓮三日',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: true,
     archivedAt: null,
     role: 'EDITOR',
     createdAt: '2026-10-01T00:00:00.000Z',
@@ -42,7 +41,38 @@ describe('SettlementForm', () => {
     userId: null,
     status: 'GUEST',
   };
-  const account = { id: 'account-hua', name: '現金', initialBalance: 0, balance: 100000 };
+  const account = {
+    id: 'account-hua',
+    name: '現金',
+    initialBalance: 0,
+    balance: 100000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const bankAccount = {
+    id: 'account-bank',
+    name: '銀行',
+    initialBalance: 0,
+    balance: 200000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const thirdAccount = {
+    id: 'account-third',
+    name: '存款',
+    initialBalance: 0,
+    balance: 300000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const temporaryAccount = {
+    id: 'account-temp',
+    name: '臨時帳戶 2',
+    initialBalance: 0,
+    balance: 0,
+    isTemporary: true,
+    hasTransactions: true,
+  };
   const people = [hua, min, guest];
   const transaction: Transaction = {
     id: 'transaction-id',
@@ -61,6 +91,8 @@ describe('SettlementForm', () => {
     ledgerSplit: null,
     settlement: { id: 'settlement-id', from: hua, to: min },
     accountPending: false,
+    differenceOfId: null,
+    difference: null,
     createdAt: '2026-09-02T00:00:00.000Z',
   };
   const otherPayerTransaction: Transaction = {
@@ -78,7 +110,7 @@ describe('SettlementForm', () => {
         <SettlementForm ledger={ledger} onSaved={onSaved} onDeleted={onDeleted} {...props} />
       </QueryClientProvider>,
     );
-    return { onSaved, onDeleted };
+    return { onSaved, onDeleted, client };
   }
 
   function parseRequestBody(init: RequestInit): unknown {
@@ -118,8 +150,13 @@ describe('SettlementForm', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (String(url).includes('/users/me/record-defaults')) {
+        return json({ ledgerId: ledger.id, accountId: account.id });
+      }
       if (String(url).includes('/people')) return json(people);
-      if (String(url).endsWith('/accounts')) return json([account]);
+      if (String(url).endsWith('/accounts')) {
+        return json([account, bankAccount, thirdAccount, temporaryAccount]);
+      }
       if (String(url).includes('/settlements') && init?.method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }));
       }
@@ -132,7 +169,7 @@ describe('SettlementForm', () => {
     vi.unstubAllGlobals();
   });
 
-  it('prefills a suggestion and posts as the current payer without fromPersonId', async () => {
+  it('prefills the default account and posts as the current payer without fromPersonId', async () => {
     const user = userEvent.setup();
     const { onSaved } = renderForm({
       prefill: { fromPersonId: hua.id, toPersonId: min.id, amount: 205000 },
@@ -144,9 +181,9 @@ describe('SettlementForm', () => {
     expect(from).toHaveValue(hua.id);
     expect(to).toHaveValue(min.id);
     expect(screen.getByLabelText('金額')).toHaveValue(2050);
-    expect(screen.getByLabelText('帳戶')).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByLabelText('帳戶'), account.id);
+    await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue(account.id));
+    expect(screen.getByLabelText('帳戶')).toHaveValue(account.id);
+    expect(screen.queryByRole('option', { name: '臨時帳戶 2' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await waitFor(() => {
@@ -165,6 +202,24 @@ describe('SettlementForm', () => {
     });
     expectDateString(body);
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the selected account when the server default changes', async () => {
+    const user = userEvent.setup();
+    const { client } = renderForm({
+      prefill: { fromPersonId: hua.id, toPersonId: min.id, amount: 205000 },
+    });
+
+    const accountSelect = await screen.findByLabelText('帳戶');
+    await waitFor(() => expect(accountSelect).toHaveValue(account.id));
+    expect(accountSelect).toHaveValue(account.id);
+    await user.selectOptions(accountSelect, bankAccount.id);
+    client.setQueryData(['record-defaults', ledger.id], {
+      ledgerId: ledger.id,
+      accountId: thirdAccount.id,
+    });
+
+    expect(accountSelect).toHaveValue(bankAccount.id);
   });
 
   it('sends toAccountId when the current user is the receiver', async () => {

@@ -12,8 +12,22 @@ import App from '../../App';
 describe('Accounts page', () => {
   const fetchMock = vi.fn();
 
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
-  const card = { id: 'acc-2', name: '信用卡', initialBalance: -1200000, balance: -1200000 };
+  const cash = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 380000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const card = {
+    id: 'acc-2',
+    name: '信用卡',
+    initialBalance: -1200000,
+    balance: -1200000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -64,6 +78,34 @@ describe('Accounts page', () => {
     const balance = within(items[1]!).getByLabelText('信用卡餘額');
     expect(balance).toHaveTextContent('-$12,000');
     expect(balance.className).toMatch(/negative/);
+  });
+
+  it('shows a used temporary account by its fixed name without edit or delete actions', async () => {
+    const temporary = {
+      id: 'acc-temp',
+      name: '臨時帳戶 2',
+      initialBalance: 0,
+      balance: 5000,
+      isTemporary: true,
+      hasTransactions: true,
+    };
+    const emptyTemporary = {
+      ...temporary,
+      id: 'acc-temp-empty',
+      hasTransactions: false,
+    };
+    routeFetch({ accounts: [cash, card, temporary, emptyTemporary] });
+
+    render(<App />);
+
+    const items = await screen.findAllByRole('listitem');
+    expect(items).toHaveLength(3);
+    expect(within(items[0]!).getByText('現金')).toBeInTheDocument();
+    expect(within(items[1]!).getByText('信用卡')).toBeInTheDocument();
+    expect(within(items[2]!).getByText('臨時帳戶')).toBeInTheDocument();
+    expect(within(items[2]!).getByLabelText('臨時帳戶餘額')).toHaveTextContent('$50');
+    expect(within(items[2]!).queryByRole('button', { name: /編輯|刪除/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('臨時帳戶 2')).not.toBeInTheDocument();
   });
 
   it('tells the user to keep an account when the list is empty', async () => {
@@ -307,7 +349,6 @@ describe('Transaction form without any account', () => {
       id: 'ledger-1',
       name: '我的帳本',
       currency: 'TWD',
-      tracksBalance: true,
       archivedAt: null,
       role: 'OWNER',
     };

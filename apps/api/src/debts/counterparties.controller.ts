@@ -25,6 +25,7 @@ import { ListCounterpartiesQueryDto } from './dto/list-counterparties-query.dto'
 import { ListDebtEntriesQueryDto } from './dto/list-debt-entries-query.dto';
 import { MergeCounterpartyDto } from './dto/merge-counterparty.dto';
 import { UpdateCounterpartyDto } from './dto/update-counterparty.dto';
+import { ForgiveCounterpartyDto } from './dto/forgive-counterparty.dto';
 
 /**
  * 往來對象（spec 3b §5.1）。對象屬於使用者、不屬於帳本（決策 17），所以不在
@@ -97,8 +98,9 @@ export class CounterpartiesController {
   forgive(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
+    @Body() dto: ForgiveCounterpartyDto,
   ): Promise<CreateDebtEntryResponse> {
-    return this.counterparties.forgive(user.sub, id);
+    return this.counterparties.forgive(user.sub, id, dto.ledgerId);
   }
 
   @Post(':id/merge')

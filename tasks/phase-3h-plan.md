@@ -139,3 +139,13 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
    - 註冊時建立臨時帳戶、migration 的結構部分（欄位、索引、補建臨時帳戶、刪 `tracksBalance`）：H2～H4 跑 e2e 需要新欄位，不能等 H1。H1 只補 migration 的資料搬移兩段。
    - shared `actualAmountOf`：修改還款表單要帶入實際收付金額，方向的判斷不能放前端。
    - Web `selectableAccounts`：表單的帳戶選單排除臨時帳戶，H5、H6 共用。
+5. **migration 拆成兩個檔**：H3 發現既有的 CHECK 約束 `DebtEntry_transaction_by_kind` 規定免除不能帶交易。協調者另開 `20261014160000_forgiveness_has_transaction` 放寬（`SETTLEMENT` 照舊不能帶）。沒有改原本那個檔，是因為 Prisma 不讓 AI 執行 `migrate reset`，已套用的測試資料庫只能往後 `deploy`。spec §3.3 寫「同一個 migration」，實際是同一個 PR 的兩個 migration。
+6. **H1 的 migration 補一條**：不計入餘額帳本裡的借還交易（`LEND`、`BORROW`、`COLLECT`、`REPAY`）沒有帳戶時也移到記帳人的臨時帳戶，放在差額轉分支之前，分支才會拿到同一個帳戶。H1 的比對資料裡 r6 就是這種情況，原本分支的帳戶是空的。
+7. **migration 前後比對**（協調者用 H1 的比對資料重跑，2026-10-14）：一般帳戶 a1 845 → 845、a2 2000 → 2000；8 個對象的往來餘額全部不變；臨時帳戶 u1 −100（H1 回報時是 −140，差的 40 是第 6 項補上的 r6 實收）、u2 55；6 筆分支都符合「還款 ± 分支 = 原本實收」（80、120、45、80、120、40）；對不到還款的舊差額原樣保留；非成員付款、別人替我付的交易帳戶仍是空的。
+8. **migration SQL 開發者同意**（2026-10-14）。驗收 H1 時協調者先在本機合進了整合分支（沒推、沒碰 `ledger_dev`），比 plan 寫的「同意後才合」早一步，已向開發者說明。
+9. **H4 結果**：`record-defaults` 單元測試 11、e2e 5 全過；1 萬筆交易五次回應的中位數 6.6ms（目標 < 200ms），不需要加索引。
+10. **H2 結果**：付款人規則、`assertSelectableAccount` 全面替換、換帳戶只限「目前在自己的臨時帳戶」；`every-entry-account-payer` 4 條全過。協調者逐行看過 `payer-account-rules.ts`、`transactions.service.ts`、`settlements.service.ts` 的 diff。
+11. **H5 結果與協調者補正**：交易表單原本「沒選就用第一個帳戶」被改成只帶「最近一次」，從沒記過帳的新使用者會變成空欄位。協調者補回第三層預設（最近一次 → 第一個可選帳戶）。
+12. **H3 退回**：功能正確，但 `debt-entries.service.spec.ts` 從 28 條 `describe`／`it` 刪到 5 條（含與 3h 無關的核心規則：借出正負號、先鎖對象、帳本不能寫就不寫），`debt-recording.ts` 的「為什麼」註解被刪成一行。退回補測試與註解（新的 dispatch，同一個 worktree）。
+13. **H3 修正後合併**：`debt-entries.service.spec.ts` 回到 36 條 `describe`／`it`（含少收、多收、少付、多付、剛好還清），`debt-recording.ts` 的說明註解補回。H3 刪掉 `debts-bind.e2e-spec.ts`（測 3g 的 `SETTLEMENT` 綁定，行為已被分支取代，`every-entry-account-debts` 涵蓋新行為）。
+14. **第 1 波後端整合**（H1～H4 合併後的整合分支）：API 單元測試 441 個全綠；`every-entry-account*` 4 個 e2e 共 24 條全綠，隔離測試 8 條由紅轉綠；API typecheck 只剩既有 e2e 檔的 16 個錯誤（H7）。

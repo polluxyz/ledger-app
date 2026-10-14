@@ -5,7 +5,6 @@ import {
 } from './payer-account-rules';
 
 const base: PayerAccountInput = {
-  tracksBalance: true,
   payer: { userId: 'me' },
   callerUserId: 'me',
   requestedAccountId: undefined,
@@ -15,88 +14,95 @@ const base: PayerAccountInput = {
 };
 
 describe('resolvePayerAccount', () => {
-  it('rejects accounts on unlinked ledgers and otherwise clears them', () => {
-    expect(resolvePayerAccount({ ...base, tracksBalance: false, requestedAccountId: 'a' })).toEqual(
-      {
-        ok: false,
-        error: 'ACCOUNT_NOT_ALLOWED',
-      },
-    );
-    expect(resolvePayerAccount({ ...base, tracksBalance: false, currentAccountId: 'a' })).toEqual({
-      ok: true,
-      accountId: null,
-      needsOwnershipCheck: false,
-    });
-  });
-
-  it('requires my account on create or when changing the payer to me', () => {
+  it('requires my account on create and when changing the payer to me', () => {
     expect(resolvePayerAccount(base)).toEqual({ ok: false, error: 'ACCOUNT_REQUIRED' });
     expect(resolvePayerAccount({ ...base, mode: 'UPDATE', payerChanged: true })).toEqual({
       ok: false,
       error: 'ACCOUNT_REQUIRED',
     });
-    expect(resolvePayerAccount({ ...base, requestedAccountId: 'mine' })).toEqual({
-      ok: true,
-      accountId: 'mine',
-      needsOwnershipCheck: true,
-    });
-    expect(
-      resolvePayerAccount({
-        ...base,
-        mode: 'UPDATE',
-        payerChanged: true,
-        requestedAccountId: 'mine',
-      }),
-    ).toEqual({ ok: true, accountId: 'mine', needsOwnershipCheck: true });
+    for (const mode of ['CREATE', 'UPDATE'] as const) {
+      expect(resolvePayerAccount({ ...base, mode, requestedAccountId: 'mine' })).toEqual({
+        ok: true,
+        accountId: 'mine',
+        needsOwnershipCheck: true,
+        needsTemporaryAccount: false,
+      });
+    }
   });
 
-  it('keeps my account when payer is unchanged and no account was sent', () => {
+  it('preserves my account on an unrelated update', () => {
     expect(resolvePayerAccount({ ...base, mode: 'UPDATE', currentAccountId: 'mine' })).toEqual({
       ok: true,
       accountId: 'mine',
       needsOwnershipCheck: false,
+      needsTemporaryAccount: false,
     });
   });
 
-  it('forbids choosing someone else’s account and preserves or clears their account', () => {
-    const other = { ...base, payer: { userId: 'other' }, mode: 'UPDATE' as const };
+  it('rejects an account for another member and requests their temporary account', () => {
+    const other = { ...base, payer: { userId: 'other' } };
     expect(resolvePayerAccount({ ...other, requestedAccountId: 'mine' })).toEqual({
       ok: false,
       error: 'ACCOUNT_NOT_PAYERS',
     });
-    expect(resolvePayerAccount({ ...other, currentAccountId: 'theirs' })).toEqual({
+    expect(resolvePayerAccount(other)).toEqual({
       ok: true,
-      accountId: 'theirs',
+      accountId: null,
       needsOwnershipCheck: false,
-    });
-    expect(resolvePayerAccount({ ...other, payerChanged: true, currentAccountId: 'mine' })).toEqual(
-      { ok: true, accountId: null, needsOwnershipCheck: false },
-    );
-  });
-
-  it('clears an account when changing the payer from another member to a guest', () => {
-    const guest = { ...base, payer: { userId: null }, mode: 'UPDATE' as const };
-    expect(resolvePayerAccount({ ...guest, requestedAccountId: 'mine' })).toEqual({
-      ok: false,
-      error: 'ACCOUNT_NOT_PAYERS',
+      needsTemporaryAccount: true,
     });
     expect(
-      resolvePayerAccount({ ...guest, currentAccountId: 'theirs', payerChanged: true }),
+      resolvePayerAccount({
+        ...other,
+        mode: 'UPDATE',
+        payerChanged: true,
+        currentAccountId: 'mine',
+      }),
     ).toEqual({
       ok: true,
       accountId: null,
       needsOwnershipCheck: false,
+      needsTemporaryAccount: true,
     });
+    expect(resolvePayerAccount({ ...other, mode: 'UPDATE', currentAccountId: 'theirs' })).toEqual({
+      ok: true,
+      accountId: 'theirs',
+      needsOwnershipCheck: false,
+      needsTemporaryAccount: false,
+    });
+  });
+
+  it('keeps a nonmember payer without an account, including a payer change', () => {
+    const guest = { ...base, payer: { userId: null } };
+    expect(resolvePayerAccount({ ...guest, requestedAccountId: 'mine' })).toEqual({
+      ok: false,
+      error: 'ACCOUNT_NOT_PAYERS',
+    });
+    for (const mode of ['CREATE', 'UPDATE'] as const) {
+      expect(
+        resolvePayerAccount({ ...guest, mode, payerChanged: true, currentAccountId: 'mine' }),
+      ).toEqual({
+        ok: true,
+        accountId: null,
+        needsOwnershipCheck: false,
+        needsTemporaryAccount: false,
+      });
+    }
   });
 });
 
 describe('isAccountPending', () => {
-  it('is visible only to the payer with an account still missing on a linked ledger', () => {
-    const args = { tracksBalance: true, payerUserId: 'me', accountId: null, viewerUserId: 'me' };
+  it('only marks my side while it uses my temporary account', () => {
+    const args = {
+      payerUserId: 'me',
+      accountId: 'temporary',
+      viewerUserId: 'me',
+      viewerTemporaryAccountId: 'temporary',
+    };
     expect(isAccountPending(args)).toBe(true);
     expect(isAccountPending({ ...args, viewerUserId: 'other' })).toBe(false);
     expect(isAccountPending({ ...args, payerUserId: null })).toBe(false);
-    expect(isAccountPending({ ...args, accountId: 'a' })).toBe(false);
-    expect(isAccountPending({ ...args, tracksBalance: false })).toBe(false);
+    expect(isAccountPending({ ...args, accountId: 'cash' })).toBe(false);
+    expect(isAccountPending({ ...args, viewerTemporaryAccountId: null })).toBe(false);
   });
 });

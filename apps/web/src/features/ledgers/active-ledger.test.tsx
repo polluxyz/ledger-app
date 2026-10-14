@@ -17,7 +17,6 @@ describe('Active ledger selection', () => {
     id: 'led-1',
     name: '個人帳本',
     currency: 'TWD',
-    tracksBalance: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     role: 'OWNER',

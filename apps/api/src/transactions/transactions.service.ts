@@ -21,6 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { deriveSync } from '../debts/debt-proposal-rules';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
+import { assertSelectableAccount, temporaryAccountIdOf } from '../accounts/account-selection';
 import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 
 /**
@@ -31,7 +32,7 @@ import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator'
  * 以下貫穿全檔的規則：
  *   - 金額為正整數（在 DTO 驗證），絕不用浮點數。
  *   - 刪除採軟刪除（設 `deletedAt`）；每個讀取都以 `deletedAt: null` 過濾。
- *   - 分類與帳戶是**條件必填**：該不該填取決於交易型別與帳本的 `tracksBalance`，
+ *   - 分類與帳戶依交易型別驗證，所有帳本的交易都計入餘額，
  *     完整規則見 `assertAccountRules`。
  *   - 帳戶屬於使用者（不是帳本）；共享帳本的收支依付款人決定帳戶，
  *     而回應中別人的帳戶一律遮成 `null`（見 `toTransaction`）。
@@ -64,6 +65,8 @@ interface AccountRef {
 /** 一筆交易資料列，已 join 其分類、帳戶與建立者。 */
 interface TransactionRow {
   id: string;
+  differenceOfId?: string | null;
+  difference?: { id: string; type: TransactionType; amount: number; deletedAt: Date | null } | null;
   type: TransactionType;
   amount: number;
   date: Date;
@@ -130,6 +133,7 @@ interface TransactionRow {
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
 // `userId`——遮蔽他人帳戶時需要它來比對檢視者，其他欄位一概不取。
 const TRANSACTION_INCLUDE = {
+  difference: { select: { id: true, type: true, amount: true, deletedAt: true } },
   ledgerSplit: { include: { shares: { orderBy: { sortOrder: 'asc' } } } },
   settlement: true,
   category: { select: { id: true, name: true, icon: true } },
@@ -218,7 +222,7 @@ interface UpdateTransactionInput {
 
 interface ViewContext {
   shared: boolean;
-  tracksBalance: boolean;
+  viewerTemporaryAccountId: string | null;
   people: Map<string, LedgerPersonView>;
   byUser: Map<string, LedgerPersonView>;
 }
@@ -263,8 +267,7 @@ export class TransactionsService {
           { allowLeft: true },
         );
         const payer = records.get(payerId)!;
-        const accountId = await this.resolveAccount({
-          tracksBalance: ledger.tracksBalance,
+        const accountId = await this.resolveAccount(tx, {
           payer,
           callerUserId: creatorId,
           requestedAccountId: input.accountId,
@@ -383,7 +386,7 @@ export class TransactionsService {
           ) AS rn
         FROM "Transaction" t
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
-        WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
           ${leftScope}
           ${settlementOnly}
           ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
@@ -412,7 +415,7 @@ export class TransactionsService {
             await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
-      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
         ${leftScope}
         ${settlementOnly}
         ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
@@ -424,7 +427,7 @@ export class TransactionsService {
           )[0]?.count ?? 0n,
         );
 
-    const context = await this.viewContext(ledgerId);
+    const context = await this.viewContext(ledgerId, viewerUserId);
     return {
       items: selected.map((item) =>
         this.toTransaction(byId.get(item.id)!, viewerUserId, context, access),
@@ -452,7 +455,7 @@ export class TransactionsService {
   ): Promise<Transaction> {
     const ledger = await this.getLedger(ledgerId);
     if (ledger.kind === 'SHARED') {
-      return this.updateShared(ledgerId, transactionId, viewerUserId, input, ledger.tracksBalance);
+      return this.updateShared(ledgerId, transactionId, viewerUserId, input);
     }
     this.assertSplitAllowed(input, ledger.kind, input.type ?? 'EXPENSE');
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -531,7 +534,6 @@ export class TransactionsService {
     transactionId: string,
     callerUserId: string,
     input: UpdateTransactionInput,
-    tracksBalance: boolean,
   ): Promise<Transaction> {
     await this.prisma.$transaction(async (tx) => {
       const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
@@ -606,8 +608,7 @@ export class TransactionsService {
         [payerId, ...(split?.shares.map((share) => share.personId) ?? [])],
         { allowLeft: true },
       );
-      const accountId = await this.resolveAccount({
-        tracksBalance,
+      const accountId = await this.resolveAccount(tx, {
         payer: records.get(payerId)!,
         callerUserId,
         requestedAccountId: input.accountId,
@@ -665,11 +666,17 @@ export class TransactionsService {
     type: TransactionType,
     client: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    const entry = await client.debtEntry.findUnique({
-      where: { transactionId },
-      select: { id: true },
-    });
-    if (entry !== null || isDebtTransactionType(type)) {
+    const [entry, difference] = await Promise.all([
+      client.debtEntry.findUnique({
+        where: { transactionId },
+        select: { id: true },
+      }),
+      client.transaction.findUnique({
+        where: { id: transactionId },
+        select: { differenceOfId: true },
+      }),
+    ]);
+    if (entry !== null || difference?.differenceOfId != null || isDebtTransactionType(type)) {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.DEBT_TRANSACTION_READ_ONLY,
@@ -684,8 +691,7 @@ export class TransactionsService {
       select: { kind: true },
     });
     if (!ledger) throw this.notFound('Ledger');
-    // 3h H0 佔位：所有帳本都計入餘額（決策 165）。H2 會把 tracksBalance 這個參數整個拿掉。
-    return { ...ledger, tracksBalance: true };
+    return ledger;
   }
 
   private isIncomeExpense(type: TransactionType): type is 'EXPENSE' | 'INCOME' {
@@ -777,6 +783,7 @@ export class TransactionsService {
   }
 
   private async resolveAccount(
+    tx: Prisma.TransactionClient,
     input: Parameters<typeof resolvePayerAccount>[0],
   ): Promise<string | null> {
     const result = resolvePayerAccount(input);
@@ -788,8 +795,10 @@ export class TransactionsService {
       );
     }
     if (result.needsOwnershipCheck)
-      await this.assertAccountOwned(input.callerUserId, result.accountId!);
-    return result.accountId;
+      await assertSelectableAccount(tx, input.callerUserId, result.accountId!);
+    return result.needsTemporaryAccount
+      ? temporaryAccountIdOf(tx, input.payer.userId!)
+      : result.accountId;
   }
 
   private async findActiveForUpdate(
@@ -856,13 +865,6 @@ export class TransactionsService {
           'Account cannot be set here.',
         );
       }
-      if (!ledger.tracksBalance) {
-        throw new AppException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.ACCOUNT_NOT_ALLOWED,
-          'This ledger does not track accounts.',
-        );
-      }
       const creator = await this.people.findCallerPerson(tx, ledgerId, existing.creatorId);
       const payerId = existing.payerPersonId ?? creator?.id;
       if (!payerId) throw this.notFound('Person');
@@ -874,7 +876,14 @@ export class TransactionsService {
           'Only the payer can set this account.',
         );
       }
-      await this.assertAccountOwned(callerUserId, accountId);
+      if (existing.accountId !== (await temporaryAccountIdOf(tx, callerUserId))) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.ACCOUNT_NOT_PAYERS,
+          'Only a temporary account can be replaced here.',
+        );
+      }
+      await assertSelectableAccount(tx, callerUserId, accountId);
       await tx.transaction.update({ where: { id: transactionId }, data: { accountId } });
     });
     return this.getById(ledgerId, transactionId, callerUserId);
@@ -886,8 +895,7 @@ export class TransactionsService {
    * 在呼叫端的資料庫交易（`client`）裡寫一筆借還交易，回傳它的 id。
    *
    * **帳本權限不在這裡檢查**：呼叫端必須先用 `assertLedgerWritable` 確認呼叫者至少是
-   * EDITOR、帳本未封存。這裡只沿用一般交易的帳戶規則——連動帳本必填帳戶、非連動帳本
-   * 不可填、帳戶必須屬於本人（`assertAccountRules`）。借還交易沒有分類。
+   * EDITOR、帳本未封存。這裡沿用一般交易的帳戶規則；借還交易沒有分類。
    */
   async createDebtTransaction(
     client: Prisma.TransactionClient,
@@ -903,7 +911,14 @@ export class TransactionsService {
     },
   ): Promise<string> {
     const accounts = { accountId: input.accountId };
-    await this.assertAccountRules(input.ledgerId, input.creatorId, input.type, accounts, accounts);
+    await this.assertAccountRules(
+      input.ledgerId,
+      input.creatorId,
+      input.type,
+      accounts,
+      accounts,
+      client,
+    );
 
     const created = await client.transaction.create({
       data: {
@@ -924,6 +939,65 @@ export class TransactionsService {
       select: { id: true },
     });
     return created.id;
+  }
+
+  /**
+   * 結清分支繼承還款的帳本、帳戶、建立者與日期，繞過一般收支的分類必填規則：
+   * 它不是另一筆使用者選類別的交易，而是還款實收與欠款額之間的差額。
+   * `differenceOfId` 有 `@unique`，同一筆還款不會有第二個分支；在呼叫端交易內寫入，
+   * 才能與還款紀錄一起提交或回滾。
+   */
+  async createDebtDifference(
+    client: Prisma.TransactionClient,
+    repaymentId: string,
+    difference: { type: 'EXPENSE' | 'INCOME'; amount: number },
+  ): Promise<string> {
+    const repayment = await client.transaction.findUniqueOrThrow({ where: { id: repaymentId } });
+    const row = await client.transaction.create({
+      data: {
+        ledgerId: repayment.ledgerId,
+        creatorId: repayment.creatorId,
+        type: difference.type,
+        amount: difference.amount,
+        date: repayment.date,
+        accountId: repayment.accountId,
+        categoryId: null,
+        toAccountId: null,
+        differenceOfId: repaymentId,
+        note: null,
+        title: null,
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  /**
+   * 免除沖銷往來欠款：免除別人是支出，被免除是收入，沒有金流經過帳戶，也沒有分類。
+   * 呼叫端已按寫入者檢查帳本權限；這裡沿用同一個資料庫交易，避免留下孤立的呆帳交易。
+   */
+  async createDebtForgiveness(
+    client: Prisma.TransactionClient,
+    input: {
+      ledgerId: string;
+      creatorId: string;
+      type: 'EXPENSE' | 'INCOME';
+      amount: number;
+      date: Date;
+    },
+  ): Promise<string> {
+    const row = await client.transaction.create({
+      data: {
+        ...input,
+        accountId: null,
+        categoryId: null,
+        toAccountId: null,
+        note: null,
+        title: null,
+      },
+      select: { id: true },
+    });
+    return row.id;
   }
 
   /**
@@ -1089,16 +1163,7 @@ export class TransactionsService {
   }
 
   /**
-   * 帳戶的條件必填規則。該不該填取決於帳本設定與交易型別：
-   *
-   * | 帳本       | 型別        | accountId | toAccountId |
-   * | ---------- | ----------- | --------- | ----------- |
-   * | 連動       | 支出／收入  | 必填      | 不可填      |
-   * | 連動       | 轉帳        | 必填      | 必填        |
-   * | 非連動     | 支出／收入  | 不可填    | 不可填      |
-   *
-   * 「連動」＝帳本的 `tracksBalance` 為 true（預設）。連動帳本若允許不填帳戶，
-   * 餘額就只會是「部分真實」——那等於不能信，也就失去了記餘額的意義。
+   * 所有帳本都計入餘額；一般收支要一個帳戶，轉帳要兩個不同帳戶。
    *
    * `final` 是套用這次請求後的最終值，用來判斷必填與否；`assigned` 是這次請求
    * **實際指定**的值，只有它才需要驗證所有權——沿用不動的既有帳戶可能屬於別的
@@ -1111,6 +1176,7 @@ export class TransactionsService {
     type: TransactionType,
     final: { accountId?: string; toAccountId?: string },
     assigned: { accountId?: string; toAccountId?: string },
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<void> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
@@ -1157,19 +1223,8 @@ export class TransactionsService {
     // 形狀合法後，才驗證這次「指定」的帳戶確實屬於呼叫者。
     for (const accountId of [assigned.accountId, assigned.toAccountId]) {
       if (accountId !== undefined) {
-        await this.assertAccountOwned(userId, accountId);
+        await assertSelectableAccount(client, userId, accountId);
       }
-    }
-  }
-
-  /** 帳戶必須存在且屬於呼叫者；兩種失敗都回同樣的 404。 */
-  private async assertAccountOwned(userId: string, accountId: string): Promise<void> {
-    const account = await this.prisma.account.findUnique({
-      where: { id: accountId },
-      select: { userId: true },
-    });
-    if (!account || account.userId !== userId) {
-      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Account not found.');
     }
   }
 
@@ -1186,15 +1241,16 @@ export class TransactionsService {
     if (!transaction) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
     }
-    const context = await this.viewContext(ledgerId);
+    const context = await this.viewContext(ledgerId, viewerUserId);
     return this.toTransaction(transaction, viewerUserId, context);
   }
 
-  private async viewContext(ledgerId: string): Promise<ViewContext> {
+  private async viewContext(ledgerId: string, viewerUserId: string): Promise<ViewContext> {
     const ledger = await this.getLedger(ledgerId);
     const context: ViewContext = {
       shared: ledger.kind === 'SHARED',
-      tracksBalance: ledger.tracksBalance,
+      viewerTemporaryAccountId:
+        ledger.kind === 'SHARED' ? await temporaryAccountIdOf(this.prisma, viewerUserId) : null,
       people: new Map(),
       byUser: new Map(),
     };
@@ -1251,20 +1307,20 @@ export class TransactionsService {
     const accountPending =
       settlement && context
         ? isAccountPending({
-            tracksBalance: context.tracksBalance,
+            viewerTemporaryAccountId: context.viewerTemporaryAccountId,
             payerUserId: settlement.from.userId,
             accountId: row.account?.id ?? null,
             viewerUserId,
           }) ||
           isAccountPending({
-            tracksBalance: context.tracksBalance,
+            viewerTemporaryAccountId: context.viewerTemporaryAccountId,
             payerUserId: settlement.to.userId,
             accountId: row.toAccount?.id ?? null,
             viewerUserId,
           })
         : payer && context && !row.splitId && !row.debtEntry
           ? isAccountPending({
-              tracksBalance: context.tracksBalance,
+              viewerTemporaryAccountId: context.viewerTemporaryAccountId,
               payerUserId: payer.userId,
               accountId: row.account?.id ?? null,
               viewerUserId,
@@ -1294,9 +1350,15 @@ export class TransactionsService {
       settlement,
       // 退出者不能補帳戶，不能在唯讀回應裡提示可寫入的待補狀態。
       accountPending: access === 'LEFT' ? false : accountPending,
-      // 3h 契約佔位（H0）：H3 改成讀 differenceOfId 與還款的分支。
-      differenceOfId: null,
-      difference: null,
+      differenceOfId: row.differenceOfId ?? null,
+      difference:
+        row.difference && row.difference.deletedAt === null
+          ? {
+              id: row.difference.id,
+              type: row.difference.type as 'EXPENSE' | 'INCOME',
+              amount: row.difference.amount,
+            }
+          : null,
       createdAt: row.createdAt.toISOString(),
     };
   }

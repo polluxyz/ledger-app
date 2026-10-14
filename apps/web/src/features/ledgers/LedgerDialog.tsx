@@ -21,10 +21,10 @@ interface LedgerDialogProps {
 /**
  * 建立帳本的表單。
  *
- * 由上到下：名稱 → 帳本類型 → （選共享才展開的）參與者 → 是否連動帳戶。
+ * 由上到下：名稱 → 帳本類型 → （選共享才展開的）參與者。
  * 一頁到底，不做兩步精靈——兩組選擇還撐不起一個「下一步」。
  *
- * `kind` 與 `tracksBalance` 都是**建立後不可變更**的，兩組下面各寫明這件事。
+ * `kind` 建立後不可變更，選項旁會說明這件事。
  */
 export function LedgerDialog({ open, onClose, variant = 'modal' }: LedgerDialogProps) {
   if (!open) {
@@ -36,7 +36,6 @@ export function LedgerDialog({ open, onClose, variant = 'modal' }: LedgerDialogP
 function LedgerDialogForm({ onClose, variant }: { onClose: () => void; variant: DialogVariant }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<LedgerKind>('PERSONAL');
-  const [tracksBalance, setTracksBalance] = useState(true);
   const [participants, setParticipants] = useState<MemberDraft[]>([newParticipant()]);
 
   // 帳本一旦建立就不再重建。使用者修正 email 後按第二次送出時，只補送失敗的成員。
@@ -80,7 +79,7 @@ function LedgerDialogForm({ onClose, variant }: { onClose: () => void; variant: 
 
     let ledgerId = createdLedgerId;
     if (ledgerId === null) {
-      const created = await createLedger.mutateAsync({ name, kind, tracksBalance });
+      const created = await createLedger.mutateAsync({ name, kind });
       ledgerId = created.id;
       setCreatedLedgerId(ledgerId);
     }
@@ -151,25 +150,6 @@ function LedgerDialogForm({ onClose, variant }: { onClose: () => void; variant: 
             disabled={isPending}
           />
         )}
-
-        <fieldset className={styles.choice}>
-          <legend className={styles.legend}>與我的帳戶餘額</legend>
-          <Radio
-            name="tracksBalance"
-            checked={tracksBalance}
-            disabled={createdLedgerId !== null}
-            label="連動：記帳時扣減我的帳戶"
-            onSelect={() => setTracksBalance(true)}
-          />
-          <Radio
-            name="tracksBalance"
-            checked={!tracksBalance}
-            disabled={createdLedgerId !== null}
-            label="不連動：出遊分帳、社團公款這類「錢不是我的」帳本"
-            onSelect={() => setTracksBalance(false)}
-          />
-          <p className={styles.hint}>建立後不可更改。事後改會讓餘額突然跳動。</p>
-        </fieldset>
 
         <Button type="submit" block disabled={isPending}>
           {isPending ? '建立中…' : createdLedgerId !== null ? '重試' : '建立'}

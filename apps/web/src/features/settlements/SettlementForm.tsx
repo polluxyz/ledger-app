@@ -13,7 +13,8 @@ import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { toDateInputValue } from '../../lib/format';
 import { useCurrentUser } from '../auth/use-current-user';
-import { useAccounts } from '../accounts/use-accounts';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
+import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useLedgerPeople } from '../ledger-people/use-ledger-people';
 import type { SettlementPrefill } from '../transactions/TransactionWorkbench';
 import { useCreateSettlement, useDeleteSettlement, useUpdateSettlement } from './use-settlements';
@@ -31,7 +32,7 @@ interface SettlementFormProps {
 
 /**
  * 結清的新增與編輯表單（3e W116～W121）。帳本裡的人與自己的帳戶取自既有 hooks；
- * 是否顯示帳戶欄只依目前選到的人與帳本設定決定，付款與收款規則由後端驗證。
+ * 只有目前使用者在付錢或收錢時顯示帳戶欄，金流規則由後端驗證。
  */
 export function SettlementForm({
   ledger,
@@ -44,6 +45,8 @@ export function SettlementForm({
   const people = useLedgerPeople(ledger.id, ledger.kind === 'SHARED');
   const currentUser = useCurrentUser();
   const accounts = useAccounts();
+  const recordDefaults = useRecordDefaults(ledger.id);
+  const accountOptions = selectableAccounts(accounts.data ?? []);
   const createSettlement = useCreateSettlement(ledger.id);
   const updateSettlement = useUpdateSettlement(ledger.id);
   const deleteSettlement = useDeleteSettlement(ledger.id);
@@ -70,13 +73,28 @@ export function SettlementForm({
   const toPerson = people.data?.find((person) => person.id === toPersonId);
   const fromIsMe = currentUserId !== undefined && fromPerson?.userId === currentUserId;
   const toIsMe = currentUserId !== undefined && toPerson?.userId === currentUserId;
-  const showAccount = ledger.tracksBalance && (fromIsMe || toIsMe);
-  const existingAccountId = fromIsMe
+  const showAccount = fromIsMe || toIsMe;
+  const storedAccountId = fromIsMe
     ? (transaction?.account?.id ?? '')
     : toIsMe
       ? (transaction?.toAccount?.id ?? '')
       : '';
-  const accountId = accountSelection === undefined ? existingAccountId : (accountSelection ?? '');
+  const existingAccountId = accountOptions.some((account) => account.id === storedAccountId)
+    ? storedAccountId
+    : '';
+  const defaultAccountId =
+    !isEditing && accountSelection === undefined && !recordDefaults.isFetching
+      ? (recordDefaults.data?.accountId ?? '')
+      : '';
+  const selectableDefaultAccountId = accountOptions.some(
+    (account) => account.id === defaultAccountId,
+  )
+    ? defaultAccountId
+    : '';
+  const accountId =
+    accountSelection === undefined
+      ? existingAccountId || selectableDefaultAccountId
+      : (accountSelection ?? '');
   const amountCents = parseMoneyInput(amount);
   const samePerson = fromPersonId !== '' && fromPersonId === toPersonId;
   const pending = createSettlement.isPending || updateSettlement.isPending;
@@ -196,10 +214,12 @@ export function SettlementForm({
             label="帳戶"
             value={accountId}
             required
-            onChange={(event) => setAccountSelection(event.target.value)}
+            onChange={(event) => {
+              setAccountSelection(event.target.value);
+            }}
           >
             <option value="">選擇帳戶</option>
-            {accounts.data?.map((account) => (
+            {accountOptions.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>

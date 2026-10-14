@@ -13,12 +13,26 @@ describe('FillAccountForm', () => {
     name: '家庭帳本',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: true,
     archivedAt: null,
     role: 'VIEWER',
     createdAt: '2026-10-01T00:00:00.000Z',
   };
-  const account = { id: 'account-1', name: '現金', initialBalance: 0, balance: 100000 };
+  const account = {
+    id: 'account-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 100000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const temporaryAccount = {
+    id: 'account-temp',
+    name: '臨時帳戶',
+    initialBalance: 0,
+    balance: 0,
+    isTemporary: true,
+    hasTransactions: true,
+  };
   const transaction = {
     id: 'transaction-id',
     type: 'EXPENSE',
@@ -36,6 +50,8 @@ describe('FillAccountForm', () => {
     ledgerSplit: null,
     settlement: null,
     accountPending: true,
+    differenceOfId: null,
+    difference: null,
     createdAt: '2026-10-01T00:00:00.000Z',
   } as Transaction;
 
@@ -62,7 +78,7 @@ describe('FillAccountForm', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
-      if (String(url).endsWith('/accounts')) return json([account]);
+      if (String(url).endsWith('/accounts')) return json([account, temporaryAccount]);
       if (String(url).includes('/account') && init?.method === 'PUT') return json(transaction);
       return json([]);
     });
@@ -78,6 +94,7 @@ describe('FillAccountForm', () => {
 
     const accountSelect = await screen.findByLabelText('帳戶');
     await screen.findByRole('option', { name: '現金' });
+    expect(screen.queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('combobox')).toHaveLength(1);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '儲存' })).toBeDisabled();

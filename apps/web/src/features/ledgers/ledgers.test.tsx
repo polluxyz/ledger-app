@@ -18,7 +18,6 @@ describe('Ledgers page', () => {
     name: '個人帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     role: 'OWNER',
@@ -28,7 +27,6 @@ describe('Ledgers page', () => {
     id: 'led-2',
     name: '家庭帳本',
     kind: 'SHARED',
-    tracksBalance: false,
   };
   const archived = {
     ...personal,
@@ -107,8 +105,7 @@ describe('Ledgers page', () => {
     expect(screen.getByRole('link', { name: '家庭帳本' })).toBeInTheDocument();
     expect(screen.getByText('私人')).toBeInTheDocument();
     expect(screen.getByText('共享')).toBeInTheDocument();
-    // 非連動帳本才標示；連動是預設，一律標會讓每列長出一堆標籤。
-    expect(screen.getByText('不影響餘額')).toBeInTheDocument();
+    expect(screen.queryByText('不影響餘額')).not.toBeInTheDocument();
   });
 
   it('asks the server for archived ledgers only when the box is ticked', async () => {
@@ -137,24 +134,23 @@ describe('Ledgers page', () => {
     return user;
   }
 
-  it('defaults to a personal ledger that tracks balances, and hides participants', async () => {
+  it('defaults to a personal ledger and hides participants', async () => {
     routeFetch();
     await openCreateDialog();
 
     expect(screen.getByLabelText('私人：只有自己看得到')).toBeChecked();
-    expect(screen.getByLabelText('連動：記帳時扣減我的帳戶')).toBeChecked();
+    expect(screen.queryByText(/餘額/)).not.toBeInTheDocument();
     // 私人帳本加不了成員，欄位不該出現。
     expect(screen.queryByLabelText('參與者 1 的 email')).not.toBeInTheDocument();
   });
 
-  it('sends kind and tracksBalance with the new ledger', async () => {
+  it('sends only name and kind with the new ledger', async () => {
     routeFetch({
       'POST /ledgers': () => Promise.resolve(jsonResponse(201, { ...personal, id: 'led-new' })),
     });
     const user = await openCreateDialog();
 
     await user.type(screen.getByLabelText('名稱'), '旅遊');
-    await user.click(screen.getByLabelText('不連動：出遊分帳、社團公款這類「錢不是我的」帳本'));
     await user.click(screen.getByRole('button', { name: '建立' }));
 
     await waitFor(() => {
@@ -165,7 +161,6 @@ describe('Ledgers page', () => {
       expect(JSON.parse(created?.body ?? '{}')).toEqual({
         name: '旅遊',
         kind: 'PERSONAL',
-        tracksBalance: false,
       });
     });
   });
