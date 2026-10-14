@@ -51,11 +51,14 @@ function directionOf(type: Prisma.TransactionGroupByOutputType['type']): 1 | -1 
 export class AccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 列出自己的帳戶，每筆附上即時計算的餘額。 */
+  /**
+   * 列出自己的帳戶，每筆附上即時計算的餘額。臨時帳戶永遠排最後（3h W174）：它不能手動選，
+   * 排在前面會讓「預設選第一個」的畫面選到它。
+   */
   async list(userId: string): Promise<Account[]> {
     const accounts = await this.prisma.account.findMany({
       where: { userId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ isTemporary: 'asc' }, { createdAt: 'asc' }],
     });
 
     const balances = await this.calculateBalances(accounts);

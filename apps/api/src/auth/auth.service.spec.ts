@@ -1,5 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
-import { DEFAULT_ACCOUNTS } from '@ledger/shared';
+import { DEFAULT_ACCOUNTS, TEMPORARY_ACCOUNT_NAME } from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
@@ -84,7 +84,11 @@ describe('AuthService', () => {
     // 預設帳戶與帳本都在同一個 transaction 內一併備妥。少了帳戶的話，使用者
     // 一登入就記不了任何一筆帳（連動帳本必須指定帳戶），而且畫面上毫無線索。
     expect(prisma.account.createMany).toHaveBeenCalledWith({
-      data: DEFAULT_ACCOUNTS.map((name) => ({ userId: dbUser.id, name })),
+      data: [
+        ...DEFAULT_ACCOUNTS.map((name) => ({ userId: dbUser.id, name })),
+        // 3h 決策 167：每個使用者剛好一個臨時帳戶，註冊時一起建。
+        { userId: dbUser.id, name: TEMPORARY_ACCOUNT_NAME, isTemporary: true },
+      ],
     });
     // 註冊自動建立的帳本是私人的——這是「我自己的帳」，不是要共用的。
     expect(ledgers.createLedgerForUser).toHaveBeenCalledWith(expect.anything(), dbUser.id, {
