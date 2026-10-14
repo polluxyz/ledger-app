@@ -147,3 +147,5 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 10. **H2 結果**：付款人規則、`assertSelectableAccount` 全面替換、換帳戶只限「目前在自己的臨時帳戶」；`every-entry-account-payer` 4 條全過。協調者逐行看過 `payer-account-rules.ts`、`transactions.service.ts`、`settlements.service.ts` 的 diff。
 11. **H5 結果與協調者補正**：交易表單原本「沒選就用第一個帳戶」被改成只帶「最近一次」，從沒記過帳的新使用者會變成空欄位。協調者補回第三層預設（最近一次 → 第一個可選帳戶）。
 12. **H3 退回**：功能正確，但 `debt-entries.service.spec.ts` 從 28 條 `describe`／`it` 刪到 5 條（含與 3h 無關的核心規則：借出正負號、先鎖對象、帳本不能寫就不寫），`debt-recording.ts` 的「為什麼」註解被刪成一行。退回補測試與註解（新的 dispatch，同一個 worktree）。
+13. **H3 修正後合併**：`debt-entries.service.spec.ts` 回到 36 條 `describe`／`it`（含少收、多收、少付、多付、剛好還清），`debt-recording.ts` 的說明註解補回。H3 刪掉 `debts-bind.e2e-spec.ts`（測 3g 的 `SETTLEMENT` 綁定，行為已被分支取代，`every-entry-account-debts` 涵蓋新行為）。
+14. **第 1 波後端整合**（H1～H4 合併後的整合分支）：API 單元測試 441 個全綠；`every-entry-account*` 4 個 e2e 共 24 條全綠，隔離測試 8 條由紅轉綠；API typecheck 只剩既有 e2e 檔的 16 個錯誤（H7）。
