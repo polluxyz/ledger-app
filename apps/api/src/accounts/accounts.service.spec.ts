@@ -9,8 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
  * 分成兩組：
  *   1. CRUD 與授權——重複名稱、跨使用者存取、引用中不可刪；
  *   2. **餘額計算**——這是整個功能存在的理由，也是最容易安靜出錯的地方，因此
- *      五個加減項（初始／收入／支出／轉出／轉入）與兩個排除條件（軟刪除交易、
- *      非連動帳本）各寫成獨立的案例。合成一個大測試雖然比較短，但失敗時只會說
+ *      五個加減項（初始／收入／支出／轉出／轉入）與軟刪除排除各寫成獨立的案例。合成一個大測試雖然比較短，但失敗時只會說
  *      「餘額不對」，說不出是哪一項算錯。
  */
 describe('AccountsService', () => {
@@ -29,7 +28,14 @@ describe('AccountsService', () => {
   const userId = 'user-1';
   const accountId = 'account-1';
   const createdAt = new Date('2026-08-13T00:00:00.000Z');
-  const row = { id: accountId, userId, name: '現金', initialBalance: 0, createdAt };
+  const row = {
+    id: accountId,
+    userId,
+    name: '現金',
+    initialBalance: 0,
+    isTemporary: false,
+    createdAt,
+  };
   const p2002 = new Prisma.PrismaClientKnownRequestError('unique', {
     code: 'P2002',
     clientVersion: 'test',
@@ -85,6 +91,8 @@ describe('AccountsService', () => {
       name: '國泰世華',
       initialBalance: 5000,
       balance: 5000,
+      isTemporary: false,
+      hasTransactions: false,
       createdAt: createdAt.toISOString(),
     });
   });
@@ -118,6 +126,21 @@ describe('AccountsService', () => {
     expect(prisma.account.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { name: '國泰' } }),
     );
+  });
+
+  it.each(['update', 'remove'] as const)('locks temporary accounts against %s', async (action) => {
+    prisma.account.findUnique.mockResolvedValue({ ...row, isTemporary: true });
+
+    const operation =
+      action === 'update'
+        ? service.update(userId, accountId, { name: '新名字' })
+        : service.remove(userId, accountId);
+    await expect(operation).rejects.toMatchObject({
+      status: 409,
+      errorCode: 'TEMPORARY_ACCOUNT_LOCKED',
+    });
+    expect(prisma.account.update).not.toHaveBeenCalled();
+    expect(prisma.account.delete).not.toHaveBeenCalled();
   });
 
   it("returns 404 for another user's account instead of 403", async () => {
@@ -215,9 +238,8 @@ describe('AccountsService', () => {
     expect(balance).toBe(1250); // 1000 + 500 − 300 − 200 + 250
   });
 
-  it('excludes soft-deleted transactions and non-tracking ledgers from the sums', async () => {
-    // 這兩個條件不是效能考量，而是正確性：漏掉任一個，餘額都會安靜地變錯——
-    // 已刪的交易繼續扣錢，或出遊分帳的金額被當成自己的支出。
+  it('excludes soft-deleted transactions from the sums', async () => {
+    // 已刪的交易不應繼續影響餘額；3h 起所有帳本都計入餘額。
     prisma.account.findMany.mockResolvedValue([row]);
     prisma.transaction.groupBy.mockResolvedValue([]);
 
@@ -226,11 +248,41 @@ describe('AccountsService', () => {
     const calls = prisma.transaction.groupBy.mock.calls as Array<[{ where: unknown }]>;
     expect(calls).toHaveLength(2);
     for (const [args] of calls) {
-      expect(args.where).toMatchObject({
-        deletedAt: null,
-        ledger: { tracksBalance: true },
-      });
+      expect(args.where).toMatchObject({ deletedAt: null });
     }
+  });
+
+  it('reports hasTransactions for active outgoing and incoming references', async () => {
+    prisma.account.findMany.mockResolvedValue([row, { ...row, id: 'account-2' }]);
+    prisma.transaction.groupBy
+      .mockResolvedValueOnce([{ accountId, type: 'EXPENSE', _sum: { amount: 100 } }])
+      .mockResolvedValueOnce([{ toAccountId: 'account-2', _sum: { amount: 100 } }]);
+
+    const accounts = await service.list(userId);
+    expect(accounts.map((account) => account.hasTransactions)).toEqual([true, true]);
+  });
+
+  it('reports no transactions when only soft-deleted rows exist', async () => {
+    prisma.account.findMany.mockResolvedValue([row]);
+    prisma.transaction.groupBy.mockResolvedValue([]);
+
+    const accounts = await service.list(userId);
+    expect(accounts[0]!.hasTransactions).toBe(false);
+    const calls = prisma.transaction.groupBy.mock.calls as Array<
+      [{ where: { deletedAt: Date | null } }]
+    >;
+    expect(calls).toHaveLength(2);
+    for (const [args] of calls) {
+      expect(args.where.deletedAt).toBeNull();
+    }
+  });
+
+  it('reports no transactions for an unused account', async () => {
+    prisma.account.findMany.mockResolvedValue([row]);
+    prisma.transaction.groupBy.mockResolvedValue([]);
+
+    const accounts = await service.list(userId);
+    expect(accounts[0]!.hasTransactions).toBe(false);
   });
 
   it('only ever issues two aggregate queries, however many accounts there are', async () => {
