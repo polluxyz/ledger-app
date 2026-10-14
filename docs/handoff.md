@@ -18,7 +18,7 @@
   - 房東：借出 93、還 90 以此結清（綁定的差額），餘額 0。測歷史的修改與撤銷。
   - 阿德：每天借出 10，共 25 筆，餘額 250。測「載入更多」。
 - `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env(.test)` 指向已刪除的資料庫，要跑 API 前先改。
-- 額度（2026-10-13）：Codex 方案已停（`gpt-6-sol` 回「not supported when using Codex with a ChatGPT account」），開發者重新購買前不派 Codex。先用 GLM，用完改 Claude Haiku 5.5 xhigh。
+- 額度（2026-10-14）：Codex 已恢復，照 `docs/orca-multi-agent.md` §0 角色表派工（Codex → GLM → Gemini）。10-13 的「先 GLM、再 Haiku」臨時規則作廢。Orca 管理的 Codex 帳號實測 `gpt-6-sol` 與 `gpt-6-luna` 都能用；系統預設的 `~/.codex` 是免費帳號，不能拿來測（§5 Codex）。
 
 ### 下一步
 
