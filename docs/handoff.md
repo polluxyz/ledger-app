@@ -23,7 +23,7 @@
 ### 下一步
 
 1. 等開發者操作 3g 後的回饋，依回饋開修訂（先改 spec 再改程式）。
-2. 還沒回覆的舊問題：改 Vite 設定讓 `packages/shared` 變更後預先打包快取自動失效；要不要加 App 的錯誤邊界（error boundary，畫面出錯時顯示錯誤頁而不是黑畫面）。
+2. 加 App 的錯誤邊界（error boundary，畫面出錯時顯示錯誤頁而不是黑畫面），開發者 2026-10-14 同意。
 
 ### 開發者的偏好（不在 spec 裡的）
 
@@ -44,7 +44,7 @@
 - 只改前端：Vite 會自動更新，請他按 `Ctrl + Shift + R`。
 - 後端或 `packages/shared` 有改：
   1. `git checkout --detach origin/main`。
-  2. `pnpm --filter @ledger/shared build`，並刪掉 `apps/web/node_modules/.vite`。
+  2. `pnpm --filter @ledger/shared build`。Vite 會自己更新預先打包，不必刪 `.vite`。
   3. schema 有變：先 `pg_dump` 備份 `ledger_dev`，在 `apps/api` 手動跑 `prisma generate`（`pnpm install --frozen-lockfile` 不一定會重跑），再跑 `prisma migrate deploy`。
   4. `apps/api` 跑 `pnpm build`，然後請他重開 API 與 Vite。
 - 測試帳號（dev 資料庫，密碼都是 `12345678`）：a@a.com（test）、b@b.com（小明）、c@c.com（小華）、d@d.com（小美，已離開花蓮三日）。
