@@ -1,530 +1,102 @@
-import type { PrismaService } from '../prisma/prisma.service';
+import type { Prisma } from '../generated/prisma/client';
 import type { TransactionsService } from '../transactions/transactions.service';
-import { DebtEntriesService } from './debt-entries.service';
-import type { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
-import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
+import { deltaFor } from './debt-entry-rules';
+import {
+  differenceFor,
+  recalculateSettlement,
+  voidRepaymentWithSettlement,
+  writeDifference,
+} from './debt-recording';
 
-/**
- * `DebtEntriesService`：記一筆、改、刪（spec 3b §3、§5.2）。
- *
- * 這個 suite 驗證四件事：
- * 1. **組合規則**：`counterparty` 二選一、`record` 必填、`PAID_FOR_ME` 的分類與帳戶、`settle`
- *    只給還款——違反一律 400，而且在碰資料庫之前。
- * 2. **交易怎麼產生**：型別由種類決定；`record: null` 不產生；代付走 `createPaidForMeExpense`。
- * 3. **以此結清**：補一筆 `SETTLEMENT`，`delta` 讓餘額歸零；剛好還清就不補。
- * 4. **調整紀錄不能改**，改一般紀錄時正負號沿用原本那一筆。
- *
- * 策略：Prisma 全程 mock，`$transaction` 直接把同一個 mock 當 tx 傳進 callback；
- * `TransactionsService` 也是 mock——它有自己的測試檔。
- */
-describe('DebtEntriesService', () => {
-  const USER = 'user-1';
-  const LEDGER = 'ledger-1';
-  const ACCOUNT = 'account-1';
-  const DATE = '2026-09-24T00:00:00.000Z';
-  const counterpartyRow = {
-    id: 'cp-1',
-    ownerId: USER,
-    name: '小明',
-    createdAt: new Date(DATE),
-    updatedAt: new Date(DATE),
-  };
+/** 結清的五種整數分情境：往來歸零，交易金流與實收相等。 */
+describe('debt settlement differences', () => {
+  const date = new Date('2026-10-14T12:00:00.000Z');
+  const cases = [
+    ['少收', 'COLLECT', 9300, 9000, 'EXPENSE', 300],
+    ['多收', 'COLLECT', 10000, 10500, 'INCOME', 500],
+    ['少付', 'REPAY', 10000, 9500, 'INCOME', 500],
+    ['多付', 'REPAY', 10000, 10500, 'EXPENSE', 500],
+    ['剛好還清', 'COLLECT', 9300, 9300, null, 0],
+  ] as const;
 
-  function entryRow(overrides: Record<string, unknown> = {}) {
-    return {
-      id: 'entry-1',
-      counterpartyId: 'cp-1',
-      kind: 'LEND',
-      delta: 120,
-      date: new Date(DATE),
-      note: null,
-      transactionId: 'txn-1',
-      pairedEntryId: null,
-      settlesEntryId: null,
-      deletedAt: null,
-      createdAt: new Date(DATE),
-      updatedAt: new Date(DATE),
-      ...overrides,
+  it.each(cases)(
+    '%s keeps the balance zero and cash movement equal to actual amount',
+    async (_label, kind, cleared, actual, type, amount) => {
+      const before = kind === 'COLLECT' ? cleared : -cleared;
+      const delta = deltaFor(kind, cleared);
+      expect(before + delta).toBe(0);
+      const difference = differenceFor(kind, cleared, actual);
+      expect(difference).toEqual(type === null ? null : { type, amount });
+      const cashSign = kind === 'COLLECT' ? 1 : -1;
+      const branchSign = difference?.type === 'INCOME' ? 1 : -1;
+      expect(cashSign * cleared + (difference?.amount ?? 0) * branchSign).toBe(cashSign * actual);
+
+      const transactions = { createDebtDifference: jest.fn().mockResolvedValue('branch') };
+      const entry = { id: 'entry', kind, delta, transactionId: 'repayment', date };
+      await writeDifference(
+        {} as Prisma.TransactionClient,
+        transactions as unknown as TransactionsService,
+        entry as Prisma.DebtEntryGetPayload<object>,
+        actual,
+      );
+      expect(transactions.createDebtDifference).toHaveBeenCalledTimes(type === null ? 0 : 1);
+    },
+  );
+
+  it('recalculates, changes direction, and removes a zero difference without changing the repayment', async () => {
+    const branch = { id: 'branch', type: 'EXPENSE', amount: 300, deletedAt: null };
+    const transaction = {
+      findFirst: jest.fn().mockResolvedValue(branch),
+      update: jest.fn().mockResolvedValue(branch),
     };
-  }
-
-  function buildPrisma() {
-    const mock = {
-      counterparty: {
-        findFirst: jest.fn().mockResolvedValue(counterpartyRow),
-        upsert: jest.fn().mockResolvedValue(counterpartyRow),
-      },
-      debtEntry: {
-        create: jest.fn((args: { data: Record<string, unknown> }) =>
-          Promise.resolve(entryRow({ ...args.data, id: `entry-${String(args.data.kind)}` })),
-        ),
-        findFirst: jest.fn(),
-        update: jest.fn((args: { data: Record<string, unknown> }) =>
-          Promise.resolve(entryRow(args.data)),
-        ),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }),
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-      },
-      // 連動（3b-2）：預設沒有連動，所以不送任何提議。送提議的規則在
-      // debt-proposal-rules.spec.ts 與 e2e 驗。
-      counterpartyLink: {
-        findFirst: jest.fn().mockResolvedValue(null),
-        findMany: jest.fn().mockResolvedValue([]),
-      },
-      debtProposal: {
-        findMany: jest.fn().mockResolvedValue([]),
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-        create: jest.fn(),
-      },
-      ledgerMember: {
-        findUnique: jest.fn().mockResolvedValue({ role: 'EDITOR', ledger: { archivedAt: null } }),
-      },
-      // 鎖對象（`SELECT … FOR UPDATE`）。真正的並發行為由 e2e 對 PostgreSQL 驗（SC-L21）。
-      $queryRaw: jest.fn().mockResolvedValue([]),
-      // 回傳型別要明寫成 unknown，否則 `mock` 引用自己會讓 TypeScript 把整個物件推成 any。
-      $transaction: jest.fn((callback: (tx: unknown) => unknown): unknown => callback(mock)),
+    const tx = {
+      transaction,
+      debtEntry: { findFirst: jest.fn() },
+    } as unknown as Prisma.TransactionClient;
+    const repayment = {
+      id: 'entry',
+      kind: 'COLLECT' as const,
+      delta: -9300,
+      transactionId: 'repayment',
     };
-    return mock;
-  }
+    expect(await recalculateSettlement(tx, repayment, 9100)).toBe(true);
+    expect(transaction.update).toHaveBeenLastCalledWith({
+      where: { id: 'branch' },
+      data: { type: 'EXPENSE', amount: 200 },
+    });
+    expect(await recalculateSettlement(tx, repayment, 9500)).toBe(true);
+    expect(transaction.update).toHaveBeenLastCalledWith({
+      where: { id: 'branch' },
+      data: { type: 'INCOME', amount: 200 },
+    });
+    expect(await recalculateSettlement(tx, repayment, 9300)).toBe(true);
+    expect(transaction.update.mock.lastCall?.[0].data.deletedAt).toBeInstanceOf(Date);
+  });
 
-  function buildTransactions() {
-    return {
-      createDebtTransaction: jest.fn().mockResolvedValue('txn-new'),
-      createPaidForMeExpense: jest.fn().mockResolvedValue('txn-expense'),
-      updateDebtTransaction: jest.fn().mockResolvedValue(undefined),
-      softDeleteDebtTransactions: jest.fn().mockResolvedValue(undefined),
-    };
-  }
-
-  let prisma: ReturnType<typeof buildPrisma>;
-  let transactions: ReturnType<typeof buildTransactions>;
-  let service: DebtEntriesService;
-
-  beforeEach(() => {
-    prisma = buildPrisma();
-    transactions = buildTransactions();
-    service = new DebtEntriesService(
-      prisma as unknown as PrismaService,
+  it('withdraws the repayment, branch, and old settlement with one timestamp', async () => {
+    const deletedAt = new Date();
+    const debtEntry = { updateMany: jest.fn(), update: jest.fn() };
+    const transaction = { updateMany: jest.fn() };
+    const transactions = { softDeleteDebtTransactions: jest.fn() };
+    const tx = { debtEntry, transaction } as unknown as Prisma.TransactionClient;
+    await voidRepaymentWithSettlement(
+      tx,
       transactions as unknown as TransactionsService,
-      {
-        partsByCounterparty: jest.fn().mockResolvedValue(new Map()),
-      } as unknown as LedgerDebtsService,
+      { id: 'entry', transactionId: 'repayment' } as Prisma.DebtEntryGetPayload<object>,
+      deletedAt,
     );
-  });
-
-  function input(overrides: Partial<CreateDebtEntryDto> = {}): CreateDebtEntryDto {
-    return {
-      counterparty: { id: 'cp-1' },
-      kind: 'LEND',
-      amount: 120,
-      date: DATE,
-      record: { ledgerId: LEDGER, accountId: ACCOUNT },
-      ...overrides,
-    };
-  }
-
-  /** 取出 debtEntry.create 第 n 次呼叫的 data。 */
-  function createdData(n = 0): Record<string, unknown> {
-    const calls = prisma.debtEntry.create.mock.calls as Array<[{ data: Record<string, unknown> }]>;
-    return calls[n]![0].data;
-  }
-
-  describe('shape rules (400 before touching the database)', () => {
-    it.each([
-      ['both id and name', { counterparty: { id: 'cp-1', name: '小明' } }],
-      ['neither id nor name', { counterparty: {} }],
-      ['record omitted', { record: undefined }],
-      ['PAID_FOR_ME with record null', { kind: 'PAID_FOR_ME', categoryId: 'c', record: null }],
-      [
-        'PAID_FOR_ME naming an account',
-        { kind: 'PAID_FOR_ME', categoryId: 'c', record: { ledgerId: LEDGER, accountId: ACCOUNT } },
-      ],
-      ['PAID_FOR_ME without a category', { kind: 'PAID_FOR_ME', record: { ledgerId: LEDGER } }],
-      ['a category on LEND', { categoryId: 'c' }],
-      ['settle on LEND', { settle: true }],
-      ['settle on PAID_FOR_ME', { kind: 'PAID_FOR_ME', categoryId: 'c', settle: true }],
-    ])('rejects %s', async (_label, overrides) => {
-      await expect(
-        service.create(USER, input(overrides as Partial<CreateDebtEntryDto>)),
-      ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(debtEntry.updateMany).toHaveBeenCalledWith({
+      where: { settlesEntryId: 'entry', deletedAt: null },
+      data: { deletedAt },
     });
-  });
-
-  describe('create', () => {
-    it('records a LEND as a LEND transaction with a positive delta', async () => {
-      prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 120 } });
-
-      const result = await service.create(USER, input());
-
-      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
-        prisma,
-        expect.objectContaining({
-          ledgerId: LEDGER,
-          type: 'LEND',
-          amount: 120,
-          accountId: ACCOUNT,
-        }),
-      );
-      expect(createdData()).toMatchObject({ kind: 'LEND', delta: 120, transactionId: 'txn-new' });
-      expect(result.counterparty.balance).toBe(120);
-      expect(result.entries).toHaveLength(1);
+    expect(transaction.updateMany).toHaveBeenCalledWith({
+      where: { differenceOfId: 'repayment', deletedAt: null },
+      data: { deletedAt },
     });
-
-    it('records a BORROW with a negative delta', async () => {
-      await service.create(USER, input({ kind: 'BORROW', amount: 111 }));
-
-      expect(createdData()).toMatchObject({ kind: 'BORROW', delta: -111 });
-    });
-
-    it('rejects a category on the old debt endpoint', async () => {
-      await expect(service.create(USER, input({ categoryId: 'cat-1' }))).rejects.toMatchObject({
-        status: 400,
-      });
-    });
-
-    it('finds or creates the counterparty by name', async () => {
-      await service.create(USER, input({ counterparty: { name: '小明' } }));
-
-      expect(prisma.counterparty.upsert).toHaveBeenCalledWith({
-        where: { ownerId_name: { ownerId: USER, name: '小明' } },
-        update: {},
-        create: { ownerId: USER, name: '小明' },
-      });
-    });
-
-    it('writes nothing when the ledger is not writable', async () => {
-      prisma.ledgerMember.findUnique.mockResolvedValue({
-        role: 'VIEWER',
-        ledger: { archivedAt: null },
-      });
-
-      await expect(service.create(USER, input())).rejects.toMatchObject({ status: 403 });
-      expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
-      expect(prisma.debtEntry.create).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('repayment (decisions 46, 47, 50)', () => {
-    it('stores a repayment as COLLECT when the counterparty owes me', async () => {
-      prisma.debtEntry.aggregate
-        .mockResolvedValueOnce({ _sum: { delta: 100 } })
-        .mockResolvedValueOnce({ _sum: { delta: 70 } });
-
-      const result = await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
-
-      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
-        prisma,
-        expect.objectContaining({ type: 'COLLECT', amount: 30 }),
-      );
-      expect(createdData()).toMatchObject({ kind: 'COLLECT', delta: -30 });
-      expect(result.counterparty.balance).toBe(70);
-    });
-
-    it('stores a repayment as REPAY when I owe the counterparty', async () => {
-      prisma.debtEntry.aggregate
-        .mockResolvedValueOnce({ _sum: { delta: -50 } })
-        .mockResolvedValueOnce({ _sum: { delta: 0 } });
-
-      await service.create(USER, input({ kind: 'REPAYMENT', amount: 50 }));
-
-      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
-        prisma,
-        expect.objectContaining({ type: 'REPAY', amount: 50 }),
-      );
-      expect(createdData()).toMatchObject({ kind: 'REPAY', delta: 50 });
-    });
-
-    it('locks the counterparty before reading the balance', async () => {
-      prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 100 } });
-
-      await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
-
-      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-      expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(
-        prisma.debtEntry.aggregate.mock.invocationCallOrder[0]!,
-      );
-    });
-
-    it.each([
-      ['nothing is owed', 0, 30, 'NOTHING_TO_REPAY'],
-      ['it exceeds what is owed', 9, 20, 'REPAYMENT_EXCEEDS_BALANCE'],
-    ])(
-      'rejects with 409 and writes nothing when %s',
-      async (_label, balance, amount, errorCode) => {
-        prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: balance } });
-
-        await expect(
-          service.create(USER, input({ kind: 'REPAYMENT', amount })),
-        ).rejects.toMatchObject({ status: 409, errorCode });
-        expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
-        expect(prisma.debtEntry.create).not.toHaveBeenCalled();
-      },
+    expect(transactions.softDeleteDebtTransactions).toHaveBeenCalledWith(
+      tx,
+      ['repayment'],
+      deletedAt,
     );
-  });
-
-  describe('settle (decision 38, 3g decision 156)', () => {
-    it('adds a SETTLEMENT bound to the repayment that brings the balance back to zero', async () => {
-      // 欠 93、還 90：寫入後的餘額 3（對方還欠 3），結清差額 −3：我少收 3。
-      prisma.debtEntry.aggregate
-        .mockResolvedValueOnce({ _sum: { delta: 93 } })
-        .mockResolvedValueOnce({ _sum: { delta: 3 } })
-        .mockResolvedValueOnce({ _sum: { delta: 0 } });
-
-      const result = await service.create(
-        USER,
-        input({ kind: 'REPAYMENT', amount: 90, settle: true }),
-      );
-
-      expect(createdData(1)).toMatchObject({
-        kind: 'SETTLEMENT',
-        delta: -3,
-        transactionId: null,
-        // 差額記下它屬於哪一筆還款（決策 156）：撤銷或修改那筆時會一併處理它。
-        settlesEntryId: 'entry-COLLECT',
-      });
-      expect(result.entries).toHaveLength(2);
-      expect(result.counterparty.balance).toBe(0);
-      // 只有還款那一筆產生交易，差額不產生。
-      expect(transactions.createDebtTransaction).toHaveBeenCalledTimes(1);
-    });
-
-    it('lets an overpayment through when settling, recording the excess in my favour', async () => {
-      // 欠 93、還 95 並結清：寫入後 −2，差額 +2（對方多給 2），方向沒有反過來。
-      prisma.debtEntry.aggregate
-        .mockResolvedValueOnce({ _sum: { delta: 93 } })
-        .mockResolvedValueOnce({ _sum: { delta: -2 } })
-        .mockResolvedValueOnce({ _sum: { delta: 0 } });
-
-      await service.create(USER, input({ kind: 'REPAYMENT', amount: 95, settle: true }));
-
-      expect(createdData(0)).toMatchObject({ kind: 'COLLECT', delta: -95 });
-      expect(createdData(1)).toMatchObject({
-        kind: 'SETTLEMENT',
-        delta: 2,
-        settlesEntryId: 'entry-COLLECT',
-      });
-    });
-
-    it('adds nothing when the repayment already clears the balance', async () => {
-      prisma.debtEntry.aggregate
-        .mockResolvedValueOnce({ _sum: { delta: 93 } })
-        .mockResolvedValue({ _sum: { delta: 0 } });
-
-      const result = await service.create(
-        USER,
-        input({ kind: 'REPAYMENT', amount: 93, settle: true }),
-      );
-
-      expect(prisma.debtEntry.create).toHaveBeenCalledTimes(1);
-      expect(result.entries).toHaveLength(1);
-    });
-  });
-
-  describe('update with a bound settlement (3g decision 158)', () => {
-    /** 還款 90（COLLECT，delta −9000）＋綁定差額 −300，合計 −9300。 */
-    function boundRepayment() {
-      return entryRow({
-        id: 'repay-1',
-        kind: 'COLLECT',
-        delta: -9000,
-        transactionId: 'txn-repay',
-      });
-    }
-
-    function settlementRow(overrides: Record<string, unknown> = {}) {
-      return entryRow({
-        id: 'settle-1',
-        kind: 'SETTLEMENT',
-        delta: -300,
-        transactionId: null,
-        settlesEntryId: 'repay-1',
-        ...overrides,
-      });
-    }
-
-    /** loadOwnedEntry 先回還款，recalculateSettlement 再回它綁定的差額。 */
-    function mockBoundPair(repayment = boundRepayment(), settlement = settlementRow()) {
-      prisma.debtEntry.findFirst.mockResolvedValueOnce(repayment).mockResolvedValueOnce(settlement);
-    }
-
-    it('recalculates the settlement so the two deltas still add up', async () => {
-      mockBoundPair();
-
-      await service.update(USER, 'repay-1', { amount: 9100 });
-
-      const calls = prisma.debtEntry.update.mock.calls as Array<
-        [{ where: { id: string }; data: Record<string, unknown> }]
-      >;
-      const settlementUpdate = calls.find(([{ where }]) => where.id === 'settle-1')!;
-      const repaymentUpdate = calls.find(([{ where }]) => where.id === 'repay-1')!;
-      // 修改前：−9000 + −300 = −9300；修改後：−9100 + (−300 − (−9100 − −9000)) = −9300。
-      expect(settlementUpdate[0].data).toMatchObject({ delta: -200 });
-      expect(repaymentUpdate[0].data).toMatchObject({ delta: -9100 });
-      expect(
-        (repaymentUpdate[0].data.delta as number) + (settlementUpdate[0].data.delta as number),
-      ).toBe(-9300);
-    });
-
-    it('lets the new amount exceed the original debt, flipping the settlement', async () => {
-      // 還 95 > 欠 93：差額從 −300 變 +200（多收的部分），餘額仍為 0。
-      mockBoundPair();
-
-      await service.update(USER, 'repay-1', { amount: 9500 });
-
-      const calls = prisma.debtEntry.update.mock.calls as Array<
-        [{ where: { id: string }; data: Record<string, unknown> }]
-      >;
-      const settlementUpdate = calls.find(([{ where }]) => where.id === 'settle-1')!;
-      expect(settlementUpdate[0].data).toMatchObject({ delta: 200 });
-    });
-
-    it('soft-deletes the settlement when it recalculates to zero', async () => {
-      // 還 93 剛好還清：差額重算成 0，撤銷差額，之後那筆是一般還款。
-      mockBoundPair();
-
-      await service.update(USER, 'repay-1', { amount: 9300 });
-
-      const calls = prisma.debtEntry.update.mock.calls as Array<
-        [{ where: { id: string }; data: Record<string, unknown> }]
-      >;
-      const settlementUpdate = calls.find(([{ where }]) => where.id === 'settle-1')!;
-      expect(settlementUpdate[0].data.deletedAt).toBeInstanceOf(Date);
-      expect(settlementUpdate[0].data.delta).toBeUndefined();
-    });
-
-    it('does nothing to a settlement-less repayment', async () => {
-      prisma.debtEntry.findFirst
-        .mockResolvedValueOnce(boundRepayment())
-        .mockResolvedValueOnce(null);
-
-      await service.update(USER, 'repay-1', { amount: 9100 });
-
-      const calls = prisma.debtEntry.update.mock.calls as Array<
-        [{ where: { id: string }; data: Record<string, unknown> }]
-      >;
-      expect(calls.filter(([{ where }]) => where.id === 'settle-1')).toEqual([]);
-    });
-  });
-
-  describe('update', () => {
-    it('keeps the sign of the entry and updates its transaction', async () => {
-      // loadOwnedEntry 回那筆紀錄；recalculateSettlement 找不到綁定的差額（回 null）。
-      prisma.debtEntry.findFirst
-        .mockResolvedValueOnce(entryRow({ kind: 'BORROW', delta: -111 }))
-        .mockResolvedValueOnce(null);
-
-      await service.update(USER, 'entry-1', { amount: 150 });
-
-      expect(prisma.debtEntry.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ delta: -150 }) as unknown }),
-      );
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-1', {
-        amount: 150,
-      });
-    });
-
-    it.each(['SETTLEMENT', 'FORGIVE'])('refuses to edit a %s entry', async (kind) => {
-      prisma.debtEntry.findFirst.mockResolvedValue(
-        entryRow({ kind, delta: -3, transactionId: null }),
-      );
-
-      await expect(service.update(USER, 'entry-1', { note: 'x' })).rejects.toMatchObject({
-        status: 409,
-        errorCode: 'DEBT_ENTRY_NOT_EDITABLE',
-      });
-      expect(prisma.debtEntry.update).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('remove', () => {
-    it('soft-deletes the entry and its transaction with the same timestamp', async () => {
-      prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
-
-      await service.remove(USER, 'entry-1');
-
-      const calls = prisma.debtEntry.update.mock.calls as Array<[{ data: { deletedAt: Date } }]>;
-      const deletedAt = calls[0]![0].data.deletedAt;
-      expect(transactions.softDeleteDebtTransactions).toHaveBeenCalledWith(
-        prisma,
-        ['txn-1'],
-        deletedAt,
-      );
-    });
-
-    it('withdraws a bound settlement together with its repayment (decision 156)', async () => {
-      prisma.debtEntry.findFirst.mockResolvedValue(
-        entryRow({ id: 'repay-1', kind: 'COLLECT', delta: -9000, transactionId: 'txn-repay' }),
-      );
-
-      await service.remove(USER, 'repay-1');
-
-      // 差額用跟還款同一個 deletedAt 撤銷；差額不產生交易，不用處理交易。
-      const [settlementCall] = prisma.debtEntry.updateMany.mock.calls as Array<
-        [{ where: { settlesEntryId: string; deletedAt: null }; data: { deletedAt: Date } }]
-      >;
-      expect(settlementCall![0].where).toEqual({ settlesEntryId: 'repay-1', deletedAt: null });
-      const entryCall = (
-        prisma.debtEntry.update.mock.calls as Array<
-          [{ where: { id: string }; data: { deletedAt: Date } }]
-        >
-      ).find(([{ where }]) => where.id === 'repay-1')!;
-      expect(settlementCall![0].data.deletedAt).toBe(entryCall[0].data.deletedAt);
-      expect(transactions.softDeleteDebtTransactions).toHaveBeenCalledWith(
-        prisma,
-        ['txn-repay'],
-        entryCall[0].data.deletedAt,
-      );
-    });
-
-    it('refuses to withdraw a settlement bound to a repayment (decision 157)', async () => {
-      prisma.debtEntry.findFirst.mockResolvedValue(
-        entryRow({
-          id: 'settle-1',
-          kind: 'SETTLEMENT',
-          delta: -300,
-          transactionId: null,
-          settlesEntryId: 'repay-1',
-        }),
-      );
-
-      await expect(service.remove(USER, 'settle-1')).rejects.toMatchObject({
-        status: 409,
-        errorCode: 'SETTLEMENT_BOUND_TO_REPAYMENT',
-      });
-      expect(prisma.debtEntry.update).not.toHaveBeenCalled();
-      expect(prisma.debtEntry.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('still withdraws an unbound (pre-3g) settlement on its own', async () => {
-      prisma.debtEntry.findFirst.mockResolvedValue(
-        entryRow({
-          id: 'settle-old',
-          kind: 'SETTLEMENT',
-          delta: -300,
-          transactionId: null,
-          settlesEntryId: null,
-        }),
-      );
-
-      await service.remove(USER, 'settle-old');
-
-      const calls = prisma.debtEntry.update.mock.calls as unknown as Array<
-        [{ where: { id: string } }]
-      >;
-      expect(calls).toHaveLength(1);
-      expect(calls[0]![0].where).toEqual({ id: 'settle-old' });
-      // 沒有綁定的還款，也不會誤撤別人的差額：updateMany 只找 settlesEntryId＝自己、且
-      // 差額本身不產生交易。
-      const [settlementCall] = prisma.debtEntry.updateMany.mock.calls as unknown as Array<
-        [{ where: { settlesEntryId: string } }]
-      >;
-      expect(settlementCall![0].where.settlesEntryId).toBe('settle-old');
-      expect(transactions.softDeleteDebtTransactions).toHaveBeenCalledWith(
-        prisma,
-        [],
-        expect.any(Date),
-      );
-    });
   });
 });

@@ -11,7 +11,7 @@ import {
   recordDebtTransaction,
   recalculateSettlement,
   voidRepaymentWithSettlement,
-  writeSettlement,
+  writeDifference,
 } from './debt-recording';
 import {
   badRequest,
@@ -60,35 +60,36 @@ export class DebtEntriesService {
       await lockCounterparty(tx, counterparty.id);
 
       // 還款的方向由後端依餘額決定（決策 46）；要在建立交易之前定案，交易型別跟著它走。
+      const balanceBefore =
+        input.kind === 'REPAYMENT' ? await currentBalance(tx, counterparty.id) : 0;
       const kind: RecordedDebtEntryKind =
         input.kind === 'REPAYMENT'
-          ? resolveRepayment(
-              await currentBalance(tx, counterparty.id),
-              input.amount,
-              input.settle === true,
-            )
+          ? resolveRepayment(balanceBefore, input.amount, input.settle === true)
           : input.kind;
 
       const date = new Date(input.date);
-      const transactionId = await this.recordTransaction(tx, userId, input, kind, date);
+      const clearedAmount = input.settle === true ? Math.abs(balanceBefore) : input.amount;
+      const transactionId = await this.recordTransaction(
+        tx,
+        userId,
+        input,
+        kind,
+        date,
+        clearedAmount,
+      );
 
       const entry = await tx.debtEntry.create({
         data: {
           counterpartyId: counterparty.id,
           kind,
-          delta: deltaFor(kind, input.amount),
+          delta: deltaFor(kind, clearedAmount),
           date,
           note: input.note ?? null,
           transactionId,
         },
       });
-      const entries = [entry];
-
       if (input.settle === true) {
-        const settlement = await writeSettlement(tx, counterparty.id, entry);
-        if (settlement !== null) {
-          entries.push(settlement);
-        }
+        await writeDifference(tx, this.transactions, entry, input.amount);
       }
 
       await proposeCreate(tx, {
@@ -100,7 +101,7 @@ export class DebtEntriesService {
 
       const [links, sync] = await Promise.all([
         linkInfoFor(tx, [counterparty.id]),
-        syncStatuses(tx, entries),
+        syncStatuses(tx, [entry]),
       ]);
       return {
         counterparty: toCounterparty(
@@ -108,7 +109,12 @@ export class DebtEntriesService {
           await currentBalance(tx, counterparty.id),
           links.get(counterparty.id) ?? null,
         ),
-        entries: entries.map((row) => toDebtEntry(row, { sync: sync.get(row.id) })),
+        entries: [
+          toDebtEntry(entry, {
+            sync: sync.get(entry.id),
+            difference: await this.differenceOf(tx, entry.transactionId),
+          }),
+        ],
       };
     });
     // 交易提交後再讀帳本來源，確保新紀錄的回應也使用與列表相同的總額。
@@ -149,14 +155,22 @@ export class DebtEntriesService {
       }
 
       // 正負號沿用原本那一筆（由種類決定，不會因為改金額而翻轉）。
-      const delta =
+      const proposedDelta =
         input.amount === undefined ? undefined : Math.sign(existing.delta) * input.amount;
       const date = input.date === undefined ? undefined : new Date(input.date);
 
       // 差額重算要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
-      if (delta !== undefined) {
-        await recalculateSettlement(tx, existing, delta);
+      const branchHandled =
+        input.amount !== undefined
+          ? await recalculateSettlement(tx, existing, input.amount, date)
+          : false;
+      if (date !== undefined && input.amount === undefined && existing.transactionId !== null) {
+        await tx.transaction.updateMany({
+          where: { differenceOfId: existing.transactionId, deletedAt: null },
+          data: { date },
+        });
       }
+      const delta = branchHandled ? undefined : proposedDelta;
 
       const updated = await tx.debtEntry.update({
         where: { id: existing.id },
@@ -169,19 +183,28 @@ export class DebtEntriesService {
 
       if (existing.transactionId !== null && (input.amount !== undefined || date !== undefined)) {
         await this.transactions.updateDebtTransaction(tx, existing.transactionId, {
-          ...(input.amount !== undefined ? { amount: input.amount } : {}),
+          ...(delta !== undefined ? { amount: input.amount } : {}),
           ...(date !== undefined ? { date } : {}),
         });
       }
 
-      const amountChanged = delta !== undefined && delta !== existing.delta;
+      const amountChanged =
+        input.amount !== undefined && (branchHandled || delta !== existing.delta);
       const dateChanged = date !== undefined && date.getTime() !== existing.date.getTime();
       if (amountChanged || dateChanged) {
-        await proposeAmend(tx, { fromUserId: userId, entry: updated, now: new Date() });
+        await proposeAmend(tx, {
+          fromUserId: userId,
+          entry: updated,
+          now: new Date(),
+          actualAmount: input.amount,
+        });
       }
 
       const sync = await syncStatuses(tx, [updated]);
-      return toDebtEntry(updated, { sync: sync.get(updated.id) });
+      return toDebtEntry(updated, {
+        sync: sync.get(updated.id),
+        difference: await this.differenceOf(tx, updated.transactionId),
+      });
     });
   }
 
@@ -248,14 +271,30 @@ export class DebtEntriesService {
     input: CreateDebtEntryDto,
     kind: 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY',
     date: Date,
-  ): Promise<string | null> {
+    amount: number,
+  ): Promise<string> {
     return recordDebtTransaction(tx, this.transactions, {
       userId,
       record: input.record,
       kind,
-      amount: input.amount,
+      amount,
       date,
     });
+  }
+
+  private async differenceOf(tx: Prisma.TransactionClient, transactionId: string | null) {
+    if (transactionId === null) return null;
+    const branch = await tx.transaction.findFirst({
+      where: { differenceOfId: transactionId, deletedAt: null },
+      select: { id: true, type: true, amount: true },
+    });
+    return branch
+      ? {
+          transactionId: branch.id,
+          type: branch.type as 'EXPENSE' | 'INCOME',
+          amount: branch.amount,
+        }
+      : null;
   }
 }
 
@@ -272,8 +311,8 @@ function assertEntryShape(input: CreateDebtEntryDto): void {
     throw badRequest('counterparty needs exactly one of id or name.');
   }
   // 「省略」不再代表任何預設（spec §5.2）：要不要產生交易必須說清楚。
-  if (input.record === undefined) {
-    throw badRequest('record is required: an object to record a transaction, or null for none.');
+  if (input.record === undefined || input.record === null) {
+    throw badRequest('record is required.');
   }
 
   if (input.categoryId !== undefined)

@@ -24,7 +24,7 @@ import {
   recordDebtTransaction,
   recalculateSettlement,
   voidRepaymentWithSettlement,
-  writeSettlement,
+  writeDifference,
 } from './debt-recording';
 import { assertLedgerWritable } from './debt-ledger-access';
 
@@ -101,7 +101,7 @@ export class DebtProposalsService {
   async accept(
     userId: string,
     proposalId: string,
-    record: DebtEntryRecordTarget | null | undefined,
+    record: DebtEntryRecordTarget | undefined,
     categoryId?: string,
     title?: string,
   ): Promise<DebtProposal> {
@@ -110,14 +110,21 @@ export class DebtProposalsService {
     const needsRecord = row.type === 'CREATE' && RECORDABLE_KINDS.has(mirror);
     const needsCategory =
       row.type === 'CREATE' && (mirror === 'PAID_FOR_ME' || mirror === 'RECEIVED_FOR_ME');
-    if (needsRecord && record === undefined) {
-      throw badRequest('record is required: an object to record a transaction, or null for none.');
+    if (needsRecord && record == null) {
+      throw badRequest('record is required.');
     }
-    if (!needsRecord && record !== undefined) {
+    if (!needsRecord && mirror !== 'FORGIVEN' && record !== undefined) {
       throw badRequest('record is only valid when accepting a new loan or repayment.');
     }
-    if (needsCategory) {
-      if (!record || record.accountId !== undefined || !categoryId)
+    if (needsCategory || mirror === 'FORGIVEN') {
+      if (record && record.accountId !== undefined) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.ACCOUNT_NOT_ALLOWED,
+          'accountId is not allowed.',
+        );
+      }
+      if (needsCategory && (!record || !categoryId))
         throw badRequest('This proposal requires a ledger and category, without an account.');
     } else if (categoryId !== undefined)
       throw badRequest('categoryId is only valid for a paid-for-me proposal.');
@@ -143,7 +150,7 @@ export class DebtProposalsService {
       await lockCounterparty(tx, counterpartyId);
 
       if (row.type === 'CREATE') {
-        await this.acceptCreate(tx, row, userId, counterpartyId, record ?? null, categoryId, title);
+        await this.acceptCreate(tx, row, userId, counterpartyId, record, categoryId, title);
       } else if (row.type === 'AMEND') {
         await this.acceptAmend(tx, row, counterpartyId);
       } else {
@@ -178,7 +185,7 @@ export class DebtProposalsService {
     row: ProposalRow,
     userId: string,
     counterpartyId: string,
-    record: DebtEntryRecordTarget | null,
+    record: DebtEntryRecordTarget | undefined,
     categoryId?: string,
     title?: string,
   ): Promise<void> {
@@ -189,6 +196,16 @@ export class DebtProposalsService {
       if (balance >= 0) {
         return;
       }
+      if (!record)
+        throw badRequest('record is required when accepting forgiveness of an outstanding debt.');
+      await assertLedgerWritable(tx, userId, record.ledgerId);
+      const transactionId = await this.transactions.createDebtForgiveness(tx, {
+        ledgerId: record.ledgerId,
+        creatorId: userId,
+        type: 'INCOME',
+        amount: -balance,
+        date: row.date,
+      });
       const entry = await tx.debtEntry.create({
         data: {
           counterpartyId,
@@ -196,7 +213,7 @@ export class DebtProposalsService {
           delta: -balance,
           date: row.date,
           note: null,
-          transactionId: null,
+          transactionId,
         },
       });
       await this.pair(tx, row.sourceEntryId, entry.id);
@@ -219,12 +236,10 @@ export class DebtProposalsService {
       throw notPending();
     }
 
+    let balanceBefore = 0;
     if (kind === 'COLLECT' || kind === 'REPAY') {
-      const direction = resolveRepayment(
-        await currentBalance(tx, counterpartyId),
-        row.amount,
-        row.settle,
-      );
+      balanceBefore = await currentBalance(tx, counterpartyId);
+      const direction = resolveRepayment(balanceBefore, row.amount, row.settle);
       if (direction !== kind) {
         throw new AppException(
           HttpStatus.CONFLICT,
@@ -248,10 +263,10 @@ export class DebtProposalsService {
           )
         : await recordDebtTransaction(tx, this.transactions, {
             userId,
-            record,
+            record: record!,
             kind: kind as
               'LEND' | 'BORROW' | 'COLLECT' | 'REPAY' | 'PAID_FOR_THEM' | 'RECEIVED_FOR_THEM',
-            amount: row.amount,
+            amount: row.settle ? Math.abs(balanceBefore) : row.amount,
             date: row.date,
             title: title ?? row.title,
           });
@@ -269,7 +284,7 @@ export class DebtProposalsService {
             | 'PAID_FOR_THEM'
             | 'RECEIVED_FOR_THEM'
             | 'RECEIVED_FOR_ME',
-          row.amount,
+          row.settle ? Math.abs(balanceBefore) : row.amount,
         ),
         date: row.date,
         note: null,
@@ -279,7 +294,7 @@ export class DebtProposalsService {
     await this.pair(tx, row.sourceEntryId, entry.id);
 
     if (row.settle && (kind === 'COLLECT' || kind === 'REPAY')) {
-      await writeSettlement(tx, counterpartyId, entry);
+      await writeDifference(tx, this.transactions, entry, row.amount);
     }
   }
 
@@ -320,15 +335,15 @@ export class DebtProposalsService {
       return;
     }
     // 重算差額要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
-    const newDelta = Math.sign(target.delta) * row.amount;
-    await recalculateSettlement(tx, target, newDelta);
+    const branchHandled = await recalculateSettlement(tx, target, row.amount, row.date);
+    const newDelta = branchHandled ? target.delta : Math.sign(target.delta) * row.amount;
     await tx.debtEntry.update({
       where: { id: target.id },
       data: { delta: newDelta, date: row.date },
     });
     if (target.transactionId !== null) {
       await this.transactions.updateDebtTransaction(tx, target.transactionId, {
-        amount: row.amount,
+        ...(!branchHandled ? { amount: row.amount } : {}),
         date: row.date,
       });
     }

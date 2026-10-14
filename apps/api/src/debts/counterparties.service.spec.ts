@@ -1,5 +1,6 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import type { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
+import type { TransactionsService } from '../transactions/transactions.service';
 import { CounterpartiesService } from './counterparties.service';
 
 /** 合併先驗兩邊的擁有權，再判斷連動狀態；錯誤不能透露別人的對象。 */
@@ -68,6 +69,7 @@ describe('CounterpartiesService.merge', () => {
       service: new CounterpartiesService(
         prisma as unknown as PrismaService,
         ledgerDebts as unknown as LedgerDebtsService,
+        {} as TransactionsService,
       ),
     };
   }
@@ -153,6 +155,7 @@ describe('CounterpartiesService.list', () => {
     const service = new CounterpartiesService(
       prisma as unknown as PrismaService,
       ledgerDebts as unknown as LedgerDebtsService,
+      {} as TransactionsService,
     );
     const result = await service.list('owner', { nonZero: true, page: 1, limit: 10 });
     expect(result.total).toBe(2);
@@ -220,6 +223,7 @@ describe('CounterpartiesService.list', () => {
     const service = new CounterpartiesService(
       prisma as unknown as PrismaService,
       ledgerDebts as unknown as LedgerDebtsService,
+      {} as TransactionsService,
     );
 
     const personal = await service.list('owner', { personalNonZero: true, limit: 100 });

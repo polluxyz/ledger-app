@@ -136,6 +136,11 @@ export function runningBalances<T extends OrderedEntry>(entries: ReadonlyArray<T
 
 type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
 type DebtEntryRow = Prisma.DebtEntryGetPayload<object>;
+export type DebtEntryDifference = {
+  transactionId: string;
+  type: 'EXPENSE' | 'INCOME';
+  amount: number;
+} | null;
 
 export function toCounterparty(
   row: CounterpartyRow,
@@ -163,7 +168,11 @@ export function toCounterparty(
  */
 export function toDebtEntry(
   row: DebtEntryRow,
-  extra: { balanceAfter?: number; sync?: DebtEntrySyncStatus } = {},
+  extra: {
+    balanceAfter?: number;
+    sync?: DebtEntrySyncStatus;
+    difference?: DebtEntryDifference;
+  } = {},
 ): DebtEntry {
   const { balanceAfter, sync } = extra;
   return {
@@ -176,8 +185,7 @@ export function toDebtEntry(
     transactionId: row.transactionId,
     splitId: row.splitId,
     settlesEntryId: row.settlesEntryId,
-    // 3h 契約佔位（H0）：H3 改成讀還款的分支交易。
-    difference: null,
+    difference: extra.difference ?? null,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

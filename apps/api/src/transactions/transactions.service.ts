@@ -64,6 +64,8 @@ interface AccountRef {
 /** 一筆交易資料列，已 join 其分類、帳戶與建立者。 */
 interface TransactionRow {
   id: string;
+  differenceOfId?: string | null;
+  difference?: { id: string; type: TransactionType; amount: number; deletedAt: Date | null } | null;
   type: TransactionType;
   amount: number;
   date: Date;
@@ -130,6 +132,7 @@ interface TransactionRow {
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
 // `userId`——遮蔽他人帳戶時需要它來比對檢視者，其他欄位一概不取。
 const TRANSACTION_INCLUDE = {
+  difference: { select: { id: true, type: true, amount: true, deletedAt: true } },
   ledgerSplit: { include: { shares: { orderBy: { sortOrder: 'asc' } } } },
   settlement: true,
   category: { select: { id: true, name: true, icon: true } },
@@ -383,7 +386,7 @@ export class TransactionsService {
           ) AS rn
         FROM "Transaction" t
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
-        WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
           ${leftScope}
           ${settlementOnly}
           ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
@@ -412,7 +415,7 @@ export class TransactionsService {
             await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
-      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
         ${leftScope}
         ${settlementOnly}
         ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
@@ -665,11 +668,17 @@ export class TransactionsService {
     type: TransactionType,
     client: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    const entry = await client.debtEntry.findUnique({
-      where: { transactionId },
-      select: { id: true },
-    });
-    if (entry !== null || isDebtTransactionType(type)) {
+    const [entry, difference] = await Promise.all([
+      client.debtEntry.findUnique({
+        where: { transactionId },
+        select: { id: true },
+      }),
+      client.transaction.findUnique({
+        where: { id: transactionId },
+        select: { differenceOfId: true },
+      }),
+    ]);
+    if (entry !== null || difference?.differenceOfId != null || isDebtTransactionType(type)) {
       throw new AppException(
         HttpStatus.CONFLICT,
         ErrorCode.DEBT_TRANSACTION_READ_ONLY,
@@ -924,6 +933,57 @@ export class TransactionsService {
       select: { id: true },
     });
     return created.id;
+  }
+
+  /** 結清分支繼承還款的帳本、帳戶與日期，繞過一般收支的分類必填規則。 */
+  async createDebtDifference(
+    client: Prisma.TransactionClient,
+    repaymentId: string,
+    difference: { type: 'EXPENSE' | 'INCOME'; amount: number },
+  ): Promise<string> {
+    const repayment = await client.transaction.findUniqueOrThrow({ where: { id: repaymentId } });
+    const row = await client.transaction.create({
+      data: {
+        ledgerId: repayment.ledgerId,
+        creatorId: repayment.creatorId,
+        type: difference.type,
+        amount: difference.amount,
+        date: repayment.date,
+        accountId: repayment.accountId,
+        categoryId: null,
+        toAccountId: null,
+        differenceOfId: repaymentId,
+        note: null,
+        title: null,
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  /** 免除沖銷的是往來欠款，沒有金流經過帳戶，也沒有分類。 */
+  async createDebtForgiveness(
+    client: Prisma.TransactionClient,
+    input: {
+      ledgerId: string;
+      creatorId: string;
+      type: 'EXPENSE' | 'INCOME';
+      amount: number;
+      date: Date;
+    },
+  ): Promise<string> {
+    const row = await client.transaction.create({
+      data: {
+        ...input,
+        accountId: null,
+        categoryId: null,
+        toAccountId: null,
+        note: null,
+        title: null,
+      },
+      select: { id: true },
+    });
+    return row.id;
   }
 
   /**
@@ -1294,9 +1354,15 @@ export class TransactionsService {
       settlement,
       // 退出者不能補帳戶，不能在唯讀回應裡提示可寫入的待補狀態。
       accountPending: access === 'LEFT' ? false : accountPending,
-      // 3h 契約佔位（H0）：H3 改成讀 differenceOfId 與還款的分支。
-      differenceOfId: null,
-      difference: null,
+      differenceOfId: row.differenceOfId ?? null,
+      difference:
+        row.difference && row.difference.deletedAt === null
+          ? {
+              id: row.difference.id,
+              type: row.difference.type as 'EXPENSE' | 'INCOME',
+              amount: row.difference.amount,
+            }
+          : null,
       createdAt: row.createdAt.toISOString(),
     };
   }
