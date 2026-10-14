@@ -18,7 +18,7 @@ import { auth, person, type Person } from './linking-utils';
  *
  * 場景：Alice（OWNER）建「花蓮三日」，Bob、Carol 是 EDITOR，Eve 在外面有一本自己的
  * 共享帳本。帳本裡記三筆結清後撤銷最新一筆，剩下的兩筆用來驗：新到舊、分頁、
- * 退出後的範圍、帳戶遮蔽，以及 hasSettlements 的過濾與 settlementCount。
+ * 退出後的範圍、正式帳戶遮蔽、本人臨時帳戶可見，以及 hasSettlements 的過濾與 settlementCount。
  * 授權與資料隔離的完整清單在 `debts-inline-isolation.e2e-spec.ts`（SC-G7）。
  */
 describe('Ledger settlements list (e2e)', () => {
@@ -140,6 +140,14 @@ describe('Ledger settlements list (e2e)', () => {
     };
   }
 
+  async function temporaryAccountId(who: Person): Promise<string> {
+    const account = await prisma.account.findFirstOrThrow({
+      where: { userId: who.userId, isTemporary: true },
+      select: { id: true },
+    });
+    return account.id;
+  }
+
   async function settlementsAs(
     who: Person,
     ledgerId: string,
@@ -202,14 +210,16 @@ describe('Ledger settlements list (e2e)', () => {
     const asAlice = await settlementsAs(s.alice, s.ledgerId);
     const asBob = await settlementsAs(s.bob, s.ledgerId);
 
-    // 兩筆結清都是 Bob 用自己的現金付的：Alice 只看得到金額與兩位，
-    // 帳戶欄位遮成 null；Bob 本人看得到自己的帳戶。
-    for (const item of asAlice.items) {
-      expect(item.account).toBeNull();
-      expect(item.toAccount).toBeNull();
-    }
+    // Alice 看不到 Bob 的正式帳戶，也看不到 Carol 的帳戶；她自己承接的收款在臨時帳戶，仍可辨認。
+    const bobToAliceAsAlice = asAlice.items.find((item) => item.id === s.bobToAlice.id)!;
+    const bobToCarolAsAlice = asAlice.items.find((item) => item.id === s.bobToCarol.id)!;
+    expect(bobToAliceAsAlice.account).toBeNull();
+    expect(bobToAliceAsAlice.toAccount).toMatchObject({ id: await temporaryAccountId(s.alice) });
+    expect(bobToCarolAsAlice.account).toBeNull();
+    expect(bobToCarolAsAlice.toAccount).toBeNull();
     for (const item of asBob.items) {
       expect(item.account).toMatchObject({ id: s.bob.cashId });
+      expect(item.toAccount).toBeNull();
     }
 
     // 同一筆在交易列表的遮蔽結果必須一致——同一份轉換，不能有第二套規則。

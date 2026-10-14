@@ -230,7 +230,13 @@ describe('Debt ledger isolation (e2e)', () => {
       expect(
         (await as('patch', `/api/counterparties/${counterpartyId}`).send({ name: 'x' })).status,
       ).toBe(404);
-      expect((await as('post', `/api/counterparties/${counterpartyId}/forgive`)).status).toBe(404);
+      expect(
+        (
+          await as('post', `/api/counterparties/${counterpartyId}/forgive`).send({
+            ledgerId: carol.ledgerId,
+          })
+        ).status,
+      ).toBe(404);
       expect((await as('delete', `/api/counterparties/${counterpartyId}`)).status).toBe(404);
       expect((await as('patch', `/api/debt-entries/${entryId}`).send({ amount: 1 })).status).toBe(
         404,
@@ -243,7 +249,7 @@ describe('Debt ledger isolation (e2e)', () => {
         kind: 'LEND',
         amount: 1,
         date: DAY,
-        record: null,
+        record: { ledgerId: carol.ledgerId, accountId: carol.cashId },
       });
       expect(viaId.status).toBe(404);
 

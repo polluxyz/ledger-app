@@ -86,7 +86,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
         kind: 'LEND',
         amount: 50000,
         date: day,
-        record: null,
+        record: { ledgerId: alice.ledgerId, accountId: alice.cashId },
       })
       .expect(201);
     await request(server())

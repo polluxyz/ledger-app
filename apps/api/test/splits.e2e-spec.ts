@@ -249,7 +249,7 @@ describe('Splits (e2e)', () => {
     await request(server())
       .post(`/api/debt-proposals/${outgoing.id}/accept`)
       .set(auth(ming.token))
-      .send({ record: null })
+      .send({ record: { ledgerId: ming.ledgerId, accountId: ming.cashId } })
       .expect(200);
   });
 

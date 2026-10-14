@@ -144,22 +144,13 @@ describe('Ledgers & members (e2e)', () => {
 
   // ── 2c：連動設定、封存、刪除規則 ──────────────────────────────────────────
 
-  it('fixes tracksBalance at creation (SC-C12)', async () => {
+  it('rejects the removed tracksBalance option when creating a ledger', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const created = await request(server())
       .post('/api/ledgers')
       .set(auth(alice.token))
       .send({ name: '出遊分帳', tracksBalance: false });
-    const ledger = created.body as LedgerSummary;
-    expect(ledger.tracksBalance).toBe(false);
-    expect(ledger.archivedAt).toBeNull();
-
-    const changed = await request(server())
-      .patch(`/api/ledgers/${ledger.id}`)
-      .set(auth(alice.token))
-      .send({ name: '出遊分帳', tracksBalance: true });
-    expect(changed.status).toBe(400);
-    expect((changed.body as { errorCode: string }).errorCode).toBe('TRACKS_BALANCE_IMMUTABLE');
+    expect(created.status).toBe(400);
   });
 
   it('archives a ledger: read-only, and hidden from the default list (SC-C10)', async () => {

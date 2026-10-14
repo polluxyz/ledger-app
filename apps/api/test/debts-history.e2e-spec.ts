@@ -11,7 +11,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { createE2EApp, httpServer, resetDb } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
-/** 3g SC-G1、G2：用明哥與房東的往來紀錄驗證歷史分界、個人餘額過濾與切頁。 */
+/** 3g SC-G1、G2：用每筆都記進現金帳戶的明哥與房東往來紀錄，驗證歷史分界、個人餘額過濾與切頁。 */
 describe('Debt history sections (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -57,7 +57,7 @@ describe('Debt history sections (e2e)', () => {
       kind: 'LEND',
       amount: 30000,
       date: date(1),
-      record: null,
+      record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
     const mingId = mingLend.counterparty.id;
     await postEntry(me, {
@@ -65,14 +65,14 @@ describe('Debt history sections (e2e)', () => {
       kind: 'REPAYMENT',
       amount: 30000,
       date: date(5),
-      record: null,
+      record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
     await postEntry(me, {
       counterparty: { id: mingId },
       kind: 'LEND',
       amount: 50000,
       date: date(10),
-      record: null,
+      record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
 
     const landlordLend = await postEntry(me, {
@@ -80,14 +80,14 @@ describe('Debt history sections (e2e)', () => {
       kind: 'LEND',
       amount: 9300,
       date: date(2),
-      record: null,
+      record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
     await postEntry(me, {
       counterparty: { id: landlordLend.counterparty.id },
       kind: 'REPAYMENT',
       amount: 9000,
       date: date(6),
-      record: null,
+      record: { ledgerId: me.ledgerId, accountId: me.cashId },
       settle: true,
     });
 

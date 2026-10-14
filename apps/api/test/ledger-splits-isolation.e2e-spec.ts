@@ -183,6 +183,14 @@ describe('Ledger split isolation (e2e)', () => {
     return accounts.find((account) => account.id === accountId)!.balance;
   }
 
+  async function temporaryAccountId(who: Person): Promise<string> {
+    const account = await prisma.account.findFirstOrThrow({
+      where: { userId: who.userId, isTemporary: true },
+      select: { id: true },
+    });
+    return account.id;
+  }
+
   async function listTransactions(who: Person, ledgerId: string): Promise<Transaction[]> {
     const res = await request(server())
       .get(`/api/ledgers/${ledgerId}/transactions`)
@@ -445,7 +453,7 @@ describe('Ledger split isolation (e2e)', () => {
       await expectNothingWritten();
     });
 
-    it('不是付款人的人打補帳戶端點 → 400 ACCOUNT_NOT_PAYERS，帳戶仍空著', async () => {
+    it('不是付款人的人打補帳戶端點 → 400，付款人的臨時帳戶不變', async () => {
       const s = await scene();
       const tx = await postTransaction(
         s.alice,
@@ -461,10 +469,10 @@ describe('Ledger split isolation (e2e)', () => {
         `SELECT "accountId" FROM "Transaction" WHERE id = $1`,
         tx.id,
       );
-      expect(rows[0]!.accountId).toBeNull();
+      expect(rows[0]!.accountId).toBe(await temporaryAccountId(s.vic));
     });
 
-    it('付款人補帳戶時用別人的帳戶 → 404，帳戶仍空著', async () => {
+    it('付款人補帳戶時用別人的帳戶 → 404，付款人的臨時帳戶不變', async () => {
       const s = await scene();
       const tx = await postTransaction(
         s.alice,
@@ -479,7 +487,7 @@ describe('Ledger split isolation (e2e)', () => {
         `SELECT "accountId" FROM "Transaction" WHERE id = $1`,
         tx.id,
       );
-      expect(rows[0]!.accountId).toBeNull();
+      expect(rows[0]!.accountId).toBe(await temporaryAccountId(s.bob));
     });
 
     it('結清：不相關的人補帳戶 → 400；收錢的人補的是收款那一邊', async () => {

@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import type { CreateDebtEntryResponse, DebtEntry, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, httpServer, listAccounts, resetDb } from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /** 3h 的借還路徑以 HTTP 與真實資料庫驗證：還款只寫一筆往來，分支與呆帳各是一筆交易。 */
@@ -55,6 +55,10 @@ describe('Every entry has an account — debts (e2e)', () => {
       .expect(200);
     return response.body as Transaction;
   }
+  async function cashBalance(who: Person): Promise<number> {
+    const accounts = await listAccounts(app, who.token);
+    return accounts.find((account) => account.id === who.cashId)!.balance;
+  }
   async function entries(who: Person, counterpartyId: string): Promise<DebtEntry[]> {
     const response = await request(server())
       .get(`/api/counterparties/${counterpartyId}/entries`)
@@ -65,14 +69,17 @@ describe('Every entry has an account — debts (e2e)', () => {
 
   it('SC-H1 requires a ledger and account for every loan and repayment', async () => {
     const who = await person(app, 'me@example.com', 'Me');
-    for (const target of [null, { ledgerId: who.ledgerId }]) {
-      const response = await post(who, {
-        counterparty: { name: '房東' },
-        kind: 'LEND',
-        amount: 9300,
-        record: target,
-      }).expect(400);
-      if (target !== null) expect(response.body).toMatchObject({ errorCode: 'ACCOUNT_REQUIRED' });
+    const counterpartyId = await lend(who, '房東', 9300);
+    const debtActions = [
+      { counterparty: { name: '小華' }, kind: 'LEND', amount: 9300 },
+      { counterparty: { name: '阿明' }, kind: 'BORROW', amount: 9300 },
+      { counterparty: { id: counterpartyId }, kind: 'REPAYMENT', amount: 100, settle: false },
+    ];
+    for (const action of debtActions) {
+      for (const target of [null, { ledgerId: who.ledgerId }]) {
+        const response = await post(who, { ...action, record: target }).expect(400);
+        if (target !== null) expect(response.body).toMatchObject({ errorCode: 'ACCOUNT_REQUIRED' });
+      }
     }
   });
 
@@ -80,6 +87,7 @@ describe('Every entry has an account — debts (e2e)', () => {
     const who = await person(app, 'me@example.com', 'Me');
     const landlord = await lend(who, '房東', 9300);
     const paid = await repayment(who, landlord, 9000);
+    expect(await cashBalance(who)).toBe(-300);
     expect(paid).toMatchObject({
       kind: 'COLLECT',
       delta: -9300,
@@ -125,9 +133,11 @@ describe('Every entry has an account — debts (e2e)', () => {
       else
         expect((response.body as DebtEntry).difference).toMatchObject({ type, amount: difference });
       expect((await getCounterparty(app, who, landlord)).balance).toBe(0);
+      expect(await cashBalance(who)).toBe(type === 'EXPENSE' ? -200 : type === 'INCOME' ? 200 : 0);
     }
     await request(server()).delete(`/api/debt-entries/${paid.id}`).set(auth(who.token)).expect(204);
     expect((await getCounterparty(app, who, landlord)).balance).toBe(9300);
+    expect(await cashBalance(who)).toBe(-9300);
     await request(server())
       .get(`/api/ledgers/${who.ledgerId}/transactions/${branchId}`)
       .set(auth(who.token))
@@ -136,26 +146,35 @@ describe('Every entry has an account — debts (e2e)', () => {
 
   it('SC-H4 also covers overcollection and a repayment I make', async () => {
     const who = await person(app, 'me@example.com', 'Me');
+    const beforeCollection = await cashBalance(who);
     const ade = await lend(who, '阿德', 10000);
     expect((await repayment(who, ade, 10500)).difference).toMatchObject({
       type: 'INCOME',
       amount: 500,
     });
+    expect(await cashBalance(who)).toBe(beforeCollection + 500);
+
     const creditor = await borrow(who, '債主', 10000);
+    const beforeRepayment = await cashBalance(who);
     expect((await repayment(who, creditor, 9500)).difference).toMatchObject({
       type: 'INCOME',
       amount: 500,
     });
+    expect(await cashBalance(who)).toBe(beforeRepayment - 9500);
+
     const creditor2 = await borrow(who, '另一位', 10000);
+    const beforeOverpayment = await cashBalance(who);
     expect((await repayment(who, creditor2, 10500)).difference).toMatchObject({
       type: 'EXPENSE',
       amount: 500,
     });
+    expect(await cashBalance(who)).toBe(beforeOverpayment - 10500);
   });
 
   it('SC-H14 records bad debt without an account and withdraws it with forgiveness', async () => {
     const who = await person(app, 'me@example.com', 'Me');
     const ming = await lend(who, '明哥', 50000);
+    const cashBeforeForgiveness = await cashBalance(who);
     await request(server())
       .post(`/api/counterparties/${ming}/forgive`)
       .set(auth(who.token))
@@ -174,6 +193,7 @@ describe('Every entry has an account — debts (e2e)', () => {
       account: null,
       category: null,
     });
+    expect(await cashBalance(who)).toBe(cashBeforeForgiveness);
     await request(server())
       .delete(`/api/ledgers/${who.ledgerId}/transactions/${forgiven.transactionId}`)
       .set(auth(who.token))
@@ -183,6 +203,7 @@ describe('Every entry has an account — debts (e2e)', () => {
       .set(auth(who.token))
       .expect(204);
     expect((await getCounterparty(app, who, ming)).balance).toBe(50000);
+    expect(await cashBalance(who)).toBe(cashBeforeForgiveness);
   });
 
   it('SC-H7 mirrors a linked settlement and its withdrawal', async () => {
