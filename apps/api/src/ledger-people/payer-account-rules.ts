@@ -1,12 +1,8 @@
 /**
- * 「帳戶屬於付款人」的規則（3e 決策 123～126、129），寫成純函式讓交易與結清共用同一份。
- *
- * 帳戶屬於使用者且彼此看不到，所以只有付款人本人能選帳戶：別人付時留空（帳戶待補），
- * 非成員付時永遠空。改付款人時舊帳戶一律清掉，否則會扣到舊付款人的錢（決策 125）。
- * 帳戶是否真的屬於呼叫者由呼叫端查（`needsOwnershipCheck`），這裡不碰資料庫。
+ * 付款人帳戶的純規則：本人選帳戶，別的成員由後端代填臨時帳戶，非成員沒有帳戶。
+ * 改付款人時不能沿用舊付款人的帳戶；實際查詢與帳戶驗證由呼叫端執行。
  */
 export interface PayerAccountInput {
-  tracksBalance: boolean;
   payer: { userId: string | null };
   callerUserId: string;
   requestedAccountId: string | undefined;
@@ -16,48 +12,51 @@ export interface PayerAccountInput {
 }
 
 export type PayerAccountResult =
-  | { ok: true; accountId: string | null; needsOwnershipCheck: boolean }
-  | { ok: false; error: 'ACCOUNT_REQUIRED' | 'ACCOUNT_NOT_ALLOWED' | 'ACCOUNT_NOT_PAYERS' };
+  | {
+      ok: true;
+      accountId: string | null;
+      needsOwnershipCheck: boolean;
+      needsTemporaryAccount: boolean;
+    }
+  | { ok: false; error: 'ACCOUNT_REQUIRED' | 'ACCOUNT_NOT_PAYERS' };
 
 export function resolvePayerAccount(input: PayerAccountInput): PayerAccountResult {
-  const {
-    tracksBalance,
-    payer,
-    callerUserId,
-    requestedAccountId,
-    mode,
-    payerChanged,
-    currentAccountId,
-  } = input;
-  if (!tracksBalance) {
-    if (requestedAccountId !== undefined) return { ok: false, error: 'ACCOUNT_NOT_ALLOWED' };
-    return { ok: true, accountId: null, needsOwnershipCheck: false };
-  }
+  const { payer, callerUserId, requestedAccountId, mode, payerChanged, currentAccountId } = input;
   if (payer.userId === callerUserId) {
     if (requestedAccountId !== undefined) {
-      return { ok: true, accountId: requestedAccountId, needsOwnershipCheck: true };
+      return {
+        ok: true,
+        accountId: requestedAccountId,
+        needsOwnershipCheck: true,
+        needsTemporaryAccount: false,
+      };
     }
     if (mode === 'CREATE' || payerChanged) return { ok: false, error: 'ACCOUNT_REQUIRED' };
-    return { ok: true, accountId: currentAccountId, needsOwnershipCheck: false };
+    return {
+      ok: true,
+      accountId: currentAccountId,
+      needsOwnershipCheck: false,
+      needsTemporaryAccount: false,
+    };
   }
   if (requestedAccountId !== undefined) return { ok: false, error: 'ACCOUNT_NOT_PAYERS' };
   return {
     ok: true,
-    accountId: payer.userId === null || payerChanged ? null : currentAccountId,
+    accountId: payer.userId === null || payerChanged || mode === 'CREATE' ? null : currentAccountId,
     needsOwnershipCheck: false,
+    needsTemporaryAccount: payer.userId !== null && (mode === 'CREATE' || payerChanged),
   };
 }
 
 export function isAccountPending(args: {
-  tracksBalance: boolean;
   payerUserId: string | null;
   accountId: string | null;
   viewerUserId: string;
+  viewerTemporaryAccountId: string | null;
 }): boolean {
   return (
-    args.tracksBalance &&
-    args.payerUserId !== null &&
-    args.accountId === null &&
-    args.payerUserId === args.viewerUserId
+    args.payerUserId === args.viewerUserId &&
+    args.viewerTemporaryAccountId !== null &&
+    args.accountId === args.viewerTemporaryAccountId
   );
 }

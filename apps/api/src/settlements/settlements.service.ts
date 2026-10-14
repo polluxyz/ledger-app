@@ -16,6 +16,7 @@ import {
   type LedgerPersonRecord,
 } from '../ledger-people/ledger-people.service';
 import { resolvePayerAccount } from '../ledger-people/payer-account-rules';
+import { assertSelectableAccount, temporaryAccountIdOf } from '../accounts/account-selection';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { computeLedgerSummary } from './ledger-summary';
@@ -42,7 +43,7 @@ interface LockedSettlement {
   note: string | null;
 }
 
-type AccountRuleError = 'ACCOUNT_REQUIRED' | 'ACCOUNT_NOT_ALLOWED' | 'ACCOUNT_NOT_PAYERS';
+type AccountRuleError = 'ACCOUNT_REQUIRED' | 'ACCOUNT_NOT_PAYERS';
 
 const LOCK_SETTLEMENT_SQL = [
   'SELECT t."id" AS "transactionId", settlement."id" AS "settlementId",',
@@ -91,7 +92,7 @@ export class SettlementsService {
     input: CreateSettlementRequest,
   ): Promise<Transaction> {
     const transactionId = await this.prisma.$transaction(async (tx) => {
-      const tracksBalance = await this.assertSharedLedger(tx, ledgerId);
+      await this.assertSharedLedger(tx, ledgerId);
       let fromPersonId = input.fromPersonId;
       if (fromPersonId === undefined) {
         const callerPerson = await this.people.findCallerPerson(tx, ledgerId, callerUserId);
@@ -109,7 +110,6 @@ export class SettlementsService {
       const from = this.personFrom(lockedPeople, fromPersonId);
       const to = this.personFrom(lockedPeople, input.toPersonId);
       const fromAccount = this.resolveAccount({
-        tracksBalance,
         payer: from,
         callerUserId,
         requestedAccountId: input.fromAccountId,
@@ -118,7 +118,6 @@ export class SettlementsService {
         currentAccountId: null,
       });
       const toAccount = this.resolveAccount({
-        tracksBalance,
         payer: to,
         callerUserId,
         requestedAccountId: input.toAccountId,
@@ -126,8 +125,8 @@ export class SettlementsService {
         payerChanged: false,
         currentAccountId: null,
       });
-      await this.checkAccountOwnership(tx, callerUserId, fromAccount);
-      await this.checkAccountOwnership(tx, callerUserId, toAccount);
+      const fromAccountId = await this.accountIdOf(tx, callerUserId, from, fromAccount);
+      const toAccountId = await this.accountIdOf(tx, callerUserId, to, toAccount);
 
       const transaction = await tx.transaction.create({
         data: {
@@ -137,8 +136,8 @@ export class SettlementsService {
           amount: input.amount,
           date: new Date(input.date),
           categoryId: null,
-          accountId: fromAccount.accountId,
-          toAccountId: toAccount.accountId,
+          accountId: fromAccountId,
+          toAccountId,
           note: input.note ?? null,
           title: null,
           payerPersonId: null,
@@ -166,7 +165,7 @@ export class SettlementsService {
     input: UpdateSettlementRequest,
   ): Promise<Transaction> {
     const transactionId = await this.prisma.$transaction(async (tx) => {
-      const tracksBalance = await this.assertSharedLedger(tx, ledgerId);
+      await this.assertSharedLedger(tx, ledgerId);
       const existing = await this.lockSettlement(tx, ledgerId, settlementId);
       const fromPersonId = input.fromPersonId ?? existing.fromPersonId;
       const toPersonId = input.toPersonId ?? existing.toPersonId;
@@ -179,7 +178,6 @@ export class SettlementsService {
       const fromChanged = fromPersonId !== existing.fromPersonId;
       const toChanged = toPersonId !== existing.toPersonId;
       const fromAccount = this.resolveAccount({
-        tracksBalance,
         payer: from,
         callerUserId,
         requestedAccountId: input.fromAccountId,
@@ -188,7 +186,6 @@ export class SettlementsService {
         currentAccountId: existing.accountId,
       });
       const toAccount = this.resolveAccount({
-        tracksBalance,
         payer: to,
         callerUserId,
         requestedAccountId: input.toAccountId,
@@ -196,18 +193,18 @@ export class SettlementsService {
         payerChanged: toChanged,
         currentAccountId: existing.toAccountId,
       });
-      await this.checkAccountOwnership(tx, callerUserId, fromAccount);
-      await this.checkAccountOwnership(tx, callerUserId, toAccount);
+      const fromAccountId = await this.accountIdOf(tx, callerUserId, from, fromAccount);
+      const toAccountId = await this.accountIdOf(tx, callerUserId, to, toAccount);
 
       const transactionData: Prisma.TransactionUncheckedUpdateInput = {};
       if (input.amount !== undefined) transactionData.amount = input.amount;
       if (input.date !== undefined) transactionData.date = new Date(input.date);
       if (input.note !== undefined) transactionData.note = input.note;
       if (input.fromAccountId !== undefined || fromChanged) {
-        transactionData.accountId = fromAccount.accountId;
+        transactionData.accountId = fromAccountId;
       }
       if (input.toAccountId !== undefined || toChanged) {
-        transactionData.toAccountId = toAccount.accountId;
+        transactionData.toAccountId = toAccountId;
       }
       if (Object.keys(transactionData).length > 0) {
         await tx.transaction.update({
@@ -252,7 +249,7 @@ export class SettlementsService {
     accountId: string,
   ): Promise<Transaction> {
     const transactionId = await this.prisma.$transaction(async (tx) => {
-      const tracksBalance = await this.assertSharedLedger(tx, ledgerId);
+      await this.assertSharedLedger(tx, ledgerId);
       const existing = await this.lockSettlement(tx, ledgerId, settlementId);
       const lockedPeople = await this.people.lockPeople(
         tx,
@@ -263,13 +260,14 @@ export class SettlementsService {
       const from = this.personFrom(lockedPeople, existing.fromPersonId);
       const to = this.personFrom(lockedPeople, existing.toPersonId);
 
-      if (!tracksBalance) {
-        throw this.accountRuleError('ACCOUNT_NOT_ALLOWED');
-      }
       const isFrom = from.userId === callerUserId;
       const isTo = to.userId === callerUserId;
       if (!isFrom && !isTo) throw this.accountRuleError('ACCOUNT_NOT_PAYERS');
-      await this.assertAccountOwned(tx, callerUserId, accountId);
+      const currentAccountId = isFrom ? existing.accountId : existing.toAccountId;
+      if (currentAccountId !== (await temporaryAccountIdOf(tx, callerUserId))) {
+        throw this.accountRuleError('ACCOUNT_NOT_PAYERS');
+      }
+      await assertSelectableAccount(tx, callerUserId, accountId);
 
       await tx.transaction.update({
         where: { id: existing.transactionId },
@@ -281,17 +279,12 @@ export class SettlementsService {
     return this.transactions.getById(ledgerId, transactionId, callerUserId);
   }
 
-  private async assertSharedLedger(
-    tx: Prisma.TransactionClient,
-    ledgerId: string,
-  ): Promise<boolean> {
+  private async assertSharedLedger(tx: Prisma.TransactionClient, ledgerId: string): Promise<void> {
     const ledger: LedgerSettings | null = await tx.ledger.findUnique({
       where: { id: ledgerId },
       select: { kind: true },
     });
     if (!ledger || ledger.kind !== 'SHARED') throw this.notFound('Ledger not found.');
-    // 3h H0 佔位：所有帳本都計入餘額（決策 165）。H2 會把 tracksBalance 這個參數整個拿掉。
-    return true;
   }
 
   private async lockSettlement(
@@ -309,7 +302,6 @@ export class SettlementsService {
   }
 
   private resolveAccount(input: {
-    tracksBalance: boolean;
     payer: LedgerPersonRecord;
     callerUserId: string;
     requestedAccountId: string | undefined;
@@ -322,28 +314,19 @@ export class SettlementsService {
     return result;
   }
 
-  private async checkAccountOwnership(
+  private async accountIdOf(
     tx: Prisma.TransactionClient,
     callerUserId: string,
+    payer: LedgerPersonRecord,
     result: ReturnType<typeof resolvePayerAccount>,
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (result.ok && result.needsOwnershipCheck && result.accountId !== null) {
-      await this.assertAccountOwned(tx, callerUserId, result.accountId);
+      await assertSelectableAccount(tx, callerUserId, result.accountId);
     }
-  }
-
-  private async assertAccountOwned(
-    tx: Prisma.TransactionClient,
-    callerUserId: string,
-    accountId: string,
-  ): Promise<void> {
-    const account = await tx.account.findUnique({
-      where: { id: accountId },
-      select: { userId: true },
-    });
-    if (!account || account.userId !== callerUserId) {
-      throw this.notFound('Account not found.');
-    }
+    if (!result.ok) throw this.accountRuleError(result.error);
+    return result.needsTemporaryAccount
+      ? temporaryAccountIdOf(tx, payer.userId!)
+      : result.accountId;
   }
 
   private personFrom(
@@ -368,7 +351,6 @@ export class SettlementsService {
   private accountRuleError(error: AccountRuleError): AppException {
     const messages: Record<AccountRuleError, string> = {
       ACCOUNT_REQUIRED: 'An account is required for your side of this settlement.',
-      ACCOUNT_NOT_ALLOWED: 'This ledger does not allow accounts for settlements.',
       ACCOUNT_NOT_PAYERS: 'Only the paying or receiving person can choose their account.',
     };
     return new AppException(HttpStatus.BAD_REQUEST, error, messages[error]);
