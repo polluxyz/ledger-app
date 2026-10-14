@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ErrorCode, mergeTotals, SETTLEABLE_DEBT_ENTRY_KINDS } from '@ledger/shared';
+import {
+  actualAmountOf,
+  ErrorCode,
+  mergeTotals,
+  SETTLEABLE_DEBT_ENTRY_KINDS,
+} from '@ledger/shared';
 import type { CreateDebtEntryResponse, DebtEntry, UpdateDebtEntryRequest } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
@@ -11,7 +16,7 @@ import {
   recordDebtTransaction,
   recalculateSettlement,
   voidRepaymentWithSettlement,
-  writeSettlement,
+  writeDifference,
 } from './debt-recording';
 import {
   badRequest,
@@ -34,7 +39,7 @@ import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
  *
  * 三條貫穿全檔的規則：
  * - **每個方法整個包在一個 `$transaction` 裡**。記一筆可能同時寫對象、交易、往來紀錄與結清
- *   差額四樣東西，中途失敗只寫了一半，帳戶餘額與往來餘額就永遠對不起來。授權檢查也一起放
+ *   分支四樣東西，中途失敗只寫了一半，帳戶餘額與往來餘額就永遠對不起來。授權檢查也一起放
  *   進去，讓「檢查失敗」與「什麼都沒寫」是同一件事——連新建的對象也不會留下（SC-L11）。
  * - **`delta` 的正負號只由種類決定**（`deltaFor`），呼叫者只給正的金額。資料庫另有 CHECK。
  * - **讀一律走 `loadOwnedCounterparty` / `loadOwnedEntry`**，不是自己的一律 404。
@@ -50,45 +55,46 @@ export class DebtEntriesService {
     private readonly ledgerDebts: LedgerDebtsService,
   ) {}
 
-  /** 記一筆往來；帶 `settle` 時同一個資料庫交易裡補一筆結清差額（決策 38）。 */
+  /** 記一筆往來；帶 `settle` 時還款清掉全部欠款，實收差額另記交易分支。 */
   async create(userId: string, input: CreateDebtEntryDto): Promise<CreateDebtEntryResponse> {
     assertEntryShape(input);
 
     const response = await this.prisma.$transaction(async (tx) => {
       const counterparty = await this.resolveCounterparty(tx, userId, input.counterparty);
-      // 先鎖對象再讀餘額：還款的方向、超額檢查、結清差額都依賴「寫入前的餘額」（決策 50）。
+      // 先鎖對象再讀餘額：還款方向、超額檢查與分支金額都依賴「寫入前的餘額」（決策 50）。
       await lockCounterparty(tx, counterparty.id);
 
       // 還款的方向由後端依餘額決定（決策 46）；要在建立交易之前定案，交易型別跟著它走。
+      const balanceBefore =
+        input.kind === 'REPAYMENT' ? await currentBalance(tx, counterparty.id) : 0;
       const kind: RecordedDebtEntryKind =
         input.kind === 'REPAYMENT'
-          ? resolveRepayment(
-              await currentBalance(tx, counterparty.id),
-              input.amount,
-              input.settle === true,
-            )
+          ? resolveRepayment(balanceBefore, input.amount, input.settle === true)
           : input.kind;
 
       const date = new Date(input.date);
-      const transactionId = await this.recordTransaction(tx, userId, input, kind, date);
+      const clearedAmount = input.settle === true ? Math.abs(balanceBefore) : input.amount;
+      const transactionId = await this.recordTransaction(
+        tx,
+        userId,
+        input,
+        kind,
+        date,
+        clearedAmount,
+      );
 
       const entry = await tx.debtEntry.create({
         data: {
           counterpartyId: counterparty.id,
           kind,
-          delta: deltaFor(kind, input.amount),
+          delta: deltaFor(kind, clearedAmount),
           date,
           note: input.note ?? null,
           transactionId,
         },
       });
-      const entries = [entry];
-
       if (input.settle === true) {
-        const settlement = await writeSettlement(tx, counterparty.id, entry);
-        if (settlement !== null) {
-          entries.push(settlement);
-        }
+        await writeDifference(tx, this.transactions, entry, input.amount);
       }
 
       await proposeCreate(tx, {
@@ -100,7 +106,7 @@ export class DebtEntriesService {
 
       const [links, sync] = await Promise.all([
         linkInfoFor(tx, [counterparty.id]),
-        syncStatuses(tx, entries),
+        syncStatuses(tx, [entry]),
       ]);
       return {
         counterparty: toCounterparty(
@@ -108,7 +114,12 @@ export class DebtEntriesService {
           await currentBalance(tx, counterparty.id),
           links.get(counterparty.id) ?? null,
         ),
-        entries: entries.map((row) => toDebtEntry(row, { sync: sync.get(row.id) })),
+        entries: [
+          toDebtEntry(entry, {
+            sync: sync.get(entry.id),
+            difference: await this.differenceOf(tx, entry.transactionId),
+          }),
+        ],
       };
     });
     // 交易提交後再讀帳本來源，確保新紀錄的回應也使用與列表相同的總額。
@@ -125,7 +136,7 @@ export class DebtEntriesService {
    * 改金額、日期、備註（決策 41）。對應的交易一起改，否則帳戶餘額與往來餘額會對不起來。
    * 調整紀錄是系統算出來的，不能改（決策 40）；要調整就刪掉重記。
    *
-   * 綁定差額的還款改金額時，差額跟著重算，讓餘額仍然歸零（3g 決策 158）；改成超過原本
+   * 有分支的還款改實收時，只重算分支，讓餘額仍然歸零（3h 決策 172）；改成超過原本
    * 欠款也可以（差額方向反過來），不做超額檢查。已配對或還在等對方確認的紀錄，改金額或日期
    * 會送變更給對方（決策 67）；只改備註不送，備註各記各的。先鎖對象：與對方同時接受提議時，
    * 兩邊對配對狀態的讀寫要排隊。
@@ -149,14 +160,22 @@ export class DebtEntriesService {
       }
 
       // 正負號沿用原本那一筆（由種類決定，不會因為改金額而翻轉）。
-      const delta =
+      const proposedDelta =
         input.amount === undefined ? undefined : Math.sign(existing.delta) * input.amount;
       const date = input.date === undefined ? undefined : new Date(input.date);
 
-      // 差額重算要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
-      if (delta !== undefined) {
-        await recalculateSettlement(tx, existing, delta);
+      // 先重算分支再改還款；有分支時欠款已全清，不能拿實收改動還款的 delta。
+      const branchHandled =
+        input.amount !== undefined
+          ? await recalculateSettlement(tx, existing, input.amount, date)
+          : false;
+      if (date !== undefined && input.amount === undefined && existing.transactionId !== null) {
+        await tx.transaction.updateMany({
+          where: { differenceOfId: existing.transactionId, deletedAt: null },
+          data: { date },
+        });
       }
+      const delta = branchHandled ? undefined : proposedDelta;
 
       const updated = await tx.debtEntry.update({
         where: { id: existing.id },
@@ -169,26 +188,41 @@ export class DebtEntriesService {
 
       if (existing.transactionId !== null && (input.amount !== undefined || date !== undefined)) {
         await this.transactions.updateDebtTransaction(tx, existing.transactionId, {
-          ...(input.amount !== undefined ? { amount: input.amount } : {}),
+          ...(delta !== undefined ? { amount: input.amount } : {}),
           ...(date !== undefined ? { date } : {}),
         });
       }
 
-      const amountChanged = delta !== undefined && delta !== existing.delta;
+      const difference = await this.differenceOf(tx, updated.transactionId);
+      const amountChanged =
+        input.amount !== undefined && (branchHandled || delta !== existing.delta);
       const dateChanged = date !== undefined && date.getTime() !== existing.date.getTime();
       if (amountChanged || dateChanged) {
-        await proposeAmend(tx, { fromUserId: userId, entry: updated, now: new Date() });
+        const actualAmount =
+          input.amount ??
+          (updated.kind === 'COLLECT' || updated.kind === 'REPAY'
+            ? actualAmountOf(updated.kind, Math.abs(updated.delta), difference)
+            : undefined);
+        await proposeAmend(tx, {
+          fromUserId: userId,
+          entry: updated,
+          now: new Date(),
+          actualAmount,
+        });
       }
 
       const sync = await syncStatuses(tx, [updated]);
-      return toDebtEntry(updated, { sync: sync.get(updated.id) });
+      return toDebtEntry(updated, {
+        sync: sync.get(updated.id),
+        difference,
+      });
     });
   }
 
   /**
-   * 軟刪除一筆往來紀錄，連同它的交易（決策 42）。還款有綁定差額時，差額在同一個時間戳一起
+   * 軟刪除一筆往來紀錄，連同它的交易（決策 42）。還款有分支時，分支在同一個時間戳一起
    * 撤銷（3g 決策 156）；綁定的差額不能單獨撤銷（決策 157），要撤就撤那筆還款。已配對的
-   * 紀錄同時送刪除給對方（只送還款那筆——差額本來就不配對）；還在等對方確認的新增直接作廢
+   * 紀錄同時送刪除給對方（只送還款那筆——分支本來就不配對）；還在等對方確認的新增直接作廢
    * （決策 67）。
    */
   remove(userId: string, entryId: string): Promise<void> {
@@ -236,7 +270,7 @@ export class DebtEntriesService {
   }
 
   /**
-   * 依 `record` 產生交易，回傳交易 id；`record: null` 就不產生（決策 7）。
+   * 依必填的 `record` 產生交易，回傳交易 id。
    *
    * 帳本權限在建立之前檢查：不是成員、只有 VIEWER、或已封存，整個資料庫交易就回滾。
    * 帳戶規則（連動帳本必填、帳戶屬於本人）與分類規則由 `TransactionsService` 把關，
@@ -248,14 +282,31 @@ export class DebtEntriesService {
     input: CreateDebtEntryDto,
     kind: 'LEND' | 'BORROW' | 'COLLECT' | 'REPAY',
     date: Date,
-  ): Promise<string | null> {
+    amount: number,
+  ): Promise<string> {
     return recordDebtTransaction(tx, this.transactions, {
       userId,
       record: input.record,
       kind,
-      amount: input.amount,
+      amount,
       date,
     });
+  }
+
+  /** 只回傳還在生效的分支；還款回應掛這筆交易，舊版差額紀錄不會混入。 */
+  private async differenceOf(tx: Prisma.TransactionClient, transactionId: string | null) {
+    if (transactionId === null) return null;
+    const branch = await tx.transaction.findFirst({
+      where: { differenceOfId: transactionId, deletedAt: null },
+      select: { id: true, type: true, amount: true },
+    });
+    return branch
+      ? {
+          transactionId: branch.id,
+          type: branch.type as 'EXPENSE' | 'INCOME',
+          amount: branch.amount,
+        }
+      : null;
   }
 }
 
@@ -272,8 +323,8 @@ function assertEntryShape(input: CreateDebtEntryDto): void {
     throw badRequest('counterparty needs exactly one of id or name.');
   }
   // 「省略」不再代表任何預設（spec §5.2）：要不要產生交易必須說清楚。
-  if (input.record === undefined) {
-    throw badRequest('record is required: an object to record a transaction, or null for none.');
+  if (input.record === undefined || input.record === null) {
+    throw badRequest('record is required.');
   }
 
   if (input.categoryId !== undefined)
