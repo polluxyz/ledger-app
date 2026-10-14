@@ -681,10 +681,11 @@ export class TransactionsService {
   private async getLedger(ledgerId: string) {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
-      select: { kind: true, tracksBalance: true },
+      select: { kind: true },
     });
     if (!ledger) throw this.notFound('Ledger');
-    return ledger;
+    // 3h H0 佔位：所有帳本都計入餘額（決策 165）。H2 會把 tracksBalance 這個參數整個拿掉。
+    return { ...ledger, tracksBalance: true };
   }
 
   private isIncomeExpense(type: TransactionType): type is 'EXPENSE' | 'INCOME' {
@@ -1113,28 +1114,18 @@ export class TransactionsService {
   ): Promise<void> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
-      select: { tracksBalance: true },
+      select: { id: true },
     });
     if (!ledger) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
     }
 
-    if (!ledger.tracksBalance) {
-      if (final.accountId !== undefined || final.toAccountId !== undefined) {
-        throw new AppException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.ACCOUNT_NOT_ALLOWED,
-          'This ledger does not track account balances, so transactions cannot name an account.',
-        );
-      }
-      return;
-    }
-
+    // 3h 決策 159、165：所有帳本都計入餘額，每一筆都要有帳戶。
     if (final.accountId === undefined) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.ACCOUNT_REQUIRED,
-        'accountId is required in a ledger that tracks account balances.',
+        'accountId is required.',
       );
     }
 
@@ -1303,6 +1294,9 @@ export class TransactionsService {
       settlement,
       // 退出者不能補帳戶，不能在唯讀回應裡提示可寫入的待補狀態。
       accountPending: access === 'LEFT' ? false : accountPending,
+      // 3h 契約佔位（H0）：H3 改成讀 differenceOfId 與還款的分支。
+      differenceOfId: null,
+      difference: null,
       createdAt: row.createdAt.toISOString(),
     };
   }

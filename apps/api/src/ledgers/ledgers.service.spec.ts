@@ -93,17 +93,8 @@ describe('LedgersService (members)', () => {
     });
   });
 
-  describe('tracksBalance', () => {
-    it('rejects any attempt to change it after creation', async () => {
-      // 事後翻轉會讓每位成員的餘額瞬間跳動，畫面上卻沒有任何線索。
-      await expect(service.rename(ledgerId, '新名字', false)).rejects.toMatchObject({
-        status: 400,
-        errorCode: 'TRACKS_BALANCE_IMMUTABLE',
-      });
-      expect(prisma.ledger.update).not.toHaveBeenCalled();
-    });
-
-    it('renames normally when it is not supplied', async () => {
+  describe('rename', () => {
+    it('renames the ledger', async () => {
       await service.rename(ledgerId, '新名字');
 
       expect(prisma.ledger.update).toHaveBeenCalledWith({
@@ -216,7 +207,7 @@ describe('LedgersService (members)', () => {
   describe('kind', () => {
     it('rejects any attempt to change it after creation', async () => {
       // 事後翻轉等於讓「誰看得到我的帳」在使用者沒有心理準備時改變。
-      await expect(service.rename(ledgerId, '新名字', undefined, 'SHARED')).rejects.toMatchObject({
+      await expect(service.rename(ledgerId, '新名字', 'SHARED')).rejects.toMatchObject({
         status: 400,
         errorCode: 'LEDGER_KIND_IMMUTABLE',
       });

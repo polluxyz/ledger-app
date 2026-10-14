@@ -124,4 +124,11 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+1. **H0 多做的機械式修正**（2026-10-14）：拿掉 `tracksBalance` 後 API 編譯不過，四個後端 worker 會互相卡住。協調者在契約 commit 先做最小修正，讓 API typecheck 與 lint 全綠：
+   - 帳本 DTO 與 `LedgersService` 拿掉 `tracksBalance`（原屬 H1）；`TRACKS_BALANCE_IMMUTABLE` 錯誤碼刪除，帶 `tracksBalance` 改由 `forbidNonWhitelisted` 回 400。
+   - `AccountsService`：餘額拿掉 `ledger.tracksBalance` 條件、回應帶 `isTemporary`（原屬 H1）。
+   - `TransactionsService`、`SettlementsService`、`SplitsService`：讀帳本的地方先固定成「計入餘額」，並刪掉 `assertAccountRules` 裡「不計入餘額」的分支（原屬 H2；H2 再把 `tracksBalance` 參數整個拿掉）。
+   - 借還 DTO：`record` 不可為 null（原屬 H3）。`toDebtEntry` 先放 `difference: null`、`toTransaction` 先放 `differenceOfId: null`、`difference: null` 佔位（H3 改成讀資料）。
+   - 刪掉兩個測舊行為的單元測試（`rename` 帶 `tracksBalance`、`record: null` 不產生交易）。
+   - 仍有 6 個單元測試在測「不計入餘額」，留給 H1（`AccountsService` 1 個）與 H2（`TransactionsService` 3 個、`SettlementsService` 2 個）改。既有 API e2e 的 `record: null`、`tracksBalance` 型別錯誤留給 H7。
+2. **隔離測試紅燈**：`every-entry-account-isolation.e2e-spec.ts` 8 個全紅（2026-10-14）。

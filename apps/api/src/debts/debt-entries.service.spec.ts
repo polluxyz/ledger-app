@@ -177,14 +177,6 @@ describe('DebtEntriesService', () => {
       expect(createdData()).toMatchObject({ kind: 'BORROW', delta: -111 });
     });
 
-    it('creates no transaction and skips the ledger check when record is null', async () => {
-      await service.create(USER, input({ record: null }));
-
-      expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
-      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
-      expect(createdData()).toMatchObject({ transactionId: null });
-    });
-
     it('rejects a category on the old debt endpoint', async () => {
       await expect(service.create(USER, input({ categoryId: 'cat-1' }))).rejects.toMatchObject({
         status: 400,

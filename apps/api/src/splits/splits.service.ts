@@ -323,10 +323,8 @@ export class SplitsService {
     input: Omit<Input, 'fromTransactionId'>,
   ): Promise<void> {
     await assertLedgerWritable(tx, userId, input.ledgerId);
-    const ledger = await tx.ledger.findUniqueOrThrow({
-      where: { id: input.ledgerId },
-      select: { tracksBalance: true },
-    });
+    // 3h H0 佔位：所有帳本都計入餘額（決策 165）。H2 會把 tracksBalance 這個參數整個拿掉。
+    const ledger = { tracksBalance: true };
     const category = await tx.category.findFirst({
       where: { id: input.categoryId, ledgerId: input.ledgerId },
     });

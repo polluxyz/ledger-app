@@ -18,11 +18,12 @@ import { DebtEntryRecordTargetDto } from './debt-entry-record-target.dto';
  * 「帶了」），這要讀出提議才知道，所以由 service 檢查；這裡只驗有值時的格式。
  */
 export class AcceptDebtProposalDto implements AcceptDebtProposalRequest {
-  @ApiPropertyOptional({ type: DebtEntryRecordTargetDto, nullable: true })
-  @ValidateIf((_, value) => value !== null && value !== undefined)
+  // 3h 決策 163：沒有「不記入帳本」。`null` 會進到 `@ValidateNested` 而回 400；省略與否由 service 判斷。
+  @ApiPropertyOptional({ type: DebtEntryRecordTargetDto })
+  @ValidateIf((_, value) => value !== undefined)
   @ValidateNested()
   @Type(() => DebtEntryRecordTargetDto)
-  record?: DebtEntryRecordTargetDto | null;
+  record?: DebtEntryRecordTargetDto;
 
   @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID() categoryId?: string;
   @ApiPropertyOptional({ maxLength: 100 }) @IsOptional() @IsString() @MaxLength(100) title?: string;

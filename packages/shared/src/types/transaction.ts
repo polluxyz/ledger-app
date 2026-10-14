@@ -93,11 +93,12 @@ export interface Transaction {
   /** 分類；`TRANSFER` 交易為 `null`。 */
   category: TransactionCategoryRef | null;
   /**
-   * 錢從哪個帳戶出去（`INCOME` 則是進到哪個帳戶）。以下兩種情況為 `null`：
+   * 錢從哪個帳戶出去（`INCOME` 則是進到哪個帳戶）。以下情況為 `null`：
    *
-   * 1. 這筆交易屬於「不與帳戶連動」的帳本（`tracksBalance: false`）；
-   * 2. 該帳戶**不屬於目前的檢視者**——共享帳本中，成員看得到彼此的金額與分類，
+   * 1. 該帳戶**不屬於目前的檢視者**——共享帳本中，成員看得到彼此的金額與分類，
    *    但看不到對方從哪個戶頭付的（帳戶名稱可能敏感，且協作並不需要這項資訊）。
+   * 2. 3h 決策 160～162 的例外，錢不經過任何帳戶：別人替我付或替我收、共享帳本裡非成員付的錢、
+   *    免除產生的「呆帳」與「債務免除」。
    */
   account: TransactionRef | null;
   /** 轉入的帳戶；僅 `TRANSFER` 有值，且同樣套用上述隱私規則。 */
@@ -125,12 +126,31 @@ export interface Transaction {
   /** 這筆 `TRANSFER` 是共享帳本的一筆結清（3e 決策 128）；其他交易為 `null`。 */
   settlement: TransactionSettlementRef | null;
   /**
-   * 帳戶待補（3e 決策 124），而且要由**目前的檢視者**補：付款人（結清時是付錢或收錢的那一位）
-   * 是檢視者本人、帳本連動、那一邊的帳戶還空著。其他人看同一筆一律是 `false`。
+   * 這筆在**目前檢視者的臨時帳戶**裡，要由他本人換到真正的帳戶（3h 決策 168、169，取代 3e 決策
+   * 124 的「帳戶待補」）：付款人（結清時是付錢或收錢的那一位）是檢視者本人，而那一邊的帳戶是他的
+   * 臨時帳戶。其他人看同一筆一律是 `false`。
    */
   accountPending: boolean;
+  /**
+   * 這筆是哪一筆還款的結清分支（3h 決策 170）；不是分支為 `null`。分支沒有分類，名稱用
+   * `differenceLabelOf` 由還款與分支的型別決定。
+   */
+  differenceOfId: string | null;
+  /** 還款底下的結清分支（3h 決策 170、W175）；沒有分支為 `null`。明細把它畫在還款下面一行。 */
+  difference: TransactionDifferenceRef | null;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
+}
+
+/**
+ * 還款底下的結清分支（3h 決策 170、171）。`type` 是 `EXPENSE`（少收、多付）或 `INCOME`
+ * （多收、少付）。
+ */
+export interface TransactionDifferenceRef {
+  id: string;
+  type: CategoryType;
+  /** 單位：分；恆為正整數。 */
+  amount: Cents;
 }
 
 /** 交易背後的往來紀錄與對象。只回給往來紀錄的擁有者。 */
@@ -160,17 +180,17 @@ export interface TransactionDebtRef {
  * POST /ledgers/{ledgerId}/transactions 的請求 body。
  *
  * `categoryId` 與 `accountId` 在型別上都是選填，但實際上是**條件必填**——該不該填
- * 取決於交易型別與帳本設定，TypeScript 表達不了這種依賴，因此由後端 service 把關。
- * 規則如下（違反時回 400）：
+ * 取決於交易型別與付款人，TypeScript 表達不了這種依賴，因此由後端 service 把關。
+ * 規則如下（違反時回 400）。3h 起沒有「不計入餘額」的帳本（決策 165）：
  *
- * | 情境                     | `accountId`  | `categoryId` | `toAccountId` |
- * | ------------------------ | ------------ | ------------ | ------------- |
- * | 連動帳本 ＋ 支出／收入   | **必填**     | **必填**     | 不可填        |
- * | 連動帳本 ＋ 轉帳         | **必填**     | **不可填**   | **必填**      |
- * | 非連動帳本 ＋ 支出／收入 | **不可填**   | **必填**     | 不可填        |
- * | 非連動帳本 ＋ 轉帳       | 不適用（非連動帳本不影響餘額，轉帳沒有意義）        |
+ * | 情境                         | `accountId`                    | `categoryId` | `toAccountId` |
+ * | ---------------------------- | ------------------------------ | ------------ | ------------- |
+ * | 支出／收入，付款人是我       | **必填**                       | **必填**     | 不可填        |
+ * | 支出／收入，付款人是別的成員 | **不可填**（記到他的臨時帳戶） | **必填**     | 不可填        |
+ * | 支出／收入，付款人是非成員   | **不可填**（沒有帳戶）         | **必填**     | 不可填        |
+ * | 轉帳                         | **必填**                       | **不可填**   | **必填**      |
  *
- * 「連動帳本」指 `tracksBalance: true` 的帳本（預設）。
+ * 帳戶不能是臨時帳戶（400 `TEMPORARY_ACCOUNT_NOT_SELECTABLE`）。
  */
 export interface CreateTransactionRequest {
   type: ManualTransactionType;

@@ -39,9 +39,9 @@ export const ErrorCode = {
   ACCOUNT_NAME_TAKEN: 'ACCOUNT_NAME_TAKEN',
   /** 仍有交易引用該帳戶時，不可刪除（含已軟刪除的交易，歷史須可追溯）。 */
   ACCOUNT_IN_USE: 'ACCOUNT_IN_USE',
-  /** 在「與帳戶連動」的帳本記帳時，未指定帳戶。 */
+  /** 付款人是我卻沒指定帳戶（3h 決策 159：每一筆都要有帳戶）。 */
   ACCOUNT_REQUIRED: 'ACCOUNT_REQUIRED',
-  /** 在「不與帳戶連動」的帳本記帳時，卻指定了帳戶。 */
+  /** 錢不經過我的帳戶的情況（別人替我付、替我收），卻指定了帳戶。 */
   ACCOUNT_NOT_ALLOWED: 'ACCOUNT_NOT_ALLOWED',
   /** 轉帳的轉出與轉入是同一個帳戶。 */
   TRANSFER_SAME_ACCOUNT: 'TRANSFER_SAME_ACCOUNT',
@@ -49,8 +49,6 @@ export const ErrorCode = {
   LEDGER_ARCHIVED: 'LEDGER_ARCHIVED',
   /** 帳本內有其他成員記下的交易，因此不可刪除（請改用封存）。 */
   LEDGER_HAS_OTHERS_TRANSACTIONS: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
-  /** 帳本的「是否與帳戶連動」建立後不可變更。 */
-  TRACKS_BALANCE_IMMUTABLE: 'TRACKS_BALANCE_IMMUTABLE',
   /** 帳本的「私人 / 共享」建立後不可變更。 */
   LEDGER_KIND_IMMUTABLE: 'LEDGER_KIND_IMMUTABLE',
   /** 私人帳本不得加入成員。想共享請另建一本共享帳本。 */
@@ -126,6 +124,10 @@ export const ErrorCode = {
   LEDGER_PERSON_IN_USE: 'LEDGER_PERSON_IN_USE',
   /** 帳戶不屬於付款人（收錢的人），或替別人選帳戶（3e 決策 123、129）。400。 */
   ACCOUNT_NOT_PAYERS: 'ACCOUNT_NOT_PAYERS',
+  /** 把臨時帳戶當成要記的帳戶（3h 決策 169）。臨時帳戶只能由後端代填。400。 */
+  TEMPORARY_ACCOUNT_NOT_SELECTABLE: 'TEMPORARY_ACCOUNT_NOT_SELECTABLE',
+  /** 改名或刪除臨時帳戶（3h 決策 169）。409。 */
+  TEMPORARY_ACCOUNT_LOCKED: 'TEMPORARY_ACCOUNT_LOCKED',
   /** 結清的付錢的人與收錢的人是同一個（3e §5.4）。400。 */
   SETTLEMENT_SAME_PERSON: 'SETTLEMENT_SAME_PERSON',
   /** 結清產生的交易只能從結清端點修改或刪除（3e 決策 132）。409。 */

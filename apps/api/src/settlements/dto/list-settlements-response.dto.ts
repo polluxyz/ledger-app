@@ -128,9 +128,16 @@ export class SettlementTransactionDto implements Transaction {
 
   @ApiProperty({
     type: Boolean,
-    description: '帳戶待補且由檢視者本人補（付錢或收錢的那位）；已退出者恆為 false。',
+    description:
+      '這一邊在檢視者本人的臨時帳戶（付錢或收錢的那位，3h 決策 168）；已退出者恆為 false。',
   })
   accountPending!: boolean;
+
+  @ApiProperty({ type: String, nullable: true, description: '結清不是分支，恆為 null。' })
+  differenceOfId!: string | null;
+
+  @ApiProperty({ type: Object, nullable: true, description: '結清沒有分支，恆為 null。' })
+  difference!: null;
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;

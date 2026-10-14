@@ -65,7 +65,7 @@ export class LedgersController {
   @Patch(':ledgerId')
   @RequireLedgerRole('OWNER')
   rename(@Param('ledgerId') ledgerId: string, @Body() dto: UpdateLedgerDto): Promise<LedgerDetail> {
-    return this.ledgers.rename(ledgerId, dto.name, dto.tracksBalance, dto.kind);
+    return this.ledgers.rename(ledgerId, dto.name, dto.kind);
   }
 
   /**

@@ -176,6 +176,8 @@ export function toDebtEntry(
     transactionId: row.transactionId,
     splitId: row.splitId,
     settlesEntryId: row.settlesEntryId,
+    // 3h 契約佔位（H0）：H3 改成讀還款的分支交易。
+    difference: null,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

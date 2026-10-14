@@ -56,8 +56,10 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   // ── 帳戶與交易 ────────────────────────────────────────────────────────────
   ACCOUNT_NAME_TAKEN: '這個名稱已經有帳戶在用了，換一個名稱。',
   ACCOUNT_IN_USE: '這個帳戶已經有交易在用，不能刪除。',
-  ACCOUNT_REQUIRED: '這本帳本會連動帳戶餘額，記帳時請選一個帳戶。',
-  ACCOUNT_NOT_ALLOWED: '這本帳本不連動帳戶餘額，記帳時不需指定帳戶。',
+  ACCOUNT_REQUIRED: '請選一個帳戶。',
+  ACCOUNT_NOT_ALLOWED: '這筆的錢不經過你的帳戶，不需要選帳戶。',
+  TEMPORARY_ACCOUNT_NOT_SELECTABLE: '不能選臨時帳戶，請選一個真正的帳戶。',
+  TEMPORARY_ACCOUNT_LOCKED: '臨時帳戶不能改名或刪除。',
   TRANSFER_SAME_ACCOUNT: '轉帳的轉出與轉入不能是同一個帳戶，請換其中一個。',
 
   // ── 借還（3b-1 往來帳版，spec phase-3b1-web.md §4.6）──────────────────────

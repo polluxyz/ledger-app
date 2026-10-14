@@ -18,6 +18,7 @@ interface AccountRow {
   userId: string;
   name: string;
   initialBalance: number;
+  isTemporary: boolean;
   createdAt: Date;
 }
 
@@ -78,10 +79,8 @@ export class AccountsService {
    * 用兩次 `groupBy` 把所有帳戶一起算完，而不是每個帳戶各查一次——後者是典型的
    * N+1，帳戶越多越慢；這裡不論幾個帳戶都固定兩次查詢。
    *
-   * 兩個共通的 `where` 條件是正確性的關鍵，缺一不可：
-   *   - `deletedAt: null`——軟刪除的交易不該再影響餘額；
-   *   - `ledger.tracksBalance: true`——非連動帳本（出遊分帳、社團公款等）的金額
-   *     不是你的錢，算進來會讓餘額憑空膨脹或縮水。
+   * 共通的 `where` 條件 `deletedAt: null` 是正確性的關鍵：軟刪除的交易不該再影響餘額。
+   * 3h 起沒有「不計入餘額」的帳本（決策 165），所有帳本的交易都算進來。
    */
   private async calculateBalances(accounts: AccountRow[]): Promise<Map<string, number>> {
     const balances = new Map(accounts.map((account) => [account.id, account.initialBalance]));
@@ -92,7 +91,6 @@ export class AccountsService {
     const accountIds = accounts.map((account) => account.id);
     const countedTransactions: Prisma.TransactionWhereInput = {
       deletedAt: null,
-      ledger: { tracksBalance: true },
     };
 
     const [outgoing, incoming] = await Promise.all([
@@ -224,6 +222,7 @@ export class AccountsService {
       name: account.name,
       initialBalance: account.initialBalance,
       balance,
+      isTemporary: account.isTemporary,
       createdAt: account.createdAt.toISOString(),
     };
   }

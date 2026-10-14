@@ -28,7 +28,6 @@ import { computeLedgerSummary } from './ledger-summary';
 
 interface LedgerSettings {
   kind: 'PERSONAL' | 'SHARED';
-  tracksBalance: boolean;
 }
 
 interface LockedSettlement {
@@ -288,10 +287,11 @@ export class SettlementsService {
   ): Promise<boolean> {
     const ledger: LedgerSettings | null = await tx.ledger.findUnique({
       where: { id: ledgerId },
-      select: { kind: true, tracksBalance: true },
+      select: { kind: true },
     });
     if (!ledger || ledger.kind !== 'SHARED') throw this.notFound('Ledger not found.');
-    return ledger.tracksBalance;
+    // 3h H0 佔位：所有帳本都計入餘額（決策 165）。H2 會把 tracksBalance 這個參數整個拿掉。
+    return true;
   }
 
   private async lockSettlement(
