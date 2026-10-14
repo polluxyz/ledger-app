@@ -107,7 +107,7 @@ WITH matches AS (
   JOIN "DebtEntry" r ON r."id" = m.repayment_id
   JOIN "Transaction" t ON t."id" = r."transactionId"
   WHERE (SELECT COUNT(*) FROM unique_matches other WHERE other.repayment_id = m.repayment_id) = 1
-    AND r."delta" + s."delta" <> 0 AND t."accountId" IS NOT NULL
+    AND r."delta" + s."delta" <> 0
     AND t."amount" <> ABS(r."delta" + s."delta")
 ), changed_debts AS (
   UPDATE "DebtEntry" r SET "delta" = a.new_delta, "updatedAt" = now()
