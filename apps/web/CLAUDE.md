@@ -32,7 +32,7 @@ e2e/           Playwright 測試
 **`@ledger/shared` 必須留在 `vite.config.ts` 的 `optimizeDeps.include` 裡。**
 shared 編譯成 CommonJS，而 Vite 預設不預先打包 workspace 連結的套件。拿掉這行，第一個「值」匯入（不是 `import type`）就會讓整頁全白。
 
-**改了 `packages/shared` 並重新 build 之後，要刪掉 `apps/web/node_modules/.vite` 再重開 dev server。** 否則 dev 與 Web e2e 會拿到舊的預先打包結果，出現「xxx is not a function」。
+**改了 `packages/shared` 之後只要重新 build，不必刪 `.vite`。** `vite.config.ts` 的 `sharedPrebundleRefreshPlugin` 會把 shared `dist` 的雜湊算進預先打包的快取鍵，dev server 執行中也會監看 `dist` 並自動重開。拿掉這個插件，dev 與 Web e2e 就會拿到舊的預先打包結果，出現「xxx is not a function」。
 
 **右側欄收起時內容不卸載**（#84）。新增打開右側欄的入口時，要先設定面板目標；列表的選取標示要配合 `isOpen`。
 

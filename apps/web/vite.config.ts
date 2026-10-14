@@ -1,4 +1,8 @@
 /// <reference types="vitest/config" />
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { isAbsolute, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { configDefaults } from 'vitest/config';
@@ -63,11 +67,79 @@ function cspMetaPlugin(): Plugin {
   };
 }
 
+/** `@ledger/shared` 的建置產物，也就是被預先打包的那一份。 */
+const sharedDistDir = fileURLToPath(new URL('../../packages/shared/dist', import.meta.url));
+
+/** 把目錄裡所有檔案的相對路徑與內容雜湊成一個短字串；目錄不存在時回 `missing`。 */
+function hashDirectory(dir: string): string {
+  if (!existsSync(dir)) return 'missing';
+  const hash = createHash('sha256');
+  const files = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .filter((file) => statSync(join(dir, file)).isFile())
+    .sort();
+  for (const file of files) {
+    hash.update(file);
+    hash.update(readFileSync(join(dir, file)));
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+/**
+ * `packages/shared` 重新 build 之後，讓 dev server 自動丟掉舊的預先打包結果。
+ *
+ * Vite 只在「lockfile 或 optimizeDeps 設定變了」時重做預先打包，不看連結套件的
+ * 內容。shared 改了、`node_modules/.vite` 卻還是舊的，畫面就會出現
+ * 「xxx is not a function」或整頁黑掉。以前的對策是手動刪 `.vite`，這個插件取代它：
+ *
+ * 1. **啟動時**：把 shared `dist` 的雜湊塞進 `optimizeDeps` 的 define。這個值是
+ *    Vite 快取雜湊的一部分，dist 一變，Vite 就自己判定快取過期並重做。用不到的
+ *    全域常數不會進任何程式碼，只是拿來當快取鍵。
+ * 2. **執行中**：監看 dist，有變動就重開 dev server。重開會重新讀設定，回到第 1 點；
+ *    瀏覽器連回來時會自動整頁重新載入。
+ *
+ * 只在 dev server 生效：`vite build` 每次都從頭打包，沒有快取問題；Vitest 不用
+ * 預先打包，也不該因為 shared 重 build 而重開。
+ */
+function sharedPrebundleRefreshPlugin(): Plugin {
+  return {
+    name: 'refresh-shared-prebundle',
+    apply: (_config, { command }) => command === 'serve' && !process.env.VITEST,
+    config() {
+      return {
+        optimizeDeps: {
+          rolldownOptions: {
+            transform: {
+              define: { __LEDGER_SHARED_DIST_HASH__: JSON.stringify(hashDirectory(sharedDistDir)) },
+            },
+          },
+        },
+      };
+    },
+    configureServer(server) {
+      server.watcher.add(sharedDistDir);
+      // tsc 一次會寫好幾個檔，等它寫完再重開一次就好。
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onSharedDistChange = (file: string) => {
+        const pathInDist = relative(sharedDistDir, file);
+        if (pathInDist.startsWith('..') || isAbsolute(pathInDist)) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          server.config.logger.info('packages/shared 已重新 build，重開 dev server 以更新預先打包');
+          void server.restart();
+        }, 500);
+      };
+      server.watcher.on('add', onSharedDistChange);
+      server.watcher.on('change', onSharedDistChange);
+      server.watcher.on('unlink', onSharedDistChange);
+    },
+  };
+}
+
 /**
  * Vite 設定：開發伺服器、建置，以及 Vitest（測試沿用同一份設定，不必另立檔案）。
  */
 export default defineConfig({
-  plugins: [react(), cspMetaPlugin()],
+  plugins: [react(), cspMetaPlugin(), sharedPrebundleRefreshPlugin()],
   optimizeDeps: {
     /**
      * `@ledger/shared` 編譯成 CommonJS（`main: dist/index.js`，內容是 `require`
@@ -83,8 +155,8 @@ export default defineConfig({
      * 產物與 dual-package hazard，成本比解決的問題大。重評的觸發條件是
      * 「shared 要發佈到 npm」或「出現吃不了 CJS 的消費者」。
      *
-     * ⚠️ 改了 `packages/shared` 並重新 build 之後，開發伺服器要重開才會拿到新的
-     * 預先打包結果。
+     * 改了 `packages/shared` 並重新 build 之後，預先打包結果由
+     * `sharedPrebundleRefreshPlugin` 自動更新。
      */
     include: ['@ledger/shared'],
   },
