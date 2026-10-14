@@ -14,7 +14,14 @@ import App from '../App';
 describe('Accounts page header actions', () => {
   const fetchMock = vi.fn();
 
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 380000 };
+  const cash = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 380000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
 
   beforeEach(() => {
     localStorage.clear();

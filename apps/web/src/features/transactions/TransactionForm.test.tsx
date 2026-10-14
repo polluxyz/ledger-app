@@ -23,18 +23,15 @@ import { TransactionForm } from './TransactionForm';
 describe('TransactionForm', () => {
   const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 
-  /** 連動帳本才畫得出轉帳鈕（見 TransactionForm 的 `canTransfer`）。 */
   const trackingLedger: LedgerSummary = {
     id: 'ledger-1',
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
   };
-  const plainLedger = { ...trackingLedger, id: 'ledger-2', tracksBalance: false };
   const sharedLedger: LedgerSummary = {
     ...trackingLedger,
     id: 'ledger-shared',
@@ -43,8 +40,38 @@ describe('TransactionForm', () => {
   };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const accounts = [
-    { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 },
-    { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 500000 },
+    {
+      id: 'acc-1',
+      name: '現金',
+      initialBalance: 0,
+      balance: 88000,
+      isTemporary: false,
+      hasTransactions: true,
+    },
+    {
+      id: 'acc-2',
+      name: '銀行',
+      initialBalance: 0,
+      balance: 500000,
+      isTemporary: false,
+      hasTransactions: true,
+    },
+    {
+      id: 'acc-3',
+      name: '存款',
+      initialBalance: 0,
+      balance: 300000,
+      isTemporary: false,
+      hasTransactions: true,
+    },
+    {
+      id: 'acc-temp',
+      name: '臨時帳戶',
+      initialBalance: 0,
+      balance: 0,
+      isTemporary: true,
+      hasTransactions: true,
+    },
   ];
   const sharedPeople: LedgerPerson[] = [
     { id: 'person-me', name: 'Alice', userId: 'user-me', status: 'MEMBER' },
@@ -63,7 +90,12 @@ describe('TransactionForm', () => {
 
   function routeFetch(
     ledger: LedgerSummary,
-    options: { items?: unknown[]; ledgerPeople?: LedgerPerson[] } = {},
+    options: {
+      items?: unknown[];
+      ledgerPeople?: LedgerPerson[];
+      accounts?: unknown[];
+      defaultAccountId?: string | null;
+    } = {},
   ) {
     const items = options.items ?? [];
     fetchMock.mockImplementation((url, init) => {
@@ -76,6 +108,12 @@ describe('TransactionForm', () => {
         );
       if (url.includes('/debts/summary')) {
         return json({ items: [] });
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return json({
+          ledgerId: ledger.id,
+          accountId: options.defaultAccountId === undefined ? 'acc-1' : options.defaultAccountId,
+        });
       }
       if (url.endsWith('/users/me')) {
         return json({
@@ -131,7 +169,7 @@ describe('TransactionForm', () => {
         return json([category]);
       }
       if (url.includes('/accounts')) {
-        return json(accounts);
+        return json(options.accounts ?? accounts);
       }
       return json([ledger]);
     });
@@ -155,6 +193,7 @@ describe('TransactionForm', () => {
   async function openTypeBar(user: ReturnType<typeof userEvent.setup>) {
     await user.click(await screen.findByRole('button', { name: '新增交易' }, WAIT));
     const expense = await screen.findByRole('button', { name: '支出' }, WAIT);
+    await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue('acc-1'), WAIT);
     const bar = expense.parentElement;
     expect(bar).not.toBeNull();
     return bar as HTMLElement;
@@ -272,6 +311,8 @@ describe('TransactionForm', () => {
       ledgerSplit: null,
       settlement: null,
       accountPending: false,
+      differenceOfId: null,
+      difference: null,
       createdAt: '2026-09-15T04:00:00.000Z',
       ...overrides,
     };
@@ -332,18 +373,16 @@ describe('TransactionForm', () => {
     expect(mark).toHaveStyle({ transform: 'translateX(200%)' });
   });
 
-  it('falls back to two slots when the ledger has no transfers', async () => {
-    // 非連動帳本沒有轉帳鈕，方塊的寬度要跟著格數變（支出／收入／借還＝三格），
-    // 否則會蓋到隔壁。
-    routeFetch(plainLedger);
+  it('keeps the transfer tab for shared ledgers too', async () => {
+    routeFetch(sharedLedger);
     const user = userEvent.setup();
 
     render(<App />);
     const bar = await openTypeBar(user);
 
-    expect(within(bar).queryByRole('button', { name: '轉帳' })).not.toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: '轉帳' })).toBeInTheDocument();
     const mark = bar.querySelector('[aria-hidden="true"] > span');
-    expect(mark).toHaveStyle({ width: `${100 / 3}%` });
+    expect(mark).toHaveStyle({ width: `${100 / 4}%` });
 
     await user.click(within(bar).getByRole('button', { name: '收入' }));
 
@@ -471,6 +510,48 @@ describe('TransactionForm', () => {
     expect(screen.getByRole('combobox', { name: '分類' })).toBeInTheDocument();
     expect(labels.slice(2, 6)).toEqual(['帳戶', '名稱', '備註', '分帳']);
     expect(container.textContent).not.toContain('（選填）');
+  });
+
+  it('prefills the record default, excludes temporary accounts, and preserves a manual choice', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    const accountSelect = await screen.findByLabelText('帳戶', {}, WAIT);
+    await waitFor(() => expect(accountSelect).toHaveValue('acc-1'), WAIT);
+    expect(accountSelect).toHaveValue('acc-1');
+    expect(screen.queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
+
+    await user.selectOptions(accountSelect, 'acc-2');
+    queryClient.setQueryData(['record-defaults', trackingLedger.id], {
+      ledgerId: trackingLedger.id,
+      accountId: 'acc-3',
+    });
+
+    expect(accountSelect).toHaveValue('acc-2');
+  });
+
+  it('does not prefill a temporary account as the record default', async () => {
+    routeFetch(trackingLedger, { defaultAccountId: 'acc-temp' });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText('帳戶', {}, WAIT)).toHaveValue('');
   });
 
   it('uses POST /splits for another payer and previews my full share when splitting is off', async () => {

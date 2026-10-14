@@ -53,7 +53,7 @@ export function useLedger(ledgerId: string | null) {
  * 顯示後端訊息。
  */
 
-/** 建立帳本。`tracksBalance` 建立後即定案，之後無法變更。 */
+/** 建立帳本。 */
 export function useCreateLedger() {
   const queryClient = useQueryClient();
 
@@ -67,8 +67,7 @@ export function useCreateLedger() {
 }
 
 /**
- * 帳本改名。**只送 `name`**——`tracksBalance` 帶上去會被後端退成 400
- * `TRACKS_BALANCE_IMMUTABLE`，那是刻意的，不是可以繞過的限制。
+ * 帳本改名只送 `name`，帳本類型建立後不可更改。
  */
 export function useRenameLedger() {
   const queryClient = useQueryClient();

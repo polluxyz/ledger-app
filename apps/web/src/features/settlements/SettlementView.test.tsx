@@ -26,7 +26,6 @@ describe('SettlementView', () => {
     name: '花蓮三日',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: true,
     archivedAt: null,
     role: 'EDITOR',
     createdAt: '2026-10-01T00:00:00.000Z',

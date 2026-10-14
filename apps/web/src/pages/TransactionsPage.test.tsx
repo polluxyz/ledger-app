@@ -25,12 +25,18 @@ describe('Transactions page', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
+  const account = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 88000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
   const counterparty = {
     id: 'counterparty-1',
     name: '小明',
@@ -99,6 +105,9 @@ describe('Transactions page', () => {
       }
       if (url.includes('/categories')) {
         return json([expenseCategory]);
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return json({ ledgerId: 'ledger-1', accountId: account.id });
       }
       if (url.includes('/accounts')) {
         return json([account]);
@@ -520,7 +529,6 @@ describe('Transactions page', () => {
       name: '旅行帳本',
       kind: 'SHARED',
       role: 'EDITOR',
-      tracksBalance: false,
     };
     const archivedLedger = {
       ...sharedLedger,
@@ -576,6 +584,9 @@ describe('Transactions page', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return json({ ledgerId: sharedLedger.id, accountId: account.id });
       }
       if (url.includes('/transactions')) {
         return json({
@@ -633,7 +644,6 @@ describe('Transactions page', () => {
       name: '旅行帳本',
       kind: 'SHARED',
       role: 'EDITOR',
-      tracksBalance: false,
     };
     const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
     const other = { id: 'person-other', name: '小明', userId: 'user-2', status: 'MEMBER' };
@@ -686,7 +696,7 @@ describe('Transactions page', () => {
   });
 
   it('keeps shared summary visible for viewers while hiding write buttons', async () => {
-    const viewerLedger = { ...ledger, kind: 'SHARED', role: 'VIEWER', tracksBalance: false };
+    const viewerLedger = { ...ledger, kind: 'SHARED', role: 'VIEWER' };
     const me = { id: 'person-me', name: 'Alice', userId: 'user-1', status: 'MEMBER' };
     const min = { id: 'person-min', name: '小明', userId: 'user-2', status: 'MEMBER' };
     fetchMock.mockImplementation((url: string) => {
