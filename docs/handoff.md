@@ -6,26 +6,24 @@
 
 ---
 
-## 最新交接（2026-10-13，3g spec 已核可；plan 與 todo 待核可）
+## 最新交接（2026-10-14，3g 已合併並部署；等開發者操作回饋）
 
 ### 現況
 
-- 3f 已合併（#113）並部署到 dev（`ledger_dev` 已 migrate；備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3f_20261007_1056.dump`）。
-- 3g（借還頁改版）先做原型給開發者操作，2026-10-13 開發者說原型告一段落。原型與文件都在分支 **`polluxyz/debts-inline`**（worktree `C:/Users/Administrator/orca/workspaces/ledger-app/debts-inline`，資料庫 `ledger_debts_inline_test`），已 push 到 origin 備份，**還沒開 PR**（PR 用整合分支 `feature/debts-inline` 開，見 plan §0）。這條分支以 `main`（`c801558`）為基底，與 `origin/main` 合併沒有衝突。
-  - `docs/specs/phase-3g-debts-inline.md`：**已核可**（2026-10-13）。含 schema 變更（`DebtEntry.settlesEntryId`）與 API 變更（spec §3、§4），核可即視為同意；套 migration 前仍要把實際 SQL 列給開發者看。
-  - `tasks/phase-3g-plan.md`、`tasks/phase-3g-todo.md`：**待核可**。
-  - `tasks/archive/phase-3g-prototype-notes.md`：原型期間的決定紀錄，已全部併入 spec，PR 時移到 `tasks/archive/`。
-- 開發者的 dev 伺服器在 `web-redesign` worktree，目前 **detached 在原型的 `a23de23`**（不是 `main`）。後端跟 3f 的 `main` 相同，原型只改了前端。
-- Orca Run `run_78a4a8ab6c17`：原型的 worker 都已結束，沒有進行中的任務。紀錄裡的 `coordinator_handle` 是更早的 session，新 session 用 `run-use` 重新綁定。
-- `ledger-split-web` worktree 是協調者寫文件用的（本次交接的 PR 在這裡開），它的 `apps/api/.env(.test)` 指向已刪除的 `ledger_uf_int_test`，要跑 API 前先改。
-- 額度（2026-10-12 晚上）：Codex 週用量 46%；Pi GLM 的**週額度**用完，`fallback-1` 可能還沒恢復，派工前先 `orca account list`，不行就直接用 `fallback-2`（Antigravity）。
+- 3g（借還頁列內展開與四個子分頁）已合併（#115，squash `69a9077`）。驗證數字與 plan 的偏離記在 `tasks/phase-3g-plan.md` §6。
+- 已部署到 dev：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3g_20261013_2042.dump`，migration `20261013110026_debt_entry_settles_entry` 已套用。`web-redesign` worktree detached 在 `69a9077`，API 已 build。
+- 3g 的 worktree、分支、測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_78a4a8ab6c17` 沒有進行中的任務；新 session 用 `run-use` 重新綁定。
+- a@a.com 另有 3 個測試用對象。往來紀錄都是「不記入帳本」，所以不屬於任何帳本，也不動帳戶：
+  - 明哥：借出、還款、再借出，餘額 500。
+  - 房東：借出 93、還 90 以此結清（綁定的差額），餘額 0。測歷史的修改與撤銷。
+  - 阿德：每天借出 10，共 25 筆，餘額 250。測「載入更多」。
+- `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env(.test)` 指向已刪除的資料庫，要跑 API 前先改。
+- 額度（2026-10-13）：Codex 方案已停（`gpt-6-sol` 回「not supported when using Codex with a ChatGPT account」），開發者重新購買前不派 Codex。先用 GLM，用完改 Claude Haiku 5.5 xhigh。
 
 ### 下一步
 
-1. 請開發者核可 `tasks/phase-3g-plan.md` 與 `tasks/phase-3g-todo.md`。
-2. 核可後照 todo 做到合併：G0 開 `feature/debts-inline`、契約、隔離測試（紅燈）→ 第 1 波 5 個 worker → 第 2 波 e2e → PR → CI → 合併。
-3. 合併後問開發者要不要部署到 dev（先 `pg_dump` 備份）；照 memory「做完的分支要關」清 worktree、分支、終端機、測試資料庫（刪除清單先給開發者看，保留 `ledger_dev`、`ledger_test`）。
-4. 還沒回覆的舊問題：改 Vite 設定讓 `packages/shared` 變更後預先打包快取自動失效；要不要加 App 的錯誤邊界（error boundary，畫面出錯時顯示錯誤頁而不是黑畫面）。
+1. 等開發者操作 3g 後的回饋，依回饋開修訂（先改 spec 再改程式）。
+2. 還沒回覆的舊問題：改 Vite 設定讓 `packages/shared` 變更後預先打包快取自動失效；要不要加 App 的錯誤邊界（error boundary，畫面出錯時顯示錯誤頁而不是黑畫面）。
 
 ### 開發者的偏好（不在 spec 裡的）
 
