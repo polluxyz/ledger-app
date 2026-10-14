@@ -293,6 +293,7 @@ export class DebtEntriesService {
     });
   }
 
+  /** 只回傳還在生效的分支；還款回應掛這筆交易，舊版差額紀錄不會混入。 */
   private async differenceOf(tx: Prisma.TransactionClient, transactionId: string | null) {
     if (transactionId === null) return null;
     const branch = await tx.transaction.findFirst({

@@ -179,7 +179,10 @@ export class DebtProposalsService {
    * - 還款：方向已由發起者那筆決定，這裡以接受者的餘額檢查。`resolveRepayment` 算出的方向與
    *   對照表不同，代表接受者的帳上是反方向的欠款（例如他記的是對方欠他），這筆還款在他的帳上
    *   沒有東西可還，回 `NOTHING_TO_REPAY`。
-   * - 免除：接受者欠對方時寫一筆 `FORGIVEN` 讓餘額歸零；沒有欠款就照樣接受、什麼都不寫。
+   * - 免除：接受者欠對方時寫一筆 `FORGIVEN` 讓餘額歸零，並在接受者可寫帳本記收入；
+   *   沒有欠款就照樣接受、什麼都不寫，也不要求帳本。
+   * - 結清：接受者用自己的寫入前餘額決定清掉的欠款，再共用分支函式記實收差額，
+   *   讓對方的少收對應到自己這邊的少付。
    */
   private async acceptCreate(
     tx: Prisma.TransactionClient,

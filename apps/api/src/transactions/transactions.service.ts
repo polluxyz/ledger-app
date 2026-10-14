@@ -935,7 +935,12 @@ export class TransactionsService {
     return created.id;
   }
 
-  /** 結清分支繼承還款的帳本、帳戶與日期，繞過一般收支的分類必填規則。 */
+  /**
+   * 結清分支繼承還款的帳本、帳戶、建立者與日期，繞過一般收支的分類必填規則：
+   * 它不是另一筆使用者選類別的交易，而是還款實收與欠款額之間的差額。
+   * `differenceOfId` 有 `@unique`，同一筆還款不會有第二個分支；在呼叫端交易內寫入，
+   * 才能與還款紀錄一起提交或回滾。
+   */
   async createDebtDifference(
     client: Prisma.TransactionClient,
     repaymentId: string,
@@ -961,7 +966,10 @@ export class TransactionsService {
     return row.id;
   }
 
-  /** 免除沖銷的是往來欠款，沒有金流經過帳戶，也沒有分類。 */
+  /**
+   * 免除沖銷往來欠款：免除別人是支出，被免除是收入，沒有金流經過帳戶，也沒有分類。
+   * 呼叫端已按寫入者檢查帳本權限；這裡沿用同一個資料庫交易，避免留下孤立的呆帳交易。
+   */
   async createDebtForgiveness(
     client: Prisma.TransactionClient,
     input: {
