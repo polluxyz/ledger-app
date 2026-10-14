@@ -55,15 +55,13 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   @IsISO8601()
   date!: string;
 
-  // 以下三個欄位在型別上都是選填，但實際上是**條件必填**——該不該填取決於交易
-  // 型別與帳本的 tracksBalance。這種「看另一個欄位而定」的規則 class-validator
-  // 表達不了（它看不到帳本），因此一律由 TransactionsService 把關並回 400。
+  // 以下三個欄位在型別上都是選填，但實際上依交易型別與付款人決定必填與否。
+  // 這種跨欄位規則交給 TransactionsService 驗證並回 400。
   //
-  // | 帳本   | 型別       | categoryId | accountId | toAccountId |
-  // | ------ | ---------- | ---------- | --------- | ----------- |
-  // | 連動   | 支出／收入 | 必填       | 必填      | 不可填      |
-  // | 連動   | 轉帳       | 不可填     | 必填      | 必填        |
-  // | 非連動 | 支出／收入 | 必填       | 不可填    | 不可填      |
+  // | 型別       | categoryId | accountId       | toAccountId |
+  // | ---------- | ---------- | --------------- | ----------- |
+  // | 支出／收入 | 必填       | 本人付時必填    | 不可填      |
+  // | 轉帳       | 不可填     | 必填            | 必填        |
   @ApiPropertyOptional({ format: 'uuid', description: 'Required unless the type is TRANSFER.' })
   @IsOptional()
   @IsUUID()

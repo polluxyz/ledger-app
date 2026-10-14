@@ -13,7 +13,7 @@ describe('TransactionsService', () => {
   let prisma: {
     ledger: { findUnique: jest.Mock };
     category: { findUnique: jest.Mock };
-    account: { findUnique: jest.Mock };
+    account: { findUnique: jest.Mock; findFirst: jest.Mock };
     debtEntry: { findUnique: jest.Mock };
     ledgerSettlement: { findUnique: jest.Mock };
     ledgerPerson: { findUnique: jest.Mock };
@@ -59,21 +59,21 @@ describe('TransactionsService', () => {
     creator: { id: creatorId, name: 'Alice' },
   };
 
-  /** 預設：連動帳本、分類與帳戶都合法且屬於 creatorId。 */
+  /** 預設：分類與帳戶都合法且屬於 creatorId。 */
   function allowEverything(): void {
-    prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+    prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
     prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', ledgerId, type: 'EXPENSE' });
-    prisma.account.findUnique.mockResolvedValue({ userId: creatorId });
+    prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: false });
     prisma.transaction.create.mockResolvedValue(joined);
   }
 
   beforeEach(() => {
     prisma = {
       ledger: {
-        findUnique: jest.fn().mockResolvedValue({ kind: 'PERSONAL', tracksBalance: true }),
+        findUnique: jest.fn().mockResolvedValue({ kind: 'PERSONAL' }),
       },
       category: { findUnique: jest.fn() },
-      account: { findUnique: jest.fn() },
+      account: { findUnique: jest.fn(), findFirst: jest.fn() },
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerPerson: { findUnique: jest.fn().mockResolvedValue({ id: 'person-1' }) },
@@ -121,6 +121,8 @@ describe('TransactionsService', () => {
       ledgerSplit: null,
       settlement: null,
       accountPending: false,
+      differenceOfId: null,
+      difference: null,
       createdAt: joined.createdAt.toISOString(),
     });
   });
@@ -153,7 +155,7 @@ describe('TransactionsService', () => {
   // ── 帳戶的條件必填規則 ───────────────────────────────────────────────────
 
   describe('account rules', () => {
-    it('400s ACCOUNT_REQUIRED when a tracking ledger gets no account', async () => {
+    it('400s ACCOUNT_REQUIRED when a transaction has no account', async () => {
       allowEverything();
 
       await expect(
@@ -162,29 +164,13 @@ describe('TransactionsService', () => {
       expect(prisma.transaction.create).not.toHaveBeenCalled();
     });
 
-    it('400s ACCOUNT_NOT_ALLOWED when a non-tracking ledger is given an account', async () => {
+    it('rejects a manually selected temporary account', async () => {
       allowEverything();
-      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: false });
-
+      prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: true });
       await expect(service.create(ledgerId, creatorId, input)).rejects.toMatchObject({
         status: 400,
-        errorCode: 'ACCOUNT_NOT_ALLOWED',
+        errorCode: 'TEMPORARY_ACCOUNT_NOT_SELECTABLE',
       });
-    });
-
-    it('accepts a transaction with no account in a non-tracking ledger', async () => {
-      allowEverything();
-      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: false });
-      prisma.transaction.create.mockResolvedValue({ ...joined, account: null });
-
-      const result = await service.create(ledgerId, creatorId, {
-        ...input,
-        accountId: undefined,
-      });
-
-      expect(result.account).toBeNull();
-      // 非連動帳本毋須查帳戶，也就不會有跨使用者的疑慮。
-      expect(prisma.account.findUnique).not.toHaveBeenCalled();
     });
 
     it("404s for someone else's account rather than 403", async () => {
@@ -653,9 +639,12 @@ describe('TransactionsService', () => {
 
   describe('createDebtTransaction', () => {
     it('writes a debt transaction with no category, using the account rules', async () => {
-      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
-      prisma.account.findUnique.mockResolvedValue({ userId: creatorId });
-      const client = { transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-9' }) } };
+      prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
+      prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: false });
+      const client = {
+        account: prisma.account,
+        transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-9' }) },
+      };
 
       const id = await service.createDebtTransaction(client as never, {
         ledgerId,
@@ -680,8 +669,8 @@ describe('TransactionsService', () => {
       );
     });
 
-    it('requires an account in a ledger that tracks balances', async () => {
-      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+    it('requires an account for a debt transaction', async () => {
+      prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
       const client = { transaction: { create: jest.fn() } };
 
       await expect(
@@ -697,9 +686,9 @@ describe('TransactionsService', () => {
     });
 
     it("refuses someone else's account with 404", async () => {
-      prisma.ledger.findUnique.mockResolvedValue({ tracksBalance: true });
+      prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
       prisma.account.findUnique.mockResolvedValue({ userId: otherUserId });
-      const client = { transaction: { create: jest.fn() } };
+      const client = { account: prisma.account, transaction: { create: jest.fn() } };
 
       await expect(
         service.createDebtTransaction(client as never, {

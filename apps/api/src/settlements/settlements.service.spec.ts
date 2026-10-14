@@ -21,7 +21,7 @@ describe('SettlementsService', () => {
   let service: SettlementsService;
   let tx: {
     ledger: { findUnique: jest.Mock };
-    account: { findUnique: jest.Mock };
+    account: { findUnique: jest.Mock; findFirst: jest.Mock };
     transaction: { create: jest.Mock; update: jest.Mock };
     ledgerSettlement: { create: jest.Mock; update: jest.Mock };
     $queryRawUnsafe: jest.Mock;
@@ -53,8 +53,8 @@ describe('SettlementsService', () => {
     settlementId: 'settlement-1',
     fromPersonId: bob.id,
     toPersonId: alice.id,
-    accountId: null,
-    toAccountId: 'account-alice',
+    accountId: 'temporary-bob-user',
+    toAccountId: 'temporary-alice-user',
     amount: 50000,
     date: new Date(date),
     note: null,
@@ -68,10 +68,14 @@ describe('SettlementsService', () => {
       [guest.id, guest],
     ]);
     tx = {
-      ledger: { findUnique: jest.fn().mockResolvedValue({ kind: 'SHARED', tracksBalance: true }) },
+      ledger: { findUnique: jest.fn().mockResolvedValue({ kind: 'SHARED' }) },
       account: {
         findUnique: jest.fn().mockImplementation(({ where }: { where: { id: string } }) => ({
           userId: where.id === 'account-foreign' ? 'bob-user' : callerId,
+          isTemporary: false,
+        })),
+        findFirst: jest.fn().mockImplementation(({ where }: { where: { userId: string } }) => ({
+          id: `temporary-${where.userId}`,
         })),
       },
       transaction: {
@@ -86,7 +90,7 @@ describe('SettlementsService', () => {
     };
     prisma = {
       $transaction: jest.fn((callback: (client: unknown) => Promise<unknown>) => callback(tx)),
-      ledger: { findUnique: jest.fn().mockResolvedValue({ kind: 'SHARED', tracksBalance: true }) },
+      ledger: { findUnique: jest.fn().mockResolvedValue({ kind: 'SHARED' }) },
     };
     people = {
       findCallerPerson: jest.fn().mockResolvedValue(alice),
@@ -124,7 +128,7 @@ describe('SettlementsService', () => {
         fromAccountId: 'account-alice',
         toAccountId: undefined,
         expectedAccountId: 'account-alice',
-        expectedToAccountId: null,
+        expectedToAccountId: 'temporary-bob-user',
       },
       {
         label: 'the caller receives and selects only their account',
@@ -132,7 +136,7 @@ describe('SettlementsService', () => {
         toPersonId: alice.id,
         fromAccountId: undefined,
         toAccountId: 'account-alice',
-        expectedAccountId: null,
+        expectedAccountId: 'temporary-bob-user',
         expectedToAccountId: 'account-alice',
       },
       {
@@ -141,8 +145,8 @@ describe('SettlementsService', () => {
         toPersonId: charlie.id,
         fromAccountId: undefined,
         toAccountId: undefined,
-        expectedAccountId: null,
-        expectedToAccountId: null,
+        expectedAccountId: 'temporary-bob-user',
+        expectedToAccountId: 'temporary-charlie-user',
       },
       {
         label: 'a guest pays and the caller selects the receiving account',
@@ -203,7 +207,7 @@ describe('SettlementsService', () => {
       expect(tx.ledgerSettlement.create).not.toHaveBeenCalled();
     });
 
-    it('requires an account when the caller is either side in a tracking ledger', async () => {
+    it('requires an account when the caller is either side', async () => {
       await expect(
         service.create(ledgerId, callerId, { toPersonId: bob.id, amount: 100, date }),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_REQUIRED' });
@@ -243,26 +247,6 @@ describe('SettlementsService', () => {
 
       expect(tx.transaction.create).not.toHaveBeenCalled();
     });
-
-    it('rejects account ids for a non-tracking ledger and accepts a settlement without them', async () => {
-      tx.ledger.findUnique.mockResolvedValue({ kind: 'SHARED', tracksBalance: false });
-      await expect(
-        service.create(ledgerId, callerId, {
-          toPersonId: bob.id,
-          amount: 100,
-          date,
-          fromAccountId: 'account-alice',
-        }),
-      ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_NOT_ALLOWED' });
-      expect(tx.transaction.create).not.toHaveBeenCalled();
-
-      await service.create(ledgerId, callerId, { toPersonId: bob.id, amount: 100, date });
-      expect(tx.transaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ accountId: null, toAccountId: null }) as unknown,
-        }),
-      );
-    });
   });
 
   describe('updates and account completion', () => {
@@ -289,7 +273,7 @@ describe('SettlementsService', () => {
 
     it('requires the caller account when changing a side to the caller', async () => {
       tx.$queryRawUnsafe.mockResolvedValueOnce([
-        { ...lockedSettlement, toPersonId: charlie.id, toAccountId: null },
+        { ...lockedSettlement, toPersonId: charlie.id, toAccountId: 'temporary-charlie-user' },
       ]);
       await expect(
         service.update(ledgerId, 'settlement-1', callerId, { fromPersonId: alice.id }),
@@ -435,12 +419,12 @@ describe('SettlementsService', () => {
       // 範圍與轉換重用交易列表：這裡不另外查結清，確保遮蔽規則只有一份。
       expect(prisma.ledger.findUnique).toHaveBeenCalledWith({
         where: { id: ledgerId },
-        select: { kind: true, tracksBalance: true },
+        select: { kind: true },
       });
     });
 
     it('returns 404 for personal ledgers before touching the transaction list', async () => {
-      prisma.ledger.findUnique.mockResolvedValueOnce({ kind: 'PERSONAL', tracksBalance: true });
+      prisma.ledger.findUnique.mockResolvedValueOnce({ kind: 'PERSONAL' });
 
       await expect(service.list(ledgerId, callerId, {}, 'MEMBER')).rejects.toMatchObject({
         constructor: AppException,
@@ -452,7 +436,7 @@ describe('SettlementsService', () => {
   });
 
   it('returns 404 for personal ledgers', async () => {
-    tx.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL', tracksBalance: true });
+    tx.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
 
     await expect(service.summary(ledgerId)).rejects.toMatchObject({
       constructor: AppException,
