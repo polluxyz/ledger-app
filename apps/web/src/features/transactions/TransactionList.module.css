@@ -52,6 +52,10 @@
   grid-template-rows: 3.25rem auto;
 }
 
+.rowWithDifference {
+  border-bottom: 0;
+}
+
 .clickable {
   cursor: pointer;
 }
@@ -140,6 +144,36 @@
   color: var(--color-text);
   font-size: var(--text-xs);
   font-weight: 600;
+}
+
+.clearedBadge {
+  flex: 0 0 auto;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius);
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.differenceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 2rem;
+  padding: var(--space-xs) var(--space-md);
+  padding-left: calc(var(--space-md) + 2.25rem + var(--space-sm));
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.differenceBranch {
+  color: var(--color-text-muted);
+}
+
+.differenceAmount {
+  font-variant-numeric: tabular-nums;
 }
 
 .payer {

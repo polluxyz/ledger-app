@@ -19,7 +19,6 @@ describe('DebtsView', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: false,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -78,6 +77,15 @@ describe('DebtsView', () => {
       }
       if (parsedUrl.pathname.endsWith('/counterparties/counterparty-1')) {
         return json(counterpartyItems[0]);
+      }
+      if (parsedUrl.pathname.endsWith('/ledgers')) {
+        return json([ledger]);
+      }
+      if (parsedUrl.pathname.endsWith('/accounts')) {
+        return json([]);
+      }
+      if (parsedUrl.pathname.endsWith('/users/me/record-defaults')) {
+        return json({ ledgerId: 'ledger-1', accountId: null });
       }
       return json({
         items: counterpartyItems,

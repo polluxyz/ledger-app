@@ -56,6 +56,8 @@ describe('TransactionList', () => {
       ledgerSplit: null,
       settlement: null,
       accountPending: false,
+      differenceOfId: null,
+      difference: null,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };
@@ -423,17 +425,56 @@ describe('TransactionList', () => {
     expect(listRow.querySelector('[class*="avatar"]')).toBeNull();
   });
 
-  it('calls account fill without opening edit from the pending label', async () => {
+  it('calls account fill without opening edit from the temporary-account label', async () => {
     const user = userEvent.setup();
     const transaction = makeTransaction({ id: 'pending-account', accountPending: true });
     const onEdit = vi.fn();
     const onFillAccount = vi.fn();
     renderList({ transactions: [transaction], onEdit, onFillAccount });
 
-    await user.click(screen.getByRole('button', { name: '待補' }));
+    await user.click(screen.getByRole('button', { name: '臨時帳戶' }));
 
     expect(onFillAccount).toHaveBeenCalledWith(transaction);
     expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('renders repayment differences as noninteractive child rows with a cleared badge', async () => {
+    const user = userEvent.setup();
+    const onEditDebtTransaction = vi.fn();
+    const collect = makeTransaction({
+      id: 'collect-with-difference',
+      type: 'COLLECT',
+      category: null,
+      debt: {
+        entryId: 'entry-collect',
+        counterpartyId: 'cp-1',
+        counterpartyName: '小明',
+        kind: 'COLLECT',
+        paired: false,
+        note: null,
+      },
+      difference: { id: 'difference-collect', type: 'EXPENSE', amount: 300 },
+    });
+    const collectMore = makeTransaction({
+      id: 'collect-more',
+      type: 'COLLECT',
+      category: null,
+      debt: { ...collect.debt!, entryId: 'entry-more' },
+      difference: { id: 'difference-more', type: 'INCOME', amount: 500 },
+    });
+    renderList({
+      transactions: [collect, collectMore],
+      onEditDebtTransaction,
+    });
+
+    expect(within(row(0)).getByText('還清')).toBeInTheDocument();
+    expect(row(1)).toHaveTextContent('└−$3少收');
+    expect(row(3)).toHaveTextContent('└+$5多收');
+    for (const branch of [row(1), row(3)]) {
+      expect(branch.querySelectorAll('button')).toHaveLength(0);
+      await user.click(branch);
+    }
+    expect(onEditDebtTransaction).not.toHaveBeenCalled();
   });
 
   describe('entries linked to a counterparty', () => {
@@ -524,6 +565,31 @@ describe('TransactionList', () => {
       expect(screen.getAllByText('餐飲')).toHaveLength(1);
       expect(screen.getByText('代收 · 小明')).toBeInTheDocument();
       expect(screen.getByText('薪資')).toBeInTheDocument();
+    });
+
+    it('uses the shared forgiveness names and generic icons', () => {
+      renderList({
+        transactions: [
+          makeTransaction({
+            id: 'forgive',
+            type: 'EXPENSE',
+            category: null,
+            debt: { ...debt, kind: 'FORGIVE' },
+          }),
+          makeTransaction({
+            id: 'forgiven',
+            type: 'INCOME',
+            category: null,
+            debt: { ...debt, kind: 'FORGIVEN' },
+          }),
+        ],
+      });
+
+      expect(within(row(0)).getByText('呆帳')).toBeInTheDocument();
+      expect(within(row(1)).getByText('債務免除')).toBeInTheDocument();
+      for (const listRow of [row(0), row(1)]) {
+        expect(listRow.querySelector('[data-category-icon="other"]')).toBeInTheDocument();
+      }
     });
 
     it('keeps an unlinked debt transaction unclickable and without a delete action', async () => {

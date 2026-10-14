@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DebtEntry } from '@ledger/shared';
 import rowStyles from './DebtRow.module.css';
+import styles from './DebtEntriesList.module.css';
 import miniStyles from './MiniOweArrow.module.css';
 import { DebtEntriesList } from './DebtEntriesList';
 
@@ -26,6 +27,7 @@ describe('DebtEntriesList', () => {
     transactionId: 'txn-1',
     splitId: null,
     settlesEntryId: null,
+    difference: null,
     sync: 'NONE',
     paired: false,
     createdAt: '2026-09-01T04:00:00.000Z',
@@ -217,13 +219,16 @@ describe('DebtEntriesList', () => {
     expect(preview.querySelectorAll(`.${miniStyles.mini}`)).toHaveLength(1);
   });
 
-  it('includes the bound settlement difference in the undo preview of a repayment', async () => {
+  it('shows a repayment difference under the settled row without its own actions', async () => {
     const user = userEvent.setup();
-    // 房東：借出 93、還 90 以此結清（差額 −3），餘額 0。撤銷還款時後端連差額一起撤，回到 93。
     renderList(
       [
-        entry({ id: 'settle', kind: 'SETTLEMENT', delta: -300, settlesEntryId: 'repay' }),
-        entry({ id: 'repay', kind: 'COLLECT', delta: -9_000 }),
+        entry({
+          id: 'repay',
+          kind: 'COLLECT',
+          delta: -9_300,
+          difference: { transactionId: 'difference-1', type: 'EXPENSE', amount: 300 },
+        }),
         entry({ id: 'lend', kind: 'LEND', delta: 9_300 }),
       ],
       true,
@@ -231,7 +236,13 @@ describe('DebtEntriesList', () => {
       0,
     );
 
-    const repayment = screen.getAllByRole('listitem')[1]!;
+    const repayment = screen.getAllByRole('listitem')[0]!;
+    expect(within(repayment).getByText('還清')).toBeInTheDocument();
+    const differenceRow = repayment.querySelector(`.${styles.differenceRow}`) as HTMLElement;
+    expect(differenceRow).toHaveTextContent('└−$3少收');
+    expect(
+      within(differenceRow).queryByRole('button', { name: '更多操作' }),
+    ).not.toBeInTheDocument();
     const menu = await openMenu(repayment, user);
     await user.click(within(menu).getByRole('menuitem', { name: '撤銷' }));
 

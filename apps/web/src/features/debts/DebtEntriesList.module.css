@@ -44,6 +44,33 @@
   white-space: nowrap;
 }
 
+.clearedBadge {
+  flex: none;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.differenceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0 2rem calc(var(--space-sm) + var(--space-xs)) calc(3rem + 6.125rem + var(--space-xs));
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.differenceBranch {
+  color: var(--color-border-strong, var(--color-text-muted));
+}
+
+.differenceAmount {
+  font-variant-numeric: tabular-nums;
+}
+
 .syncLabel {
   padding: 0 var(--space-xs);
   border: 1px solid var(--color-border);

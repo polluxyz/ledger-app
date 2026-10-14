@@ -13,6 +13,7 @@ import type {
   CreateDebtEntryResponse,
   DebtEntry,
   DebtEntrySection,
+  ForgiveCounterpartyRequest,
   ListCounterpartiesQuery,
   ListDebtEntriesQuery,
   MergeCounterpartyRequest,
@@ -134,8 +135,7 @@ function invalidateAfterWrite(queryClient: QueryClient): void {
 }
 
 /**
- * 記一筆往來。`record` 一定要明確給（物件或 `null`）——後端不再有「省略就沿用」的行為，
- * 省略會得到 400（`phase-3b-debts.md` §5.2）。
+ * 記一筆往來。`record` 一定要提供帳本與帳戶（3h 決策 163）。
  */
 export function useCreateDebtEntry() {
   const queryClient = useQueryClient();
@@ -196,9 +196,13 @@ export function useDeleteCounterparty() {
 export function useForgiveCounterparty() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (counterpartyId: string) =>
+    mutationFn: ({
+      counterpartyId,
+      ...input
+    }: { counterpartyId: string } & ForgiveCounterpartyRequest) =>
       apiRequest<CreateDebtEntryResponse>(`/counterparties/${counterpartyId}/forgive`, {
         method: 'POST',
+        body: input,
       }),
     onSuccess: () => invalidateAfterWrite(queryClient),
   });
