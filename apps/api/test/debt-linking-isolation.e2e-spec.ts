@@ -38,6 +38,10 @@ describe('Debt linking isolation (e2e)', () => {
 
   const server = () => httpServer(app);
 
+  function record(who: Person) {
+    return { ledgerId: who.ledgerId, accountId: who.cashId };
+  }
+
   let alice: Person;
   let bob: Person;
   let carol: Person;
@@ -82,7 +86,7 @@ describe('Debt linking isolation (e2e)', () => {
       await request(server())
         .post(`/api/debt-proposals/${proposal.id}/accept`)
         .set(auth(carol.token))
-        .send({ record: null })
+        .send({ record: record(carol) })
         .expect(404);
       await request(server())
         .post(`/api/debt-proposals/${proposal.id}/decline`)
@@ -139,7 +143,7 @@ describe('Debt linking isolation (e2e)', () => {
       await request(server())
         .post(`/api/debt-proposals/${proposal.id}/accept`)
         .set(auth(alice.token))
-        .send({ record: null })
+        .send({ record: record(alice) })
         .expect(403);
       await request(server())
         .post(`/api/debt-proposals/${proposal.id}/decline`)
@@ -269,7 +273,7 @@ describe('Debt linking isolation (e2e)', () => {
           kind: 'LEND',
           amount: 50,
           date: DAY,
-          record: null,
+          record: record(alice),
         })
         .expect(201);
       ({ aCounterpartyId: aliceSide, bCounterpartyId: bobSide } = await linkPair(

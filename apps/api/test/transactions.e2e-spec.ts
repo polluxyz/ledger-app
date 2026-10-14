@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { Account, Category, LedgerSummary, Paginated, Transaction } from '@ledger/shared';
+import { Account, Category, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
@@ -150,39 +150,13 @@ describe('Transactions (e2e)', () => {
     expect(foreign.status).toBe(404);
   });
 
-  it('forbids an account in a non-tracking ledger (SC-C6)', async () => {
+  it('rejects the removed tracksBalance option when creating a ledger', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
-    const accountId = await firstAccountId(app, alice.token);
-
     const ledger = await request(server())
       .post('/api/ledgers')
       .set(auth(alice.token))
       .send({ name: '出遊分帳', tracksBalance: false });
-    const ledgerId = (ledger.body as LedgerSummary).id;
-    expect((ledger.body as LedgerSummary).tracksBalance).toBe(false);
-    const cat = await categoryId(alice.token, ledgerId, 'EXPENSE');
-
-    const withAccount = await request(server())
-      .post(`/api/ledgers/${ledgerId}/transactions`)
-      .set(auth(alice.token))
-      .send({
-        type: 'EXPENSE',
-        amount: 3000,
-        date: '2026-08-13T00:00:00.000Z',
-        categoryId: cat,
-        accountId,
-      });
-    expect(withAccount.status).toBe(400);
-    expect((withAccount.body as { errorCode: string }).errorCode).toBe('ACCOUNT_NOT_ALLOWED');
-
-    // 不帶帳戶則正常建立，且不影響任何餘額。
-    const without = await request(server())
-      .post(`/api/ledgers/${ledgerId}/transactions`)
-      .set(auth(alice.token))
-      .send({ type: 'EXPENSE', amount: 3000, date: '2026-08-13T00:00:00.000Z', categoryId: cat });
-    expect(without.status).toBe(201);
-    expect((without.body as Transaction).account).toBeNull();
-    expect(await balanceOf(alice.token, accountId)).toBe(0);
+    expect(ledger.status).toBe(400);
   });
 
   it('enforces the transfer rules (SC-C7)', async () => {

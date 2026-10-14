@@ -63,7 +63,7 @@ describe('Debt linking (e2e)', () => {
     return request(server())
       .post('/api/debt-entries')
       .set(auth(who.token))
-      .send({ date: DAY, record: null, ...body });
+      .send({ date: DAY, record: record(who), ...body });
   }
 
   async function entries(who: Person, counterpartyId: string): Promise<DebtEntry[]> {
@@ -101,11 +101,11 @@ describe('Debt linking (e2e)', () => {
       .expect(200);
   }
 
-  /** Alice 借出、Bob 接受（不記入帳本），雙方配對。回傳 Alice 那筆。 */
+  /** Alice 借出、Bob 記進自己的帳戶後接受，雙方配對。回傳 Alice 那筆。 */
   async function syncedLend(amount: number): Promise<DebtEntry> {
     const res = await post(alice, { counterparty: { id: aliceSide }, kind: 'LEND', amount });
     expect(res.status).toBe(201);
-    await accept(bob, (await incoming(bob)).id, { record: null }).then((r) =>
+    await accept(bob, (await incoming(bob)).id, { record: record(bob) }).then((r) =>
       expect(r.status).toBe(200),
     );
     return (res.body as { entries: DebtEntry[] }).entries[0]!;
@@ -511,7 +511,9 @@ describe('Debt linking (e2e)', () => {
 
       const proposal = await incoming(alice);
       expect(proposal.entryKind).toBe('COLLECT');
-      await accept(alice, proposal.id, { record: null }).then((r) => expect(r.status).toBe(200));
+      await accept(alice, proposal.id, { record: record(alice) }).then((r) =>
+        expect(r.status).toBe(200),
+      );
 
       expect((await entries(alice, aliceSide))[0]).toMatchObject({ kind: 'COLLECT', delta: -120 });
       expect(await balance(alice, aliceSide)).toBe(0);
@@ -539,7 +541,7 @@ describe('Debt linking (e2e)', () => {
 
       await post(alice, { counterparty: { id: aliceSide }, kind: 'REPAYMENT', amount: 30 });
       const nothing = await incoming(bob);
-      const refused = await accept(bob, nothing.id, { record: null });
+      const refused = await accept(bob, nothing.id, { record: record(bob) });
       expect(refused.status).toBe(409);
       expect((refused.body as { errorCode: string }).errorCode).toBe('NOTHING_TO_REPAY');
       expect((await incoming(bob)).id).toBe(nothing.id);
@@ -550,7 +552,7 @@ describe('Debt linking (e2e)', () => {
       expect(await balance(alice, aliceSide)).toBe(130);
       expect(await balance(bob, bobSide)).toBe(-60);
 
-      // Alice 收 50 並以此結清：Alice 補 SETTLEMENT −80；Bob 用自己的 −60 算：REPAY +50、SETTLEMENT +10。
+      // Alice 收 50 並以此結清；Bob 的還款清掉 −60，差額 10 記成還款的收入分支。
       await post(alice, {
         counterparty: { id: aliceSide },
         kind: 'REPAYMENT',
@@ -559,20 +561,17 @@ describe('Debt linking (e2e)', () => {
       }).then((r) => expect(r.status).toBe(201));
       const settle = await incoming(bob);
       expect(settle).toMatchObject({ entryKind: 'REPAY', amount: 50, settle: true });
-      await accept(bob, settle.id, { record: null }).then((r) => expect(r.status).toBe(200));
+      await accept(bob, settle.id, { record: record(bob) }).then((r) => expect(r.status).toBe(200));
 
       expect(await balance(alice, aliceSide)).toBe(0);
       expect(await balance(bob, bobSide)).toBe(0);
-      const bobKinds = (await entries(bob, bobSide)).map((e) => [e.kind, e.delta]);
-      expect(bobKinds).toEqual(
-        expect.arrayContaining([
-          ['REPAY', 50],
-          ['SETTLEMENT', 10],
-        ]),
-      );
+      const bobEntries = await entries(bob, bobSide);
+      const bobRepayment = bobEntries.find((entry) => entry.kind === 'REPAY')!;
+      expect(bobRepayment).toMatchObject({ difference: { type: 'INCOME', amount: 10 } });
+      expect(bobEntries.some((entry) => entry.kind === 'SETTLEMENT')).toBe(false);
     });
 
-    it('SC-K9: forgiveness clears only what the recipient owes, without a transaction', async () => {
+    it('SC-K9: forgiveness records bad debt and recipient income transactions', async () => {
       await linkAliceAndBob();
       await syncedLend(50);
       // Bob 還 20，Alice 拒絕：Alice +50、Bob −30。
@@ -582,16 +581,29 @@ describe('Debt linking (e2e)', () => {
       await request(server())
         .post(`/api/counterparties/${aliceSide}/forgive`)
         .set(auth(alice.token))
+        .send({ ledgerId: alice.ledgerId })
         .expect(201);
       const proposal = await incoming(bob);
       expect(proposal).toMatchObject({ entryKind: 'FORGIVEN', amount: 50 });
-      const withRecord = await accept(bob, proposal.id, { record: null });
+      const withRecord = await accept(bob, proposal.id, { record: record(bob) });
       expect(withRecord.status).toBe(400);
-      await accept(bob, proposal.id).then((r) => expect(r.status).toBe(200));
+      await accept(bob, proposal.id, { record: { ledgerId: bob.ledgerId } }).then((r) =>
+        expect(r.status).toBe(200),
+      );
 
       // 免除的日期是「現在」，不一定排在固定測試日期的前面，所以依種類找。
       const forgiven = (await entries(bob, bobSide)).find((e) => e.kind === 'FORGIVEN');
-      expect(forgiven).toMatchObject({ kind: 'FORGIVEN', delta: 30, transactionId: null });
+      expect(forgiven).toMatchObject({ kind: 'FORGIVEN', delta: 30 });
+      const mirrored = await request(server())
+        .get(`/api/ledgers/${bob.ledgerId}/transactions/${forgiven!.transactionId}`)
+        .set(auth(bob.token))
+        .expect(200);
+      expect(mirrored.body as Transaction).toMatchObject({
+        type: 'INCOME',
+        amount: 30,
+        account: null,
+        category: null,
+      });
       expect(await balance(bob, bobSide)).toBe(0);
     });
   });
@@ -802,8 +814,8 @@ describe('Debt linking (e2e)', () => {
       const proposal = await incoming(bob);
 
       const results = await Promise.all([
-        accept(bob, proposal.id, { record: null }),
-        accept(bob, proposal.id, { record: null }),
+        accept(bob, proposal.id, { record: record(bob) }),
+        accept(bob, proposal.id, { record: record(bob) }),
       ]);
       expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
       expect(await entries(bob, bobSide)).toHaveLength(1);

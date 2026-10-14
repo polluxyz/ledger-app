@@ -17,7 +17,7 @@ import { auth, person, type Person } from './linking-utils';
 /**
  * 3g 的授權與資料隔離（spec `phase-3g-debts-inline.md` SC-G7）。協調者在實作前寫好，先看到紅燈。
  *
- * 新增的查詢參數與端點只能縮小範圍，不能讓人讀到原本讀不到的東西：
+ * 新增的查詢參數與端點只能縮小範圍，不能讓人讀到原本讀不到的東西；借還資料都記進建立者自己的現金：
  * - 往來紀錄：別人的對象帶 `section` 一律 404；`personalNonZero`、`hasHistory` 只在自己的對象裡篩。
  * - 結清清單 `GET /ledgers/{id}/settlements`：從沒加入過的人 404；已退出的人只看到自己是任一方
  *   的結清，分頁也放寬不了；退出的人改或撤銷結清一律被擋，資料不變。
@@ -56,14 +56,14 @@ describe('Debts inline isolation (e2e)', () => {
       kind: 'LEND',
       amount: 9300,
       date: DAY,
-      record: null,
+      record: { ledgerId: who.ledgerId, accountId: who.cashId },
     });
     await postEntry(who, {
       counterparty: { id: lent.counterparty.id },
       kind: 'REPAYMENT',
       amount: 9300,
       date: LATER,
-      record: null,
+      record: { ledgerId: who.ledgerId, accountId: who.cashId },
     });
     return lent.counterparty;
   }
@@ -75,7 +75,7 @@ describe('Debts inline isolation (e2e)', () => {
       kind: 'LEND',
       amount: 50000,
       date: DAY,
-      record: null,
+      record: { ledgerId: who.ledgerId, accountId: who.cashId },
     });
     return lent.counterparty;
   }
