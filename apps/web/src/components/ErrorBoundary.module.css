@@ -1,0 +1,25 @@
+/*
+ * 錯誤頁（ErrorBoundary）。內容區版本留在中間欄裡，側欄與頂列照常可用；
+ * 占滿視窗的版本是最外層的最後防線，那時連外殼都沒有，所以自己帶底色。
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-2xl) var(--space-md);
+  text-align: center;
+}
+
+.fullScreen {
+  composes: page;
+  min-height: 100vh;
+  justify-content: center;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+}

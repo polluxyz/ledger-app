@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from './app/routes';
 import { AppSidebar } from './app/AppSidebar';
 import { AppTopBar } from './app/AppTopBar';
+import { PageErrorBoundary } from './app/PageErrorBoundary';
 import { PageToolbar } from './app/PageToolbar';
 import { AppProviders } from './app/providers';
 import { RightPanel } from './app/RightPanel';
@@ -22,6 +23,9 @@ import styles from './App.module.css';
  * 中間欄最上方是橫條（SC-38）。2026-10-07 起它空著（保留給之後的 AI 功能），
  * 帳本切換與各頁的主要按鈕由頁面直接放進自己的內容裡。
  *
+ * 頁面內容包在 `PageErrorBoundary` 裡：某一頁渲染出錯時只換掉中間欄，側欄還能切到
+ * 別頁，切頁就恢復。
+ *
  * 窄螢幕的浮動選單狀態放在這一層：**觸發鈕在頂列、面板是側邊欄**，兩個元件
  * 各自持有一半，狀態只能放在它們共同的父層。`useDisclosure` 不依賴任何
  * Provider，所以擺在這裡不需要多包一層元件。
@@ -40,7 +44,9 @@ export default function App() {
               <main className={styles.main}>
                 <PageToolbar />
                 <div className={styles.content}>
-                  <AppRoutes />
+                  <PageErrorBoundary>
+                    <AppRoutes />
+                  </PageErrorBoundary>
                 </div>
               </main>
               <RightPanel />
