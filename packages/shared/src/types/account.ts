@@ -32,6 +32,11 @@ export interface Account {
    * 或刪除（409 `TEMPORARY_ACCOUNT_LOCKED`）。帳戶頁只在它裡面有交易時才顯示（W174）。
    */
   isTemporary: boolean;
+  /**
+   * 有沒有任何未刪除的交易用到這個帳戶（當轉出或轉入都算）。帳戶頁靠它決定臨時帳戶要不要顯示
+   * （W174：裡面有交易才顯示，全部換到別的帳戶後就消失）；餘額為 0 不代表沒有交易。
+   */
+  hasTransactions: boolean;
   /** ISO 8601 時間戳。 */
   createdAt: string;
 }

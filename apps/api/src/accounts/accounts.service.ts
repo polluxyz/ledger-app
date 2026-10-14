@@ -226,6 +226,8 @@ export class AccountsService {
       initialBalance: account.initialBalance,
       balance,
       isTemporary: account.isTemporary,
+      // 3h 契約佔位（H0）：H1 改成依交易算出。
+      hasTransactions: false,
       createdAt: account.createdAt.toISOString(),
     };
   }

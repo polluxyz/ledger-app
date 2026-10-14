@@ -133,3 +133,9 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
    - 仍有 6 個單元測試在測「不計入餘額」，留給 H1（`AccountsService` 1 個）與 H2（`TransactionsService` 3 個、`SettlementsService` 2 個）改。既有 API e2e 的 `record: null`、`tracksBalance` 型別錯誤留給 H7。
 2. **隔離測試紅燈**：`every-entry-account-isolation.e2e-spec.ts` 8 個全紅（2026-10-14）。
 3. **`assertSelectableAccount` 改由協調者在 H0 寫**：原本排給 H1 先交，H2 要等。協調者直接寫進契約（`apps/api/src/accounts/account-selection.ts`，另附 `temporaryAccountIdOf`，6 個單元測試），H1～H4 同時開工。
+4. **H0 補的契約**（開工前已寫進 spec）：
+   - `Account.hasTransactions`：W174「裡面有交易才顯示」需要它，餘額為 0 不代表沒有交易。spec §4.4 同步補上。H1 實作。
+   - `GET /accounts` 臨時帳戶排最後：測試與畫面都有「預設選第一個帳戶」的寫法，排前面會選到臨時帳戶。
+   - 註冊時建立臨時帳戶、migration 的結構部分（欄位、索引、補建臨時帳戶、刪 `tracksBalance`）：H2～H4 跑 e2e 需要新欄位，不能等 H1。H1 只補 migration 的資料搬移兩段。
+   - shared `actualAmountOf`：修改還款表單要帶入實際收付金額，方向的判斷不能放前端。
+   - Web `selectableAccounts`：表單的帳戶選單排除臨時帳戶，H5、H6 共用。

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { differenceLabelOf, forgivenessLabelOf } from './entry-labels.ts';
+import { actualAmountOf, differenceLabelOf, forgivenessLabelOf } from './entry-labels.ts';
 
 describe('differenceLabelOf', () => {
   it('names the difference under a collection', () => {
@@ -24,6 +24,22 @@ describe('differenceLabelOf', () => {
     for (const type of ['LEND', 'BORROW', 'EXPENSE', 'INCOME', 'TRANSFER'] as const) {
       assert.equal(differenceLabelOf(type, 'EXPENSE'), null);
     }
+  });
+});
+
+describe('actualAmountOf', () => {
+  it('collect: 93 cleared with 3 short is 90, with 2 over is 95', () => {
+    assert.equal(actualAmountOf('COLLECT', 9300, { type: 'EXPENSE', amount: 300 }), 9000);
+    assert.equal(actualAmountOf('COLLECT', 9300, { type: 'INCOME', amount: 200 }), 9500);
+  });
+
+  it('repay: 93 cleared paying 3 less is 90, paying 2 more is 95', () => {
+    assert.equal(actualAmountOf('REPAY', 9300, { type: 'INCOME', amount: 300 }), 9000);
+    assert.equal(actualAmountOf('REPAY', 9300, { type: 'EXPENSE', amount: 200 }), 9500);
+  });
+
+  it('is the cleared amount when there is no difference', () => {
+    assert.equal(actualAmountOf('COLLECT', 9300, null), 9300);
   });
 });
 

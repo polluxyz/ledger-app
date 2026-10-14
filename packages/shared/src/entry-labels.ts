@@ -30,6 +30,27 @@ export function differenceLabelOf(
   return null;
 }
 
+/**
+ * 以此結清的還款實際收付了多少（決策 170）：還款記的是還清的欠款，分支補上差。
+ *
+ * - 對方還我（`COLLECT`，錢進來）：分支 `INCOME`（多收）加、`EXPENSE`（少收）減。
+ * - 我還對方（`REPAY`，錢出去）：分支 `EXPENSE`（多付）加、`INCOME`（少付）減。
+ *
+ * 修改表單要帶入的就是這個數字（`PATCH /debt-entries/{id}` 的 `amount` 是實際收付）。沒有分支
+ * 時就是還清的欠款本身。金額都是分。
+ */
+export function actualAmountOf(
+  repaymentType: 'COLLECT' | 'REPAY',
+  clearedAmount: number,
+  difference: { type: 'EXPENSE' | 'INCOME'; amount: number } | null,
+): number {
+  if (difference === null) return clearedAmount;
+  const adds = repaymentType === 'COLLECT' ? 'INCOME' : 'EXPENSE';
+  return difference.type === adds
+    ? clearedAmount + difference.amount
+    : clearedAmount - difference.amount;
+}
+
 /** 免除產生的交易名稱（決策 162）。 */
 export type ForgivenessLabel = '呆帳' | '債務免除';
 
