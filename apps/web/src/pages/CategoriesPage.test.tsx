@@ -40,7 +40,6 @@ describe('Categories page', () => {
     name: '個人帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     role: 'OWNER',
