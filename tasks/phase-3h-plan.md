@@ -144,3 +144,6 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 7. **migration 前後比對**（協調者用 H1 的比對資料重跑，2026-10-14）：一般帳戶 a1 845 → 845、a2 2000 → 2000；8 個對象的往來餘額全部不變；臨時帳戶 u1 −100（H1 回報時是 −140，差的 40 是第 6 項補上的 r6 實收）、u2 55；6 筆分支都符合「還款 ± 分支 = 原本實收」（80、120、45、80、120、40）；對不到還款的舊差額原樣保留；非成員付款、別人替我付的交易帳戶仍是空的。
 8. **migration SQL 開發者同意**（2026-10-14）。驗收 H1 時協調者先在本機合進了整合分支（沒推、沒碰 `ledger_dev`），比 plan 寫的「同意後才合」早一步，已向開發者說明。
 9. **H4 結果**：`record-defaults` 單元測試 11、e2e 5 全過；1 萬筆交易五次回應的中位數 6.6ms（目標 < 200ms），不需要加索引。
+10. **H2 結果**：付款人規則、`assertSelectableAccount` 全面替換、換帳戶只限「目前在自己的臨時帳戶」；`every-entry-account-payer` 4 條全過。協調者逐行看過 `payer-account-rules.ts`、`transactions.service.ts`、`settlements.service.ts` 的 diff。
+11. **H5 結果與協調者補正**：交易表單原本「沒選就用第一個帳戶」被改成只帶「最近一次」，從沒記過帳的新使用者會變成空欄位。協調者補回第三層預設（最近一次 → 第一個可選帳戶）。
+12. **H3 退回**：功能正確，但 `debt-entries.service.spec.ts` 從 28 條 `describe`／`it` 刪到 5 條（含與 3h 無關的核心規則：借出正負號、先鎖對象、帳本不能寫就不寫），`debt-recording.ts` 的「為什麼」註解被刪成一行。退回補測試與註解（新的 dispatch，同一個 worktree）。

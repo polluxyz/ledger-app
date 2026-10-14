@@ -442,20 +442,29 @@ function TransactionFormContent({
   const showAccountField = !accountLocked;
 
   /**
-   * 只接受真正帳戶；預設帳戶由 useRecordDefaults 帶入，不在選單裡的 id 一律清空。
+   * 只接受真正帳戶，不在選單裡的 id（例如臨時帳戶）一律不用，免得它落進送出的 request。
    *
-   * 不在選單裡的 id 顯示為空值，避免臨時帳戶落進送出的 request。
+   * 新增時的預設順序（3h W177）：使用者選過的 → 我在這本帳本最近用的帳戶（`useRecordDefaults`）
+   * → 第一個可選帳戶。最後一層照 3h 之前的做法保留：多數人只有一個「現金」，從沒記過帳的
+   * 新使用者也不必碰這個欄位。共享帳本改成自己付款時例外，留空讓使用者明確選。
+   *
+   * 刻意用「推導顯示值」而非 useEffect 去 setState：後者會多觸發一輪渲染，state 只保存
+   * 使用者的明確選擇。
    */
   const defaultAccountId =
     !isEdit && !accountSelectionTouched && !recordDefaults.isFetching
       ? (recordDefaults.data?.accountId ?? '')
+      : '';
+  const fallbackAccountId =
+    !isEdit && !accountSelectionTouched && !(isSharedLedger && sharedPayerChanged)
+      ? (accountOptions[0]?.id ?? '')
       : '';
   const selectedAccountId = showAccountField
     ? accountOptions.some((account) => account.id === accountId)
       ? accountId
       : accountOptions.some((account) => account.id === defaultAccountId)
         ? defaultAccountId
-        : ''
+        : fallbackAccountId
     : '';
   /** 轉入帳戶不能與轉出帳戶相同（後端回 400 TRANSFER_SAME_ACCOUNT），預設挑第一個不同的。 */
   const otherAccounts = accountOptions.filter((account) => account.id !== selectedAccountId);
