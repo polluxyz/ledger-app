@@ -17,17 +17,26 @@ describe('PendingCard', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
   };
+  const anotherLedger = { ...ledger, id: 'ledger-2', name: '另一個帳本' };
   const account = {
     id: 'account-1',
     name: '現金',
     initialBalance: 0,
     balance: 50000,
+    isTemporary: false,
+    hasTransactions: true,
     createdAt: '2026-09-01T00:00:00.000Z',
+  };
+  const temporaryAccount = {
+    ...account,
+    id: 'account-temp',
+    name: '臨時帳戶',
+    isTemporary: true,
+    hasTransactions: false,
   };
   const counterparty: Counterparty = {
     id: 'counterparty-1',
@@ -54,6 +63,8 @@ describe('PendingCard', () => {
   let mergePrompts: Counterparty[] = [];
   let proposals: DebtProposal[] = [];
   let proposalTotal = 0;
+  let recordDefaults = { ledgerId: 'ledger-1', accountId: 'account-1' };
+  let delayedRecordDefaults: Promise<Response> | null = null;
   let failNextProposalAccept: string | null = null;
   let acceptedLink = {
     counterpartyId: 'counterparty-linked',
@@ -85,6 +96,8 @@ describe('PendingCard', () => {
     mergePrompts = [];
     proposals = [];
     proposalTotal = 0;
+    recordDefaults = { ledgerId: 'ledger-1', accountId: 'account-1' };
+    delayedRecordDefaults = null;
     failNextProposalAccept = null;
     acceptedLink = {
       counterpartyId: 'counterparty-linked',
@@ -163,7 +176,10 @@ describe('PendingCard', () => {
         return response({ items: [], page: 1, limit: 5, total: 0 });
       }
       if (url.includes('/accounts')) {
-        return response([account]);
+        return response([account, temporaryAccount]);
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return delayedRecordDefaults ?? response(recordDefaults);
       }
       if (url.includes('/categories')) {
         return response([
@@ -172,7 +188,7 @@ describe('PendingCard', () => {
         ]);
       }
       if (url.includes('/ledgers')) {
-        return response([ledger]);
+        return response([ledger, anotherLedger]);
       }
       return response([]);
     });
@@ -323,7 +339,7 @@ describe('PendingCard', () => {
     expect(postedBody('/debt-proposals/proposal-split/accept')).not.toHaveProperty('accountId');
   });
 
-  it('prefills the title and allows a no-record response for a payer-side split proposal', async () => {
+  it('prefills the title and required account for a payer-side split proposal', async () => {
     proposals = [proposal({ id: 'proposal-paid', entryKind: 'PAID_FOR_THEM', title: '咖啡' })];
     proposalTotal = 1;
     await renderHome();
@@ -334,14 +350,15 @@ describe('PendingCard', () => {
 
     expect(within(row).getByLabelText('名稱')).toHaveValue('咖啡');
     expect(within(row).getByLabelText('付款帳戶')).toBeRequired();
+    expect(within(row).getByLabelText('付款帳戶')).toHaveValue('account-1');
+    expect(within(row).queryByLabelText('不記入帳本（只記往來）')).not.toBeInTheDocument();
     await user.clear(within(row).getByLabelText('名稱'));
     await user.type(within(row).getByLabelText('名稱'), '手沖');
-    await user.click(within(row).getByLabelText('不記入帳本（只記往來）'));
     await user.click(within(row).getByRole('button', { name: '接受' }));
 
     await waitFor(() =>
       expect(postedBody('/debt-proposals/proposal-paid/accept')).toMatchObject({
-        record: null,
+        record: { ledgerId: 'ledger-1', accountId: 'account-1' },
         title: '手沖',
       }),
     );
@@ -367,11 +384,11 @@ describe('PendingCard', () => {
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getAllByRole('button', { name: '接受' })[0]!);
-    expect(within(card).getByLabelText('記在哪本帳本')).toBeInTheDocument();
+    expect(await within(card).findByLabelText('記在哪本帳本')).toBeInTheDocument();
 
-    await user.click(within(card).getAllByRole('button', { name: '接受' })[0]!);
-    expect(within(card).getByLabelText('記在哪本帳本')).toBeInTheDocument();
-    expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
+    await user.click(within(card).getAllByRole('button', { name: '接受' })[1]!);
+    expect(await within(card).findByLabelText('記在哪本帳本')).toBeInTheDocument();
+    expect(await within(card).findByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
   });
 
   it('accepts an invite without a picker or request body and closes its row without a prompt', async () => {
@@ -470,7 +487,7 @@ describe('PendingCard', () => {
     expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
   });
 
-  it('requires an account for a balance-tracking ledger and sends the selected target', async () => {
+  it('prefills the ledger and selectable account and excludes the temporary account', async () => {
     proposals = [proposal({ entryKind: 'BORROW' })];
     proposalTotal = 1;
     await renderHome();
@@ -479,8 +496,9 @@ describe('PendingCard', () => {
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
     const acceptButton = within(card).getByRole('button', { name: '接受' });
-    expect(acceptButton).toBeDisabled();
-    await user.selectOptions(within(card).getByLabelText('借到的錢進哪個帳戶'), 'account-1');
+    expect(within(card).getByLabelText('記在哪本帳本')).toHaveValue('ledger-1');
+    expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toHaveValue('account-1');
+    expect(within(card).queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
     expect(acceptButton).toBeEnabled();
     await user.click(acceptButton);
 
@@ -491,22 +509,68 @@ describe('PendingCard', () => {
     }, WAIT);
   });
 
-  it('sends record null when the proposal is accepted without a ledger entry', async () => {
+  it('does not use an unavailable default ledger or a temporary default account', async () => {
     proposals = [proposal({ entryKind: 'BORROW' })];
     proposalTotal = 1;
+    recordDefaults = { ledgerId: 'ledger-archived', accountId: 'account-temp' };
     await renderHome();
     const user = userEvent.setup();
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
-    await user.click(within(card).getByRole('checkbox', { name: '不記入帳本（只記往來）' }));
-    expect(within(card).getByLabelText('記在哪本帳本')).toBeDisabled();
-    expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toBeDisabled();
+    expect(within(card).getByLabelText('記在哪本帳本')).toHaveValue('');
+    expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toHaveValue('');
+    expect(within(card).getByRole('button', { name: '接受' })).toBeDisabled();
+    expect(within(card).queryByLabelText('不記入帳本（只記往來）')).not.toBeInTheDocument();
+  });
+
+  it('keeps a manually selected ledger and account when defaults arrive later', async () => {
+    let resolveDefaults: ((value: Response) => void) | undefined;
+    delayedRecordDefaults = new Promise((resolve) => {
+      resolveDefaults = resolve;
+    });
+    proposals = [proposal({ entryKind: 'BORROW' })];
+    proposalTotal = 1;
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
     await user.click(within(card).getByRole('button', { name: '接受' }));
 
+    const ledgerSelect = within(card).getByLabelText('記在哪本帳本');
+    const accountSelect = within(card).getByLabelText('借到的錢進哪個帳戶');
+    await user.selectOptions(ledgerSelect, 'ledger-2');
+    await user.selectOptions(accountSelect, 'account-1');
+    resolveDefaults?.(
+      new Response(JSON.stringify({ ledgerId: 'ledger-1', accountId: 'account-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
     await waitFor(() => {
-      expect(postedBody('/debt-proposals/proposal-1/accept')).toEqual({ record: null });
+      expect(ledgerSelect).toHaveValue('ledger-2');
+      expect(accountSelect).toHaveValue('account-1');
     }, WAIT);
+  });
+
+  it('accepts a forgiveness proposal with a ledger and no account', async () => {
+    proposals = [proposal({ entryKind: 'FORGIVEN' })];
+    proposalTotal = 1;
+    await renderHome();
+    const user = userEvent.setup();
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+    const row = within(card).getByRole('listitem');
+
+    await user.click(within(row).getByRole('button', { name: '接受' }));
+    expect(within(row).getByLabelText('記在哪本帳本')).toHaveValue('ledger-1');
+    expect(within(row).queryByLabelText('帳戶')).not.toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: '接受' }));
+
+    await waitFor(() =>
+      expect(postedBody('/debt-proposals/proposal-1/accept')).toEqual({
+        record: { ledgerId: 'ledger-1' },
+      }),
+    );
   });
 
   it('accepts an amend proposal directly with an empty body', async () => {

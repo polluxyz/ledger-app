@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import {
+  actualAmountOf,
   centsToInput,
   parseMoneyInput,
   type DebtEntry,
@@ -27,7 +28,11 @@ export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEd
         <DebtEntryEditForm
           key={entry.id}
           entryId={entry.id}
-          amount={Math.abs(entry.delta)}
+          amount={
+            entry.kind === 'COLLECT' || entry.kind === 'REPAY'
+              ? actualAmountOf(entry.kind, Math.abs(entry.delta), entry.difference)
+              : Math.abs(entry.delta)
+          }
           date={entry.date}
           note={entry.note}
           paired={entry.paired}

@@ -18,6 +18,7 @@ describe('DebtEntryEditDialog', () => {
     transactionId: 'txn-1',
     splitId: null,
     settlesEntryId: null,
+    difference: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
@@ -73,6 +74,28 @@ describe('DebtEntryEditDialog', () => {
     expect(url).toContain('/debt-entries/entry-1');
     expect(options.method).toBe('PATCH');
     expect(parseRequestBody(options)).toEqual({ amount: 25000 });
+  });
+
+  it('prefills and submits the received amount for a repayment with a difference', async () => {
+    const user = userEvent.setup();
+    const settledRepayment: DebtEntry = {
+      ...entry,
+      kind: 'COLLECT',
+      delta: -9300,
+      difference: { transactionId: 'difference-1', type: 'EXPENSE', amount: 300 },
+    };
+    renderDialog(settledRepayment);
+    const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
+
+    const amount = within(dialog).getByLabelText('金額');
+    expect(amount).toHaveValue(90);
+    await user.clear(amount);
+    await user.type(amount, '95');
+    await user.click(within(dialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(parseRequestBody(options)).toEqual({ amount: 9500 });
   });
 
   it('sends null when the note is cleared', async () => {

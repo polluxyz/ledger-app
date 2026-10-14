@@ -26,7 +26,6 @@ describe('DebtHistoryView', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: false,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -37,7 +36,6 @@ describe('DebtHistoryView', () => {
     name: '旅行帳本',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: false,
     archivedAt: null,
     role: 'EDITOR',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -76,6 +74,8 @@ describe('DebtHistoryView', () => {
     payer: null,
     ledgerSplit: null,
     accountPending: false,
+    differenceOfId: null,
+    difference: null,
     createdAt: '2026-09-02T00:00:00.000Z',
   };
 
@@ -98,6 +98,7 @@ describe('DebtHistoryView', () => {
       transactionId: 'txn-' + id,
       splitId: null,
       settlesEntryId: null,
+      difference: null,
       balanceAfter: 0,
       sync: 'NONE',
       paired: false,

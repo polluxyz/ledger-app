@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   AcceptDebtProposalRequest,
   Counterparty,
@@ -8,6 +8,7 @@ import type {
   LedgerSummary,
   Account,
   CategoryType,
+  RecordDefaults,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { DebtArrow } from '../../components/DebtArrow';
@@ -15,10 +16,10 @@ import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { MergePromptDialog, MergePromptForm } from '../debts/MergePrompt';
-import { useAccounts } from '../accounts/use-accounts';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
+import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCategories } from '../categories/use-categories';
 import { useCounterparty } from '../debts/use-debts';
-import { useActiveLedger } from '../ledgers/use-active-ledger';
 import { useLedgers } from '../ledgers/use-ledgers';
 import {
   useAcceptLinkInvite,
@@ -44,7 +45,7 @@ export function PendingCard() {
   const proposalsQuery = useIncomingProposals();
   const ledgersQuery = useLedgers();
   const accountsQuery = useAccounts();
-  const { ledger: activeLedger } = useActiveLedger();
+  const recordDefaultsQuery = useRecordDefaults();
   const acceptLinkInvite = useAcceptLinkInvite();
   const declineLinkInvite = useDeclineLinkInvite();
   const acceptProposal = useAcceptProposal();
@@ -122,10 +123,15 @@ export function PendingCard() {
           ledgers={ledgersQuery.data ?? []}
           ledgersLoading={ledgersQuery.isLoading}
           ledgersError={ledgersQuery.error}
-          activeLedgerId={activeLedger?.id ?? null}
           accounts={accountsQuery.data ?? []}
           accountsLoading={accountsQuery.isLoading}
           accountsError={accountsQuery.error}
+          recordDefaults={recordDefaultsQuery.data}
+          recordDefaultsLoading={
+            !recordDefaultsQuery.isFetchedAfterMount ||
+            !ledgersQuery.isFetchedAfterMount ||
+            !accountsQuery.isFetchedAfterMount
+          }
           onToggle={() => setExpandedId((current) => (current === id ? null : id))}
           onAccept={(proposalId, input) =>
             acceptProposal.mutateAsync({
@@ -316,10 +322,11 @@ function ProposalRow({
   ledgers,
   ledgersLoading,
   ledgersError,
-  activeLedgerId,
   accounts,
   accountsLoading,
   accountsError,
+  recordDefaults,
+  recordDefaultsLoading,
   onToggle,
   onAccept,
   onDecline,
@@ -329,10 +336,11 @@ function ProposalRow({
   ledgers: LedgerSummary[];
   ledgersLoading: boolean;
   ledgersError: unknown;
-  activeLedgerId: string | null;
   accounts: Account[];
   accountsLoading: boolean;
   accountsError: unknown;
+  recordDefaults: RecordDefaults | undefined;
+  recordDefaultsLoading: boolean;
   onToggle: () => void;
   onAccept: (proposalId: string, input?: AcceptDebtProposalRequest) => Promise<unknown>;
   onDecline: (proposalId: string) => Promise<unknown>;
@@ -341,40 +349,88 @@ function ProposalRow({
   const counterpartyQuery = useCounterparty(
     expanded && needsRecord ? proposal.counterpartyId : null,
   );
-  const [ledgerChoice, setLedgerChoice] = useState<string | null>(null);
+  const [ledgerChoice, setLedgerChoice] = useState('');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState(proposal.title ?? '');
-  const [doNotRecord, setDoNotRecord] = useState(false);
+  const ledgerTouched = useRef(false);
+  const accountTouched = useRef(false);
+  const defaultsApplied = useRef(false);
   const [error, setError] = useState<unknown>(null);
   const [conflictCode, setConflictCode] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableLedgers = ledgers.filter(
-    (ledger) => (ledger.role === 'OWNER' || ledger.role === 'EDITOR') && ledger.archivedAt === null,
+  const availableLedgers = useMemo(
+    () =>
+      ledgers.filter(
+        (ledger) =>
+          (ledger.role === 'OWNER' || ledger.role === 'EDITOR') && ledger.archivedAt === null,
+      ),
+    [ledgers],
   );
-  const selectedLedger =
-    availableLedgers.find((ledger) => ledger.id === ledgerChoice) ??
-    availableLedgers.find((ledger) => ledger.id === activeLedgerId) ??
-    availableLedgers[0] ??
-    null;
+  const accountsForSelection = useMemo(() => selectableAccounts(accounts), [accounts]);
+  const selectedLedger = availableLedgers.find((ledger) => ledger.id === ledgerChoice) ?? null;
   const selectedLedgerId = selectedLedger?.id ?? '';
   const isSplitProposal = isSplitEntryKind(proposal.entryKind);
   const requiresCategory =
     proposal.entryKind === 'PAID_FOR_ME' || proposal.entryKind === 'RECEIVED_FOR_ME';
+  const isForgivenessProposal = proposal.entryKind === 'FORGIVEN';
   const categoryType: CategoryType =
     proposal.entryKind === 'RECEIVED_FOR_ME' ? 'INCOME' : 'EXPENSE';
   const categoriesQuery = useCategories(
     requiresCategory && selectedLedgerId !== '' ? selectedLedgerId : null,
     requiresCategory ? categoryType : undefined,
   );
-  const requiresAccount = selectedLedger?.tracksBalance === true && !requiresCategory;
+  const requiresAccount =
+    !requiresCategory &&
+    !isForgivenessProposal &&
+    (proposal.entryKind === 'LEND' ||
+      proposal.entryKind === 'BORROW' ||
+      proposal.entryKind === 'COLLECT' ||
+      proposal.entryKind === 'REPAY' ||
+      proposal.entryKind === 'PAID_FOR_THEM' ||
+      proposal.entryKind === 'RECEIVED_FOR_THEM');
+
+  useEffect(() => {
+    if (
+      recordDefaultsLoading ||
+      ledgersLoading ||
+      accountsLoading ||
+      recordDefaults === undefined ||
+      defaultsApplied.current
+    ) {
+      return;
+    }
+
+    defaultsApplied.current = true;
+    if (
+      !ledgerTouched.current &&
+      recordDefaults.ledgerId !== null &&
+      availableLedgers.some((ledger) => ledger.id === recordDefaults.ledgerId)
+    ) {
+      setLedgerChoice(recordDefaults.ledgerId);
+    }
+    if (
+      !accountTouched.current &&
+      recordDefaults.accountId !== null &&
+      accountsForSelection.some((account) => account.id === recordDefaults.accountId)
+    ) {
+      setAccountId(recordDefaults.accountId);
+    }
+  }, [
+    recordDefaults,
+    recordDefaultsLoading,
+    ledgersLoading,
+    accountsLoading,
+    availableLedgers,
+    accountsForSelection,
+  ]);
+
   const acceptDisabled =
     isSubmitting ||
-    (!doNotRecord &&
-      (selectedLedgerId === '' ||
-        (requiresAccount && (accountsLoading || accountId === '')) ||
-        (requiresCategory && (categoriesQuery.isLoading || categoryId === ''))));
+    selectedLedgerId === '' ||
+    (requiresAccount && (accountsLoading || accountId === '')) ||
+    (requiresCategory && (categoriesQuery.isLoading || categoryId === ''));
   const conflictMessage =
     conflictCode === 'NOTHING_TO_REPAY'
       ? '你帳上目前兩清'
@@ -417,10 +473,6 @@ function ProposalRow({
   }
 
   function acceptRecordProposal() {
-    if (doNotRecord && !requiresCategory) {
-      void handleAccept({ record: null, ...(isSplitProposal ? { title } : {}) });
-      return;
-    }
     if (
       selectedLedgerId === '' ||
       (requiresAccount && accountId === '') ||
@@ -484,13 +536,17 @@ function ProposalRow({
           <Select
             label="記在哪本帳本"
             value={selectedLedgerId}
-            disabled={doNotRecord || ledgersLoading || availableLedgers.length === 0}
+            required
+            disabled={ledgersLoading || availableLedgers.length === 0}
             onChange={(event) => {
+              ledgerTouched.current = true;
               setLedgerChoice(event.target.value);
-              setAccountId('');
               setCategoryId('');
             }}
           >
+            <option value="" disabled>
+              請選擇帳本
+            </option>
             {availableLedgers.length === 0 ? (
               <option value="">沒有可記帳的帳本</option>
             ) : (
@@ -508,13 +564,16 @@ function ProposalRow({
               label={accountLabel(proposal.entryKind)}
               value={accountId}
               required
-              disabled={doNotRecord || accountsLoading}
-              onChange={(event) => setAccountId(event.target.value)}
+              disabled={accountsLoading || accountsForSelection.length === 0}
+              onChange={(event) => {
+                accountTouched.current = true;
+                setAccountId(event.target.value);
+              }}
             >
               <option value="" disabled>
                 請選擇帳戶
               </option>
-              {accounts.map((account) => (
+              {accountsForSelection.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
                 </option>
@@ -551,16 +610,6 @@ function ProposalRow({
             />
           )}
 
-          {!requiresCategory && (
-            <label className={styles.checkbox}>
-              <input
-                type="checkbox"
-                checked={doNotRecord}
-                onChange={(event) => setDoNotRecord(event.target.checked)}
-              />
-              <span>不記入帳本（只記往來）</span>
-            </label>
-          )}
           {conflictMessage && (
             <div className={styles.conflictError} role="alert">
               {conflictMessage}
@@ -611,6 +660,7 @@ function isRecordProposal(proposal: DebtProposal): boolean {
       proposal.entryKind === 'BORROW' ||
       proposal.entryKind === 'COLLECT' ||
       proposal.entryKind === 'REPAY' ||
+      proposal.entryKind === 'FORGIVEN' ||
       isSplitEntryKind(proposal.entryKind))
   );
 }

@@ -1,5 +1,10 @@
-import { useState, type MouseEvent } from 'react';
-import { isDebtTransactionType, type Transaction } from '@ledger/shared';
+import { Fragment, useState, type MouseEvent } from 'react';
+import {
+  differenceLabelOf,
+  forgivenessLabelOf,
+  isDebtTransactionType,
+  type Transaction,
+} from '@ledger/shared';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
@@ -33,7 +38,7 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
   onEditDebtTransaction?: (transaction: Transaction) => void;
-  /** 點「待補」（`accountPending: true`）時，打開補帳戶表單（3e W125）。 */
+  /** 點「臨時帳戶」（`accountPending: true`）時，打開換帳戶表單（3e W125）。 */
   onFillAccount?: (transaction: Transaction) => void;
 }
 
@@ -73,6 +78,8 @@ function rowLabel(transaction: Transaction): string {
 
 /** 第二行：交易名稱；沒有名稱就是空的，不拿分類來補（補了就又混在一起）。 */
 function rowName(transaction: Transaction): string {
+  const forgivenessLabel = transaction.debt ? forgivenessLabelOf(transaction.debt.kind) : null;
+  if (forgivenessLabel !== null) return forgivenessLabel;
   return transaction.title?.trim() ?? '';
 }
 
@@ -214,6 +221,15 @@ export function TransactionList({
               const settlementTo = settlement
                 ? labelPerson(settlement.to, currentUserId)
                 : undefined;
+              const differenceLabel = transaction.difference
+                ? differenceLabelOf(transaction.type, transaction.difference.type)
+                : null;
+              const differenceAmount = transaction.difference
+                ? formatTransactionAmount(
+                    transaction.difference.type,
+                    transaction.difference.amount,
+                  ).replace(/^-/, '−')
+                : null;
               // 結清列：第一行寫「結清」，第二行用不帶頭貼的小箭頭，明細列放頭貼太擠。
               // 分帳標籤跟著第一行的分類，第二行只留名稱與付款人。
               const rowContent = (
@@ -223,6 +239,7 @@ export function TransactionList({
                       {settlement ? '結清' : rowLabel(transaction)}
                     </span>
                     {hasSplit && <span className={styles.splitBadge}>分帳</span>}
+                    {differenceLabel !== null && <span className={styles.clearedBadge}>還清</span>}
                   </span>
                   <span className={styles.subtitle}>
                     {settlement && settlementFrom && settlementTo ? (
@@ -242,6 +259,7 @@ export function TransactionList({
               );
               const rowClassNames = [
                 styles.row,
+                differenceLabel !== null ? styles.rowWithDifference : '',
                 isClickable ? styles.clickable : '',
                 transaction.id === selectedId ? styles.selected : '',
                 expanded ? styles.rowExpanded : '',
@@ -250,97 +268,112 @@ export function TransactionList({
                 .join(' ');
 
               return (
-                <li
-                  key={transaction.id}
-                  className={rowClassNames}
-                  onClick={(event) => handleRowClick(event, transaction)}
-                >
-                  {/* 圓形底色＋金色圖示，與提案頁樣板一致（3d 修訂 2）。 */}
-                  <span className={styles.iconBadge} aria-hidden="true">
-                    <CategoryIcon
-                      className={styles.categoryIcon}
-                      icon={transaction.category?.icon}
-                      transactionType={transaction.category ? undefined : transaction.type}
-                    />
-                  </span>
-                  {/*
+                <Fragment key={transaction.id}>
+                  <li
+                    className={rowClassNames}
+                    onClick={(event) => handleRowClick(event, transaction)}
+                  >
+                    {/* 圓形底色＋金色圖示，與提案頁樣板一致（3d 修訂 2）。 */}
+                    <span className={styles.iconBadge} aria-hidden="true">
+                      <CategoryIcon
+                        className={styles.categoryIcon}
+                        icon={transaction.category?.icon}
+                        transactionType={transaction.category ? undefined : transaction.type}
+                      />
+                    </span>
+                    {/*
                     名稱格在可點的列上是一顆「看起來不像按鈕」的按鈕：滑鼠點整列就夠了，
                     但鍵盤與螢幕閱讀器需要一個聚焦得到的入口，否則拿掉鉛筆圖示之後就
                     再也進不了編輯。它的點擊由自己處理，列的 onClick 看到目標在按鈕裡會略過。
                   */}
-                  {isClickable ? (
-                    <button
-                      type="button"
-                      className={`${styles.main} ${styles.mainButton}`}
-                      aria-label={`編輯${describe(transaction)}`}
-                      onClick={() => openRow(transaction)}
-                    >
-                      {rowContent}
-                    </button>
-                  ) : (
-                    <span className={styles.main}>{rowContent}</span>
-                  )}
-                  <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
-                    {settlement
-                      ? formatMoney(amount)
-                      : formatTransactionAmount(transaction.type, amount)}
-                  </span>
-                  <span className={styles.actions}>
-                    {transaction.accountPending && !readOnly && (
+                    {isClickable ? (
                       <button
                         type="button"
-                        className={styles.pendingButton}
-                        aria-label="待補"
-                        onClick={() => onFillAccount?.(transaction)}
+                        className={`${styles.main} ${styles.mainButton}`}
+                        aria-label={`編輯${describe(transaction)}`}
+                        onClick={() => openRow(transaction)}
                       >
-                        待補
+                        {rowContent}
                       </button>
+                    ) : (
+                      <span className={styles.main}>{rowContent}</span>
                     )}
-                    {hasSplit && (
-                      <button
-                        type="button"
-                        className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
-                        aria-label={`${expanded ? '收合' : '展開'}分帳明細`}
-                        aria-expanded={expanded}
-                        onClick={() => setExpandedId(expanded ? null : transaction.id)}
-                      >
-                        ›
-                      </button>
-                    )}
-                  </span>
-                  {expanded && hasSplit && (
-                    <div className={styles.details}>
-                      {ledgerSplit
-                        ? ledgerArrows.map((arrow) => (
-                            <DebtArrow
-                              key={arrow.personId}
-                              from={arrow.from}
-                              to={arrow.to}
-                              amount={arrow.amount}
-                              srText={arrow.srText}
-                            />
-                          ))
-                        : split?.counterparts.map((counterpart) => (
-                            <DebtArrow
-                              key={counterpart.counterpartyId}
-                              from={
-                                counterpart.direction === 'THEY_OWE_ME' ? counterpart.name : '我'
-                              }
-                              to={counterpart.direction === 'THEY_OWE_ME' ? '我' : counterpart.name}
-                              amount={counterpart.amount}
-                              srText={
-                                counterpart.direction === 'THEY_OWE_ME'
-                                  ? `${counterpart.name}欠你 ${formatMoney(counterpart.amount)}`
-                                  : `你欠${counterpart.name} ${formatMoney(counterpart.amount)}`
-                              }
-                            />
-                          ))}
-                      {split?.myShare !== undefined && split.myShare > 0 && (
-                        <span className={styles.myShare}>我 {formatMoney(split.myShare)}</span>
+                    <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
+                      {settlement
+                        ? formatMoney(amount)
+                        : formatTransactionAmount(transaction.type, amount)}
+                    </span>
+                    <span className={styles.actions}>
+                      {transaction.accountPending && !readOnly && (
+                        <button
+                          type="button"
+                          className={styles.pendingButton}
+                          aria-label="臨時帳戶"
+                          onClick={() => onFillAccount?.(transaction)}
+                        >
+                          臨時帳戶
+                        </button>
                       )}
-                    </div>
+                      {hasSplit && (
+                        <button
+                          type="button"
+                          className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
+                          aria-label={`${expanded ? '收合' : '展開'}分帳明細`}
+                          aria-expanded={expanded}
+                          onClick={() => setExpandedId(expanded ? null : transaction.id)}
+                        >
+                          ›
+                        </button>
+                      )}
+                    </span>
+                    {expanded && hasSplit && (
+                      <div className={styles.details}>
+                        {ledgerSplit
+                          ? ledgerArrows.map((arrow) => (
+                              <DebtArrow
+                                key={arrow.personId}
+                                from={arrow.from}
+                                to={arrow.to}
+                                amount={arrow.amount}
+                                srText={arrow.srText}
+                              />
+                            ))
+                          : split?.counterparts.map((counterpart) => (
+                              <DebtArrow
+                                key={counterpart.counterpartyId}
+                                from={
+                                  counterpart.direction === 'THEY_OWE_ME' ? counterpart.name : '我'
+                                }
+                                to={
+                                  counterpart.direction === 'THEY_OWE_ME' ? '我' : counterpart.name
+                                }
+                                amount={counterpart.amount}
+                                srText={
+                                  counterpart.direction === 'THEY_OWE_ME'
+                                    ? `${counterpart.name}欠你 ${formatMoney(counterpart.amount)}`
+                                    : `你欠${counterpart.name} ${formatMoney(counterpart.amount)}`
+                                }
+                              />
+                            ))}
+                        {split?.myShare !== undefined && split.myShare > 0 && (
+                          <span className={styles.myShare}>我 {formatMoney(split.myShare)}</span>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                  {differenceLabel !== null && differenceAmount !== null && (
+                    <li
+                      className={styles.differenceRow}
+                      aria-label={`${differenceAmount} ${differenceLabel}`}
+                    >
+                      <span className={styles.differenceBranch} aria-hidden="true">
+                        └
+                      </span>
+                      <span className={styles.differenceAmount}>{differenceAmount}</span>
+                      <span>{differenceLabel}</span>
+                    </li>
                   )}
-                </li>
+                </Fragment>
               );
             })}
           </ul>

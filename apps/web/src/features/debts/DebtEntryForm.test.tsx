@@ -18,12 +18,11 @@ describe('DebtEntryForm', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
   };
-  const plainLedger: LedgerSummary = { ...ledger, id: 'ledger-plain', tracksBalance: false };
+  const anotherLedger: LedgerSummary = { ...ledger, id: 'ledger-2', name: '另一個帳本' };
   const counterparties = [
     {
       id: 'cp-ming',
@@ -57,9 +56,33 @@ describe('DebtEntryForm', () => {
     },
   ];
   const accounts = [
-    { id: 'acc-cash', name: '現金', initialBalance: 0, balance: 88000 },
-    { id: 'acc-bank', name: '銀行', initialBalance: 0, balance: 500000 },
+    {
+      id: 'acc-cash',
+      name: '現金',
+      initialBalance: 0,
+      balance: 88000,
+      isTemporary: false,
+      hasTransactions: true,
+    },
+    {
+      id: 'acc-bank',
+      name: '銀行',
+      initialBalance: 0,
+      balance: 500000,
+      isTemporary: false,
+      hasTransactions: true,
+    },
+    {
+      id: 'acc-temp',
+      name: '臨時帳戶',
+      initialBalance: 0,
+      balance: 0,
+      isTemporary: true,
+      hasTransactions: false,
+    },
   ];
+  let recordDefaults = { ledgerId: 'ledger-1', accountId: 'acc-cash' };
+  let delayedDefaults: Promise<Response> | null = null;
 
   beforeEach(() => {
     localStorage.clear();
@@ -67,6 +90,8 @@ describe('DebtEntryForm', () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    recordDefaults = { ledgerId: 'ledger-1', accountId: 'acc-cash' };
+    delayedDefaults = null;
 
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
@@ -109,6 +134,12 @@ describe('DebtEntryForm', () => {
       }
       if (url.includes('/accounts')) {
         return json(accounts);
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return delayedDefaults ?? json(recordDefaults);
+      }
+      if (url.includes('/ledgers')) {
+        return json([ledger, anotherLedger]);
       }
       return Promise.reject(new Error(`未預期的請求：${url}`));
     });
@@ -157,6 +188,7 @@ describe('DebtEntryForm', () => {
     expect(screen.queryByRole('button', { name: '對方幫我付' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
     expect(screen.queryByText('餐飲')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('不記入帳本')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '還款' })).toBeDisabled();
     expect(screen.queryByText('目前沒有欠款')).not.toBeInTheDocument();
   });
@@ -281,14 +313,14 @@ describe('DebtEntryForm', () => {
       name: '小明',
       amount: '8',
       settle: true,
-      expected: '記完後兩清，差額 −1（少收 1 元）',
+      expected: '記完後兩清',
     },
     {
       kind: '還款',
       name: '小華',
       amount: '405',
       settle: true,
-      expected: '記完後兩清，差額 −5（多付 5 元）',
+      expected: '記完後兩清',
     },
     { kind: '還款', name: '小明', amount: '9', settle: true, expected: '記完後兩清' },
   ])(
@@ -326,7 +358,7 @@ describe('DebtEntryForm', () => {
     expect(screen.getByRole('button', { name: '新增' })).toBeDisabled();
 
     await user.click(screen.getByRole('checkbox', { name: '以此結清' }));
-    expect(await screen.findByText('記完後兩清，差額 +11（多收 11 元）')).toBeInTheDocument();
+    expect(await screen.findByText('記完後兩清')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新增' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: '新增' }));
 
@@ -393,32 +425,54 @@ describe('DebtEntryForm', () => {
     expect('note' in body).toBe(false);
   });
 
-  it('posts record null when the user chooses not to record a ledger transaction', async () => {
+  it('prefills writable ledger and selectable account defaults and excludes temporary accounts', async () => {
+    renderForm();
+
+    const ledgerSelect = await screen.findByLabelText('記在哪本帳本');
+    const accountSelect = await screen.findByLabelText('從哪個帳戶借出');
+    await waitFor(() => {
+      expect(ledgerSelect).toHaveValue('ledger-1');
+      expect(accountSelect).toHaveValue('acc-cash');
+    });
+    expect(ledgerSelect).toBeRequired();
+    expect(accountSelect).toBeRequired();
+    expect(screen.queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('不記入帳本')).not.toBeInTheDocument();
+  });
+
+  it('does not overwrite ledger or account choices made before defaults arrive', async () => {
+    let resolveDefaults: ((value: Response) => void) | undefined;
+    delayedDefaults = new Promise((resolve) => {
+      resolveDefaults = resolve;
+    });
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText('對象'), '小明');
-    await user.click(screen.getByRole('checkbox', { name: '不記入帳本' }));
-    expect(screen.getByLabelText('從哪個帳戶借出')).toBeDisabled();
-    await user.type(screen.getByLabelText('金額'), '8');
-    await user.click(screen.getByRole('button', { name: '新增' }));
+    const ledgerSelect = await screen.findByLabelText('記在哪本帳本');
+    const accountSelect = await screen.findByLabelText('從哪個帳戶借出');
+    await user.selectOptions(ledgerSelect, 'ledger-2');
+    await user.selectOptions(accountSelect, 'acc-bank');
+    resolveDefaults?.(
+      new Response(JSON.stringify({ ledgerId: 'ledger-1', accountId: 'acc-cash' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
-    const body = await postedBody();
-    expect(body.record).toBeNull();
+    await waitFor(() => {
+      expect(ledgerSelect).toHaveValue('ledger-2');
+      expect(accountSelect).toHaveValue('acc-bank');
+    });
   });
 
-  it('does not send an account id for a non-balance-tracking ledger', async () => {
-    const user = userEvent.setup();
-    renderForm(plainLedger);
+  it('ignores a default ledger outside the writable list and a temporary account', async () => {
+    recordDefaults = { ledgerId: 'ledger-archived', accountId: 'acc-temp' };
+    renderForm();
 
-    await user.type(screen.getByLabelText('對象'), '小明');
-    await user.type(screen.getByLabelText('金額'), '6');
-    expect(screen.queryByLabelText(/帳戶/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '新增' }));
-
-    const body = await postedBody();
-    expect(body.record).toEqual({ ledgerId: 'ledger-plain' });
-    expect('accountId' in (body.record as object)).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByLabelText('記在哪本帳本')).toHaveValue('');
+      expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('');
+    });
   });
 
   it('sends settle only with REPAYMENT when it is explicitly checked', async () => {
