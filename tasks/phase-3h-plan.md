@@ -149,3 +149,4 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 12. **H3 退回**：功能正確，但 `debt-entries.service.spec.ts` 從 28 條 `describe`／`it` 刪到 5 條（含與 3h 無關的核心規則：借出正負號、先鎖對象、帳本不能寫就不寫），`debt-recording.ts` 的「為什麼」註解被刪成一行。退回補測試與註解（新的 dispatch，同一個 worktree）。
 13. **H3 修正後合併**：`debt-entries.service.spec.ts` 回到 36 條 `describe`／`it`（含少收、多收、少付、多付、剛好還清），`debt-recording.ts` 的說明註解補回。H3 刪掉 `debts-bind.e2e-spec.ts`（測 3g 的 `SETTLEMENT` 綁定，行為已被分支取代，`every-entry-account-debts` 涵蓋新行為）。
 14. **第 1 波後端整合**（H1～H4 合併後的整合分支）：API 單元測試 441 個全綠；`every-entry-account*` 4 個 e2e 共 24 條全綠，隔離測試 8 條由紅轉綠；API typecheck 只剩既有 e2e 檔的 16 個錯誤（H7）。
+15. **H6 結果**：借還表單一律綁帳戶、免除先選帳本、分支畫在還款下面、修改有分支的還款帶入實收、交易列顯示「臨時帳戶」。中途 worker 誤用協調者的收信指令被擋（`consumer_fenced`）而停下，協調者在終端機請它繼續。合併後 Web lint、app typecheck 全綠，測試 763 個全過；`apps/web/e2e` 有 13 個型別錯誤（`record: null`、`tracksBalance`）留給 H8。免除的帳本沒有「最近一次」時是空的、要使用者自己選，沒有比照交易表單補「第一個帳本」。
