@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { Account, DEFAULT_ACCOUNTS } from '@ledger/shared';
+import { Account, DEFAULT_ACCOUNTS, TEMPORARY_ACCOUNT_NAME } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
@@ -35,9 +35,33 @@ describe('Accounts (e2e)', () => {
 
     const accounts = await listAccounts(app, alice.token);
 
-    expect(accounts.map((account) => account.name)).toEqual([...DEFAULT_ACCOUNTS]);
-    expect(accounts).toHaveLength(1);
+    expect(accounts.map((account) => account.name)).toEqual([
+      ...DEFAULT_ACCOUNTS,
+      TEMPORARY_ACCOUNT_NAME,
+    ]);
+    expect(accounts).toHaveLength(2);
     expect(accounts[0]).toMatchObject({ name: '現金', initialBalance: 0, balance: 0 });
+    expect(accounts[1]).toMatchObject({ isTemporary: true, hasTransactions: false });
+  });
+
+  it('locks temporary accounts against renaming and deletion', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const temporary = (await listAccounts(app, alice.token)).find(
+      (account) => account.isTemporary,
+    )!;
+
+    const renamed = await request(server())
+      .patch(`/api/accounts/${temporary.id}`)
+      .set(auth(alice.token))
+      .send({ name: '改名' });
+    expect(renamed.status).toBe(409);
+    expect((renamed.body as { errorCode: string }).errorCode).toBe('TEMPORARY_ACCOUNT_LOCKED');
+
+    const deleted = await request(server())
+      .delete(`/api/accounts/${temporary.id}`)
+      .set(auth(alice.token));
+    expect(deleted.status).toBe(409);
+    expect((deleted.body as { errorCode: string }).errorCode).toBe('TEMPORARY_ACCOUNT_LOCKED');
   });
 
   it('creates, renames and deletes an account (SC-C3)', async () => {
@@ -62,7 +86,7 @@ describe('Accounts (e2e)', () => {
       .delete(`/api/accounts/${account.id}`)
       .set(auth(alice.token));
     expect(deleted.status).toBe(204);
-    expect(await listAccounts(app, alice.token)).toHaveLength(1);
+    expect(await listAccounts(app, alice.token)).toHaveLength(2);
   });
 
   it('refuses to change the initial balance after the account exists', async () => {

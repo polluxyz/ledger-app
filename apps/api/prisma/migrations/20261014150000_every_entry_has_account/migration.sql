@@ -27,9 +27,113 @@ SELECT
   now()
 FROM "User" u;
 
--- 3.（H1 補）帳戶待補與不計入餘額的交易，帳戶填成對應的臨時帳戶（spec §3.3 第 2 步）。
+-- 3. 只補實際資金流；非成員與別人替我付／收沒有我的帳戶流向，仍保留空值。
+-- 軟刪除的列也補帳戶，以免歷史結構與現存列不同。
+UPDATE "Transaction" t SET "accountId" = a."id"
+FROM "LedgerPerson" p, "Account" a
+WHERE t."type" IN ('EXPENSE', 'INCOME') AND t."accountId" IS NULL
+  AND t."payerPersonId" = p."id" AND p."userId" IS NOT NULL
+  AND a."userId" = p."userId" AND a."isTemporary"
+  AND NOT EXISTS (SELECT 1 FROM "DebtEntry" d WHERE d."transactionId" = t."id"
+    AND d."kind" IN ('PAID_FOR_ME', 'RECEIVED_FOR_ME'));
 
--- 4.（H1 補）差額轉成分支（spec §3.3 第 3 步）。
+UPDATE "Transaction" t SET "accountId" = a."id"
+FROM "Ledger" l, "Account" a
+WHERE t."type" IN ('EXPENSE', 'INCOME') AND t."accountId" IS NULL
+  AND t."payerPersonId" IS NULL AND t."ledgerId" = l."id" AND NOT l."tracksBalance"
+  AND a."userId" = t."creatorId" AND a."isTemporary"
+  AND NOT EXISTS (SELECT 1 FROM "DebtEntry" d WHERE d."transactionId" = t."id"
+    AND d."kind" IN ('PAID_FOR_ME', 'RECEIVED_FOR_ME'));
+
+-- 結清兩側各自找成員；非成員那一側不補。
+UPDATE "Transaction" t SET "accountId" = a."id"
+FROM "LedgerSettlement" s, "LedgerPerson" p, "Account" a
+WHERE t."type" = 'TRANSFER' AND t."accountId" IS NULL
+  AND s."transactionId" = t."id" AND p."id" = s."fromPersonId"
+  AND p."userId" IS NOT NULL AND a."userId" = p."userId" AND a."isTemporary";
+
+UPDATE "Transaction" t SET "toAccountId" = a."id"
+FROM "LedgerSettlement" s, "LedgerPerson" p, "Account" a
+WHERE t."type" = 'TRANSFER' AND t."toAccountId" IS NULL
+  AND s."transactionId" = t."id" AND p."id" = s."toPersonId"
+  AND p."userId" IS NOT NULL AND a."userId" = p."userId" AND a."isTemporary";
+
+-- 非結清的舊轉帳原本不入餘額；兩側空值皆由記帳人的臨時帳戶承接。
+UPDATE "Transaction" t SET "accountId" = a."id"
+FROM "Ledger" l, "Account" a
+WHERE t."type" = 'TRANSFER' AND t."accountId" IS NULL
+  AND t."ledgerId" = l."id" AND NOT l."tracksBalance"
+  AND NOT EXISTS (SELECT 1 FROM "LedgerSettlement" s WHERE s."transactionId" = t."id")
+  AND a."userId" = t."creatorId" AND a."isTemporary";
+
+UPDATE "Transaction" t SET "toAccountId" = a."id"
+FROM "Ledger" l, "Account" a
+WHERE t."type" = 'TRANSFER' AND t."toAccountId" IS NULL
+  AND t."ledgerId" = l."id" AND NOT l."tracksBalance"
+  AND NOT EXISTS (SELECT 1 FROM "LedgerSettlement" s WHERE s."transactionId" = t."id")
+  AND a."userId" = t."creatorId" AND a."isTemporary";
+
+UPDATE "Split" s SET "accountId" = a."id" FROM "Account" a
+WHERE s."payerCounterpartyId" IS NULL AND s."accountId" IS NULL
+  AND a."userId" = s."ownerId" AND a."isTemporary";
+
+-- 4. 舊差額僅在唯一配對時轉成分支；同秒但被其他紀錄隔開的不猜測。
+-- 單一 SQL 同步修改還款、交易和差額，避免只轉好其中一部分。
+WITH matches AS (
+  SELECT s."id" settlement_id, r."id" repayment_id
+  FROM "DebtEntry" s
+  JOIN "DebtEntry" r ON r."counterpartyId" = s."counterpartyId"
+    AND r."kind" IN ('COLLECT', 'REPAY') AND r."deletedAt" IS NULL
+    AND r."transactionId" IS NOT NULL
+    AND ((s."settlesEntryId" IS NOT NULL AND r."id" = s."settlesEntryId")
+      OR (s."settlesEntryId" IS NULL
+        AND r."createdAt" BETWEEN s."createdAt" - INTERVAL '1 second' AND s."createdAt"
+        AND NOT EXISTS (
+          SELECT 1 FROM "DebtEntry" middle
+          WHERE middle."counterpartyId" = s."counterpartyId" AND middle."deletedAt" IS NULL
+            AND middle."id" <> r."id" AND middle."id" <> s."id"
+            AND middle."createdAt" > r."createdAt" AND middle."createdAt" < s."createdAt")))
+  JOIN "Transaction" t ON t."id" = r."transactionId" AND t."deletedAt" IS NULL
+  WHERE s."kind" = 'SETTLEMENT' AND s."deletedAt" IS NULL
+), unique_matches AS (
+  SELECT settlement_id, MIN(repayment_id) repayment_id
+  FROM matches GROUP BY settlement_id HAVING COUNT(*) = 1
+), amounts AS (
+  SELECT m.settlement_id, m.repayment_id, r."transactionId" transaction_id,
+    r."kind" repayment_kind, r."delta" + s."delta" new_delta,
+    ABS(r."delta" + s."delta") cleared, t."amount" actual
+  FROM unique_matches m
+  JOIN "DebtEntry" s ON s."id" = m.settlement_id
+  JOIN "DebtEntry" r ON r."id" = m.repayment_id
+  JOIN "Transaction" t ON t."id" = r."transactionId"
+  WHERE (SELECT COUNT(*) FROM unique_matches other WHERE other.repayment_id = m.repayment_id) = 1
+    AND r."delta" + s."delta" <> 0
+    AND t."amount" <> ABS(r."delta" + s."delta")
+), changed_debts AS (
+  UPDATE "DebtEntry" r SET "delta" = a.new_delta, "updatedAt" = now()
+  FROM amounts a WHERE r."id" = a.repayment_id RETURNING r."id"
+), changed_transactions AS (
+  UPDATE "Transaction" t SET "amount" = a.cleared, "updatedAt" = now()
+  FROM amounts a WHERE t."id" = a.transaction_id RETURNING t."id"
+), branches AS (
+  INSERT INTO "Transaction" ("id", "ledgerId", "accountId", "creatorId", "type",
+    "amount", "date", "differenceOfId", "createdAt", "updatedAt")
+  SELECT gen_random_uuid()::text, t."ledgerId", t."accountId", t."creatorId",
+    CASE
+      WHEN a.repayment_kind = 'COLLECT' AND a.actual < a.cleared THEN 'EXPENSE'::"TransactionType"
+      WHEN a.repayment_kind = 'COLLECT' THEN 'INCOME'::"TransactionType"
+      WHEN a.actual < a.cleared THEN 'INCOME'::"TransactionType"
+      ELSE 'EXPENSE'::"TransactionType"
+    END,
+    ABS(a.actual - a.cleared), t."date", t."id", t."createdAt" + INTERVAL '1 millisecond', now()
+  FROM amounts a JOIN "Transaction" t ON t."id" = a.transaction_id
+  JOIN changed_debts cd ON cd."id" = a.repayment_id
+  JOIN changed_transactions ct ON ct."id" = a.transaction_id
+  RETURNING "differenceOfId"
+)
+UPDATE "DebtEntry" s SET "deletedAt" = now(), "updatedAt" = now()
+FROM amounts a JOIN branches b ON b."differenceOfId" = a.transaction_id
+WHERE s."id" = a.settlement_id;
 
 -- 5. 最後才刪掉 tracksBalance（決策 165）。
 ALTER TABLE "Ledger" DROP COLUMN "tracksBalance";
