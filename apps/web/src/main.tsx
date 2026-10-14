@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/global.css';
 
 /**
@@ -8,6 +9,9 @@ import './styles/global.css';
  *
  * 之後的 Provider（QueryClient、Auth、Router）會在 Step 2 加在這裡，
  * 本步只先確保建置與渲染管線可運作。
+ *
+ * 最外層的 ErrorBoundary 是最後防線：外殼本身（側欄、頂列、Provider）出錯時，
+ * 顯示占滿視窗的錯誤頁，而不是一片黑。頁面內容另有一層，見 `app/PageErrorBoundary.tsx`。
  */
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,6 +20,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary fullScreen>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );
