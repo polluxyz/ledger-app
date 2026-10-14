@@ -77,6 +77,14 @@ UPDATE "Split" s SET "accountId" = a."id" FROM "Account" a
 WHERE s."payerCounterpartyId" IS NULL AND s."accountId" IS NULL
   AND a."userId" = s."ownerId" AND a."isTemporary";
 
+-- 不計入餘額的帳本裡，借還交易（借出、借入、收回、償還，含代墊）也沒有帳戶；錢是記帳人的，由他的臨時帳戶承接。
+-- 要在第 4 段之前，分支才會跟著還款拿到同一個帳戶。
+UPDATE "Transaction" t SET "accountId" = a."id"
+FROM "Ledger" l, "Account" a
+WHERE t."type" IN ('LEND', 'BORROW', 'COLLECT', 'REPAY') AND t."accountId" IS NULL
+  AND t."ledgerId" = l."id" AND NOT l."tracksBalance"
+  AND a."userId" = t."creatorId" AND a."isTemporary";
+
 -- 4. 舊差額僅在唯一配對時轉成分支；同秒但被其他紀錄隔開的不猜測。
 -- 單一 SQL 同步修改還款、交易和差額，避免只轉好其中一部分。
 WITH matches AS (

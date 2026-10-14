@@ -139,3 +139,6 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
    - 註冊時建立臨時帳戶、migration 的結構部分（欄位、索引、補建臨時帳戶、刪 `tracksBalance`）：H2～H4 跑 e2e 需要新欄位，不能等 H1。H1 只補 migration 的資料搬移兩段。
    - shared `actualAmountOf`：修改還款表單要帶入實際收付金額，方向的判斷不能放前端。
    - Web `selectableAccounts`：表單的帳戶選單排除臨時帳戶，H5、H6 共用。
+5. **migration 拆成兩個檔**：H3 發現既有的 CHECK 約束 `DebtEntry_transaction_by_kind` 規定免除不能帶交易。協調者另開 `20261014160000_forgiveness_has_transaction` 放寬（`SETTLEMENT` 照舊不能帶）。沒有改原本那個檔，是因為 Prisma 不讓 AI 執行 `migrate reset`，已套用的測試資料庫只能往後 `deploy`。spec §3.3 寫「同一個 migration」，實際是同一個 PR 的兩個 migration。
+6. **H1 的 migration 補一條**：不計入餘額帳本裡的借還交易（`LEND`、`BORROW`、`COLLECT`、`REPAY`）沒有帳戶時也移到記帳人的臨時帳戶，放在差額轉分支之前，分支才會拿到同一個帳戶。H1 的比對資料裡 r6 就是這種情況，原本分支的帳戶是空的。
+7. **migration 前後比對**（協調者用 H1 的比對資料重跑，2026-10-14）：一般帳戶 a1 845 → 845、a2 2000 → 2000；8 個對象的往來餘額全部不變；臨時帳戶 u1 −100（H1 回報時是 −140，差的 40 是第 6 項補上的 r6 實收）、u2 55；6 筆分支都符合「還款 ± 分支 = 原本實收」（80、120、45、80、120、40）；對不到還款的舊差額原樣保留；非成員付款、別人替我付的交易帳戶仍是空的。
