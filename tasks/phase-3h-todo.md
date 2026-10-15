@@ -20,7 +20,7 @@ plan：`tasks/phase-3h-plan.md`；spec：`docs/specs/phase-3h-every-entry-has-ac
       驗收：`every-entry-account.e2e-spec.ts` 走完 SC-H1～H10、SC-H14；既有 API e2e 全綠。
 - [x] **H8 Web e2e**（依賴 H1～H6；`eea-web-e2e`）：plan §1.4 G8。
       驗收：兩套 Web e2e 全綠，含 spec §6 的兩條主線。
-- [ ] **H9 整體驗收與 PR**（協調者）：plan §4。
+- [x] **H9 整體驗收與 PR**（協調者）：plan §4。
       驗收：隔離測試由紅轉綠；`tracksBalance` grep 無結果；migration 前後比對自己重跑一致；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §8 的文件影響都改了；PR 依模板填寫、CI 全綠、squash merge。
 - [ ] **H10 部署與收尾**（協調者）：plan §2 第 6、7 項。問開發者要不要部署；要的話先 `pg_dump`，刪測試資料，`migrate deploy`，重建情境。
       驗收：dev 的帳戶餘額核對一致；spec §1 的 1～7 點過一次；`orca worktree list` 沒有 `eea-*`；測試資料庫刪除清單給開發者看過；memory「階段三進度」更新。
