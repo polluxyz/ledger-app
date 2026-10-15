@@ -369,7 +369,7 @@ export function DebtEntryForm({
       <TextField
         label="名稱"
         value={title}
-        maxLength={200}
+        maxLength={100}
         onChange={(event) => setTitle(event.target.value)}
       />
 

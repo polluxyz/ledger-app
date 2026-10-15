@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   actualAmountOf,
+  debtCategoryTypeOf,
   ErrorCode,
   mergeTotals,
   SETTLEABLE_DEBT_ENTRY_KINDS,
@@ -166,6 +167,15 @@ export class DebtEntriesService {
         input.title !== undefined ||
         input.accountId !== undefined ||
         input.categoryId !== undefined;
+      // 名稱、帳戶、分類只開放借出、借入、收回、還款（3i 決策 176）。舊的「幫我付」沒有帳戶
+      // （3h 決策 160），不能被補上帳戶或分類。
+      if (changesRecording && debtCategoryTypeOf(existing.kind) === null) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.DEBT_ENTRY_NOT_EDITABLE,
+          'Only lend, borrow and repayment entries can change title, account or category.',
+        );
+      }
       if (changesRecording && existing.transactionId === null) {
         throw new AppException(
           HttpStatus.CONFLICT,

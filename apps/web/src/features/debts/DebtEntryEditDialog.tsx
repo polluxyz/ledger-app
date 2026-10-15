@@ -105,10 +105,10 @@ export function DebtEntryEditForm({
   const accounts = useAccounts();
   const accountsForSelection = selectableAccounts(accounts.data ?? []);
   const categoryType = debtCategoryTypeOf(kind);
-  const categories = useCategories(
-    hasRecordedTransaction ? ledgerId : null,
-    categoryType ?? undefined,
-  );
+  // 名稱、帳戶、分類只有借出、借入、收回、還款能改（3i 決策 176）；舊的「幫我付」沒有帳戶，
+  // 顯示必填的帳戶欄反而會讓它連金額都存不了。
+  const canEditRecording = hasRecordedTransaction && categoryType !== null;
+  const categories = useCategories(canEditRecording ? ledgerId : null, categoryType ?? undefined);
 
   const amountCents = parseMoneyInput(amount);
   const amountChanged = amountCents !== originalAmount;
@@ -141,13 +141,13 @@ export function DebtEntryEditForm({
     if (noteChanged) {
       input.note = note === '' ? null : note;
     }
-    if (hasRecordedTransaction && titleChanged) {
+    if (canEditRecording && titleChanged) {
       input.title = title.trim() === '' ? null : title.trim();
     }
-    if (hasRecordedTransaction && accountChanged && accountId !== '') {
+    if (canEditRecording && accountChanged && accountId !== '') {
       input.accountId = accountId;
     }
-    if (hasRecordedTransaction && categoryChanged) {
+    if (canEditRecording && categoryChanged) {
       input.categoryId = categoryId === '' ? null : categoryId;
     }
     if (Object.keys(input).length === 0) {
@@ -183,7 +183,7 @@ export function DebtEntryEditForm({
           disabled={updateEntry.isPending}
           onChange={(event) => setDate(event.target.value)}
         />
-        {hasRecordedTransaction && categoryType !== null && (
+        {canEditRecording && (
           <CategoryPicker
             categories={categories.data ?? []}
             value={categoryId}
@@ -192,7 +192,7 @@ export function DebtEntryEditForm({
           />
         )}
       </div>
-      {hasRecordedTransaction && (
+      {canEditRecording && (
         <>
           <Select
             label="帳戶"
@@ -213,7 +213,7 @@ export function DebtEntryEditForm({
           <TextField
             label="名稱"
             value={title}
-            maxLength={200}
+            maxLength={100}
             disabled={updateEntry.isPending}
             onChange={(event) => setTitle(event.target.value)}
           />

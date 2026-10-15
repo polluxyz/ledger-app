@@ -198,6 +198,20 @@ describe('DebtEntryEditDialog', () => {
     expect(within(dialog).getByLabelText('備註')).toBeInTheDocument();
   });
 
+  it('hides account, category, and title for a legacy paid-for-me entry, which has no account', async () => {
+    renderDialog({
+      ...entry,
+      kind: 'PAID_FOR_ME',
+      delta: -12000,
+      recorded: { ledgerId: 'ledger-1', accountId: null, title: null, categoryId: null },
+    });
+    const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
+    expect(within(dialog).queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('名稱')).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('combobox', { name: '分類' })).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('金額')).toBeInTheDocument();
+  });
+
   it('shows the confirmation line only after the amount or date changes', async () => {
     const user = userEvent.setup();
     const pairedEntry = { ...entry, paired: true };

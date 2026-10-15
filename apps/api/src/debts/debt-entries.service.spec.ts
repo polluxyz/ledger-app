@@ -493,6 +493,19 @@ describe('DebtEntriesService', () => {
     );
 
     it.each([{ title: '押金' }, { categoryId: null }, { accountId: 'bank' }])(
+      'rejects transaction fields on a legacy PAID_FOR_ME entry: %j',
+      async (input) => {
+        prisma.debtEntry.findFirst.mockResolvedValue(entryRow({ kind: 'PAID_FOR_ME' }));
+        await expect(service.update(USER, 'entry-1', input)).rejects.toMatchObject({
+          status: 409,
+          errorCode: 'DEBT_ENTRY_NOT_EDITABLE',
+        });
+        expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+        expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([{ title: '押金' }, { categoryId: null }, { accountId: 'bank' }])(
       'checks ledger write access for %j',
       async (input) => {
         prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
