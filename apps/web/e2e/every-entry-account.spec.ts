@@ -87,9 +87,12 @@ test('少收結清主線：還款下顯示分支，撤銷後往來餘額回復',
   await expect(detailSwitch).toHaveAttribute('aria-pressed', 'true');
   const repaymentTransaction = transactionRow(page, '還清');
   await expect(repaymentTransaction).toContainText('房東');
+  // 3h 修訂 1：還款列是實收 90，分支開頭是還清的 93。
+  await expect(repaymentTransaction).toContainText('+$90');
   const transactionDifference = page.getByRole('listitem', { name: /少收/ });
   await expect(transactionDifference).toBeVisible();
   await expect(transactionDifference).toContainText('└');
+  await expect(transactionDifference).toContainText('+$93');
 
   await openDebtsTab(page, '歷史');
   const undoHistory = await expandDebtRow(page, /^房東/);

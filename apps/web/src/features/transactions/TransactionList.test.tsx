@@ -438,12 +438,13 @@ describe('TransactionList', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it('renders repayment differences as noninteractive child rows with a cleared badge', async () => {
+  it('shows the actual amount on the repayment and the cleared amount on its branch', async () => {
     const user = userEvent.setup();
     const onEditDebtTransaction = vi.fn();
     const collect = makeTransaction({
       id: 'collect-with-difference',
       type: 'COLLECT',
+      amount: 9300,
       category: null,
       debt: {
         entryId: 'entry-collect',
@@ -458,6 +459,7 @@ describe('TransactionList', () => {
     const collectMore = makeTransaction({
       id: 'collect-more',
       type: 'COLLECT',
+      amount: 10000,
       category: null,
       debt: { ...collect.debt!, entryId: 'entry-more' },
       difference: { id: 'difference-more', type: 'INCOME', amount: 500 },
@@ -468,8 +470,11 @@ describe('TransactionList', () => {
     });
 
     expect(within(row(0)).getByText('還清')).toBeInTheDocument();
-    expect(row(1)).toHaveTextContent('└−$3少收');
-    expect(row(3)).toHaveTextContent('└+$5多收');
+    // 主列是實際收付：93 少收 3 是 90、100 多收 5 是 105。分支開頭是還清的欠款。
+    expect(row(0)).toHaveTextContent('+$90');
+    expect(row(1)).toHaveTextContent('└+$93少收−$3');
+    expect(row(2)).toHaveTextContent('+$105');
+    expect(row(3)).toHaveTextContent('└+$100多收+$5');
     for (const branch of [row(1), row(3)]) {
       expect(branch.querySelectorAll('button')).toHaveLength(0);
       await user.click(branch);

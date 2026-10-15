@@ -162,10 +162,16 @@
   gap: var(--space-xs);
   min-height: 2rem;
   padding: var(--space-xs) var(--space-md);
-  padding-left: calc(var(--space-md) + 2.25rem + var(--space-sm));
+  /* 比名稱再縮一格（3h 修訂 1），一眼看得出是上一行的分支。 */
+  padding-left: calc(var(--space-md) + 2.25rem + var(--space-sm) + var(--space-lg));
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* 還清的金額與差額之間多空一點，讀成兩段：「+93」「少收 −3」。 */
+.differenceLabel {
+  margin-left: var(--space-sm);
 }
 
 .differenceBranch {

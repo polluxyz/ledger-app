@@ -1,5 +1,6 @@
 import { Fragment, useState, type MouseEvent } from 'react';
 import {
+  actualAmountOf,
   differenceLabelOf,
   forgivenessLabelOf,
   isDebtTransactionType,
@@ -206,13 +207,22 @@ export function TransactionList({
               const expanded = expandedId === transaction.id;
               const isClickable =
                 !readOnly && (transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt);
-              const amount = ledgerSplit
-                ? transaction.amount
-                : split
-                  ? split.payer === null
-                    ? split.total
-                    : split.myShare
-                  : transaction.amount;
+              const repaymentType =
+                transaction.type === 'COLLECT' || transaction.type === 'REPAY'
+                  ? transaction.type
+                  : null;
+              // 有分支的還款，右邊顯示實際收付（3h 修訂 1）：帳戶裡的錢是還款加分支，
+              // 還清的欠款改寫在分支那一行。
+              const amount =
+                repaymentType !== null && transaction.difference
+                  ? actualAmountOf(repaymentType, transaction.amount, transaction.difference)
+                  : ledgerSplit
+                    ? transaction.amount
+                    : split
+                      ? split.payer === null
+                        ? split.total
+                        : split.myShare
+                      : transaction.amount;
               const payerSubtitle = getPayerSubtitle(transaction, currentUserId);
               const ledgerArrows = getLedgerSplitArrows(transaction, currentUserId);
               const settlementFrom = settlement
@@ -230,6 +240,11 @@ export function TransactionList({
                     transaction.difference.amount,
                   ).replace(/^-/, '−')
                 : null;
+              // 分支那一行開頭是還清的欠款，也就是還款交易本身的金額。
+              const clearedAmount = formatTransactionAmount(
+                transaction.type,
+                transaction.amount,
+              ).replace(/^-/, '−');
               // 結清列：第一行寫「結清」，第二行用不帶頭貼的小箭頭，明細列放頭貼太擠。
               // 分帳標籤跟著第一行的分類，第二行只留名稱與付款人。
               const rowContent = (
@@ -364,13 +379,14 @@ export function TransactionList({
                   {differenceLabel !== null && differenceAmount !== null && (
                     <li
                       className={styles.differenceRow}
-                      aria-label={`${differenceAmount} ${differenceLabel}`}
+                      aria-label={`${clearedAmount} ${differenceLabel} ${differenceAmount}`}
                     >
                       <span className={styles.differenceBranch} aria-hidden="true">
                         └
                       </span>
+                      <span className={styles.differenceAmount}>{clearedAmount}</span>
+                      <span className={styles.differenceLabel}>{differenceLabel}</span>
                       <span className={styles.differenceAmount}>{differenceAmount}</span>
-                      <span>{differenceLabel}</span>
                     </li>
                   )}
                 </Fragment>
