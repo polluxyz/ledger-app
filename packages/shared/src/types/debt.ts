@@ -148,6 +148,11 @@ export interface DebtEntry {
    * 只在 `GET /counterparties/{id}/entries` 回傳。
    */
   balanceAfter?: Cents;
+  /**
+   * 這筆產生的交易現在記在哪裡（3i §4.3）：修改對話框用它帶入目前的帳戶、名稱、分類。
+   * `accountId` 一定是我自己的帳戶；呆帳、債務免除沒有帳戶，為 `null`。沒有交易的舊資料整個為 `null`。
+   */
+  recorded: DebtEntryRecorded | null;
   /** 與對方的同步狀態（3b-2 §3.4），由後端算出。 */
   sync: DebtEntrySyncStatus;
   /** 是否與對方那邊的一筆紀錄配對。畫面用它決定改或刪之前要不要警告（決策 67）。 */
@@ -167,6 +172,14 @@ export interface DebtEntry {
  */
 export const DEBT_ENTRY_SYNC_STATUSES = ['NONE', 'PENDING', 'SYNCED', 'DECLINED'] as const;
 export type DebtEntrySyncStatus = (typeof DEBT_ENTRY_SYNC_STATUSES)[number];
+
+/** 往來紀錄的交易現在的帳本、帳戶、名稱、分類（3i §4.3）。 */
+export interface DebtEntryRecorded {
+  ledgerId: string;
+  accountId: string | null;
+  title: string | null;
+  categoryId: string | null;
+}
 
 /** 還款底下的結清分支（3h 決策 170）。名稱用 `differenceLabelOf` 由還款與分支的型別決定。 */
 export interface DebtEntryDifferenceRef {
@@ -205,7 +218,13 @@ export interface CreateDebtEntryRequest {
    * **必填**：產生交易並記在這本帳本、這個帳戶（3h 決策 163）。沒有「不記入帳本」——送 `null` 回 400。
    */
   record: DebtEntryRecordTarget;
-  /** `PAID_FOR_ME` 必填，須為該帳本的支出分類；其他種類不可帶。 */
+  /** 交易名稱，選填，最多 100 字（3i 決策 181、179）。 */
+  title?: string;
+  /**
+   * 選填，須為 `record.ledgerId` 那本帳本的分類（3i 決策 178、181）。方向看後端決定的種類
+   * （`debtCategoryTypeOf`）：借出、還款（我還對方）用支出分類，借入、收回用收入分類，
+   * 不符 400 `CATEGORY_TYPE_MISMATCH`，不是這本帳本的 404。只是標記，交易型別不變。
+   */
   categoryId?: string;
   /**
    * 以此結清。只有 `REPAYMENT` 可以帶；帶了就不受「不能超過欠款」限制。`amount` 是實際收付的金額：
@@ -237,6 +256,17 @@ export interface UpdateDebtEntryRequest {
   date?: string;
   /** 送 `null` 清除備註。 */
   note?: string | null;
+  // 以下 3 個改的是這筆的交易（3i 決策 176）。已連動的紀錄只改我這邊、不送提議（決策 180）；
+  // 沒有交易的舊資料帶了回 409 `DEBT_ENTRY_NOT_EDITABLE`。
+  /** 交易名稱，最多 100 字；送 `null` 清除（決策 179）。 */
+  title?: string | null;
+  /**
+   * 換到我自己的一般帳戶（決策 177）：別人的 404，臨時帳戶 400 `TEMPORARY_ACCOUNT_NOT_SELECTABLE`。
+   * 還款底下的分支跟著換。
+   */
+  accountId?: string;
+  /** 同 `CreateDebtEntryRequest.categoryId` 的規則；送 `null` 清除（決策 178）。 */
+  categoryId?: string | null;
 }
 
 /**
