@@ -188,14 +188,14 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   const form = panelA;
   await form.getByRole('button', { name: '借出', exact: true }).click();
   await form.getByLabel('金額').fill('120');
-  await form.getByLabel('記在哪本帳本').selectOption({ label: '甲 的帳本' });
+  await expect(form.getByLabel('記在哪本帳本')).toHaveCount(0);
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   await pageB.reload();
   await openDashboard(pageB);
   await pendingRow(pageB, '你欠阿甲 $120').getByRole('button', { name: '接受' }).click();
-  await pendingCard(pageB).getByLabel('記在哪本帳本').selectOption({ label: '乙 的帳本' });
+  await expect(pendingCard(pageB).getByLabel('記在哪本帳本')).toHaveCount(0);
   await pendingCard(pageB)
     .getByRole('combobox', { name: '借到的錢進哪個帳戶' })
     .selectOption({ label: '現金' });
@@ -335,7 +335,7 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
   await pendingRow(pageB, /你欠.*\$50/)
     .getByRole('button', { name: '接受' })
     .click();
-  await pendingCard(pageB).getByLabel('記在哪本帳本').selectOption({ label: '乙 的帳本' });
+  await expect(pendingCard(pageB).getByLabel('記在哪本帳本')).toHaveCount(0);
   await pendingCard(pageB).getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await pendingCard(pageB).getByRole('button', { name: '接受', exact: true }).click();
   await expect(pendingCard(pageB).getByText('你帳上目前兩清')).toBeVisible();

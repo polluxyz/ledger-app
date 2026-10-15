@@ -1,4 +1,4 @@
-import { addMember, createLedger, listAccounts, listCategories, personalLedger } from './api';
+import { addMember, createLedger, listAccounts, listCategories } from './api';
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   debtEntry,
@@ -26,10 +26,7 @@ test('少收結清主線：還款下顯示分支，撤銷後往來餘額回復',
   request,
 }) => {
   test.setTimeout(120_000);
-  const [ledger, accounts] = await Promise.all([
-    personalLedger(request, userA.token),
-    listAccounts(request, userA.token),
-  ]);
+  const accounts = await listAccounts(request, userA.token);
   const cash = accounts.find((account) => account.name === '現金' && !account.isTemporary);
   if (!cash) {
     throw new Error('找不到甲的現金帳戶。');
@@ -46,7 +43,7 @@ test('少收結清主線：還款下顯示分支，撤銷後往來餘額回復',
     .getByRole('button', { name: '借出', exact: true })
     .click();
   await newForm.getByLabel('金額').fill('93');
-  await newForm.getByLabel('記在哪本帳本').selectOption(ledger.id);
+  await expect(newForm.getByLabel('記在哪本帳本')).toHaveCount(0);
   await newForm.getByRole('combobox', { name: /帳戶/ }).selectOption(cash.id);
   await newForm.getByRole('button', { name: '新增', exact: true }).click();
   await expect
@@ -65,7 +62,7 @@ test('少收結清主線：還款下顯示分支，撤銷後往來餘額回復',
     .getByRole('button', { name: '還款', exact: true })
     .click();
   await repaymentForm.getByLabel('金額').fill('90');
-  await repaymentForm.getByLabel('記在哪本帳本').selectOption(ledger.id);
+  await expect(repaymentForm.getByLabel('記在哪本帳本')).toHaveCount(0);
   await repaymentForm.getByRole('combobox', { name: /帳戶/ }).selectOption(cash.id);
   await repaymentForm.getByLabel('以此結清').check();
   await repaymentForm.getByRole('button', { name: '新增', exact: true }).click();
@@ -87,12 +84,15 @@ test('少收結清主線：還款下顯示分支，撤銷後往來餘額回復',
   await expect(detailSwitch).toHaveAttribute('aria-pressed', 'true');
   const repaymentTransaction = transactionRow(page, '還清');
   await expect(repaymentTransaction).toContainText('房東');
-  // 3h 修訂 1：還款列是實收 90，分支開頭是還清的 93。
+  // 3i W181：收合時只顯示實收與還清；欠款與少收要展開細項才看得到。
   await expect(repaymentTransaction).toContainText('+$90');
-  const transactionDifference = page.getByRole('listitem', { name: /少收/ });
-  await expect(transactionDifference).toBeVisible();
-  await expect(transactionDifference).toContainText('└');
-  await expect(transactionDifference).toContainText('+$93');
+  await expect(repaymentTransaction).not.toContainText('+$93');
+  await expect(repaymentTransaction).not.toContainText('少收');
+  await repaymentTransaction.getByRole('button', { name: '展開細項', exact: true }).click();
+  await expect(repaymentTransaction).toContainText('欠款');
+  await expect(repaymentTransaction).toContainText('+$93');
+  await expect(repaymentTransaction).toContainText('少收');
+  await expect(repaymentTransaction).toContainText('−$3');
 
   await openDebtsTab(page, '歷史');
   const undoHistory = await expandDebtRow(page, /^房東/);
