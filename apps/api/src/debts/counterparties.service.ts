@@ -30,6 +30,7 @@ import {
   runningBalances,
   toCounterparty,
   toDebtEntry,
+  DEBT_ENTRY_INCLUDE,
 } from './debt-entry-rules';
 import { filterDebtEntriesBySection } from './debt-entry-sections';
 import { proposeAmend, proposeCreate, syncStatuses } from './debt-proposal-rules';
@@ -243,6 +244,7 @@ export class CounterpartiesService {
     const row = await loadOwnedCounterparty(this.prisma, userId, counterpartyId);
     const rows = await this.prisma.debtEntry.findMany({
       where: { counterpartyId: row.id, deletedAt: null },
+      include: DEBT_ENTRY_INCLUDE,
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
     const running = runningBalances(rows);
@@ -330,6 +332,7 @@ export class CounterpartiesService {
           note: null,
           transactionId,
         },
+        include: DEBT_ENTRY_INCLUDE,
       });
       await proposeCreate(tx, { fromUserId: userId, entry, amount: balance, settle: false });
 

@@ -48,6 +48,7 @@ describe('DebtEntriesService', () => {
       date: new Date(DATE),
       note: null,
       transactionId: 'txn-1',
+      transaction: { ledgerId: LEDGER, accountId: ACCOUNT, title: null, categoryId: null },
       pairedEntryId: null,
       settlesEntryId: null,
       deletedAt: null,
@@ -156,7 +157,6 @@ describe('DebtEntriesService', () => {
         { kind: 'PAID_FOR_ME', categoryId: 'c', record: { ledgerId: LEDGER, accountId: ACCOUNT } },
       ],
       ['PAID_FOR_ME without a category', { kind: 'PAID_FOR_ME', record: { ledgerId: LEDGER } }],
-      ['a category on LEND', { categoryId: 'c' }],
       ['settle on LEND', { settle: true }],
       ['settle on PAID_FOR_ME', { kind: 'PAID_FOR_ME', categoryId: 'c', settle: true }],
     ])('rejects %s', async (_label, overrides) => {
@@ -193,10 +193,12 @@ describe('DebtEntriesService', () => {
       expect(createdData()).toMatchObject({ kind: 'BORROW', delta: -111 });
     });
 
-    it('rejects a category on the old debt endpoint', async () => {
-      await expect(service.create(USER, input({ categoryId: 'cat-1' }))).rejects.toMatchObject({
-        status: 400,
-      });
+    it('passes title and category to the shared debt transaction writer', async () => {
+      await service.create(USER, input({ title: '押金', categoryId: 'cat-1' }));
+      expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ title: '押金', categoryId: 'cat-1' }),
+      );
     });
 
     it('finds or creates the counterparty by name', async () => {
@@ -366,7 +368,12 @@ describe('DebtEntriesService', () => {
       expect(prisma.debtEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'repay-1' }, data: {} }),
       );
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-repay', {});
+      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        'txn-repay',
+        {},
+        USER,
+      );
       expect(9300 - 200).toBe(9100);
     });
 
@@ -379,7 +386,12 @@ describe('DebtEntriesService', () => {
         where: { id: 'branch-1' },
         data: { type: 'INCOME', amount: 200 },
       });
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-repay', {});
+      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        'txn-repay',
+        {},
+        USER,
+      );
       expect(9300 + 200).toBe(9500);
     });
 
@@ -392,7 +404,12 @@ describe('DebtEntriesService', () => {
         where: { id: 'branch-1' },
         data: { deletedAt: expect.any(Date) as Date },
       });
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-repay', {});
+      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        'txn-repay',
+        {},
+        USER,
+      );
     });
 
     it('updates delta on an ordinary repayment without a branch', async () => {
@@ -405,13 +422,118 @@ describe('DebtEntriesService', () => {
       expect(prisma.debtEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { delta: -9100 } }),
       );
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-repay', {
-        amount: 9100,
-      });
+      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        'txn-repay',
+        {
+          amount: 9100,
+        },
+        USER,
+      );
     });
   });
 
   describe('update', () => {
+    function linkedEntry() {
+      const entry = entryRow({ pairedEntryId: 'their-entry' });
+      prisma.debtEntry.findFirst.mockResolvedValue(entry);
+      prisma.debtEntry.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...entry, ...data }),
+      );
+      prisma.counterpartyLink.findFirst.mockResolvedValue({
+        userLowId: USER,
+        userHighId: 'other',
+        counterpartyLowId: 'cp-1',
+        counterpartyHighId: 'cp-2',
+      });
+    }
+
+    it.each([
+      { title: '押金' },
+      { accountId: 'bank' },
+      { categoryId: 'expense' },
+      { note: '私人的備註' },
+      { title: null, categoryId: null },
+    ])('does not propose an amendment for local-only fields %j', async (input) => {
+      linkedEntry();
+      const result = await service.update(USER, 'entry-1', input);
+      expect(result.sync).toBe('SYNCED');
+      expect(prisma.debtProposal.updateMany).not.toHaveBeenCalled();
+      expect(prisma.debtProposal.create).not.toHaveBeenCalled();
+    });
+
+    it.each([{ amount: 150 }, { date: '2026-10-15T00:00:00.000Z' }])(
+      'still proposes an amendment for %j',
+      async (input) => {
+        linkedEntry();
+        await service.update(USER, 'entry-1', { title: '押金', ...input });
+        expect(prisma.debtProposal.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              type: 'AMEND',
+              targetEntryId: 'their-entry',
+            }) as unknown,
+          }),
+        );
+      },
+    );
+
+    it.each([{ title: null }, { categoryId: null }, { accountId: 'bank' }])(
+      'rejects transaction fields on a legacy entry: %j',
+      async (input) => {
+        prisma.debtEntry.findFirst.mockResolvedValue(
+          entryRow({ transactionId: null, transaction: null }),
+        );
+        await expect(service.update(USER, 'entry-1', input)).rejects.toMatchObject({
+          status: 409,
+          errorCode: 'DEBT_ENTRY_NOT_EDITABLE',
+        });
+        expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([{ title: '押金' }, { categoryId: null }, { accountId: 'bank' }])(
+      'checks ledger write access for %j',
+      async (input) => {
+        prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
+        prisma.ledgerMember.findUnique.mockResolvedValue({
+          role: 'VIEWER',
+          ledger: { archivedAt: null },
+        });
+        await expect(service.update(USER, 'entry-1', input)).rejects.toMatchObject({ status: 403 });
+        expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+        expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps the existing note-only behavior when ledger access was lost', async () => {
+      prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      await service.update(USER, 'entry-1', { note: '我的備註' });
+      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [null, 404, 'NOT_FOUND'],
+      [{ role: 'EDITOR', ledger: { archivedAt: new Date(DATE) } }, 409, 'LEDGER_ARCHIVED'],
+    ])('refuses new fields when ledger membership is %j', async (membership, status, errorCode) => {
+      prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
+      prisma.ledgerMember.findUnique.mockResolvedValue(membership);
+      await expect(service.update(USER, 'entry-1', { title: '押金' })).rejects.toMatchObject({
+        status,
+        errorCode,
+      });
+      expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+      expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+    });
+
+    it('does not propose unchanged ordinary amount and date together with local fields', async () => {
+      linkedEntry();
+      await service.update(USER, 'entry-1', { amount: 120, date: DATE, title: '押金' });
+      expect(prisma.debtProposal.updateMany).not.toHaveBeenCalled();
+      expect(prisma.debtProposal.create).not.toHaveBeenCalled();
+    });
+
     it('keeps the sign of the entry and updates its transaction', async () => {
       // loadOwnedEntry 回那筆紀錄；recalculateSettlement 找不到綁定的差額（回 null）。
       prisma.debtEntry.findFirst
@@ -423,12 +545,17 @@ describe('DebtEntriesService', () => {
       expect(prisma.debtEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ delta: -150 }) as unknown }),
       );
-      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(prisma, 'txn-1', {
-        amount: 150,
-      });
+      expect(transactions.updateDebtTransaction).toHaveBeenCalledWith(
+        prisma,
+        'txn-1',
+        {
+          amount: 150,
+        },
+        USER,
+      );
     });
 
-    it.each(['SETTLEMENT', 'FORGIVE'])('refuses to edit a %s entry', async (kind) => {
+    it.each(['SETTLEMENT', 'FORGIVE', 'FORGIVEN'])('refuses to edit a %s entry', async (kind) => {
       prisma.debtEntry.findFirst.mockResolvedValue(
         entryRow({ kind, delta: -3, transactionId: null }),
       );

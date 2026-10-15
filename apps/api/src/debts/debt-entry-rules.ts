@@ -135,7 +135,12 @@ export function runningBalances<T extends OrderedEntry>(entries: ReadonlyArray<T
 }
 
 type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
-type DebtEntryRow = Prisma.DebtEntryGetPayload<object>;
+/** 回應所需交易欄位隨紀錄一起查出，清單不逐筆查詢。 */
+export const DEBT_ENTRY_INCLUDE = {
+  transaction: { select: { ledgerId: true, accountId: true, title: true, categoryId: true } },
+} satisfies Prisma.DebtEntryInclude;
+
+type DebtEntryRow = Prisma.DebtEntryGetPayload<{ include: typeof DEBT_ENTRY_INCLUDE }>;
 export type DebtEntryDifference = {
   transactionId: string;
   type: 'EXPENSE' | 'INCOME';
@@ -183,6 +188,7 @@ export function toDebtEntry(
     date: row.date.toISOString(),
     note: row.note,
     transactionId: row.transactionId,
+    recorded: row.transaction ?? null,
     splitId: row.splitId,
     settlesEntryId: row.settlesEntryId,
     difference: extra.difference ?? null,
@@ -217,6 +223,7 @@ export async function loadOwnedEntry(
 ): Promise<DebtEntryRow> {
   const row = await client.debtEntry.findFirst({
     where: { id: entryId, deletedAt: null, counterparty: { ownerId: userId } },
+    include: DEBT_ENTRY_INCLUDE,
   });
   if (row === null) {
     throw notFound('Debt entry');
