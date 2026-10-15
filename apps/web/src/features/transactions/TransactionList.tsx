@@ -1,6 +1,7 @@
 import { Fragment, useState, type MouseEvent } from 'react';
 import {
   actualAmountOf,
+  debtCategoryTypeOf,
   differenceLabelOf,
   forgivenessLabelOf,
   isDebtTransactionType,
@@ -69,10 +70,12 @@ const AMOUNT_COLOR: Record<Transaction['type'], string> = {
  * 聽到一串一模一樣的按鈕。加上日期與分類才指得明確。
  */
 /**
- * 第一行：這筆是什麼（3d 修訂 1，T13）。永遠是分類；沒有分類的借還與轉帳用它們的標籤
- * （「借出 · 小明」「轉帳」）。每一列的這個位置都是同一種資訊，掃過去才不會亂。
+ * 第一行：一般交易優先顯示分類；借還方向固定顯示動作標籤，分類只用來換圖示。
  */
 function rowLabel(transaction: Transaction): string {
+  if (transaction.debt && debtCategoryTypeOf(transaction.debt.kind) !== null) {
+    return getTransactionLabel(transaction);
+  }
   if (transaction.category) return transaction.category.name;
   return getTransactionLabel(transaction);
 }
@@ -211,8 +214,7 @@ export function TransactionList({
                 transaction.type === 'COLLECT' || transaction.type === 'REPAY'
                   ? transaction.type
                   : null;
-              // 有分支的還款，右邊顯示實際收付（3h 修訂 1）：帳戶裡的錢是還款加分支，
-              // 還清的欠款改寫在分支那一行。
+              // 有分支的還款，主列顯示實收，欠款與差額收在展開細項裡。
               const amount =
                 repaymentType !== null && transaction.difference
                   ? actualAmountOf(repaymentType, transaction.amount, transaction.difference)
@@ -234,6 +236,8 @@ export function TransactionList({
               const differenceLabel = transaction.difference
                 ? differenceLabelOf(transaction.type, transaction.difference.type)
                 : null;
+              const hasDifferenceDetails =
+                differenceLabel !== null && transaction.difference !== null;
               const differenceAmount = transaction.difference
                 ? formatTransactionAmount(
                     transaction.difference.type,
@@ -274,7 +278,6 @@ export function TransactionList({
               );
               const rowClassNames = [
                 styles.row,
-                differenceLabel !== null ? styles.rowWithDifference : '',
                 isClickable ? styles.clickable : '',
                 transaction.id === selectedId ? styles.selected : '',
                 expanded ? styles.rowExpanded : '',
@@ -329,11 +332,15 @@ export function TransactionList({
                           臨時帳戶
                         </button>
                       )}
-                      {hasSplit && (
+                      {(hasSplit || hasDifferenceDetails) && (
                         <button
                           type="button"
                           className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
-                          aria-label={`${expanded ? '收合' : '展開'}分帳明細`}
+                          aria-label={
+                            hasDifferenceDetails
+                              ? `${expanded ? '收合' : '展開'}細項`
+                              : `${expanded ? '收合' : '展開'}分帳明細`
+                          }
                           aria-expanded={expanded}
                           onClick={() => setExpandedId(expanded ? null : transaction.id)}
                         >
@@ -341,54 +348,60 @@ export function TransactionList({
                         </button>
                       )}
                     </span>
-                    {expanded && hasSplit && (
-                      <div className={styles.details}>
-                        {ledgerSplit
-                          ? ledgerArrows.map((arrow) => (
-                              <DebtArrow
-                                key={arrow.personId}
-                                from={arrow.from}
-                                to={arrow.to}
-                                amount={arrow.amount}
-                                srText={arrow.srText}
-                              />
-                            ))
-                          : split?.counterparts.map((counterpart) => (
-                              <DebtArrow
-                                key={counterpart.counterpartyId}
-                                from={
-                                  counterpart.direction === 'THEY_OWE_ME' ? counterpart.name : '我'
-                                }
-                                to={
-                                  counterpart.direction === 'THEY_OWE_ME' ? '我' : counterpart.name
-                                }
-                                amount={counterpart.amount}
-                                srText={
-                                  counterpart.direction === 'THEY_OWE_ME'
-                                    ? `${counterpart.name}欠你 ${formatMoney(counterpart.amount)}`
-                                    : `你欠${counterpart.name} ${formatMoney(counterpart.amount)}`
-                                }
-                              />
-                            ))}
-                        {split?.myShare !== undefined && split.myShare > 0 && (
-                          <span className={styles.myShare}>我 {formatMoney(split.myShare)}</span>
+                    {expanded && (hasSplit || hasDifferenceDetails) && (
+                      <div
+                        className={`${styles.details} ${hasDifferenceDetails ? styles.differenceDetails : ''}`}
+                      >
+                        {hasDifferenceDetails && differenceAmount !== null ? (
+                          <>
+                            <div className={styles.differenceLine}>
+                              <span className={styles.differenceDetailLabel}>欠款</span>
+                              <span className={styles.differenceDetailAmount}>{clearedAmount}</span>
+                            </div>
+                            <div className={styles.differenceLine}>
+                              <span className={styles.differenceDetailLabel}>
+                                {differenceLabel}
+                              </span>
+                              <span className={styles.differenceDetailAmount}>
+                                {differenceAmount}
+                              </span>
+                            </div>
+                          </>
+                        ) : ledgerSplit ? (
+                          ledgerArrows.map((arrow) => (
+                            <DebtArrow
+                              key={arrow.personId}
+                              from={arrow.from}
+                              to={arrow.to}
+                              amount={arrow.amount}
+                              srText={arrow.srText}
+                            />
+                          ))
+                        ) : (
+                          split?.counterparts.map((counterpart) => (
+                            <DebtArrow
+                              key={counterpart.counterpartyId}
+                              from={
+                                counterpart.direction === 'THEY_OWE_ME' ? counterpart.name : '我'
+                              }
+                              to={counterpart.direction === 'THEY_OWE_ME' ? '我' : counterpart.name}
+                              amount={counterpart.amount}
+                              srText={
+                                counterpart.direction === 'THEY_OWE_ME'
+                                  ? `${counterpart.name}欠你 ${formatMoney(counterpart.amount)}`
+                                  : `你欠${counterpart.name} ${formatMoney(counterpart.amount)}`
+                              }
+                            />
+                          ))
                         )}
+                        {!hasDifferenceDetails &&
+                          split?.myShare !== undefined &&
+                          split.myShare > 0 && (
+                            <span className={styles.myShare}>我 {formatMoney(split.myShare)}</span>
+                          )}
                       </div>
                     )}
                   </li>
-                  {differenceLabel !== null && differenceAmount !== null && (
-                    <li
-                      className={styles.differenceRow}
-                      aria-label={`${clearedAmount} ${differenceLabel} ${differenceAmount}`}
-                    >
-                      <span className={styles.differenceBranch} aria-hidden="true">
-                        └
-                      </span>
-                      <span className={styles.differenceAmount}>{clearedAmount}</span>
-                      <span className={styles.differenceLabel}>{differenceLabel}</span>
-                      <span className={styles.differenceAmount}>{differenceAmount}</span>
-                    </li>
-                  )}
                 </Fragment>
               );
             })}

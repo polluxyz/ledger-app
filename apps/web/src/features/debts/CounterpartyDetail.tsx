@@ -1,17 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
-import { Select } from '../../components/Select';
 import { getAvatarLabels } from '../../lib/avatar-labels';
-import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntriesList } from './DebtEntriesList';
 import { DebtEntryForm } from './DebtEntryForm';
 import { useCounterparty, useCounterpartyEntryPages, useForgiveCounterparty } from './use-debts';
 import { LedgerSourceList } from './LedgerSourceList';
-import { useLedgers } from '../ledgers/use-ledgers';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
@@ -41,39 +38,17 @@ export function CounterpartyDetail({
   const counterparty = useCounterparty(counterpartyId);
   const entries = useCounterpartyEntryPages(counterpartyId, 'outstanding');
   const forgive = useForgiveCounterparty();
-  const ledgersQuery = useLedgers();
-  const recordDefaults = useRecordDefaults();
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
-  const [forgiveLedgerChoice, setForgiveLedgerChoice] = useState<string | null>(null);
   const [entryFormOpen, setEntryFormOpen] = useState(false);
-  const writableLedgers = useMemo(
-    () =>
-      (ledgersQuery.data ?? []).filter(
-        (item) => (item.role === 'OWNER' || item.role === 'EDITOR') && item.archivedAt === null,
-      ),
-    [ledgersQuery.data],
-  );
-  const defaultLedgerId = recordDefaults.data?.ledgerId ?? '';
-  const defaultForgiveLedgerId =
-    recordDefaults.isFetchedAfterMount &&
-    ledgersQuery.isFetchedAfterMount &&
-    writableLedgers.some((item) => item.id === defaultLedgerId)
-      ? defaultLedgerId
-      : '';
-  const forgiveLedgerId = forgiveLedgerChoice ?? defaultForgiveLedgerId;
 
   function closeForgive() {
     setForgiveOpen(false);
-    setForgiveLedgerChoice(null);
     forgive.reset();
   }
 
   function confirmForgive() {
-    if (forgiveLedgerId === '') {
-      return;
-    }
-    forgive.mutate({ counterpartyId, ledgerId: forgiveLedgerId }, { onSuccess: closeForgive });
+    forgive.mutate({ counterpartyId, ledgerId: ledger.id }, { onSuccess: closeForgive });
   }
 
   if (counterparty.isLoading) {
@@ -90,7 +65,10 @@ export function CounterpartyDetail({
   const { ledgerParts } = person;
   const entryFormId = `counterparty-entry-form-${counterpartyId}`;
   const outstandingEntries = entries.data?.pages.flatMap((page) => page.items) ?? [];
-  const canWrite = mode === 'personal';
+  const canWrite =
+    mode === 'personal' &&
+    (ledger.role === 'OWNER' || ledger.role === 'EDITOR') &&
+    ledger.archivedAt === null;
   const computedLabels = getAvatarLabels([
     '我',
     person.displayName,
@@ -179,24 +157,8 @@ export function CounterpartyDetail({
         </AnimatedDisclosure>
       )}
 
-      <Dialog open={forgiveOpen} title="免除剩餘" onClose={closeForgive}>
+      <Dialog open={forgiveOpen && canWrite} title="免除剩餘" onClose={closeForgive}>
         <div className={styles.entries}>
-          <Select
-            label="帳本"
-            value={forgiveLedgerId}
-            required
-            disabled={ledgersQuery.isLoading || writableLedgers.length === 0}
-            onChange={(event) => {
-              setForgiveLedgerChoice(event.target.value);
-            }}
-          >
-            <option value="">請選擇</option>
-            {writableLedgers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </Select>
           <FormError error={forgive.error} />
           <div className={styles.actions}>
             <Button
@@ -207,11 +169,7 @@ export function CounterpartyDetail({
             >
               取消
             </Button>
-            <Button
-              type="button"
-              disabled={forgive.isPending || forgiveLedgerId === ''}
-              onClick={confirmForgive}
-            >
+            <Button type="button" disabled={forgive.isPending} onClick={confirmForgive}>
               {forgive.isPending ? '處理中…' : '免除'}
             </Button>
           </div>

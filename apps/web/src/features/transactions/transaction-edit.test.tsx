@@ -35,6 +35,20 @@ describe('Editing and deleting a transaction', () => {
     creator: { id: 'u1', name: 'Alice' },
     createdAt: '2026-08-12T04:00:00.000Z',
   };
+  const debtTransaction = {
+    ...lunch,
+    type: 'LEND',
+    title: '押金',
+    note: null,
+    debt: {
+      entryId: 'entry-1',
+      counterpartyId: 'cp-1',
+      counterpartyName: '明哥',
+      kind: 'LEND',
+      paired: false,
+      note: '借款備註',
+    },
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -114,6 +128,24 @@ describe('Editing and deleting a transaction', () => {
       'aria-valuetext',
       '餐飲',
     );
+  });
+
+  it('prefills the shared debt edit form from the transaction in the active ledger', async () => {
+    routeFetch({ items: [debtTransaction] });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^編輯/ }));
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' });
+
+    expect(within(dialog).getByLabelText('金額')).toHaveValue(120);
+    expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-08-12');
+    expect(within(dialog).getByRole('combobox', { name: '分類' })).toHaveAttribute(
+      'aria-valuetext',
+      '餐飲',
+    );
+    expect(within(dialog).getByLabelText('帳戶')).toHaveValue('acc-1');
+    expect(within(dialog).getByLabelText('名稱')).toHaveValue('押金');
+    expect(within(dialog).getByLabelText('備註')).toHaveValue('借款備註');
   });
 
   it('sends only a PATCH with the edited values', async () => {

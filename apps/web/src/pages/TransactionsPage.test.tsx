@@ -57,6 +57,12 @@ describe('Transactions page', () => {
     date: '2026-09-01T04:00:00.000Z',
     note: null,
     transactionId: 'txn-debt',
+    recorded: {
+      ledgerId: 'ledger-1',
+      accountId: 'acc-1',
+      title: null,
+      categoryId: null,
+    },
     balanceAfter: 500000,
     createdAt: '2026-09-01T04:00:00.000Z',
     updatedAt: '2026-09-01T04:00:00.000Z',
@@ -474,8 +480,11 @@ describe('Transactions page', () => {
     await user.click(within(item).getByRole('button', { name: /^編輯/ }));
 
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(dialog).getByText('會送給小明確認')).toBeInTheDocument();
+    expect(within(dialog).queryByText('會送給小明確認')).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('備註')).toHaveValue('晚餐錢');
+    await user.clear(within(dialog).getByLabelText('金額'));
+    await user.type(within(dialog).getByLabelText('金額'), '5100');
+    expect(within(dialog).getByText('會送給小明確認')).toBeInTheDocument();
   });
 
   /*

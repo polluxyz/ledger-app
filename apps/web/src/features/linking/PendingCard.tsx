@@ -5,9 +5,9 @@ import type {
   DebtEntryKind,
   DebtProposal,
   FriendRequest,
-  LedgerSummary,
   Account,
   CategoryType,
+  LedgerSummary,
   RecordDefaults,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
@@ -20,7 +20,7 @@ import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCategories } from '../categories/use-categories';
 import { useCounterparty } from '../debts/use-debts';
-import { useLedgers } from '../ledgers/use-ledgers';
+import { useActiveLedger } from '../ledgers/use-active-ledger';
 import {
   useAcceptLinkInvite,
   useAcceptProposal,
@@ -43,9 +43,9 @@ export function PendingCard() {
   const invitesQuery = useIncomingLinkInvites();
   const mergePromptsQuery = useMergePrompts();
   const proposalsQuery = useIncomingProposals();
-  const ledgersQuery = useLedgers();
+  const { ledger: activeLedger, isLoading: activeLedgerLoading } = useActiveLedger();
   const accountsQuery = useAccounts();
-  const recordDefaultsQuery = useRecordDefaults();
+  const recordDefaultsQuery = useRecordDefaults(activeLedger?.id);
   const acceptLinkInvite = useAcceptLinkInvite();
   const declineLinkInvite = useDeclineLinkInvite();
   const acceptProposal = useAcceptProposal();
@@ -120,16 +120,15 @@ export function PendingCard() {
           key={id}
           proposal={proposal}
           expanded={expandedId === id}
-          ledgers={ledgersQuery.data ?? []}
-          ledgersLoading={ledgersQuery.isLoading}
-          ledgersError={ledgersQuery.error}
+          activeLedger={activeLedger}
+          activeLedgerLoading={activeLedgerLoading}
           accounts={accountsQuery.data ?? []}
           accountsLoading={accountsQuery.isLoading}
           accountsError={accountsQuery.error}
           recordDefaults={recordDefaultsQuery.data}
           recordDefaultsLoading={
             !recordDefaultsQuery.isFetchedAfterMount ||
-            !ledgersQuery.isFetchedAfterMount ||
+            activeLedgerLoading ||
             !accountsQuery.isFetchedAfterMount
           }
           onToggle={() => setExpandedId((current) => (current === id ? null : id))}
@@ -319,9 +318,8 @@ function MergePromptRow({
 function ProposalRow({
   proposal,
   expanded,
-  ledgers,
-  ledgersLoading,
-  ledgersError,
+  activeLedger,
+  activeLedgerLoading,
   accounts,
   accountsLoading,
   accountsError,
@@ -333,9 +331,8 @@ function ProposalRow({
 }: {
   proposal: DebtProposal;
   expanded: boolean;
-  ledgers: LedgerSummary[];
-  ledgersLoading: boolean;
-  ledgersError: unknown;
+  activeLedger: LedgerSummary | null;
+  activeLedgerLoading: boolean;
   accounts: Account[];
   accountsLoading: boolean;
   accountsError: unknown;
@@ -349,28 +346,22 @@ function ProposalRow({
   const counterpartyQuery = useCounterparty(
     expanded && needsRecord ? proposal.counterpartyId : null,
   );
-  const [ledgerChoice, setLedgerChoice] = useState('');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState(proposal.title ?? '');
-  const ledgerTouched = useRef(false);
   const accountTouched = useRef(false);
-  const defaultsApplied = useRef(false);
+  const defaultsAppliedForLedger = useRef<string | null>(null);
+  const previousLedgerId = useRef(activeLedger?.id ?? null);
   const [error, setError] = useState<unknown>(null);
   const [conflictCode, setConflictCode] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableLedgers = useMemo(
-    () =>
-      ledgers.filter(
-        (ledger) =>
-          (ledger.role === 'OWNER' || ledger.role === 'EDITOR') && ledger.archivedAt === null,
-      ),
-    [ledgers],
-  );
   const accountsForSelection = useMemo(() => selectableAccounts(accounts), [accounts]);
-  const selectedLedger = availableLedgers.find((ledger) => ledger.id === ledgerChoice) ?? null;
-  const selectedLedgerId = selectedLedger?.id ?? '';
+  const selectedLedgerId = activeLedger?.id ?? '';
+  const canWriteLedger =
+    activeLedger !== null &&
+    (activeLedger.role === 'OWNER' || activeLedger.role === 'EDITOR') &&
+    activeLedger.archivedAt === null;
   const isSplitProposal = isSplitEntryKind(proposal.entryKind);
   const requiresCategory =
     proposal.entryKind === 'PAID_FOR_ME' || proposal.entryKind === 'RECEIVED_FOR_ME';
@@ -378,7 +369,7 @@ function ProposalRow({
   const categoryType: CategoryType =
     proposal.entryKind === 'RECEIVED_FOR_ME' ? 'INCOME' : 'EXPENSE';
   const categoriesQuery = useCategories(
-    requiresCategory && selectedLedgerId !== '' ? selectedLedgerId : null,
+    requiresCategory && canWriteLedger ? selectedLedgerId : null,
     requiresCategory ? categoryType : undefined,
   );
   const requiresAccount =
@@ -394,22 +385,16 @@ function ProposalRow({
   useEffect(() => {
     if (
       recordDefaultsLoading ||
-      ledgersLoading ||
+      activeLedgerLoading ||
       accountsLoading ||
       recordDefaults === undefined ||
-      defaultsApplied.current
+      activeLedger === null ||
+      defaultsAppliedForLedger.current === activeLedger.id
     ) {
       return;
     }
 
-    defaultsApplied.current = true;
-    if (
-      !ledgerTouched.current &&
-      recordDefaults.ledgerId !== null &&
-      availableLedgers.some((ledger) => ledger.id === recordDefaults.ledgerId)
-    ) {
-      setLedgerChoice(recordDefaults.ledgerId);
-    }
+    defaultsAppliedForLedger.current = activeLedger.id;
     if (
       !accountTouched.current &&
       recordDefaults.accountId !== null &&
@@ -420,15 +405,22 @@ function ProposalRow({
   }, [
     recordDefaults,
     recordDefaultsLoading,
-    ledgersLoading,
+    activeLedger,
+    activeLedgerLoading,
     accountsLoading,
-    availableLedgers,
     accountsForSelection,
   ]);
 
+  useEffect(() => {
+    if (previousLedgerId.current !== (activeLedger?.id ?? null)) {
+      previousLedgerId.current = activeLedger?.id ?? null;
+      setCategoryId('');
+    }
+  }, [activeLedger?.id]);
+
   const acceptDisabled =
     isSubmitting ||
-    selectedLedgerId === '' ||
+    !canWriteLedger ||
     (requiresAccount && (accountsLoading || accountId === '')) ||
     (requiresCategory && (categoriesQuery.isLoading || categoryId === ''));
   const conflictMessage =
@@ -506,15 +498,17 @@ function ProposalRow({
               拒絕
             </Button>
             {needsRecord ? (
-              <Button
-                type="button"
-                className={styles.smallButton}
-                disabled={isSubmitting}
-                aria-expanded={false}
-                onClick={onToggle}
-              >
-                接受
-              </Button>
+              canWriteLedger && (
+                <Button
+                  type="button"
+                  className={styles.smallButton}
+                  disabled={isSubmitting}
+                  aria-expanded={false}
+                  onClick={onToggle}
+                >
+                  接受
+                </Button>
+              )
             ) : (
               <Button
                 type="button"
@@ -532,32 +526,6 @@ function ProposalRow({
       {expanded && needsRecord && (
         <div className={styles.expansion}>
           {preview && <p className={styles.preview}>{preview}</p>}
-
-          <Select
-            label="記在哪本帳本"
-            value={selectedLedgerId}
-            required
-            disabled={ledgersLoading || availableLedgers.length === 0}
-            onChange={(event) => {
-              ledgerTouched.current = true;
-              setLedgerChoice(event.target.value);
-              setCategoryId('');
-            }}
-          >
-            <option value="" disabled>
-              請選擇帳本
-            </option>
-            {availableLedgers.length === 0 ? (
-              <option value="">沒有可記帳的帳本</option>
-            ) : (
-              availableLedgers.map((ledger) => (
-                <option key={ledger.id} value={ledger.id}>
-                  {ledger.name}
-                </option>
-              ))
-            )}
-          </Select>
-          {Boolean(ledgersError) && <FormError error={ledgersError} />}
 
           {requiresAccount && (
             <Select
@@ -635,7 +603,7 @@ function ProposalRow({
               >
                 改成拒絕
               </Button>
-            ) : (
+            ) : canWriteLedger ? (
               <Button
                 type="button"
                 className={styles.smallButton}
@@ -644,7 +612,7 @@ function ProposalRow({
               >
                 接受
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       )}

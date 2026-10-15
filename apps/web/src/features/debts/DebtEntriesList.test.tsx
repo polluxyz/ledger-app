@@ -25,6 +25,12 @@ describe('DebtEntriesList', () => {
     date: '2026-09-01T04:00:00.000Z',
     note: null,
     transactionId: 'txn-1',
+    recorded: {
+      ledgerId: 'ledger-1',
+      accountId: 'account-1',
+      title: null,
+      categoryId: null,
+    },
     splitId: null,
     settlesEntryId: null,
     difference: null,

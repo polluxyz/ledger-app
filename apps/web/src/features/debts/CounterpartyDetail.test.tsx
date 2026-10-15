@@ -21,6 +21,12 @@ describe('CounterpartyDetail', () => {
     date: '2026-09-01T04:00:00.000Z',
     note: '借款',
     transactionId: 'txn-1',
+    recorded: {
+      ledgerId: 'ledger-1',
+      accountId: 'account-1',
+      title: null,
+      categoryId: null,
+    },
     splitId: null,
     settlesEntryId: null,
     difference: null,
@@ -154,6 +160,7 @@ describe('CounterpartyDetail', () => {
       entryPages?: Record<number, unknown[]>;
     } = {},
     mode: 'overview' | 'personal' = 'personal',
+    selectedLedger: LedgerSummary = ledger,
   ) {
     const onEditSplit = vi.fn();
     respondWith(balance, items, total, options);
@@ -161,7 +168,7 @@ describe('CounterpartyDetail', () => {
       <MemoryRouter initialEntries={['/transactions?view=debts']}>
         <QueryClientProvider client={queryClient}>
           <CounterpartyDetail
-            ledger={ledger}
+            ledger={selectedLedger}
             counterpartyId="cp-1"
             mode={mode}
             onEditSplit={onEditSplit}
@@ -350,6 +357,7 @@ describe('CounterpartyDetail', () => {
         delta: -11100,
         balanceAfter: 900,
         transactionId: null,
+        recorded: null,
         note: null,
       },
       { ...baseEntry, id: 'collect', kind: 'COLLECT', delta: 3000 },
@@ -362,6 +370,7 @@ describe('CounterpartyDetail', () => {
         delta: -800,
         balanceAfter: 100,
         transactionId: null,
+        recorded: null,
       },
       {
         ...baseEntry,
@@ -370,6 +379,7 @@ describe('CounterpartyDetail', () => {
         delta: -900,
         balanceAfter: 200,
         transactionId: null,
+        recorded: null,
       },
     ];
     renderDetail(0, entries, entries.length);
@@ -493,15 +503,14 @@ describe('CounterpartyDetail', () => {
     expect(undoDialog).not.toHaveTextContent('會請小明也刪除');
   });
 
-  it('requires a ledger to forgive and sends its id', async () => {
+  it('uses the selected ledger to forgive without a ledger picker', async () => {
     const user = userEvent.setup();
     renderDetail(5000);
     const forgiveButton = await screen.findByRole('button', { name: '免除剩餘' });
     await user.click(forgiveButton);
 
     const confirmation = await screen.findByRole('dialog', { name: '免除剩餘' });
-    const ledgerSelect = within(confirmation).getByLabelText('帳本');
-    await waitFor(() => expect(ledgerSelect).toHaveValue('ledger-1'));
+    expect(within(confirmation).queryByLabelText('帳本')).not.toBeInTheDocument();
     expect(within(confirmation).queryByText(/小明欠你的/)).not.toBeInTheDocument();
     expect(within(confirmation).getByRole('button', { name: '取消' })).toBeInTheDocument();
     await user.click(within(confirmation).getByRole('button', { name: '免除' }));
@@ -512,5 +521,13 @@ describe('CounterpartyDetail', () => {
         expect.objectContaining({ method: 'POST', body: JSON.stringify({ ledgerId: 'ledger-1' }) }),
       );
     });
+  });
+
+  it('hides recording and forgiveness actions on a viewer ledger', async () => {
+    renderDetail(5000, [baseEntry], 1, {}, 'personal', { ...ledger, role: 'VIEWER' });
+    await screen.findByText('借款');
+
+    expect(screen.queryByRole('button', { name: '記一筆' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '免除剩餘' })).not.toBeInTheDocument();
   });
 });
