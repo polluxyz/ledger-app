@@ -20,15 +20,15 @@ import {
 } from './ui';
 
 /**
- * 3g 借還列內展開的兩條主線（`docs/specs/phase-3g-debts-inline.md` §6）。
+ * 3g 借還列內展開與 3h 每筆帳戶行為的回歸（`docs/specs/phase-3g-debts-inline.md`、
+ * `docs/specs/phase-3h-every-entry-has-account.md`）。真實 API 建立前置資料，畫面完成借還、撤銷與共享結清。
  *
- * 1. **個人**：記一筆借出 → 以此結清記一筆少收的還款 → 對象離開個人分頁、紀錄進歷史，
- *    差額沒有「⋯」（決策 157）→ 在歷史撤銷還款 → 差額一起撤銷、對象回到個人分頁（決策 156）。
+ * 1. **個人**：記一筆借出 → 以此結清少收 → 往來與明細都在還款下顯示分支 → 撤銷還款後分支一起消失、餘額復原。
  * 2. **共享**：共享帳本分帳 → 共享分頁點轉帳方塊，全寬表單預填後送出 → 歷史的共享帳本段出現
  *    這本帳本 → 撤銷結清 → 結清消失、方塊回來（W158～W163）。
  *
  * 前置資料（欠款、共享帳本、分帳支出）一律用 API 建立（D3），被測的動線全部走畫面。
- * 現金餘額用 API 讀，才能核對撤銷之後帳戶真的跟著回去。
+ * 借還表單明確選帳戶；現金餘額用 API 讀，確認每一步都實際進帳戶。
  */
 
 /** 現金餘額，單位：分（3c-0）。 */
@@ -37,7 +37,7 @@ async function cash(request: APIRequestContext, token: string): Promise<number> 
   return accounts.find((account) => account.name === '現金')!.balance;
 }
 
-test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後差額一起不見', async ({
+test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後分支一起不見', async ({
   signedInPage: page,
   userA,
   request,
@@ -50,8 +50,8 @@ test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後�
     kind: 'LEND',
     amount: 30_000,
     date: new Date().toISOString(),
-    record: null,
   });
+  await expect.poll(() => cash(request, userA.token)).toBe(before - 30_000);
 
   // 個人分頁：展開阿明，記一筆借出 700，欠我 1,000，從現金借出（記進帳本與帳戶）。
   await openDebtsTab(page, '個人');
@@ -65,9 +65,9 @@ test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後�
   await row.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await row.getByRole('button', { name: '新增', exact: true }).click();
   await expect(debtRow(page, /^阿明/)).toContainText('阿明欠你 $1,000');
-  await expect.poll(() => cash(request, userA.token)).toBe(before - 70_000);
+  await expect.poll(() => cash(request, userA.token)).toBe(before - 100_000);
 
-  // 以此結清：還 900，還差 100 算少收。差額會綁在這筆還款上（決策 156）。
+  // 以此結清：實收 900、欠款 1,000，少收 100 會成為還款下的分支（3h 決策 170）。
   await row.getByRole('button', { name: '記一筆', exact: true }).click();
   await row
     .getByRole('group', { name: '往來種類' })
@@ -76,23 +76,24 @@ test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後�
   await row.getByLabel('金額').fill('900');
   await row.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await row.getByLabel('以此結清').check();
-  await expect(row.getByText('記完後兩清，差額 −100（少收 100 元）')).toBeVisible();
+  await expect(row.getByText('記完後兩清')).toBeVisible();
   await row.getByRole('button', { name: '新增', exact: true }).click();
 
   // 欠款歸零：阿明離開個人分頁。歸零那一筆與之前的紀錄都進歷史（決策 153）。
   await expect(debtRow(page, /^阿明/)).toHaveCount(0);
-  await expect.poll(() => cash(request, userA.token)).toBe(before + 20_000);
+  await expect.poll(() => cash(request, userA.token)).toBe(before - 10_000);
 
-  // 歷史的個人往來：還款與差額都在，差額綁在還款上，所以它沒有「⋯」（決策 157）。
+  // 歷史的往來紀錄：還款顯示欠款全額，下面的少收分支沒有自己的「⋯」。
   await openDebtsTab(page, '歷史');
   const history = await expandDebtRow(page, /^阿明/);
-  const repayment = debtEntry(history, '阿明還我 $900');
-  const settlement = debtEntry(history, '我和阿明結清差額 $100');
+  const repayment = debtEntry(history, '阿明還我 $1,000');
   await expect(repayment).toHaveCount(1);
-  await expect(settlement).toHaveCount(1);
-  await expect(entryMenu(settlement)).toHaveCount(0);
+  await expect(repayment).toContainText('還清');
+  const difference = repayment.getByLabel(/少收/);
+  await expect(difference).toBeVisible();
+  await expect(entryMenu(difference)).toHaveCount(0);
 
-  // 在歷史撤銷還款：差額在同一個交易裡一起撤銷（決策 156）。沒有還款也沒有差額了，
+  // 在歷史撤銷還款：分支在同一個交易裡一起撤銷（3h）。沒有還款也沒有分支了，
   // 剩下的兩筆借出都未還清，阿明整個離開歷史，回到個人分頁、欠我 1,000。
   await undoEntry(page, repayment);
   await expect(debtRow(page, /^阿明/)).toHaveCount(0);
@@ -100,11 +101,11 @@ test('個人主線：以此結清少收一筆、移到歷史、撤銷還款後�
   await openDebtsTab(page, '個人');
   const back = await expandDebtRow(page, /^阿明/);
   await expect(debtRow(page, /^阿明/)).toContainText('阿明欠你 $1,000');
-  await expect(back.getByLabel(/結清差額/)).toHaveCount(0);
+  await expect(back.getByLabel(/少收/)).toHaveCount(0);
   await expect(debtEntry(back, '我借給阿明 $700')).toHaveCount(1);
   await expect(debtEntry(back, '我借給阿明 $300')).toHaveCount(1);
-  // 還款的收款一起撤回，現金只剩借出 700 那一步。
-  await expect.poll(() => cash(request, userA.token)).toBe(before - 70_000);
+  // 還款與分支一起撤回；API 預置的 300 和畫面借出的 700 都仍在帳戶紀錄裡。
+  await expect.poll(() => cash(request, userA.token)).toBe(before - 100_000);
 });
 
 test('共享主線：方塊記結清、歷史出現這本帳本、撤銷後結清消失、方塊回來', async ({
@@ -117,7 +118,6 @@ test('共享主線：方塊記結清、歷史出現這本帳本、撤銷後結�
   const ledger = await createLedger(request, userA.token, {
     name: '花蓮三日',
     kind: 'SHARED',
-    tracksBalance: false,
   });
   await addMember(request, userA.token, ledger.id, { email: USER_B_EMAIL, role: 'EDITOR' });
   const people = await listLedgerPeople(request, userA.token, ledger.id);
@@ -134,11 +134,18 @@ test('共享主線：方塊記結清、歷史出現這本帳本、撤銷後結�
   if (!expense) {
     throw new Error('共享帳本找不到支出分類。');
   }
+  const aCash = (await listAccounts(request, userA.token)).find(
+    (account) => account.name === '現金',
+  );
+  if (!aCash) {
+    throw new Error('找不到甲的現金帳戶。');
+  }
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
     amount: 90_000,
     date: new Date().toISOString(),
     categoryId: expense.id,
+    accountId: aCash.id,
     ledgerSplit: { method: 'EQUAL', shares: shareIds.map((personId) => ({ personId })) },
   });
 

@@ -4,13 +4,12 @@ import {
   newTransactionForm,
   openDashboard,
   openNewTransaction,
-  parseAmount,
   selectCategory,
   switchLedger,
 } from './ui';
 
 /**
- * Slice 2 的六個情境（spec §7）。
+ * 帳本建立、切換、成員與生命週期的六個情境（Slice 2 spec §7、3h spec SC-H12）。
  *
  * 這些測試走的是**使用者實際的動線**：點按鈕、填表單、看畫面。所以它們同時驗到
  * 三件事——前端邏輯、後端行為，以及兩者之間的那條線（CORS、序列化、位址）。
@@ -26,14 +25,22 @@ import {
 const PERSONAL_LEDGER_NAME = '甲 的帳本';
 const TRIP_LEDGER_NAME = '出遊分帳';
 
-test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ signedInPage: page }) => {
+test('情境 1：建立帳本不設定計入餘額；共享帳本交易仍記入帳戶', async ({
+  signedInPage: page,
+  userA,
+  request,
+}) => {
+  const cashBefore = (await listAccounts(request, userA.token)).find(
+    (account) => account.name === '現金',
+  )!.balance;
   await page.getByRole('link', { name: '帳本' }).click();
   await page.getByRole('button', { name: '建立帳本' }).click();
 
   const dialog = page.getByRole('dialog', { name: '建立帳本' });
   await dialog.getByLabel('名稱').fill(TRIP_LEDGER_NAME);
   await dialog.getByRole('radio', { name: '共享' }).check();
-  await dialog.getByRole('radio', { name: '不連動' }).check();
+  await expect(dialog.getByText('計入餘額')).toHaveCount(0);
+  await expect(dialog.getByRole('radio', { name: '不連動' })).toHaveCount(0);
   await dialog.getByRole('button', { name: '建立', exact: true }).click();
 
   await expect(page.getByRole('link', { name: TRIP_LEDGER_NAME })).toBeVisible();
@@ -43,54 +50,76 @@ test('情境 1：不連動帳本的記帳表單沒有帳戶欄位', async ({ sig
   // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
   await openNewTransaction(page);
 
-  // SC-16：欄位必須整個不存在，不是停用——後端連「帶著空值」都會擋下。
-  await expect(page.getByLabel('帳戶', { exact: true })).toHaveCount(0);
-  // 3c W64：不連動帳本的這一列是「付款人：我」，原本的說明文字拿掉了（介面文字極簡）。
-  await expect(newTransactionForm(page).getByText('付款人：我')).toBeVisible();
+  const form = newTransactionForm(page);
+  await expect(form.getByLabel('帳戶', { exact: true })).toBeVisible();
+  await form.getByLabel('帳戶', { exact: true }).selectOption({ label: '現金' });
 
-  await page.getByLabel('金額').fill('1200');
-  await selectCategory(newTransactionForm(page), '餐飲');
-  await page.getByRole('button', { name: '新增', exact: true }).click();
+  await form.getByLabel('金額').fill('1200');
+  await selectCategory(form, '餐飲');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
 
   // 限定在交易列表的那一列裡找。整頁搜尋「餐飲」會同時對到分類下拉的選項。
   const entry = page.getByRole('listitem').filter({ hasText: '-$1,200' });
   await expect(entry).toBeVisible();
   await expect(entry).toContainText('餐飲');
+  await expect
+    .poll(async () => {
+      const account = (await listAccounts(request, userA.token)).find(
+        (item) => item.name === '現金',
+      );
+      return account?.balance;
+    })
+    .toBe(cashBefore - 120_000);
 });
 
-test('情境 2：切回個人帳本後帳戶欄位回來，餘額跟著變動', async ({
+test('情境 2：切換帳本時帳戶欄位持續存在，兩本帳的交易都改變餘額', async ({
   signedInPage: page,
   userA,
   request,
 }) => {
-  // 前置：多一本不連動的帳本，才有東西可以切換。
+  // 前置：多一本共享帳本，確認 3h 移除「不計入餘額」後，兩種帳本都使用帳戶。
   await createLedger(request, userA.token, {
     name: TRIP_LEDGER_NAME,
     kind: 'SHARED',
-    tracksBalance: false,
   });
   await page.reload();
   // 右側欄預設關閉；打開之後在同一頁切換帳本不會關掉它。
   await openNewTransaction(page);
 
   await switchLedger(page, TRIP_LEDGER_NAME);
-  await expect(page.getByLabel('帳戶', { exact: true })).toHaveCount(0);
+  const form = newTransactionForm(page);
+  await expect(form.getByLabel('帳戶', { exact: true })).toBeVisible();
+  await form.getByLabel('帳戶', { exact: true }).selectOption({ label: '現金' });
+  const cashBefore = (await listAccounts(request, userA.token)).find(
+    (account) => account.name === '現金',
+  )!.balance;
+  await form.getByLabel('金額').fill('1200');
+  await selectCategory(form, '餐飲');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+  await expect
+    .poll(async () => {
+      const account = (await listAccounts(request, userA.token)).find(
+        (item) => item.name === '現金',
+      );
+      return account?.balance;
+    })
+    .toBe(cashBefore - 120_000);
 
-  // SC-14：切回連動帳本，帳戶欄位就該回來。
+  // 切回個人帳本，帳戶欄位仍在；第二筆同樣改變現金餘額。
   await switchLedger(page, PERSONAL_LEDGER_NAME);
-  await expect(page.getByLabel('帳戶', { exact: true })).toBeVisible();
-
-  const balance = page.getByLabel('現金餘額');
-  const before = parseAmount(await balance.textContent());
-
-  await page.getByLabel('金額').fill('1200');
-  await selectCategory(newTransactionForm(page), '餐飲');
-  await page.getByRole('button', { name: '新增', exact: true }).click();
-
-  // SC-18：支出讓餘額減少相同的金額。用差額而非絕對值，才不會被預設值綁死。
-  await expect(async () => {
-    expect(parseAmount(await balance.textContent())).toBe(before - 120000);
-  }).toPass();
+  await expect(form.getByLabel('帳戶', { exact: true })).toBeVisible();
+  await form.getByLabel('帳戶', { exact: true }).selectOption({ label: '現金' });
+  await form.getByLabel('金額').fill('300');
+  await selectCategory(form, '餐飲');
+  await form.getByRole('button', { name: '新增', exact: true }).click();
+  await expect
+    .poll(async () => {
+      const account = (await listAccounts(request, userA.token)).find(
+        (item) => item.name === '現金',
+      );
+      return account?.balance;
+    })
+    .toBe(cashBefore - 150_000);
 });
 
 test('情境 3：加入成員、變更角色，對方就看得到這本帳本', async ({

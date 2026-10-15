@@ -4,6 +4,7 @@ import {
   createDebtEntry,
   createLedger,
   createTransaction,
+  listAccounts,
   linkByEmail,
   listCategories,
   listLedgerPeople,
@@ -26,6 +27,8 @@ import { debtEntry, debtRow, expandDebtRow, openDebtsTab } from './ui';
  * 總覽的展開區只看不操作（W156），所以 3f「點帳本來源就切到結清、預填」改成：到共享分頁，
  * 點那一筆轉帳的方塊，預填的表單在方塊那一排下方展開（W158、W159）。作用中帳本只在明細那一排
  * 顯示（W151），所以 3f 驗「切換作用中帳本」的那一步拿掉了。
+ *
+ * 3h 更新：共享帳本由甲付款的 API 前置支出明確指定甲的真正帳戶。
  */
 
 /** 個人往來：明哥欠我 500 元。 */
@@ -52,14 +55,12 @@ test('3f 主線：指向、借還總額、展開來源、共享分頁記結清�
     kind: 'LEND',
     amount: PERSONAL_CENTS,
     date: today,
-    record: null,
   });
 
   // --- 準備：共享帳本「花蓮三日」，我付一筆 900 元三人均分。 ---
   const ledger = await createLedger(request, userA.token, {
     name: '花蓮三日',
     kind: 'SHARED',
-    tracksBalance: false,
   });
   await addMember(request, userA.token, ledger.id, { email: ming.email, role: 'EDITOR' });
   await addMember(request, userA.token, ledger.id, { email: hua.email, role: 'EDITOR' });
@@ -77,11 +78,18 @@ test('3f 主線：指向、借還總額、展開來源、共享分頁記結清�
   if (!expenseCategory) {
     throw new Error('共享帳本找不到支出分類。');
   }
+  const cashAccount = (await listAccounts(request, userA.token)).find(
+    (account) => account.name === '現金' && !account.isTemporary,
+  );
+  if (!cashAccount) {
+    throw new Error('找不到甲的現金帳戶。');
+  }
   await createTransaction(request, userA.token, ledger.id, {
     type: 'EXPENSE',
     amount: EXPENSE_CENTS,
     date: today,
     categoryId: expenseCategory.id,
+    accountId: cashAccount.id,
     ledgerSplit: { method: 'EQUAL', shares: shareIds.map((personId) => ({ personId })) },
   });
 

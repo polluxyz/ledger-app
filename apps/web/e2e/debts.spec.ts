@@ -21,7 +21,7 @@ import {
  * 3b-1 借還畫面（往來帳版）的端對端流程（`docs/specs/phase-3b1-web.md` §5）。
  *
  * 元件測試把 API 整個 mock 掉，證不出兩件最要緊的事：**帳戶餘額真的跟著變**，以及
- * **往來餘額、結清差額、`balanceAfter` 真的是後端算的**。這裡走真的後端，一條主線依序驗
+ * **往來餘額、還款分支、`balanceAfter` 真的是後端算的**。這裡走真的後端，一條主線依序驗
  * SC-W20 → W26，另一條驗修訂 1 的還款（SC-W31～W34）與右側欄保留（SC-W27）。
  * 「對方幫我付」已從畫面拿掉（W20），代付的顯示改由元件測試驗。
  *
@@ -30,6 +30,11 @@ import {
  * 往來帳不再開右側欄，點一列就在那一列下方展開（W153）。原本「打開往來帳、看餘額表、點刪除」
  * 的步驟改成「切到借還的子分頁、展開那一列、在列上操作」，意圖不變。已還清的紀錄移到歷史（決策
  * 153），所以原本在同一張表裡一路看下去的步驟，改成「個人分頁看未還清、歷史看已還清」。
+ *
+ * ## 3h 更新
+ *
+ * 借還表單都明確選帳本與真正帳戶；以此結清在還款下呈現分支，撤銷還款時分支一起消失。
+ * API 前置往來也透過測試 helper 綁到有效帳本與帳戶。
  *
  * 餘額一律用 API 讀：交易頁上沒有帳戶餘額，繞去首頁會整頁重載、清掉快取，反而驗不到畫面的更新。
  */
@@ -48,17 +53,20 @@ async function openDebtTab(page: Page): Promise<Locator> {
   return form;
 }
 
-/** 在借還分頁填一筆（不送出）。帳戶一律明確選「現金」——帳戶欄沒有預選（SC-W28）。 */
+/** 在借還分頁填一筆（不送出）；帳本與帳戶由呼叫端明確選定（3h）。 */
 async function fill(
   form: Locator,
   name: string,
   kind: string,
   amount: number,
-  options: { account?: string; settle?: boolean } = {},
+  options: { ledger?: string; account?: string; settle?: boolean } = {},
 ) {
   await typeCounterparty(form, name);
   await form.getByRole('group', { name: '往來種類' }).getByRole('button', { name: kind }).click();
   await form.getByLabel('金額').fill(String(amount));
+  if (options.ledger !== undefined) {
+    await form.getByLabel('記在哪本帳本').selectOption({ label: options.ledger });
+  }
   if (options.account !== undefined) {
     await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: options.account });
   }
@@ -80,9 +88,12 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   await openTransactions(page);
   const form = await openDebtTab(page);
 
-  // SC-W20、SC-W28：借出 120。帳戶沒選之前不能送出。
+  // 3h：新帳號沒有最近一次預設時，借出必須同時選帳本與帳戶才能送出。
   await fill(form, '小明', '借出', 120);
   await expect(form.getByText('新對象，送出時建立')).toBeVisible();
+  await expect(form.getByLabel('記在哪本帳本')).toHaveValue('');
+  await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
+  await form.getByLabel('記在哪本帳本').selectOption({ label: '甲 的帳本' });
   await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await expect(form.getByText('記完後：小明欠你 $120')).toHaveCount(1);
@@ -99,10 +110,10 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 900);
 
-  // SC-W22（修訂 1）：還款 5 並以此結清 → 差 4 元算了。方向由目前餘額決定：小明欠我，所以是收錢。
+  // 3h：實收 5 元以此結清 9 元欠款；還清標記與少收分支在歷史紀錄檢查。
   await fill(form, '小明', '還款', 5, { account: '現金', settle: true });
   await expect(form.getByText('小明還你')).toBeVisible();
-  await expect(form.getByText('記完後兩清，差額 −4（少收 4 元）')).toBeVisible();
+  await expect(form.getByText('記完後兩清')).toBeVisible();
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before - 400);
 
@@ -118,14 +129,13 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   // 3f W136：兩清的對象不列，小明這時不在借還清單上。
   await expect(debtRow(page, /^小明/)).toHaveCount(0);
 
-  // 再補一筆不記帳的借出 100（前置條件，D3）讓小明回到清單，後面才能在借還展開他。
+  // 再補一筆已綁帳戶的借出 100（前置條件，D3）讓小明回到清單，後面才能在借還展開他。
   // 切換檢視會重新拉清單，畫面就看得到。
   await createDebtEntry(request, userA.token, {
     counterparty: { name: '小明' },
     kind: 'LEND',
     amount: 10000,
     date: new Date().toISOString(),
-    record: null,
   });
 
   // SC-W58：明細點借還列直接編輯該筆；收起後改從借還的個人分頁展開小明。
@@ -145,17 +155,18 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   await expect(debtEntry(person, '我借給小明 $100')).toHaveCount(1);
   await expect(debtEntry(person, '我借給小明 $120')).toHaveCount(0);
 
-  // SC-W25（3g 版）：綁定在還款上的差額沒有「⋯」，不能單獨撤銷（決策 157）。
-  // 還款與差額已經歸零、在歷史裡，先到歷史確認。
+  // 3h：還清標記在還款上，少收分支縮排顯示且沒有「⋯」。
+  // 還款與分支已經歸零、在歷史裡，先到歷史確認。
   await openDebtsTab(page, '歷史');
   const history = await expandDebtRow(page, /^小明/);
-  const repayment = debtEntry(history, '小明還我 $5');
-  const settlement = debtEntry(history, '我和小明結清差額 $4');
+  const repayment = debtEntry(history, '小明還我 $9');
   await expect(repayment).toHaveCount(1);
-  await expect(settlement).toHaveCount(1);
-  await expect(entryMenu(settlement)).toHaveCount(0);
+  await expect(repayment).toContainText('還清');
+  const difference = repayment.getByLabel(/少收/);
+  await expect(difference).toBeVisible();
+  await expect(entryMenu(difference)).toHaveCount(0);
 
-  // 撤銷還款：差額在同一個交易裡一起撤銷（決策 156）。剩下的三筆都未還清，欠我 109。
+  // 撤銷還款：少收分支一起撤銷（3h）。剩下的三筆都未還清，欠我 109。
   await undoEntry(page, repayment);
   await expect(debtRow(page, /^小明/)).toHaveCount(0);
 
@@ -163,7 +174,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   const person109 = await expandDebtRow(page, /^小明/);
   await expect(debtRow(page, /^小明/)).toContainText('小明欠你 $109');
   await expect(debtEntry(person109, '我借給小明 $120')).toHaveCount(1);
-  await expect(person109.getByLabel(/結清差額/)).toHaveCount(0);
+  await expect(person109.getByLabel(/少收/)).toHaveCount(0);
 
   // 免除剩餘（展開區最下面靠右）：欠款歸零，小明離開個人分頁，之後的紀錄都進歷史。
   await person109.getByRole('button', { name: '免除剩餘', exact: true }).click();
@@ -189,14 +200,14 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   await editDialog.getByLabel('金額').fill('150');
   await editDialog.getByRole('button', { name: '儲存', exact: true }).click();
   await expect(debtRow(page, /^小明/)).toContainText('小明欠你 $139');
-  // 還款 5 已撤銷，所以現金只剩借出 150（−15000）與借入 111（+11100）。
-  await expect.poll(() => cash(request, userA.token)).toBe(before - 3900);
+  // 還款已撤銷；現金包含借出 150、借入 111，以及 API 前置借出的 100。
+  await expect.poll(() => cash(request, userA.token)).toBe(before - 13_900);
 });
 
 test('SC-W67：借還列收起後，右側欄維持收起、不冒出新增表單', async ({ signedInPage: page }) => {
   await openTransactions(page);
   const form = await openDebtTab(page);
-  await fill(form, '小明', '借出', 120, { account: '現金' });
+  await fill(form, '小明', '借出', 120, { ledger: '甲 的帳本', account: '現金' });
   await form.getByRole('button', { name: '新增', exact: true }).click();
   await page.getByRole('button', { name: '收起新增面板' }).click();
 
@@ -215,7 +226,7 @@ test('SC-W67：借還列收起後，右側欄維持收起、不冒出新增表�
 test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', async ({ signedInPage: page }) => {
   await openTransactions(page);
   const form = await openDebtTab(page);
-  await fill(form, '小明', '借出', 120, { account: '現金' });
+  await fill(form, '小明', '借出', 120, { ledger: '甲 的帳本', account: '現金' });
   await form.getByLabel('備註').fill('原備註');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
@@ -258,7 +269,7 @@ test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款�
   await expect(form.getByText('目前沒有欠款')).toBeVisible();
 
   // 向小華借 400 → 我欠小華。
-  await fill(form, '小華', '借入', 400, { account: '現金' });
+  await fill(form, '小華', '借入', 400, { ledger: '甲 的帳本', account: '現金' });
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before + 40000);
 
@@ -267,11 +278,11 @@ test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款�
   await expect(form.getByText('你還小華')).toBeVisible();
   await form.getByRole('combobox', { name: '從哪個帳戶付出' }).selectOption({ label: '現金' });
 
-  // SC-W34：超過欠款又沒勾結清 → 提示並停用送出；勾了結清就能送，差額 +50（少付 50 元）。
+  // SC-W34／3h：超過欠款又沒勾結清會停用送出；勾了結清後少付 50 元會記成收入分支。
   await expect(form.getByText(/超過欠款 \$50/)).toBeVisible();
   await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
   await fill(form, '小華', '還款', 350, { settle: true });
-  await expect(form.getByText('記完後兩清，差額 +50（少付 50 元）')).toBeVisible();
+  await expect(form.getByText('記完後兩清')).toBeVisible();
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before + 5000);
 
