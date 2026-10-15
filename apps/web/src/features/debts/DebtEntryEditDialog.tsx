@@ -2,15 +2,22 @@ import { useState, type FormEvent } from 'react';
 import {
   actualAmountOf,
   centsToInput,
+  debtCategoryTypeOf,
   parseMoneyInput,
   type DebtEntry,
+  type DebtEntryKind,
   type UpdateDebtEntryRequest,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
+import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { toDateInputValue } from '../../lib/format';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
+import { useCategories } from '../categories/use-categories';
+import { CategoryPicker } from '../transactions/CategoryPicker';
+import fieldLayoutStyles from '../transactions/TransactionFieldLayout.module.css';
 import { useUpdateDebtEntry } from './use-debts';
 import styles from './DebtEntryEditDialog.module.css';
 
@@ -20,7 +27,7 @@ interface DebtEntryEditDialogProps {
   onClose: () => void;
 }
 
-/** 編輯一般往來紀錄的小視窗；只傳有變更的欄位，沿用 API 作為唯一資料來源。 */
+/** 編輯一般往來紀錄的小視窗；只有 API 有交易的紀錄才帶入交易欄位。 */
 export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEditDialogProps) {
   return (
     <Dialog open={entry !== null} title="修改往來紀錄" onClose={onClose}>
@@ -35,8 +42,14 @@ export function DebtEntryEditDialog({ entry, displayName, onClose }: DebtEntryEd
           }
           date={entry.date}
           note={entry.note}
+          title={entry.recorded?.title ?? null}
+          accountId={entry.recorded?.accountId ?? null}
+          categoryId={entry.recorded?.categoryId ?? null}
+          ledgerId={entry.recorded?.ledgerId ?? ''}
+          kind={entry.kind}
           paired={entry.paired}
-          displayName={displayName}
+          counterpartyName={displayName}
+          hasRecordedTransaction={entry.recorded !== null}
           onClose={onClose}
         />
       )}
@@ -50,31 +63,67 @@ export interface DebtEntryEditFormProps {
   amount: number;
   date: string;
   note: string | null;
+  title: string | null;
+  accountId: string | null;
+  categoryId: string | null;
+  ledgerId: string;
+  kind: DebtEntryKind;
   paired: boolean;
-  displayName: string;
+  counterpartyName: string;
+  hasRecordedTransaction: boolean;
   onClose: () => void;
 }
 
-/** 可獨立放進對話框或右側欄的往來紀錄編輯表單。 */
+/** 交易頁與借還頁共用往來修改表單，並只送有變動的欄位。 */
 export function DebtEntryEditForm({
   entryId,
   amount: originalAmount,
   date: originalDateValue,
   note: originalNoteValue,
+  title: originalTitleValue,
+  accountId: originalAccountId,
+  categoryId: originalCategoryId,
+  ledgerId,
+  kind,
   paired,
-  displayName,
+  counterpartyName,
+  hasRecordedTransaction,
   onClose,
 }: DebtEntryEditFormProps) {
   const originalDate = toDateInputValue(new Date(originalDateValue));
   const originalNote = originalNoteValue ?? '';
+  const originalTitle = originalTitleValue ?? '';
+  const originalAccountIdValue = originalAccountId ?? '';
+  const originalCategoryIdValue = originalCategoryId ?? '';
   const [amount, setAmount] = useState(centsToInput(originalAmount));
   const [date, setDate] = useState(originalDate);
   const [note, setNote] = useState(originalNote);
+  const [title, setTitle] = useState(originalTitle);
+  const [accountId, setAccountId] = useState(originalAccountIdValue);
+  const [categoryId, setCategoryId] = useState(originalCategoryIdValue);
   const updateEntry = useUpdateDebtEntry();
+  const accounts = useAccounts();
+  const accountsForSelection = selectableAccounts(accounts.data ?? []);
+  const categoryType = debtCategoryTypeOf(kind);
+  const categories = useCategories(
+    hasRecordedTransaction ? ledgerId : null,
+    categoryType ?? undefined,
+  );
 
   const amountCents = parseMoneyInput(amount);
+  const amountChanged = amountCents !== originalAmount;
+  const dateChanged = date !== originalDate;
+  const noteChanged = note !== originalNote;
+  const titleChanged = title !== originalTitle;
+  const accountChanged = accountId !== originalAccountIdValue;
+  const categoryChanged = categoryId !== originalCategoryIdValue;
   const hasChanges =
-    amountCents !== originalAmount || date !== originalDate || note !== originalNote;
+    amountChanged ||
+    dateChanged ||
+    noteChanged ||
+    titleChanged ||
+    accountChanged ||
+    categoryChanged;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,14 +132,23 @@ export function DebtEntryEditForm({
     }
 
     const input: UpdateDebtEntryRequest = {};
-    if (amountCents !== originalAmount) {
+    if (amountChanged) {
       input.amount = amountCents;
     }
-    if (date !== originalDate) {
+    if (dateChanged) {
       input.date = new Date(date).toISOString();
     }
-    if (note !== originalNote) {
+    if (noteChanged) {
       input.note = note === '' ? null : note;
+    }
+    if (hasRecordedTransaction && titleChanged) {
+      input.title = title.trim() === '' ? null : title.trim();
+    }
+    if (hasRecordedTransaction && accountChanged && accountId !== '') {
+      input.accountId = accountId;
+    }
+    if (hasRecordedTransaction && categoryChanged) {
+      input.categoryId = categoryId === '' ? null : categoryId;
     }
     if (Object.keys(input).length === 0) {
       return;
@@ -102,26 +160,65 @@ export function DebtEntryEditForm({
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <FormError error={updateEntry.error} />
-      {paired && <p>會送給{displayName}確認</p>}
-      <TextField
-        label="金額"
-        type="number"
-        min="0.01"
-        step="0.01"
-        inputMode="decimal"
-        value={amount}
-        required
-        disabled={updateEntry.isPending}
-        onChange={(event) => setAmount(event.target.value)}
-      />
-      <TextField
-        label="日期"
-        type="date"
-        value={date}
-        required
-        disabled={updateEntry.isPending}
-        onChange={(event) => setDate(event.target.value)}
-      />
+      {paired && (amountChanged || dateChanged) && <p>會送給{counterpartyName}確認</p>}
+      <div className={fieldLayoutStyles.amount}>
+        <TextField
+          label="金額"
+          type="number"
+          min="0.01"
+          step="0.01"
+          inputMode="decimal"
+          value={amount}
+          required
+          disabled={updateEntry.isPending}
+          onChange={(event) => setAmount(event.target.value)}
+        />
+      </div>
+      <div className={fieldLayoutStyles.row}>
+        <TextField
+          label="日期"
+          type="date"
+          value={date}
+          required
+          disabled={updateEntry.isPending}
+          onChange={(event) => setDate(event.target.value)}
+        />
+        {hasRecordedTransaction && categoryType !== null && (
+          <CategoryPicker
+            categories={categories.data ?? []}
+            value={categoryId}
+            allowClear
+            onChange={setCategoryId}
+          />
+        )}
+      </div>
+      {hasRecordedTransaction && (
+        <>
+          <Select
+            label="帳戶"
+            value={accountId}
+            required
+            disabled={accounts.isLoading || updateEntry.isPending}
+            onChange={(event) => setAccountId(event.target.value)}
+          >
+            <option value="" disabled>
+              請選擇
+            </option>
+            {accountsForSelection.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </Select>
+          <TextField
+            label="名稱"
+            value={title}
+            maxLength={200}
+            disabled={updateEntry.isPending}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </>
+      )}
       <TextField
         label="備註"
         value={note}

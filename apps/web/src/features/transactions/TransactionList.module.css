@@ -52,10 +52,6 @@
   grid-template-rows: 3.25rem auto;
 }
 
-.rowWithDifference {
-  border-bottom: 0;
-}
-
 .clickable {
   cursor: pointer;
 }
@@ -156,32 +152,6 @@
   font-weight: 600;
 }
 
-.differenceRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: 2rem;
-  padding: var(--space-xs) var(--space-md);
-  /* 比名稱再縮一格（3h 修訂 1），一眼看得出是上一行的分支。 */
-  padding-left: calc(var(--space-md) + 2.25rem + var(--space-sm) + var(--space-lg));
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-/* 還清的金額與差額之間多空一點，讀成兩段：「+93」「少收 −3」。 */
-.differenceLabel {
-  margin-left: var(--space-sm);
-}
-
-.differenceBranch {
-  color: var(--color-text-muted);
-}
-
-.differenceAmount {
-  font-variant-numeric: tabular-nums;
-}
-
 .payer {
   flex: 0 0 auto;
   color: var(--color-text-muted);
@@ -196,6 +166,39 @@
   gap: var(--space-sm);
   /* 對齊上方文字欄，不從圖示底下開始。 */
   padding: 0 0 var(--space-sm) calc(2.25rem + var(--space-sm));
+}
+
+/* 還款細項直接沿用主列的標題與金額欄寬，兩側文字精準對齊主列。 */
+.differenceDetails {
+  grid-column: 2 / 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: 0 0 var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.differenceLine {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: inherit;
+  gap: inherit;
+  min-width: 0;
+}
+
+.differenceDetailLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.differenceDetailAmount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .amount {

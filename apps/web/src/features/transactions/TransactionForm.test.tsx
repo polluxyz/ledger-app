@@ -414,7 +414,7 @@ describe('TransactionForm', () => {
     ).toEqual(['借出', '借入', '還款']);
     expect(screen.getByRole('button', { name: '還款' })).toBeDisabled();
     expect(screen.getByLabelText('對象')).toBeInTheDocument();
-    expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('分類')).toBeInTheDocument();
   });
 
   it('opens on 借還 and pre-fills the counterparty when an initial name is provided', () => {

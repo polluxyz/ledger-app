@@ -1,0 +1,12 @@
+/* 交易與借還表單共用的金額強調與日期／分類並排欄位。 */
+.amount input {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-md);
+}

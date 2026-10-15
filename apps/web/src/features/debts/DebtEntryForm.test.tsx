@@ -81,6 +81,10 @@ describe('DebtEntryForm', () => {
       hasTransactions: false,
     },
   ];
+  const categories = [
+    { id: 'category-expense', name: '居住', type: 'EXPENSE', icon: null },
+    { id: 'category-income', name: '薪資', type: 'INCOME', icon: null },
+  ];
   let recordDefaults = { ledgerId: 'ledger-1', accountId: 'acc-cash' };
   let delayedDefaults: Promise<Response> | null = null;
 
@@ -138,6 +142,10 @@ describe('DebtEntryForm', () => {
       if (url.includes('/users/me/record-defaults')) {
         return delayedDefaults ?? json(recordDefaults);
       }
+      if (url.includes('/categories')) {
+        const type = new URL(url).searchParams.get('type');
+        return json(type ? categories.filter((category) => category.type === type) : categories);
+      }
       if (url.includes('/ledgers')) {
         return json([ledger, anotherLedger]);
       }
@@ -174,7 +182,7 @@ describe('DebtEntryForm', () => {
 
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-  it('shows only three kinds and removes paid-for-only fields', () => {
+  it('shows three kinds with an expense category picker and removes paid-for-only fields', () => {
     renderForm();
 
     const kindGroup = screen.getByRole('group', { name: '往來種類' });
@@ -186,11 +194,108 @@ describe('DebtEntryForm', () => {
     expect(screen.queryByRole('button', { name: '對方還我' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '我還對方' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '對方幫我付' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('分類')).not.toBeInTheDocument();
-    expect(screen.queryByText('餐飲')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '分類' })).toBeInTheDocument();
     expect(screen.queryByLabelText('不記入帳本')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '還款' })).toBeDisabled();
     expect(screen.queryByText('目前沒有欠款')).not.toBeInTheDocument();
+  });
+
+  it('keeps the new-entry fields in order and places the repayment hint before the amount', async () => {
+    const user = userEvent.setup();
+    renderForm(ledger, '小明');
+    await screen.findByText('目前小明欠你 $9');
+    await user.click(screen.getByRole('button', { name: '還款' }));
+    await user.type(screen.getByLabelText('金額'), '9');
+    await user.click(screen.getByRole('checkbox', { name: '以此結清' }));
+
+    const form = screen.getByLabelText('對象').closest('form');
+    if (!form) throw new Error('新增借還表單不存在');
+    const category = screen.getByRole('combobox', { name: '分類' });
+    const date = screen.getByLabelText('日期');
+    expect(date.parentElement?.parentElement).toBe(category.parentElement?.parentElement);
+    const ordered = [
+      screen.getByLabelText('對象'),
+      screen.getByRole('group', { name: '往來種類' }),
+      screen.getByText('小明還你'),
+      screen.getByLabelText('金額'),
+      date,
+      category,
+      screen.getByLabelText('收進哪個帳戶'),
+      screen.getByLabelText('名稱'),
+      screen.getByLabelText('備註'),
+      screen.getByRole('checkbox', { name: '以此結清' }),
+      screen.getByText('記完後兩清'),
+      within(form).getByRole('button', { name: '新增' }),
+    ];
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      const current = ordered[index];
+      const next = ordered[index + 1];
+      if (!current || !next) throw new Error('欄位順序檢查缺少節點');
+      expect(current.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('lists and clears categories when the debt direction changes', async () => {
+    const user = userEvent.setup();
+    renderForm(ledger, '小明');
+    await screen.findByText('目前小明欠你 $9');
+
+    const picker = screen.getByRole('combobox', { name: '分類' });
+    await user.click(picker);
+    const expenseList = screen.getByRole('listbox', { name: '分類' });
+    expect(within(expenseList).getByRole('option', { name: '居住' })).toBeInTheDocument();
+    expect(within(expenseList).queryByRole('option', { name: '薪資' })).not.toBeInTheDocument();
+    await user.click(within(expenseList).getByRole('option', { name: '居住' }));
+
+    await user.click(screen.getByRole('button', { name: '借入' }));
+    expect(picker).toHaveAttribute('aria-valuetext', '請選擇分類');
+    await user.click(picker);
+    const incomeList = screen.getByRole('listbox', { name: '分類' });
+    expect(within(incomeList).getByRole('option', { name: '薪資' })).toBeInTheDocument();
+    expect(within(incomeList).queryByRole('option', { name: '居住' })).not.toBeInTheDocument();
+    await user.click(within(incomeList).getByRole('option', { name: '薪資' }));
+
+    await user.click(screen.getByRole('button', { name: '還款' }));
+    expect(picker).toHaveAttribute('aria-valuetext', '請選擇分類');
+    await user.click(picker);
+    const repaymentList = screen.getByRole('listbox', { name: '分類' });
+    expect(within(repaymentList).getByRole('option', { name: '薪資' })).toBeInTheDocument();
+    expect(within(repaymentList).queryByRole('option', { name: '居住' })).not.toBeInTheDocument();
+  });
+
+  it('uses an expense category when repaying a counterparty I owe', async () => {
+    const user = userEvent.setup();
+    renderForm(ledger, '小華');
+    await screen.findByText('目前你欠小華 $400');
+    await user.click(screen.getByRole('button', { name: '還款' }));
+    await user.click(screen.getByRole('combobox', { name: '分類' }));
+
+    const options = screen.getByRole('listbox', { name: '分類' });
+    expect(within(options).getByRole('option', { name: '居住' })).toBeInTheDocument();
+    expect(within(options).queryByRole('option', { name: '薪資' })).not.toBeInTheDocument();
+  });
+
+  it('sends the active ledger, trimmed title, and optional category without a ledger field', async () => {
+    const user = userEvent.setup();
+    renderForm(anotherLedger, '小明');
+    await screen.findByText('目前小明欠你 $9');
+    await waitFor(() => expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('acc-cash'));
+    await user.type(screen.getByLabelText('金額'), '12');
+    await user.type(screen.getByLabelText('名稱'), '  押金  ');
+    await user.click(screen.getByRole('combobox', { name: '分類' }));
+    await user.click(screen.getByRole('option', { name: '居住' }));
+    expect(screen.queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '新增' }));
+
+    const body = await postedBody();
+    expect(body.record).toEqual({ ledgerId: 'ledger-2', accountId: 'acc-cash' });
+    expect(body.title).toBe('押金');
+    expect(body.categoryId).toBe('category-expense');
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('record-defaults?ledgerId=ledger-2'),
+      ),
+    ).toBe(true);
   });
 
   it.each([
@@ -425,22 +530,20 @@ describe('DebtEntryForm', () => {
     expect('note' in body).toBe(false);
   });
 
-  it('prefills writable ledger and selectable account defaults and excludes temporary accounts', async () => {
+  it('defaults the selectable account and excludes temporary accounts', async () => {
     renderForm();
 
-    const ledgerSelect = await screen.findByLabelText('記在哪本帳本');
     const accountSelect = await screen.findByLabelText('從哪個帳戶借出');
     await waitFor(() => {
-      expect(ledgerSelect).toHaveValue('ledger-1');
       expect(accountSelect).toHaveValue('acc-cash');
     });
-    expect(ledgerSelect).toBeRequired();
     expect(accountSelect).toBeRequired();
+    expect(screen.queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('不記入帳本')).not.toBeInTheDocument();
   });
 
-  it('does not overwrite ledger or account choices made before defaults arrive', async () => {
+  it('does not overwrite the account choice made before defaults arrive', async () => {
     let resolveDefaults: ((value: Response) => void) | undefined;
     delayedDefaults = new Promise((resolve) => {
       resolveDefaults = resolve;
@@ -448,9 +551,8 @@ describe('DebtEntryForm', () => {
     const user = userEvent.setup();
     renderForm();
 
-    const ledgerSelect = await screen.findByLabelText('記在哪本帳本');
     const accountSelect = await screen.findByLabelText('從哪個帳戶借出');
-    await user.selectOptions(ledgerSelect, 'ledger-2');
+    await waitFor(() => expect(accountSelect).toBeEnabled());
     await user.selectOptions(accountSelect, 'acc-bank');
     resolveDefaults?.(
       new Response(JSON.stringify({ ledgerId: 'ledger-1', accountId: 'acc-cash' }), {
@@ -460,17 +562,15 @@ describe('DebtEntryForm', () => {
     );
 
     await waitFor(() => {
-      expect(ledgerSelect).toHaveValue('ledger-2');
       expect(accountSelect).toHaveValue('acc-bank');
     });
   });
 
-  it('ignores a default ledger outside the writable list and a temporary account', async () => {
+  it('ignores a temporary default account while using the selected ledger', async () => {
     recordDefaults = { ledgerId: 'ledger-archived', accountId: 'acc-temp' };
     renderForm();
 
     await waitFor(() => {
-      expect(screen.getByLabelText('記在哪本帳本')).toHaveValue('');
       expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('');
     });
   });
