@@ -45,8 +45,6 @@ export function LedgerList({ ledgers, isLoading, error }: LedgerListProps) {
                 {ledger.kind === 'SHARED' ? '共享' : '私人'}
               </span>
               <span className={styles.tag}>{ROLE_LABEL[ledger.role]}</span>
-              {/* 非連動帳本才標示。連動是預設，一律標只會讓每一列都長出一堆標籤。 */}
-              {!ledger.tracksBalance && <span className={styles.tag}>不影響餘額</span>}
               {ledger.archivedAt !== null && <span className={styles.tagArchived}>已封存</span>}
             </div>
           </div>

@@ -121,7 +121,10 @@ export interface DebtEntry {
   /** ISO 8601。 */
   date: string;
   note: string | null;
-  /** 產生的交易；調整紀錄與「不記入帳本」為 `null`。 */
+  /**
+   * 產生的交易。免除（`FORGIVE`、`FORGIVEN`）指向它的「呆帳」或「債務免除」交易（3h 決策 162）。
+   * 3h 之前的舊資料可能是 `null`：選了「不記入帳本」的紀錄、舊的免除與舊差額。
+   */
   transactionId: string | null;
   /**
    * 分帳產生的紀錄（3c）指向那筆分帳；接受提議產生的與一般往來為 `null`。
@@ -129,11 +132,17 @@ export interface DebtEntry {
    */
   splitId: string | null;
   /**
-   * 「以此結清」產生的差額（`SETTLEMENT`）指向它的還款（3g 決策 156）；其他紀錄與 3g 之前的
-   * 差額為 `null`。有值時這筆不能單獨撤銷（`409 SETTLEMENT_BOUND_TO_REPAYMENT`，決策 157），
-   * 撤銷或修改那筆還款時由後端一併處理。
+   * 3g 的舊資料：「以此結清」產生的差額（`SETTLEMENT`）指向它的還款（3g 決策 156）。3h 起差額改成
+   * 還款底下的分支交易（見 `difference`），migration 也把對得到還款的舊差額轉掉了，所以新資料
+   * 一律是 `null`。仍有值的舊紀錄照舊不能單獨撤銷（`409 SETTLEMENT_BOUND_TO_REPAYMENT`）。
    */
   settlesEntryId: string | null;
+  /**
+   * 「以此結清」的還款底下的分支交易（3h 決策 170～172）；其他紀錄為 `null`。有分支時，這筆還款的
+   * `delta` 是還清的欠款，實際收付 = 還清的欠款 ∓ 分支（`EXPENSE` 減、`INCOME` 加）。分支不影響
+   * 往來餘額，撤銷或修改還款時由後端一併處理。
+   */
+  difference: DebtEntryDifferenceRef | null;
   /**
    * 寫入這筆之後的累計往來餘額，單位：分（依日期、再依建立時間由舊到新累加）。
    * 只在 `GET /counterparties/{id}/entries` 回傳。
@@ -159,10 +168,22 @@ export interface DebtEntry {
 export const DEBT_ENTRY_SYNC_STATUSES = ['NONE', 'PENDING', 'SYNCED', 'DECLINED'] as const;
 export type DebtEntrySyncStatus = (typeof DEBT_ENTRY_SYNC_STATUSES)[number];
 
+/** 還款底下的結清分支（3h 決策 170）。名稱用 `differenceLabelOf` 由還款與分支的型別決定。 */
+export interface DebtEntryDifferenceRef {
+  transactionId: string;
+  /** `EXPENSE`：少收、多付；`INCOME`：多收、少付（決策 171）。 */
+  type: 'EXPENSE' | 'INCOME';
+  /** 單位：分；恆為正整數。 */
+  amount: Cents;
+}
+
 /** 這筆往來要記成哪本帳本、哪個帳戶的交易。 */
 export interface DebtEntryRecordTarget {
   ledgerId: string;
-  /** 連動帳本必填、非連動帳本不可填；`PAID_FOR_ME` 一律不可填。 */
+  /**
+   * 借出、借入、還款、代墊**必填**，而且不能是臨時帳戶（3h 決策 163、169）。
+   * `PAID_FOR_ME`、`RECEIVED_FOR_ME` 與免除（呆帳、債務免除）不可填：錢不經過我的帳戶（決策 160、162）。
+   */
   accountId?: string;
 }
 
@@ -181,13 +202,15 @@ export interface CreateDebtEntryRequest {
   date: string;
   note?: string;
   /**
-   * **必填**：物件＝產生交易並記在這裡；`null`＝不產生交易（只記往來）。
-   * `PAID_FOR_ME` 不可為 `null`（它就是要記那筆支出）。
+   * **必填**：產生交易並記在這本帳本、這個帳戶（3h 決策 163）。沒有「不記入帳本」——送 `null` 回 400。
    */
-  record: DebtEntryRecordTarget | null;
+  record: DebtEntryRecordTarget;
   /** `PAID_FOR_ME` 必填，須為該帳本的支出分類；其他種類不可帶。 */
   categoryId?: string;
-  /** 以此結清（決策 38）。只有 `REPAYMENT` 可以帶；帶了就不受「不能超過欠款」限制。 */
+  /**
+   * 以此結清。只有 `REPAYMENT` 可以帶；帶了就不受「不能超過欠款」限制。`amount` 是實際收付的金額：
+   * 還款記還清的欠款，差額記成還款底下的分支交易（3h 決策 170）。
+   */
   settle?: boolean;
 }
 
@@ -195,8 +218,16 @@ export interface CreateDebtEntryRequest {
 export interface CreateDebtEntryResponse {
   /** 寫入後的對象（含新的往來餘額）。 */
   counterparty: Counterparty;
-  /** 這次寫入的 1 筆，或加上結清差額的 2 筆。 */
+  /** 這次寫入的紀錄。3h 起一律 1 筆：以此結清的差額是還款的 `difference`，不再是另一筆紀錄。 */
   entries: DebtEntry[];
+}
+
+/**
+ * `POST /counterparties/{id}/forgive` 的 body（3h 決策 162、175）：免除對方欠我的剩餘金額，
+ * 在這本帳本記一筆支出「呆帳」，不動帳戶。
+ */
+export interface ForgiveCounterpartyRequest {
+  ledgerId: string;
 }
 
 /** `PATCH /debt-entries/{id}` 的 body。只有送出的欄位會變；調整紀錄不能改。 */
@@ -335,18 +366,21 @@ export interface ListDebtProposalsQuery {
 /**
  * `POST /debt-proposals/{id}/accept` 的 body。
  *
- * 只有 `CREATE` 需要 `record`；其他提議不可帶。依接受者那邊寫入的種類（3c 決策 102）：
+ * 只有 `CREATE` 需要 `record`；其他提議不可帶。依接受者那邊寫入的種類（3c 決策 102）。
+ * 3h 起沒有「不記入帳本」（決策 163），`record` 一律是物件：
  *
- * | 接受者寫入                                   | `record`                               | `categoryId`                 | `title` |
- * | -------------------------------------------- | -------------------------------------- | ---------------------------- | ------- |
- * | 借入、借出、還款（3b-2）                     | 物件或 `null`（規則同 `POST /debt-entries`） | 不可帶                       | 不可帶  |
- * | `PAID_FOR_THEM`、`RECEIVED_FOR_THEM`         | 物件或 `null`，同借出                   | 不可帶                       | 可帶    |
- * | `PAID_FOR_ME`、`RECEIVED_FOR_ME`             | **物件**，只有 `ledgerId`、不可帶帳戶    | **必填**，該帳本的支出／收入分類 | 可帶    |
+ * | 接受者寫入                           | `record`                                  | `categoryId`                     | `title` |
+ * | ------------------------------------ | ----------------------------------------- | -------------------------------- | ------- |
+ * | 借入、借出、還款（3b-2）             | **物件**，帳戶必填（同 `POST /debt-entries`） | 不可帶                           | 不可帶  |
+ * | `PAID_FOR_THEM`、`RECEIVED_FOR_THEM` | **物件**，帳戶必填                        | 不可帶                           | 可帶    |
+ * | `PAID_FOR_ME`、`RECEIVED_FOR_ME`     | **物件**，只有 `ledgerId`、不可帶帳戶     | **必填**，該帳本的支出／收入分類 | 可帶    |
+ * | `FORGIVEN`（被免除，決策 162）       | **物件**，只有 `ledgerId`、不可帶帳戶     | 不可帶                           | 不可帶  |
  *
+ * 接受者沒有欠款可免除時，免除提議照樣接受、什麼都不寫，這時 `record` 可省略。
  * `title` 省略時沿用提議的 `title`；送空字串代表不要名稱。
  */
 export interface AcceptDebtProposalRequest {
-  record?: DebtEntryRecordTarget | null;
+  record?: DebtEntryRecordTarget;
   categoryId?: string;
   title?: string;
 }

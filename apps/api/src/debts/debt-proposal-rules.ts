@@ -220,10 +220,16 @@ export async function proposeCreate(
  */
 export async function proposeAmend(
   tx: ProposalClient,
-  input: { fromUserId: string; entry: DebtEntryRow; now: Date; title?: string | null },
+  input: {
+    fromUserId: string;
+    entry: DebtEntryRow;
+    now: Date;
+    title?: string | null;
+    actualAmount?: number;
+  },
 ): Promise<void> {
   const { entry } = input;
-  const amount = Math.abs(entry.delta);
+  const amount = input.actualAmount ?? Math.abs(entry.delta);
 
   const pendingCreate = await tx.debtProposal.updateMany({
     where: { sourceEntryId: entry.id, status: 'PENDING', type: 'CREATE' },

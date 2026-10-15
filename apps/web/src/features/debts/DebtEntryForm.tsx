@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type {
   Counterparty,
   CreateDebtEntryKind,
@@ -11,8 +11,10 @@ import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
-import { formatAmount, formatMoney, toDateInputValue } from '../../lib/format';
-import { useAccounts } from '../accounts/use-accounts';
+import { formatMoney, toDateInputValue } from '../../lib/format';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
+import { useRecordDefaults } from '../accounts/use-record-defaults';
+import { useLedgers } from '../ledgers/use-ledgers';
 import { CounterpartyPicker, findCounterparty } from './CounterpartyPicker';
 import { useCounterparties, useCreateDebtEntry } from './use-debts';
 import styles from './DebtEntryForm.module.css';
@@ -44,7 +46,6 @@ const ACCOUNT_LABELS: Record<DebtEntryFormKind, string> = {
  * 只有送出前的餘額預覽依 W16 在畫面上試算；紀錄成功後餘額以伺服器回應為準。
  */
 export function DebtEntryForm({
-  ledger,
   amountFieldId,
   initialCounterpartyName = '',
   onSaved,
@@ -55,22 +56,76 @@ export function DebtEntryForm({
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => toDateInputValue());
+  const [ledgerId, setLedgerId] = useState('');
   const [accountId, setAccountId] = useState('');
   const [note, setNote] = useState('');
-  const [doNotRecord, setDoNotRecord] = useState(false);
   const [settle, setSettle] = useState(false);
+  const ledgerTouched = useRef(false);
+  const accountTouched = useRef(false);
+  const defaultsApplied = useRef(false);
 
   const counterpartiesQuery = useCounterparties({ limit: 100 });
   const counterparties = counterpartiesQuery.data?.items ?? [];
+  const ledgersQuery = useLedgers();
   const accounts = useAccounts();
+  const recordDefaults = useRecordDefaults();
   const createEntry = useCreateDebtEntry();
+  const writableLedgers = useMemo(
+    () =>
+      (ledgersQuery.data ?? []).filter(
+        (item) => (item.role === 'OWNER' || item.role === 'EDITOR') && item.archivedAt === null,
+      ),
+    [ledgersQuery.data],
+  );
+  const accountsForSelection = useMemo(
+    () => selectableAccounts(accounts.data ?? []),
+    [accounts.data],
+  );
+
+  useEffect(() => {
+    if (
+      recordDefaults.data === undefined ||
+      !recordDefaults.isFetchedAfterMount ||
+      ledgersQuery.data === undefined ||
+      !ledgersQuery.isFetchedAfterMount ||
+      accounts.data === undefined ||
+      !accounts.isFetchedAfterMount ||
+      defaultsApplied.current
+    ) {
+      return;
+    }
+
+    defaultsApplied.current = true;
+    const defaults = recordDefaults.data;
+    if (
+      !ledgerTouched.current &&
+      defaults.ledgerId !== null &&
+      writableLedgers.some((item) => item.id === defaults.ledgerId)
+    ) {
+      setLedgerId(defaults.ledgerId);
+    }
+    if (
+      !accountTouched.current &&
+      defaults.accountId !== null &&
+      accountsForSelection.some((item) => item.id === defaults.accountId)
+    ) {
+      setAccountId(defaults.accountId);
+    }
+  }, [
+    recordDefaults.data,
+    recordDefaults.isFetchedAfterMount,
+    ledgersQuery.data,
+    ledgersQuery.isFetchedAfterMount,
+    accounts.data,
+    accounts.isFetchedAfterMount,
+    writableLedgers,
+    accountsForSelection,
+  ]);
 
   const normalizedName = counterpartyName.trim();
   const counterparty = selectedCounterparty ?? findCounterparty(counterpartyName, counterparties);
   const repaymentAvailable = Boolean(counterparty && counterparty.balance !== 0);
   const canSettle = kind === 'REPAYMENT';
-  const showAccountField = ledger.tracksBalance;
-  const needsAccount = showAccountField && !doNotRecord;
   const amountCents = parseMoneyInput(amount);
   const repaymentOverage =
     kind === 'REPAYMENT' &&
@@ -84,7 +139,8 @@ export function DebtEntryForm({
     normalizedName === '' ||
     amountCents === null ||
     amountCents <= 0 ||
-    (needsAccount && accountId === '') ||
+    ledgerId === '' ||
+    accountId === '' ||
     (kind === 'REPAYMENT' && !repaymentAvailable) ||
     repaymentExceedsBalance ||
     createEntry.isPending;
@@ -125,16 +181,7 @@ export function DebtEntryForm({
     const after = before + (kind === 'REPAYMENT' ? repaymentDelta : delta);
 
     if (canSettle && settle) {
-      if (after === 0) {
-        preview = '記完後兩清';
-      } else {
-        const difference = -after;
-        const sign = difference < 0 ? '−' : '+';
-        const absoluteDifference = Math.abs(difference);
-        const description =
-          before > 0 ? (difference < 0 ? '少收' : '多收') : difference > 0 ? '少付' : '多付';
-        preview = `記完後兩清，差額 ${sign}${formatAmount(absoluteDifference)}（${description} ${formatAmount(absoluteDifference)} 元）`;
-      }
+      preview = '記完後兩清';
     } else if (repaymentExceedsBalance && repaymentOverage !== null) {
       preview = `超過欠款 ${formatMoney(repaymentOverage)}。要兩清請勾『以此結清』，或把多出的部分記成${before > 0 ? '借入' : '借出'}`;
     } else if (after === 0) {
@@ -202,12 +249,7 @@ export function DebtEntryForm({
       kind,
       amount: amountCents,
       date: new Date(date).toISOString(),
-      record: doNotRecord
-        ? null
-        : {
-            ledgerId: ledger.id,
-            ...(ledger.tracksBalance ? { accountId } : {}),
-          },
+      record: { ledgerId, accountId },
       ...(note === '' ? {} : { note }),
       ...(canSettle && settle ? { settle: true } : {}),
     };
@@ -291,22 +333,40 @@ export function DebtEntryForm({
         onChange={(event) => setDate(event.target.value)}
       />
 
-      {showAccountField && (
-        <Select
-          label={accountLabel}
-          value={accountId}
-          required={!doNotRecord}
-          disabled={doNotRecord}
-          onChange={(event) => setAccountId(event.target.value)}
-        >
-          <option value="">請選擇</option>
-          {accounts.data?.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </Select>
-      )}
+      <Select
+        label="記在哪本帳本"
+        value={ledgerId}
+        required
+        disabled={ledgersQuery.isLoading || writableLedgers.length === 0}
+        onChange={(event) => {
+          ledgerTouched.current = true;
+          setLedgerId(event.target.value);
+        }}
+      >
+        <option value="">請選擇</option>
+        {writableLedgers.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </Select>
+      <Select
+        label={accountLabel}
+        value={accountId}
+        required
+        disabled={accounts.isLoading || accountsForSelection.length === 0}
+        onChange={(event) => {
+          accountTouched.current = true;
+          setAccountId(event.target.value);
+        }}
+      >
+        <option value="">請選擇</option>
+        {accountsForSelection.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.name}
+          </option>
+        ))}
+      </Select>
 
       <TextField
         label="備註"
@@ -314,15 +374,6 @@ export function DebtEntryForm({
         maxLength={500}
         onChange={(event) => setNote(event.target.value)}
       />
-
-      <label className={styles.toggle}>
-        <input
-          type="checkbox"
-          checked={doNotRecord}
-          onChange={(event) => setDoNotRecord(event.target.checked)}
-        />
-        不記入帳本
-      </label>
 
       {canSettle && (
         <label className={styles.toggle}>

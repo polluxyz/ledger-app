@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
+  Account,
   Counterparty,
   DebtEntry,
   LedgerGroup,
@@ -26,7 +27,6 @@ describe('DebtHistoryView', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: false,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -37,7 +37,6 @@ describe('DebtHistoryView', () => {
     name: '旅行帳本',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: false,
     archivedAt: null,
     role: 'EDITOR',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -59,6 +58,16 @@ describe('DebtHistoryView', () => {
   const personMe = { id: 'p-me', name: '我', userId: 'u-1', status: 'MEMBER' as const };
   const personMing = { id: 'p-ming', name: '小明', userId: 'u-2', status: 'MEMBER' as const };
 
+  const account: Account = {
+    id: 'account-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 10000,
+    isTemporary: false,
+    hasTransactions: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
+
   const settlementTxn: Transaction = {
     id: 'txn-settle-1',
     type: 'TRANSFER',
@@ -68,7 +77,7 @@ describe('DebtHistoryView', () => {
     note: null,
     category: null,
     account: null,
-    toAccount: null,
+    toAccount: { id: 'account-1', name: '現金' },
     creator: { id: 'u-1', name: '我' },
     settlement: { id: 'set-1', from: personMing, to: personMe },
     debt: null,
@@ -76,6 +85,8 @@ describe('DebtHistoryView', () => {
     payer: null,
     ledgerSplit: null,
     accountPending: false,
+    differenceOfId: null,
+    difference: null,
     createdAt: '2026-09-02T00:00:00.000Z',
   };
 
@@ -98,6 +109,7 @@ describe('DebtHistoryView', () => {
       transactionId: 'txn-' + id,
       splitId: null,
       settlesEntryId: null,
+      difference: null,
       balanceAfter: 0,
       sync: 'NONE',
       paired: false,
@@ -197,7 +209,7 @@ describe('DebtHistoryView', () => {
         return json([personMe, personMing]);
       }
       if (path.endsWith('/accounts')) {
-        return json([]);
+        return json([account]);
       }
       if (path.includes('/settlements') && init?.method === 'DELETE') {
         return Promise.resolve(new Response(null, { status: 204 }));

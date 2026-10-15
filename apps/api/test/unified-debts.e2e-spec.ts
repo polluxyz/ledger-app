@@ -67,7 +67,7 @@ describe('Unified debts scenario (e2e)', () => {
     const { aCounterpartyId: mingCounterpartyId } = await linkPair(app, me, ming, '明哥', null);
     const landlord = await createCounterparty(app, me, '房東');
 
-    // 個人往來：我借明哥 500 元（LEND → delta +50000），不記進任何帳本。
+    // 個人往來：我借明哥 500 元（LEND → delta +50000），記進我的個人帳本與現金。
     await request(server())
       .post('/api/debt-entries')
       .set(auth(me.token))
@@ -76,17 +76,12 @@ describe('Unified debts scenario (e2e)', () => {
         kind: 'LEND',
         amount: 50000,
         date: DAY,
-        record: null,
+        record: { ledgerId: me.ledgerId, accountId: me.cashId },
       })
       .expect(201);
 
-    // 花蓮三日不連動帳戶（tracksBalance: false）：交易與結清一律不帶帳戶。
-    const ledger = await request(server())
-      .post('/api/ledgers')
-      .set(auth(me.token))
-      .send({ name: '花蓮三日', kind: 'SHARED', tracksBalance: false })
-      .expect(201);
-    const ledgerId = (ledger.body as { id: string }).id;
+    // 共享帳本一律連動帳戶；之後的結清明確使用付款成員的帳戶。
+    const ledgerId = await createSharedLedger(app, me.token, '花蓮三日');
 
     for (const member of [ming, hua, mei]) {
       await request(server())
@@ -207,6 +202,7 @@ describe('Unified debts scenario (e2e)', () => {
         amount: 190600,
         date: DAY,
         categoryId,
+        accountId: me.cashId,
         title: '住宿',
         ledgerSplit: {
           method: 'AMOUNT',
@@ -225,6 +221,7 @@ describe('Unified debts scenario (e2e)', () => {
         amount: 40000,
         date: DAY,
         categoryId,
+        accountId: s.mei.cashId,
         title: '點心',
         payerPersonId: people.mei.id,
         ledgerSplit: { method: 'AMOUNT', shares: [{ personId: people.ming.id, amount: 40000 }] },
@@ -356,7 +353,13 @@ describe('Unified debts scenario (e2e)', () => {
     const settled = await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
       .set(auth(ming.token))
-      .send({ toPersonId: people.me.id, amount: 51200, date: DAY })
+      .send({
+        fromPersonId: people.ming.id,
+        toPersonId: people.me.id,
+        amount: 51200,
+        date: DAY,
+        fromAccountId: ming.cashId,
+      })
       .expect(201);
     const mingSettled = await counterpartyRow(me, s.mingCounterpartyId);
     expect(mingSettled.ledgerParts).toEqual([]);

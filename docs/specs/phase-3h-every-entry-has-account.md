@@ -212,7 +212,7 @@ dev 的數量（2026-10-14，刪掉 §3.4 的測試資料之後）：
 
 ### 4.4 帳戶
 
-- `Account` 回應多 `isTemporary: boolean`。`GET /accounts` 照舊回全部帳戶（含臨時帳戶），由畫面決定顯示（W174）。
+- `Account` 回應多 `isTemporary: boolean` 與 `hasTransactions: boolean`（有沒有未刪除的交易用到它，W174「有交易才顯示」靠它判斷；餘額為 0 不代表沒有交易）。`GET /accounts` 照舊回全部帳戶（含臨時帳戶），臨時帳戶排最後，由畫面決定顯示。
 - 對臨時帳戶 `PATCH`、`DELETE`：`409 TEMPORARY_ACCOUNT_LOCKED`（新錯誤碼）。
 
 ### 4.5 預設帶入（新）

@@ -29,6 +29,8 @@ import {
  *
  * 修訂 2（W52、W55）：管理動作（暱稱、合併、解除連動）在對象頁的「對象」右側欄做；
  * 帳（餘額、同步狀態）在交易頁借還檢視的「借還往來」右側欄看。
+ *
+ * 3h 更新：所有借還 UI 操作明確選帳本與帳戶；API 建立的前置借還也使用有效記錄目標。
  */
 
 /** 現金餘額，單位：分（3c-0）。畫面上輸入的是元，比較時要乘 100。 */
@@ -111,7 +113,6 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
     kind: 'BORROW',
     amount: 3000,
     date: new Date().toISOString(),
-    record: null,
   });
   const pageB = await openAs(userB);
 
@@ -132,7 +133,6 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
     kind: 'BORROW',
     amount: 3000,
     date: new Date().toISOString(),
-    record: null,
   });
 
   // SC-W52：邀請、邀請中、取消、再邀請。
@@ -188,12 +188,14 @@ test('連動主線：對象頁邀請與取消、接受後詢問並合併、同�
   const form = panelA;
   await form.getByRole('button', { name: '借出', exact: true }).click();
   await form.getByLabel('金額').fill('120');
+  await form.getByLabel('記在哪本帳本').selectOption({ label: '甲 的帳本' });
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   await pageB.reload();
   await openDashboard(pageB);
   await pendingRow(pageB, '你欠阿甲 $120').getByRole('button', { name: '接受' }).click();
+  await pendingCard(pageB).getByLabel('記在哪本帳本').selectOption({ label: '乙 的帳本' });
   await pendingCard(pageB)
     .getByRole('combobox', { name: '借到的錢進哪個帳戶' })
     .selectOption({ label: '現金' });
@@ -280,7 +282,6 @@ test('錯過詢問：之後從對象頁「合併之前的紀錄」補做', async
     kind: 'LEND',
     amount: 5000,
     date: new Date().toISOString(),
-    record: null,
   });
   await linkByEmail(request, userA, userB);
 
@@ -319,7 +320,6 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
     kind: 'LEND',
     amount: 5000,
     date: new Date().toISOString(),
-    record: null,
   });
   const { inviterSideId } = await linkByEmail(request, userA, userB);
   // A 把舊的「小明」併進新的已連動對象，這樣 A 帳上乙欠 50、B 帳上兩清。
@@ -329,14 +329,14 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
     kind: 'REPAYMENT',
     amount: 5000,
     date: new Date().toISOString(),
-    record: null,
   });
 
   const pageB = await openAs(userB);
   await pendingRow(pageB, /你欠.*\$50/)
     .getByRole('button', { name: '接受' })
     .click();
-  await pendingCard(pageB).getByLabel('不記入帳本（只記往來）').check();
+  await pendingCard(pageB).getByLabel('記在哪本帳本').selectOption({ label: '乙 的帳本' });
+  await pendingCard(pageB).getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await pendingCard(pageB).getByRole('button', { name: '接受', exact: true }).click();
   await expect(pendingCard(pageB).getByText('你帳上目前兩清')).toBeVisible();
   await pendingCard(pageB).getByRole('button', { name: '改成拒絕' }).click();
@@ -350,7 +350,6 @@ test('接受時帳上對不起來：兩清時收到還款，改成拒絕', async
     kind: 'LEND',
     amount: 3000,
     date: new Date().toISOString(),
-    record: null,
   });
   const ledgerA = await openLedger(pageA, /小明/, '歷史');
   await expect(ledgerA.getByText('對方未接受')).toBeVisible();

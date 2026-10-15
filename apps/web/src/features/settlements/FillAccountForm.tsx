@@ -3,7 +3,7 @@ import type { LedgerSummary, Transaction } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
-import { useAccounts } from '../accounts/use-accounts';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useSetSettlementAccount, useSetTransactionAccount } from './use-settlements';
 import styles from './FillAccountForm.module.css';
 
@@ -19,6 +19,7 @@ interface FillAccountFormProps {
  */
 export function FillAccountForm({ ledger, transaction, onSaved }: FillAccountFormProps) {
   const accounts = useAccounts();
+  const options = selectableAccounts(accounts.data ?? []);
   const setTransactionAccount = useSetTransactionAccount(ledger.id);
   const setSettlementAccount = useSetSettlementAccount(ledger.id);
   const [accountId, setAccountId] = useState('');
@@ -54,7 +55,7 @@ export function FillAccountForm({ ledger, transaction, onSaved }: FillAccountFor
         onChange={(event) => setAccountId(event.target.value)}
       >
         <option value="">選擇帳戶</option>
-        {accounts.data?.map((account) => (
+        {options.map((account) => (
           <option key={account.id} value={account.id}>
             {account.name}
           </option>

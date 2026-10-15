@@ -19,11 +19,14 @@ async function cashAccount(request: APIRequestContext, token: string) {
   return account;
 }
 
-function pendingRow(page: Page): Locator {
-  return page.getByRole('listitem').filter({ hasText: '待補' });
+function temporaryAccountRow(page: Page): Locator {
+  return page.getByRole('listitem').filter({ hasText: '臨時帳戶' });
 }
 
-// SC-W100：驗證兩位成員透過畫面記分帳、補帳戶與結清，並用 API 核對雙方現金餘額。
+/**
+ * 驗證共享分帳的每筆交易都落在帳戶：用畫面記分帳、由本人把臨時帳戶換到現金並結清，
+ * 再用 API 核對兩位成員的餘額（3e SC-W100、3h SC-H8）。前置帳本與成員透過真實 API 建立。
+ */
 test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   signedInPage: pageA,
   userA,
@@ -34,7 +37,6 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   const ledger = await createLedger(request, userA.token, {
     name: '花蓮旅遊',
     kind: 'SHARED',
-    tracksBalance: true,
   });
   await addMember(request, userA.token, ledger.id, { email: USER_B_EMAIL, role: 'EDITOR' });
 
@@ -110,8 +112,8 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   await switchLedger(pageB, ledger.name);
   await openTransactions(pageB);
   const dinnerRowB = transactionRow(pageB, '晚餐');
-  await expect(dinnerRowB.getByRole('button', { name: '待補' })).toBeVisible();
-  await dinnerRowB.getByRole('button', { name: '待補' }).click();
+  await expect(dinnerRowB.getByRole('button', { name: '臨時帳戶' })).toBeVisible();
+  await dinnerRowB.getByRole('button', { name: '臨時帳戶' }).click();
 
   const bFillDialog = pageB.getByRole('dialog', { name: '補帳戶' });
   await expect(bFillDialog.getByRole('combobox')).toHaveCount(1);
@@ -162,10 +164,10 @@ test('SC-W100：共享帳本分帳、補帳戶與結清主線', async ({
   await pageA.reload();
   await switchLedger(pageA, ledger.name);
   await openTransactions(pageA);
-  const settlementRow = pendingRow(pageA);
+  const settlementRow = temporaryAccountRow(pageA);
   await expect(settlementRow).toHaveCount(1);
   await expect(settlementRow).toContainText('乙');
-  await settlementRow.getByRole('button', { name: '待補' }).click();
+  await settlementRow.getByRole('button', { name: '臨時帳戶' }).click();
 
   const aFillDialog = pageA.getByRole('dialog', { name: '補帳戶' });
   await expect(aFillDialog.getByRole('combobox')).toHaveCount(1);

@@ -12,6 +12,9 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
+import { TransactionsService } from '../transactions/transactions.service';
+import { assertLedgerWritable } from './debt-ledger-access';
+import { forgivenessTypeFor } from './debt-recording';
 import {
   counterpartyLinked,
   findLinkOfCounterparty,
@@ -56,6 +59,7 @@ export class CounterpartiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerDebts: LedgerDebtsService,
+    private readonly transactions: TransactionsService,
   ) {}
 
   /** 不記帳先新增一個人（決策 55）。名字已在 DTO 去掉前後空白；撞名回 409。 */
@@ -247,15 +251,39 @@ export class CounterpartiesService {
       query.section,
     );
     const pageRows = sectionRows.slice((page - 1) * limit, page * limit);
+    // 分頁後一次讀完分支，避免往來清單逐筆查交易。
+    const branches = await this.prisma.transaction.findMany({
+      where: {
+        differenceOfId: {
+          in: pageRows
+            .map(({ entry }) => entry.transactionId)
+            .filter((id): id is string => id !== null),
+        },
+        deletedAt: null,
+      },
+      select: { id: true, differenceOfId: true, type: true, amount: true },
+    });
+    const byRepayment = new Map(branches.map((branch) => [branch.differenceOfId, branch]));
     const sync = await syncStatuses(
       this.prisma,
       pageRows.map(({ entry }) => entry),
     );
 
     return {
-      items: pageRows.map(({ entry, balanceAfter }) =>
-        toDebtEntry(entry, { balanceAfter, sync: sync.get(entry.id) }),
-      ),
+      items: pageRows.map(({ entry, balanceAfter }) => {
+        const branch = entry.transactionId ? byRepayment.get(entry.transactionId) : undefined;
+        return toDebtEntry(entry, {
+          balanceAfter,
+          sync: sync.get(entry.id),
+          difference: branch
+            ? {
+                transactionId: branch.id,
+                type: branch.type as 'EXPENSE' | 'INCOME',
+                amount: branch.amount,
+              }
+            : null,
+        });
+      }),
       page,
       limit,
       total: sectionRows.length,
@@ -263,12 +291,19 @@ export class CounterpartiesService {
   }
 
   /**
-   * 免除剩餘（決策 39）：對方欠我時，補一筆 `FORGIVE` 讓往來餘額歸零，不產生交易。
-   * 餘額 ≤ 0（對方沒欠我、或是我欠對方）時沒有東西可以免除。連動中會送提議給對方（決策 62）。
+   * 免除剩餘（決策 162、175）：對方欠我時，補一筆 `FORGIVE` 與沒有帳戶的呆帳支出。
+   * 餘額 ≤ 0（對方沒欠我、或是我欠對方）時沒有東西可以免除。先按寫入者檢查指定帳本，
+   * 再鎖對象算餘額；呆帳交易與往來紀錄在同一個資料庫交易內提交，避免兩本帳只改一邊。
+   * 連動中會送提議給對方（決策 62）。
    */
-  forgive(userId: string, counterpartyId: string): Promise<CreateDebtEntryResponse> {
+  forgive(
+    userId: string,
+    counterpartyId: string,
+    ledgerId: string,
+  ): Promise<CreateDebtEntryResponse> {
     return this.prisma.$transaction(async (tx) => {
       const row = await loadOwnedCounterparty(tx, userId, counterpartyId);
+      await assertLedgerWritable(tx, userId, ledgerId);
       await lockCounterparty(tx, row.id);
       const balance = await currentBalance(tx, row.id);
       if (balance <= 0) {
@@ -278,14 +313,22 @@ export class CounterpartiesService {
           'This counterparty does not owe you anything.',
         );
       }
+      const date = new Date();
+      const transactionId = await this.transactions.createDebtForgiveness(tx, {
+        ledgerId,
+        creatorId: userId,
+        type: forgivenessTypeFor('FORGIVE'),
+        amount: balance,
+        date,
+      });
       const entry = await tx.debtEntry.create({
         data: {
           counterpartyId: row.id,
           kind: 'FORGIVE',
           delta: -balance,
-          date: new Date(),
+          date,
           note: null,
-          transactionId: null,
+          transactionId,
         },
       });
       await proposeCreate(tx, { fromUserId: userId, entry, amount: balance, settle: false });

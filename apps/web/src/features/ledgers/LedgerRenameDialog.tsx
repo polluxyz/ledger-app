@@ -36,7 +36,7 @@ function LedgerRenameForm({ ledger, onClose }: { ledger: LedgerDetail; onClose: 
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // 只送名稱。`kind` 與 `tracksBalance` 帶上去都會被後端退回 400，那是刻意的。
+    // 只送名稱；帳本類型建立後不可更改。
     renameLedger.mutate({ id: ledger.id, name }, { onSuccess: onClose });
   }
 

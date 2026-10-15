@@ -15,7 +15,6 @@ describe('CounterpartiesPage', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     createdAt: '2026-09-01T00:00:00.000Z',
     role: 'OWNER',
@@ -62,6 +61,21 @@ describe('CounterpartiesPage', () => {
 
       if (url.includes('/ledgers')) {
         return json(withLedger ? [ledger] : []);
+      }
+      if (url.endsWith('/accounts')) {
+        return json([
+          {
+            id: 'account-1',
+            name: '現金',
+            initialBalance: 0,
+            balance: 0,
+            isTemporary: false,
+            hasTransactions: false,
+          },
+        ]);
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return json({ ledgerId: 'ledger-1', accountId: 'account-1' });
       }
       if (url.includes('/ledger-groups')) {
         return json([]);

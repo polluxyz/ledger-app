@@ -7,6 +7,7 @@ import type {
   UpdateSplitResponse,
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
+import { assertSelectableAccount } from '../accounts/account-selection';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
@@ -323,10 +324,6 @@ export class SplitsService {
     input: Omit<Input, 'fromTransactionId'>,
   ): Promise<void> {
     await assertLedgerWritable(tx, userId, input.ledgerId);
-    const ledger = await tx.ledger.findUniqueOrThrow({
-      where: { id: input.ledgerId },
-      select: { tracksBalance: true },
-    });
     const category = await tx.category.findFirst({
       where: { id: input.categoryId, ledgerId: input.ledgerId },
     });
@@ -349,7 +346,7 @@ export class SplitsService {
       const count = await tx.counterparty.count({ where: { id: { in: ids }, ownerId: userId } });
       if (count !== ids.length) throw notFound('Counterparty');
     }
-    if (input.payer !== null || !ledger.tracksBalance) {
+    if (input.payer !== null) {
       if (input.accountId !== undefined)
         throw new AppException(
           HttpStatus.BAD_REQUEST,
@@ -364,8 +361,7 @@ export class SplitsService {
       );
     }
     if (input.accountId) {
-      const account = await tx.account.findFirst({ where: { id: input.accountId, userId } });
-      if (!account) throw notFound('Account');
+      await assertSelectableAccount(tx, userId, input.accountId);
     }
   }
 

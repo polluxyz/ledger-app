@@ -10,8 +10,7 @@ import App from '../../App';
 const newTransactionForm = () => screen.getByRole('group', { name: '新增一筆交易' });
 
 /**
- * 轉帳（SC-15）。轉帳的欄位規則與支出／收入不同，因此獨立成一檔：
- * 沒有分類、必須有轉入帳戶、而且只在「與帳戶連動」的帳本才有意義。
+ * 轉帳（SC-15）。轉帳沒有分類、必須有轉入帳戶，所有帳本都會影響帳戶餘額。
  */
 describe('Recording a transfer', () => {
   const fetchMock = vi.fn();
@@ -21,13 +20,26 @@ describe('Recording a transfer', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
   };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
-  const cash = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 100000 };
-  const bank = { id: 'acc-2', name: '國泰世華', initialBalance: 0, balance: 500000 };
+  const cash = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 100000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  const bank = {
+    id: 'acc-2',
+    name: '國泰世華',
+    initialBalance: 0,
+    balance: 500000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
 
   beforeEach(() => {
     localStorage.clear();
@@ -71,6 +83,9 @@ describe('Recording a transfer', () => {
       }
       if (url.includes('/categories')) {
         return Promise.resolve(jsonResponse(200, [expenseCategory]));
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return Promise.resolve(jsonResponse(200, { ledgerId: ledger.id, accountId: cash.id }));
       }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, overrides.accounts ?? [cash, bank]));
@@ -123,14 +138,13 @@ describe('Recording a transfer', () => {
     expect(posted).not.toHaveProperty('categoryId');
   });
 
-  it('offers no transfer at all in a ledger that does not track balances', async () => {
-    // 那本帳本不影響餘額，轉帳沒有意義，後端也會回 400 ACCOUNT_NOT_ALLOWED。
-    routeFetch({ ledger: { ...ledger, id: 'ledger-trip', tracksBalance: false } });
+  it('offers transfer in every ledger', async () => {
+    routeFetch({ ledger: { ...ledger, id: 'ledger-trip' } });
 
     render(<App />);
 
     expect(await screen.findByRole('button', { name: '支出' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '轉帳' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '轉帳' })).toBeInTheDocument();
   });
 
   it('explains itself instead of failing when there is only one account', async () => {

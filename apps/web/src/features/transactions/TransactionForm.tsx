@@ -32,7 +32,8 @@ import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatMoney, toDateInputValue } from '../../lib/format';
-import { useAccounts } from '../accounts/use-accounts';
+import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
+import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCurrentUser } from '../auth/use-current-user';
 import { useCategories } from '../categories/use-categories';
 import { DebtEntryForm } from '../debts/DebtEntryForm';
@@ -170,19 +171,14 @@ interface TransactionFormProps {
  *
  * ## 為什麼新增與編輯是同一個元件（D1）
  *
- * 欄位規則有四種組合（型別 × 帳本的 `tracksBalance`，表在
- * `packages/shared/src/types/transaction.ts`）。這種規則只該有一份實作。
+ * 帳戶欄位依付款人是否為自己決定；付款人是自己時必須選帳戶，別人付時不顯示。
+ * 這種規則只該有一份實作。
  * 分成兩個表單一開始好寫，但兩邊遲早分岔，而分岔的症狀是「新增得成、編輯卻被
  * 後端 400」——很難聯想到原因。
  *
  * ## 為什麼收的是整個 `ledger` 而不只是 id（SC-16）
  *
- * 帳戶欄位存不存在，取決於這本帳本的 `tracksBalance`：
- *
- * - **連動帳本**：帳戶必填，不給就是 400 `ACCOUNT_REQUIRED`。
- * - **非連動帳本**：帳戶不可給，給了就是 400 `ACCOUNT_NOT_ALLOWED`。
- *
- * 所以欄位不能只是「停用」，必須整個不存在，送出的 body 也不能帶 `accountId`。
+ * 帳戶屬於使用者而非帳本；付款人是自己時要選真正帳戶，付款人是別人時不送帳戶。
  *
  * ## 新增模式的第 4 格「借還」（3b-1 · W2）
  *
@@ -299,6 +295,7 @@ function TransactionFormContent({
     split?.category.id ?? transaction?.category?.id ?? '',
   );
   const [accountId, setAccountId] = useState(split?.account?.id ?? transaction?.account?.id ?? '');
+  const [accountSelectionTouched, setAccountSelectionTouched] = useState(false);
   const [sharedPayerPersonId, setSharedPayerPersonId] = useState<string | null>(
     transaction?.payer?.id ?? null,
   );
@@ -307,11 +304,7 @@ function TransactionFormContent({
   const [title, setTitle] = useState(split?.title ?? transaction?.title ?? '');
   const [note, setNote] = useState(split?.note ?? transaction?.note ?? '');
   const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
-    split?.payer || (isSharedLedger && transaction?.payer)
-      ? 'counterparty'
-      : ledger.tracksBalance
-        ? 'account'
-        : 'self',
+    split?.payer || (isSharedLedger && transaction?.payer) ? 'counterparty' : 'account',
   );
   const [payerName, setPayerName] = useState(
     split?.payer?.name ?? (isSharedLedger ? transaction?.payer?.name : undefined) ?? '',
@@ -377,6 +370,8 @@ function TransactionFormContent({
   const categoryType: CategoryType = type === 'TRANSFER' ? 'EXPENSE' : type;
   const categories = useCategories(ledgerId, categoryType);
   const accounts = useAccounts();
+  const recordDefaults = useRecordDefaults(ledgerId);
+  const accountOptions = selectableAccounts(accounts.data ?? []);
   const createTransaction = useCreateTransaction(ledgerId);
   const updateTransaction = useUpdateTransaction(ledgerId);
   const deleteTransaction = useDeleteTransaction(ledgerId);
@@ -430,36 +425,49 @@ function TransactionFormContent({
     split?.participants.some((person) => person.sync === 'SYNCED') ?? false;
 
   /**
-   * 帳戶欄位鎖住＝這筆記在別人的帳戶上（D2）。
+   * 帳戶欄位鎖住＝這筆的帳戶被隱私規則遮住，且不是目前使用者的臨時帳戶。
    *
-   * 連動帳本的交易一定有帳戶，而 `account` 只在「帳戶不屬於目前的檢視者」時才被
-   * 遮成 `null`（SC-18）。所以在連動帳本裡 `account === null` 就等於「不是我的」，
-   * 不必再去比對建立者是誰。
+   * `account` 只在帳戶不屬於目前檢視者，或這筆依法不經過帳戶時才是 `null`。
+   * `accountPending` 指向自己的臨時帳戶，因此那種交易仍可選真正帳戶。
    *
-   * 這種情況下前端根本拿不到原本的帳戶 id，送出時就**不帶 `accountId`**，
-   * 後端會沿用原值。若照新增模式那樣「沒選就落到第一個帳戶」，會把別人的交易
-   * 悄悄搬到自己的戶頭——而且送得出去，後端不會擋。
+   * 這種情況下前端拿不到原本的帳戶 id，送出時就**不帶 `accountId`**，由後端沿用原值，
+   * 避免把別人的交易改記到自己的戶頭。
    */
   const accountLocked =
     transaction !== undefined &&
     split === undefined &&
-    ledger.tracksBalance &&
     transaction.account === null &&
+    !transaction.accountPending &&
     !(isSharedLedger && (sharedPayerChanged || sharedPayerPersonId !== mePersonId));
-  const showAccountField = ledger.tracksBalance && !accountLocked;
+  const showAccountField = !accountLocked;
 
   /**
-   * 帳戶是必填的。使用者若沒主動選過，就落到第一個帳戶——多數人只有一個「現金」，
-   * 等於完全不用碰這個欄位。
+   * 只接受真正帳戶，不在選單裡的 id（例如臨時帳戶）一律不用，免得它落進送出的 request。
    *
-   * 刻意用「推導顯示值」而非 useEffect 去 setState：後者會多觸發一輪渲染
-   * （cascading render），而 state 只需要保存使用者的明確選擇。
+   * 新增時的預設順序（3h W177）：使用者選過的 → 我在這本帳本最近用的帳戶（`useRecordDefaults`）
+   * → 第一個可選帳戶。最後一層照 3h 之前的做法保留：多數人只有一個「現金」，從沒記過帳的
+   * 新使用者也不必碰這個欄位。共享帳本改成自己付款時例外，留空讓使用者明確選。
+   *
+   * 刻意用「推導顯示值」而非 useEffect 去 setState：後者會多觸發一輪渲染，state 只保存
+   * 使用者的明確選擇。
    */
+  const defaultAccountId =
+    !isEdit && !accountSelectionTouched && !recordDefaults.isFetching
+      ? (recordDefaults.data?.accountId ?? '')
+      : '';
+  const fallbackAccountId =
+    !isEdit && !accountSelectionTouched && !(isSharedLedger && sharedPayerChanged)
+      ? (accountOptions[0]?.id ?? '')
+      : '';
   const selectedAccountId = showAccountField
-    ? accountId || (isSharedLedger && sharedPayerChanged ? '' : (accounts.data?.[0]?.id ?? ''))
+    ? accountOptions.some((account) => account.id === accountId)
+      ? accountId
+      : accountOptions.some((account) => account.id === defaultAccountId)
+        ? defaultAccountId
+        : fallbackAccountId
     : '';
   /** 轉入帳戶不能與轉出帳戶相同（後端回 400 TRANSFER_SAME_ACCOUNT），預設挑第一個不同的。 */
-  const otherAccounts = (accounts.data ?? []).filter((account) => account.id !== selectedAccountId);
+  const otherAccounts = accountOptions.filter((account) => account.id !== selectedAccountId);
   const selectedToAccountId = showAccountField
     ? toAccountId && toAccountId !== selectedAccountId
       ? toAccountId
@@ -467,9 +475,6 @@ function TransactionFormContent({
     : '';
 
   /**
-   * 轉帳只在連動帳本才有意義——非連動帳本不影響餘額，後端也會擋
-   * （400 `ACCOUNT_NOT_ALLOWED`）。
-   *
    * 帳戶鎖住時也不給轉帳（D3）：把別人的支出改成轉帳的話，轉出沿用他的帳戶、
    * 轉入是我的，後端會接受，變成一筆「從他的戶頭轉到我的戶頭」的交易。
    * 反方向（他的轉帳改成支出）允許，錢還留在他的帳戶；改完之後這顆鈕就消失、
@@ -481,9 +486,9 @@ function TransactionFormContent({
   const accountBelongsToOthers =
     transaction !== undefined &&
     split === undefined &&
-    ledger.tracksBalance &&
-    transaction.account === null;
-  const canTransfer = ledger.tracksBalance && !accountLocked && !accountBelongsToOthers;
+    transaction.account === null &&
+    !transaction.accountPending;
+  const canTransfer = !accountLocked && !accountBelongsToOthers;
   const showTransferButton = (canTransfer && split === undefined) || type === 'TRANSFER';
   /** 轉帳至少要有兩個帳戶。與其讓使用者送出後撞 400，不如先說清楚。 */
   const transferBlocked = type === 'TRANSFER' && showAccountField && otherAccounts.length === 0;
@@ -517,7 +522,7 @@ function TransactionFormContent({
     if (nextType === 'TRANSFER') {
       setSplitEnabled(false);
       if (isSharedLedger) {
-        setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+        setPaymentMode('account');
         setSharedPayerPersonId(mePersonId);
         setSharedPayerChanged(false);
         setPayerName('');
@@ -544,9 +549,7 @@ function TransactionFormContent({
     paymentMode === 'counterparty' &&
     sharedPayerPersonId !== null &&
     sharedPayerPersonId === mePersonId
-      ? ledger.tracksBalance
-        ? 'account'
-        : 'self'
+      ? 'account'
       : paymentMode;
   const previewPayerId =
     selectedPayer?.counterpartyId ??
@@ -683,11 +686,7 @@ function TransactionFormContent({
         ]),
       )
     : null;
-  const needsAccount = isSharedLedger
-    ? showAccountField &&
-      (type === 'TRANSFER' ||
-        (!isPayerOther && paymentRowMode !== 'self' && paymentRowMode !== 'counterparty'))
-    : showAccountField && (type === 'TRANSFER' || (!isPayerOther && paymentMode !== 'self'));
+  const needsAccount = showAccountField && (type === 'TRANSFER' || !isPayerOther);
   const needsSharedPayer =
     isSharedLedger && type !== 'TRANSFER' && paymentRowMode === 'counterparty' && !isPayerOther;
 
@@ -898,7 +897,7 @@ function TransactionFormContent({
         setSplitPrecision('CENT');
         setSharedPayerPersonId(mePersonId);
         setSharedPayerChanged(false);
-        setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+        setPaymentMode('account');
         setAccountId('');
         setPayerName('');
         setAmount('');
@@ -990,7 +989,7 @@ function TransactionFormContent({
             setSplitMethod('EQUAL');
             setSplitPrecision('CENT');
             setParticipants([makeMeParticipant()]);
-            setPaymentMode(ledger.tracksBalance ? 'account' : 'self');
+            setPaymentMode('account');
             setSelectedPayer(null);
             setPayerName('');
           }
@@ -1047,7 +1046,7 @@ function TransactionFormContent({
     !isPayerOther &&
     !(isSharedLedger && paymentRowMode === 'counterparty') &&
     !accounts.isLoading &&
-    (accounts.data?.length ?? 0) === 0
+    accountOptions.length === 0
   ) {
     return (
       <section>
@@ -1127,18 +1126,19 @@ function TransactionFormContent({
         )}
       </div>
 
-      {/* 非連動帳本沒有帳戶欄位。停用而非移除是不夠的——後端連「帶著空值」都會
-          擋下（400 ACCOUNT_NOT_ALLOWED），而且一個停用的欄位會讓人以為
-          「應該要能選，只是現在不行」。 */}
+      {/* 轉帳兩端與付款人為我的交易都只能選真正帳戶；他人付款時 PaymentRow 不顯示帳戶。 */}
       {type === 'TRANSFER' ? (
         <>
           <Select
             label="轉出帳戶"
             value={selectedAccountId}
             required
-            onChange={(event) => setAccountId(event.target.value)}
+            onChange={(event) => {
+              setAccountSelectionTouched(true);
+              setAccountId(event.target.value);
+            }}
           >
-            {accounts.data?.map((account) => (
+            {accountOptions.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>
@@ -1166,7 +1166,7 @@ function TransactionFormContent({
       ) : (
         <PaymentRow
           type={type}
-          accounts={accounts.data ?? []}
+          accounts={accountOptions}
           accountId={selectedAccountId}
           showAccountField={showAccountField}
           accountLocked={accountLocked}
@@ -1177,7 +1177,10 @@ function TransactionFormContent({
           ledgerPeople={isSharedLedger ? ledgerPeople : undefined}
           mePersonId={mePersonId}
           selectedLedgerPersonId={sharedPayerPersonId}
-          onAccountChange={setAccountId}
+          onAccountChange={(value) => {
+            setAccountSelectionTouched(true);
+            setAccountId(value);
+          }}
           onModeChange={handlePayerModeChange}
           onPayerNameChange={handlePayerNameChange}
           onPayerSelect={handlePayerSelect}

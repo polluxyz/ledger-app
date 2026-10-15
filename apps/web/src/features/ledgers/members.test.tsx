@@ -20,7 +20,6 @@ describe('Ledger members', () => {
     name: '家庭帳本',
     currency: 'TWD',
     kind: 'SHARED',
-    tracksBalance: true,
     archivedAt: null as string | null,
     createdAt: '2026-01-01T00:00:00.000Z',
     members: [

@@ -16,3 +16,9 @@
  * 初始餘額為 0，使用者可自行調整成導入當下的真實金額。
  */
 export const DEFAULT_ACCOUNTS: readonly string[] = ['現金'] as const;
+
+/**
+ * 臨時帳戶存在資料庫裡的名稱（3h 決策 167）。畫面一律顯示「臨時帳戶」，不看這個欄位：
+ * migration 遇到使用者已有同名帳戶時，會把臨時帳戶取名「臨時帳戶 2」。
+ */
+export const TEMPORARY_ACCOUNT_NAME = '臨時帳戶';

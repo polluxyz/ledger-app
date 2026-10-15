@@ -28,14 +28,6 @@ export interface Ledger {
   /** 私人或共享。**建立後不可變更**；詳見 `LEDGER_KINDS` 的說明。 */
   kind: LedgerKind;
   /**
-   * 這本帳本的交易是否計入我的帳戶餘額。**建立後不可變更**（事後改會讓餘額突然跳動）。
-   *
-   * - `true`（預設）：一般的個人／家庭帳本，記帳同時扣減對應帳戶。交易必須指定帳戶。
-   * - `false`：臨時性、「錢不是我的」的帳本，例如出遊分帳、社團公款。交易不指定
-   *   帳戶，也不影響任何餘額。
-   */
-  tracksBalance: boolean;
-  /**
    * 封存時間；未封存為 `null`。封存後帳本轉為唯讀（不可再記帳），且預設不出現在
    * 帳本列表中。
    *
@@ -86,16 +78,16 @@ export interface CreateLedgerRequest {
    * 選 `SHARED` 時可以先不加任何成員——對方也許還沒註冊，不該因此卡住建立。
    */
   kind?: LedgerKind;
-  /** 是否與我的帳戶餘額連動（預設 true）。**建立後就定案，之後不可更改。** */
-  tracksBalance?: boolean;
 }
 
 /**
  * PATCH /ledgers/{ledgerId} 的請求 body。
  *
- * 只有名稱可改。`tracksBalance` 與 `kind` 刻意**不在**這裡——兩者建立後即定案。
- * 後端仍會明確接住它們並回 400（`TRACKS_BALANCE_IMMUTABLE` / `LEDGER_KIND_IMMUTABLE`），
- * 好讓誤送的人得到說得出原因的錯誤訊息，而不是一句籠統的「欄位不被允許」。
+ * 只有名稱可改。`kind` 刻意**不在**這裡——它建立後即定案。後端仍會明確接住它並回 400
+ * （`LEDGER_KIND_IMMUTABLE`），好讓誤送的人得到說得出原因的錯誤訊息。
+ *
+ * 3h 起沒有「不計入餘額」的帳本（決策 165）：所有帳本的交易都算進帳戶餘額，
+ * `tracksBalance` 已從請求與回應拿掉，帶了一律 400。
  */
 export interface UpdateLedgerRequest {
   name: string;

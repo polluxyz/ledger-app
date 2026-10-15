@@ -73,3 +73,11 @@ export function useDeleteAccount() {
     },
   });
 }
+
+/**
+ * 表單的帳戶選單只能列這些（3h 決策 169）：臨時帳戶只能由後端代填，不能手動選。
+ * 帳戶頁要顯示臨時帳戶時，直接用 `useAccounts` 的完整清單，不經過這裡。
+ */
+export function selectableAccounts(accounts: readonly Account[]): Account[] {
+  return accounts.filter((account) => !account.isTemporary);
+}

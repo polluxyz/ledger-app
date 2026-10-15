@@ -39,21 +39,11 @@ describe('Ledger settlements (e2e)', () => {
     people: { Alice: LedgerPerson; Bob: LedgerPerson; Charlie: LedgerPerson };
   }
 
-  async function scene(tracksBalance = true): Promise<Scene> {
+  async function scene(): Promise<Scene> {
     const alice = await person(app, 'alice@example.com', 'Alice');
     const bob = await person(app, 'bob@example.com', '小明');
     const charlie = await person(app, 'charlie@example.com', '小華');
-    let ledgerId: string;
-    if (tracksBalance) {
-      ledgerId = await createSharedLedger(app, alice.token, '花蓮三日');
-    } else {
-      const created = await request(server())
-        .post('/api/ledgers')
-        .set(auth(alice.token))
-        .send({ name: '不連動帳本', kind: 'SHARED', tracksBalance: false })
-        .expect(201);
-      ledgerId = (created.body as { id: string }).id;
-    }
+    const ledgerId = await createSharedLedger(app, alice.token, '花蓮三日');
 
     for (const member of [bob, charlie]) {
       await request(server())
@@ -199,6 +189,14 @@ describe('Ledger settlements (e2e)', () => {
     return account.balance;
   }
 
+  async function temporaryAccountId(who: Person): Promise<string> {
+    const account = await prisma.account.findFirstOrThrow({
+      where: { userId: who.userId, isTemporary: true },
+      select: { id: true },
+    });
+    return account.id;
+  }
+
   function namedNets(result: SettlementSummary): Array<[string, string, number]> {
     return result.people.map(({ person: ledgerPerson, net }) => [
       ledgerPerson.name,
@@ -224,6 +222,7 @@ describe('Ledger settlements (e2e)', () => {
 
     const charlieBefore = await balanceOf(s.charlie, s.charlie.cashId);
     const aliceBefore = await balanceOf(s.alice, s.alice.cashId);
+    const aliceTemporaryId = await temporaryAccountId(s.alice);
     const created = await settlement(s.charlie, s.ledgerId, {
       toPersonId: s.people.Alice.id,
       amount: 205000,
@@ -236,9 +235,10 @@ describe('Ledger settlements (e2e)', () => {
       where: { id: charlieSettlement.id },
       select: { accountId: true, toAccountId: true },
     });
-    expect(charlieRow).toEqual({ accountId: s.charlie.cashId, toAccountId: null });
+    expect(charlieRow).toEqual({ accountId: s.charlie.cashId, toAccountId: aliceTemporaryId });
     expect(await balanceOf(s.charlie, s.charlie.cashId)).toBe(charlieBefore - 205000);
     expect(await balanceOf(s.alice, s.alice.cashId)).toBe(aliceBefore);
+    expect(await balanceOf(s.alice, aliceTemporaryId)).toBe(205000);
 
     await request(server())
       .put('/api/ledgers/' + s.ledgerId + '/settlements/' + charlieSettlementId + '/account')
@@ -246,6 +246,7 @@ describe('Ledger settlements (e2e)', () => {
       .send({ accountId: s.alice.cashId })
       .expect(200);
     expect(await balanceOf(s.alice, s.alice.cashId)).toBe(aliceBefore + 205000);
+    expect(await balanceOf(s.alice, aliceTemporaryId)).toBe(0);
     const afterCharliePaid = await summary(s.alice, s.ledgerId);
     expect(namedNets(afterCharliePaid)).toEqual([
       ['Alice', 'MEMBER', 100000],
@@ -341,7 +342,10 @@ describe('Ledger settlements (e2e)', () => {
       where: { id: transfer.id },
       select: { accountId: true, toAccountId: true },
     });
-    expect(saved).toEqual({ accountId: null, toAccountId: s.alice.cashId });
+    expect(saved).toEqual({
+      accountId: await temporaryAccountId(s.bob),
+      toAccountId: s.alice.cashId,
+    });
   });
 
   it('rejects invalid account combinations without leaving a transaction', async () => {
@@ -375,27 +379,36 @@ describe('Ledger settlements (e2e)', () => {
     expect(await prisma.ledgerSettlement.count()).toBe(0);
   });
 
-  it('allows account-free settlements in a non-tracking ledger and rejects supplied accounts', async () => {
-    const s = await scene(false);
+  it('records the payer account and gives the receiver a temporary account to replace', async () => {
+    const s = await scene();
+    const aliceBefore = await balanceOf(s.alice, s.alice.cashId);
+    const bobBefore = await balanceOf(s.bob, s.bob.cashId);
+    const bobTemporaryId = await temporaryAccountId(s.bob);
     const created = await settlement(s.alice, s.ledgerId, {
+      fromPersonId: s.people.Alice.id,
       toPersonId: s.people.Bob.id,
       amount: 50000,
       date: DAY,
+      fromAccountId: s.alice.cashId,
     }).expect(201);
     const saved = await prisma.transaction.findUnique({
       where: { id: (created.body as Transaction).id },
       select: { accountId: true, toAccountId: true },
     });
-    expect(saved).toEqual({ accountId: null, toAccountId: null });
+    expect(saved).toEqual({ accountId: s.alice.cashId, toAccountId: bobTemporaryId });
+    expect(await balanceOf(s.alice, s.alice.cashId)).toBe(aliceBefore - 50000);
+    expect(await balanceOf(s.bob, bobTemporaryId)).toBe(50000);
+    expect(await balanceOf(s.bob, s.bob.cashId)).toBe(bobBefore);
 
-    const withAccount = await settlement(s.alice, s.ledgerId, {
-      toPersonId: s.people.Bob.id,
-      amount: 50000,
-      date: DAY,
-      fromAccountId: s.alice.cashId,
-    }).expect(400);
-    expect((withAccount.body as ApiErrorResponse).errorCode).toBe('ACCOUNT_NOT_ALLOWED');
-    expect(await prisma.ledgerSettlement.count()).toBe(1);
+    await request(server())
+      .put(
+        `/api/ledgers/${s.ledgerId}/settlements/${await settlementIdFor((created.body as Transaction).id)}/account`,
+      )
+      .set(auth(s.bob.token))
+      .send({ accountId: s.bob.cashId })
+      .expect(200);
+    expect(await balanceOf(s.bob, bobTemporaryId)).toBe(0);
+    expect(await balanceOf(s.bob, s.bob.cashId)).toBe(bobBefore + 50000);
   });
 
   it('returns 404 for every settlement route on a personal ledger', async () => {
@@ -463,8 +476,10 @@ describe('Ledger settlements (e2e)', () => {
       where: { id: transaction.id },
       select: { accountId: true, toAccountId: true },
     });
-    expect(patched).toEqual({ accountId: s.alice.cashId, toAccountId: null });
+    const charlieTemporaryId = await temporaryAccountId(s.charlie);
+    expect(patched).toEqual({ accountId: s.alice.cashId, toAccountId: charlieTemporaryId });
     expect(await balanceOf(s.bob, s.bob.cashId)).toBe(bobBefore);
+    expect(await balanceOf(s.charlie, charlieTemporaryId)).toBe(50000);
     expect(namedNets(await summary(s.alice, s.ledgerId))).toEqual([
       ['Alice', 'MEMBER', 50000],
       ['小明', 'MEMBER', 0],
@@ -480,6 +495,7 @@ describe('Ledger settlements (e2e)', () => {
       select: { deletedAt: true },
     });
     expect(removed?.deletedAt).toBeInstanceOf(Date);
+    expect(await balanceOf(s.charlie, charlieTemporaryId)).toBe(0);
     expect(namedNets(await summary(s.alice, s.ledgerId))).toEqual([
       ['Alice', 'MEMBER', 0],
       ['小明', 'MEMBER', 0],

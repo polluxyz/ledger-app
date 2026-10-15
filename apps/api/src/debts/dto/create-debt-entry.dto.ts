@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDefined,
   IsIn,
   IsInt,
   IsISO8601,
@@ -12,7 +13,6 @@ import {
   Length,
   Max,
   MaxLength,
-  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CREATE_DEBT_ENTRY_KINDS, MAX_AMOUNT_CENTS } from '@ledger/shared';
@@ -80,14 +80,14 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
   note?: string;
 
   /**
-   * 必填：物件或 `null`。`@IsOptional` 會把 null 與省略一起放過，所以用 `ValidateIf`
-   * 只在有值時驗內容，「省略」由 service 擋下（spec §5.2：不再有「省略就沿用」）。
+   * 必填物件（3h 決策 163）：沒有「不記入帳本」。`null` 與省略都過不了 `@IsDefined` 與
+   * `@ValidateNested`，回 400。
    */
-  @ApiProperty({ type: DebtEntryRecordTargetDto, nullable: true })
-  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @ApiProperty({ type: DebtEntryRecordTargetDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => DebtEntryRecordTargetDto)
-  record!: DebtEntryRecordTargetDto | null;
+  record!: DebtEntryRecordTargetDto;
 
   @ApiPropertyOptional({
     format: 'uuid',

@@ -227,11 +227,6 @@ function LedgerDetailView({
           value={ledger.kind === 'SHARED' ? '共享' : '私人'}
           note="建立後不可更改"
         />
-        <Fact
-          label="與我的帳戶餘額"
-          value={ledger.tracksBalance ? '連動' : '不連動'}
-          note="建立後不可更改"
-        />
         <Fact label="幣別" value={ledger.currency} />
         <Fact label="我的角色" value={myRole ? ROLE_LABEL[myRole] : '—'} />
         {ledger.archivedAt !== null && (

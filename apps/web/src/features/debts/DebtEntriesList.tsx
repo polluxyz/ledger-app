@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DebtEntry, DebtEntryKind } from '@ledger/shared';
+import { differenceLabelOf, type DebtEntry, type DebtEntryKind } from '@ledger/shared';
 import { Check, MoreHorizontal } from 'lucide-react';
 import { Button } from '../../components/Button';
 import confirmStyles from '../../components/ConfirmDialog.module.css';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
-import { formatDate, formatMoney } from '../../lib/format';
+import { formatDate, formatMoney, formatTransactionAmount } from '../../lib/format';
 import { useDeleteSplit } from '../transactions/use-splits';
 import rowStyles from './DebtRow.module.css';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
@@ -80,6 +80,16 @@ export function DebtEntriesList({
           const flow = getDebtEntryFlow(entry, displayName);
           const from = flow.direction === 'iOweThem' ? '我' : displayName;
           const to = flow.direction === 'iOweThem' ? displayName : '我';
+          const differenceLabel =
+            entry.difference && (entry.kind === 'COLLECT' || entry.kind === 'REPAY')
+              ? differenceLabelOf(entry.kind, entry.difference.type)
+              : null;
+          const differenceAmount = !entry.difference
+            ? null
+            : formatTransactionAmount(entry.difference.type, entry.difference.amount).replace(
+                /^-/,
+                '−',
+              );
 
           return (
             <li
@@ -113,6 +123,7 @@ export function DebtEntriesList({
                 <span className={rowStyles.spacer} />
                 <span className={rowStyles.label}>
                   {entry.splitId !== null && <span className={styles.splitBadge}>分帳</span>}
+                  {differenceLabel !== null && <span className={styles.clearedBadge}>還清</span>}
                   {isUnrecorded && <span className={styles.unrecorded}>未記帳</span>}
                   {SYNC_STATUS_LABELS[entry.sync] && (
                     <span className={`${styles.syncLabel} ${styles[entry.sync.toLowerCase()]}`}>
@@ -146,6 +157,18 @@ export function DebtEntriesList({
                   </span>
                 )}
               </div>
+              {differenceLabel !== null && differenceAmount !== null && entry.difference && (
+                <div
+                  className={styles.differenceRow}
+                  aria-label={`${differenceAmount} ${differenceLabel}`}
+                >
+                  <span className={styles.differenceBranch} aria-hidden="true">
+                    └
+                  </span>
+                  <span className={styles.differenceAmount}>{differenceAmount}</span>
+                  <span>{differenceLabel}</span>
+                </div>
+              )}
             </li>
           );
         })}
@@ -153,7 +176,7 @@ export function DebtEntriesList({
 
       <UndoConfirmation
         entry={entryToUndo}
-        undoDelta={entryToUndo === null ? 0 : undoDeltaOf(entryToUndo, entries)}
+        undoDelta={entryToUndo === null ? 0 : undoDeltaOf(entryToUndo)}
         balance={balance}
         displayName={displayName}
         avatarLabels={avatarLabels}
@@ -183,13 +206,10 @@ export function DebtEntriesList({
 }
 
 /**
- * 撤銷這筆會讓往來餘額少掉多少（畫面試算用）。還款綁定了結清差額時，後端會一起撤銷差額
- * （3g 決策 156），所以要連差額一起扣，否則試算會少算差額那一段。差額緊接在還款之後寫入、
- * 日期相同，清單新到舊排在還款前面，看得到還款時差額一定已經載入。
+ * 撤銷這筆會讓往來餘額少掉多少（畫面試算用）。3h 分支只影響帳戶，不影響往來餘額。
  */
-function undoDeltaOf(entry: DebtEntry, entries: readonly DebtEntry[]): number {
-  const bound = entries.find((candidate) => candidate.settlesEntryId === entry.id);
-  return entry.delta + (bound?.delta ?? 0);
+function undoDeltaOf(entry: DebtEntry): number {
+  return entry.delta;
 }
 
 /**
@@ -208,7 +228,7 @@ function UndoConfirmation({
   onCancel,
 }: {
   entry: DebtEntry | null;
-  /** 撤銷後往來餘額減少的量：這筆的 `delta`，綁定差額的還款再加上差額。 */
+  /** 撤銷後往來餘額減少的量：這筆的 `delta`。 */
   undoDelta: number;
   balance: number;
   displayName: string;

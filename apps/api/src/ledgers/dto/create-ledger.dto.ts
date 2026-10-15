@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { LEDGER_KINDS } from '@ledger/shared';
 import type { CreateLedgerRequest, LedgerKind } from '@ledger/shared';
 
@@ -22,14 +22,6 @@ export class CreateLedgerDto implements CreateLedgerRequest {
   @IsIn(LEDGER_KINDS)
   kind?: LedgerKind;
 
-  /**
-   * 這本帳本的交易是否計入我的帳戶餘額，預設 true。
-   *
-   * **建立後不可變更**——事後改會讓餘額突然跳動，而使用者無從得知數字為何變了。
-   * 選 false 適合臨時性、「錢不是我的」的帳本：出遊分帳、社團公款。
-   */
-  @ApiPropertyOptional({ default: true })
-  @IsOptional()
-  @IsBoolean()
-  tracksBalance?: boolean;
+  // 3h 決策 165：沒有「不計入餘額」的帳本。`tracksBalance` 不再宣告，送了由
+  // `forbidNonWhitelisted` 回 400。
 }

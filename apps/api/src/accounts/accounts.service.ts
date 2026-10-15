@@ -18,6 +18,7 @@ interface AccountRow {
   userId: string;
   name: string;
   initialBalance: number;
+  isTemporary: boolean;
   createdAt: Date;
 }
 
@@ -50,15 +51,20 @@ function directionOf(type: Prisma.TransactionGroupByOutputType['type']): 1 | -1 
 export class AccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 列出自己的帳戶，每筆附上即時計算的餘額。 */
+  /**
+   * 列出自己的帳戶，每筆附上即時計算的餘額。臨時帳戶永遠排最後（3h W174）：它不能手動選，
+   * 排在前面會讓「預設選第一個」的畫面選到它。
+   */
   async list(userId: string): Promise<Account[]> {
     const accounts = await this.prisma.account.findMany({
       where: { userId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ isTemporary: 'asc' }, { createdAt: 'asc' }],
     });
 
-    const balances = await this.calculateBalances(accounts);
-    return accounts.map((account) => this.toAccount(account, balances.get(account.id) ?? 0));
+    const { balances, used } = await this.calculateBalances(accounts);
+    return accounts.map((account) =>
+      this.toAccount(account, balances.get(account.id) ?? 0, used.has(account.id)),
+    );
   }
 
   /**
@@ -78,21 +84,21 @@ export class AccountsService {
    * 用兩次 `groupBy` 把所有帳戶一起算完，而不是每個帳戶各查一次——後者是典型的
    * N+1，帳戶越多越慢；這裡不論幾個帳戶都固定兩次查詢。
    *
-   * 兩個共通的 `where` 條件是正確性的關鍵，缺一不可：
-   *   - `deletedAt: null`——軟刪除的交易不該再影響餘額；
-   *   - `ledger.tracksBalance: true`——非連動帳本（出遊分帳、社團公款等）的金額
-   *     不是你的錢，算進來會讓餘額憑空膨脹或縮水。
+   * 共通的 `where` 條件 `deletedAt: null` 是正確性的關鍵：軟刪除的交易不該再影響餘額。
+   * 3h 起沒有「不計入餘額」的帳本（決策 165），所有帳本的交易都算進來。
    */
-  private async calculateBalances(accounts: AccountRow[]): Promise<Map<string, number>> {
+  private async calculateBalances(
+    accounts: AccountRow[],
+  ): Promise<{ balances: Map<string, number>; used: Set<string> }> {
     const balances = new Map(accounts.map((account) => [account.id, account.initialBalance]));
+    const used = new Set<string>();
     if (accounts.length === 0) {
-      return balances;
+      return { balances, used };
     }
 
     const accountIds = accounts.map((account) => account.id);
     const countedTransactions: Prisma.TransactionWhereInput = {
       deletedAt: null,
-      ledger: { tracksBalance: true },
     };
 
     const [outgoing, incoming] = await Promise.all([
@@ -114,6 +120,7 @@ export class AccountsService {
       if (group.accountId === null) {
         continue; // where 已排除，這裡只是讓型別收斂
       }
+      used.add(group.accountId);
       const sum = group._sum.amount ?? 0;
       const delta = directionOf(group.type) * sum;
       balances.set(group.accountId, (balances.get(group.accountId) ?? 0) + delta);
@@ -123,11 +130,12 @@ export class AccountsService {
       if (group.toAccountId === null) {
         continue;
       }
+      used.add(group.toAccountId);
       const sum = group._sum.amount ?? 0;
       balances.set(group.toAccountId, (balances.get(group.toAccountId) ?? 0) + sum);
     }
 
-    return balances;
+    return { balances, used };
   }
 
   /**
@@ -140,7 +148,7 @@ export class AccountsService {
         data: { userId, name, initialBalance },
       });
       // 全新的帳戶不可能有交易，餘額必等於初始餘額，毋須再查一次。
-      return this.toAccount(account, account.initialBalance);
+      return this.toAccount(account, account.initialBalance, false);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw this.nameTaken();
@@ -157,7 +165,8 @@ export class AccountsService {
    * 該欄位，且全域開了 `forbidNonWhitelisted`），到不了這裡。
    */
   async update(userId: string, accountId: string, input: { name?: string }): Promise<Account> {
-    await this.getOwned(userId, accountId);
+    const owned = await this.getOwned(userId, accountId);
+    this.assertNotTemporary(owned);
 
     try {
       const account = await this.prisma.account.update({
@@ -166,8 +175,8 @@ export class AccountsService {
           ...(input.name !== undefined ? { name: input.name } : {}),
         },
       });
-      const balances = await this.calculateBalances([account]);
-      return this.toAccount(account, balances.get(account.id) ?? 0);
+      const { balances, used } = await this.calculateBalances([account]);
+      return this.toAccount(account, balances.get(account.id) ?? 0, used.has(account.id));
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw this.nameTaken();
@@ -178,7 +187,8 @@ export class AccountsService {
 
   /** 刪除帳戶，除非有任何交易引用它（轉出或轉入皆算）。 */
   async remove(userId: string, accountId: string): Promise<void> {
-    await this.getOwned(userId, accountId);
+    const owned = await this.getOwned(userId, accountId);
+    this.assertNotTemporary(owned);
 
     // 計數包含已軟刪除的交易：歷史紀錄必須保持可追溯，帳戶名不能憑空消失。
     // 轉入方也要算——否則刪掉轉入帳戶會讓一筆轉帳只剩半邊。
@@ -218,12 +228,25 @@ export class AccountsService {
     );
   }
 
-  private toAccount(account: AccountRow, balance: number): Account {
+  /** 臨時帳戶承接待認領的歷史交易；改名或刪除會失去辨識與承接的依據。 */
+  private assertNotTemporary(account: AccountRow): void {
+    if (account.isTemporary) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.TEMPORARY_ACCOUNT_LOCKED,
+        'Temporary accounts cannot be renamed or deleted.',
+      );
+    }
+  }
+
+  private toAccount(account: AccountRow, balance: number, hasTransactions: boolean): Account {
     return {
       id: account.id,
       name: account.name,
       initialBalance: account.initialBalance,
       balance,
+      isTemporary: account.isTemporary,
+      hasTransactions,
       createdAt: account.createdAt.toISOString(),
     };
   }

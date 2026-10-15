@@ -4,6 +4,7 @@ import {
   AuthTokenResponse,
   AuthUser,
   DEFAULT_ACCOUNTS,
+  TEMPORARY_ACCOUNT_NAME,
   ErrorCode,
   JwtPayload,
 } from '@ledger/shared';
@@ -68,8 +69,12 @@ export class AuthService {
           data: { email: dto.email, name: dto.name, passwordHash },
         });
         // 帳戶屬於使用者（不是帳本），所以種子放在這裡而非 createLedgerForUser。
+        // 臨時帳戶也在這裡建（3h 決策 167），每個使用者剛好一個。
         await tx.account.createMany({
-          data: DEFAULT_ACCOUNTS.map((name) => ({ userId: created.id, name })),
+          data: [
+            ...DEFAULT_ACCOUNTS.map((name) => ({ userId: created.id, name })),
+            { userId: created.id, name: TEMPORARY_ACCOUNT_NAME, isTemporary: true },
+          ],
         });
         // 註冊自動建立的帳本明確標成私人——這是「我自己的帳」，不是要共用的。
         await this.ledgers.createLedgerForUser(tx, created.id, {

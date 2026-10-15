@@ -23,6 +23,7 @@ describe('CounterpartyDetail', () => {
     transactionId: 'txn-1',
     splitId: null,
     settlesEntryId: null,
+    difference: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,
@@ -36,7 +37,6 @@ describe('CounterpartyDetail', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: false,
     archivedAt: null,
     role: 'OWNER',
     createdAt: '2026-09-01T00:00:00.000Z',
@@ -100,7 +100,25 @@ describe('CounterpartyDetail', () => {
         return json({ items: [counterpartyForForm], page: 1, limit: 100, total: 1 });
       }
       if (url.endsWith('/accounts')) {
-        return json([]);
+        return json([
+          {
+            id: 'account-1',
+            name: '現金',
+            initialBalance: 0,
+            balance: 0,
+            isTemporary: false,
+            hasTransactions: false,
+          },
+        ]);
+      }
+      if (url.endsWith('/ledgers')) {
+        return json([ledger]);
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return json({ ledgerId: 'ledger-1', accountId: 'account-1' });
+      }
+      if (url.endsWith('/counterparties/cp-1/forgive') && init?.method === 'POST') {
+        return json({ counterparty: counterpartyForForm, entries: [] }, 201);
       }
       if (url.endsWith('/counterparties/cp-1/link')) {
         return json({});
@@ -475,14 +493,24 @@ describe('CounterpartyDetail', () => {
     expect(undoDialog).not.toHaveTextContent('會請小明也刪除');
   });
 
-  it('confirms forgiveness with the API balance amount', async () => {
+  it('requires a ledger to forgive and sends its id', async () => {
     const user = userEvent.setup();
     renderDetail(5000);
     const forgiveButton = await screen.findByRole('button', { name: '免除剩餘' });
     await user.click(forgiveButton);
 
     const confirmation = await screen.findByRole('dialog', { name: '免除剩餘' });
-    // 免除會把欠款歸零，和錢有關，所以留一句短話說明金額（W44 的例外）。
-    expect(within(confirmation).getByText('小明欠你的 $50 將歸零')).toBeInTheDocument();
+    const ledgerSelect = within(confirmation).getByLabelText('帳本');
+    await waitFor(() => expect(ledgerSelect).toHaveValue('ledger-1'));
+    expect(within(confirmation).queryByText(/小明欠你的/)).not.toBeInTheDocument();
+    expect(within(confirmation).getByRole('button', { name: '取消' })).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole('button', { name: '免除' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/counterparties/cp-1/forgive'),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ ledgerId: 'ledger-1' }) }),
+      );
+    });
   });
 });

@@ -11,17 +11,16 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /**
  * 3g 的主線情境（spec `phase-3g-debts-inline.md` §5 SC-G1～G6）：一條測試從記第一筆走到
- * 撤銷，驗證新功能串在同一份資料上仍一致——往來紀錄的分段、個人分頁的過濾、差額與還款的
- * 綁定、連動兩邊的同步撤銷、共享帳本的結清清單與計數。
+ * 撤銷，驗證往來分段、個人過濾、還款分支重算、連動雙方的撤銷，以及共享帳本的結清清單。
  *
  * 資料照 spec §1：我＝test；明哥（連動到真實使用者「小明」）3/1 借出 300、3/5 還 300、
  * 3/10 借出 500；房東 3/2 借出 93、3/6 還 90 以此結清（差額 −3）；共享帳本「花蓮三日」
- * 照 3f 的四筆轉帳記成結清（不連動帳戶，交易與結清一律不帶帳戶）。金額一律用分。
+ * 照 3f 的四筆轉帳記成結清，成員使用自己的帳戶，客人沒有個人帳戶。金額一律用分。
  *
  * 有一處偏離 spec §1 的資料：SC-G5 之前，明哥要先照一般還款還清 500（3/11）。「以此結清」會把
  * 整個往來餘額歸零（決策 38），明哥欠 500 時直接結清會連這 500 一起沖掉，SC-G5 就測不到「只沖
@@ -60,14 +59,18 @@ describe('Debts inline scenario (e2e)', () => {
     return res.body as CreateDebtEntryResponse;
   }
 
-  /** 記一筆之後，讓連動的小明接受他收到的提議。情境裡一來一往，不累積待確認。 */
+  function record(who: Person) {
+    return { ledgerId: who.ledgerId, accountId: who.cashId };
+  }
+
+  /** 記一筆之後，讓連動的小明用自己的帳戶接受提議，情境裡不累積待確認。 */
   async function postAndAccept(body: CreateDebtEntryRequest): Promise<CreateDebtEntryResponse> {
     const created = await postEntry(body);
     const incoming = (await proposals(app, xiaoming, 'incoming', 'PENDING'))[0]!;
     await request(server())
       .post(`/api/debt-proposals/${incoming.id}/accept`)
       .set(auth(xiaoming.token))
-      .send({ record: null })
+      .send({ record: record(xiaoming) })
       .expect(200);
     return created;
   }
@@ -126,21 +129,21 @@ describe('Debts inline scenario (e2e)', () => {
       kind: 'LEND',
       amount: 30000,
       date: date(1),
-      record: null,
+      record: record(me),
     });
     await postAndAccept({
       counterparty: { id: mingId },
       kind: 'REPAYMENT',
       amount: 30000,
       date: date(5),
-      record: null,
+      record: record(me),
     });
     await postAndAccept({
       counterparty: { id: mingId },
       kind: 'LEND',
       amount: 50000,
       date: date(10),
-      record: null,
+      record: record(me),
     });
 
     // 房東：3/2 借出 93、3/6 還 90 以此結清。記進現金，之後才驗得到交易的修改。
@@ -166,15 +169,10 @@ describe('Debts inline scenario (e2e)', () => {
       record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
     const repayment = repaid.entries[0]!;
-    const settlement = repaid.entries[1]!;
+    expect(repaid.entries).toHaveLength(1);
 
-    // 花蓮三日：不連動帳戶的共享帳本，小明也是 OWNER（最後我才能退出），其餘是客名。
-    const hualienId = await request(server())
-      .post('/api/ledgers')
-      .set(auth(me.token))
-      .send({ name: '花蓮三日', kind: 'SHARED', tracksBalance: false })
-      .expect(201)
-      .then((res) => (res.body as { id: string }).id);
+    // 花蓮三日是共享帳本，小明也是 OWNER（最後我才能退出），其餘是客名。
+    const hualienId = await createSharedLedger(app, me.token, '花蓮三日');
     await request(server())
       .post(`/api/ledgers/${hualienId}/members`)
       .set(auth(me.token))
@@ -200,8 +198,9 @@ describe('Debts inline scenario (e2e)', () => {
       to: string,
       amount: number,
       day: number,
+      accounts: { fromAccountId?: string; toAccountId?: string } = {},
     ): Promise<Transaction> {
-      return request(server())
+      const response = await request(server())
         .post(`/api/ledgers/${hualienId}/settlements`)
         .set(auth(me.token))
         .send({
@@ -209,12 +208,17 @@ describe('Debts inline scenario (e2e)', () => {
           toPersonId: personOf(to).id,
           amount,
           date: date(day),
-        })
-        .expect(201)
-        .then((res) => res.body as Transaction);
+          ...accounts,
+        });
+      if (response.status !== 201) {
+        throw new Error(`結清建立失敗：${response.status} ${JSON.stringify(response.body)}`);
+      }
+      return response.body as Transaction;
     }
-    const huaToMe = await settle('小華', 'test', 139400, 7);
-    const mingToMe = await settle('小明', 'test', 51200, 8);
+    const huaToMe = await settle('小華', 'test', 139400, 7, { toAccountId: me.cashId });
+    const mingToMe = await settle('小明', 'test', 51200, 8, {
+      toAccountId: me.cashId,
+    });
     const mingToMei = await settle('小明', '小美', 40000, 9);
     const mingToAMei = await settle('小明', '阿美', 20000, 10);
 
@@ -247,27 +251,29 @@ describe('Debts inline scenario (e2e)', () => {
     const withHistory = await counterpartyIds({ hasHistory: 'true' });
     expect([...withHistory].sort()).toEqual([landlord.id, mingId].sort());
 
-    // ── SC-G3：差額綁在還款上，不能單獨撤銷（決策 156、157）─────────
-    expect(repayment).toMatchObject({ kind: 'COLLECT', delta: -9000 });
-    expect(settlement).toMatchObject({ kind: 'SETTLEMENT', delta: -300 });
-    expect(settlement.settlesEntryId).toBe(repayment.id);
-    // 同一天的差額固定排在還款後面（新到舊：差額、還款、借出）。
+    // ── SC-G3：差額是還款底下的分支交易，不是另一筆往來紀錄。──────
+    expect(repayment).toMatchObject({
+      kind: 'COLLECT',
+      delta: -9300,
+      difference: { type: 'EXPENSE', amount: 300 },
+    });
+    const differenceId = repayment.difference!.transactionId;
     const landlordPage = await entriesOf(me, landlord.id);
-    expect(landlordPage.total).toBe(3);
+    expect(landlordPage.total).toBe(2);
     expect(
       landlordPage.items.map(({ kind, delta, balanceAfter }) => [kind, delta, balanceAfter]),
     ).toEqual([
-      ['SETTLEMENT', -300, 0],
-      ['COLLECT', -9000, 300],
+      ['COLLECT', -9300, 0],
       ['LEND', 9300, 9300],
     ]);
     expect(await balanceOf(landlord.id)).toBe(0);
-
-    const refused = await request(server())
-      .delete(`/api/debt-entries/${settlement.id}`)
-      .set(auth(me.token));
-    expect(refused.status).toBe(409);
-    expect((refused.body as { errorCode: string }).errorCode).toBe('SETTLEMENT_BOUND_TO_REPAYMENT');
+    const ledgerTransactions = await request(server())
+      .get(`/api/ledgers/${me.ledgerId}/transactions`)
+      .set(auth(me.token))
+      .expect(200)
+      .then((res) => (res.body as Paginated<Transaction>).items);
+    expect(ledgerTransactions.find((row) => row.id === repayment.transactionId)!.amount).toBe(9300);
+    expect(ledgerTransactions.some((row) => row.id === differenceId)).toBe(false);
 
     // ── SC-G4：改還款金額時差額重算，餘額不動（決策 158）────────────
     const transactionId = repayment.transactionId!;
@@ -291,12 +297,12 @@ describe('Debts inline scenario (e2e)', () => {
       .set(auth(me.token))
       .send({ amount: 9100 })
       .expect(200);
-    expect(byKind((await entriesOf(me, landlord.id)).items, 'SETTLEMENT')).toMatchObject({
-      delta: -200,
-      settlesEntryId: repayment.id,
+    expect(byKind((await entriesOf(me, landlord.id)).items, 'COLLECT')!.difference).toMatchObject({
+      type: 'EXPENSE',
+      amount: 200,
     });
     expect(await balanceOf(landlord.id)).toBe(0);
-    expect(await repaymentTransactionAmount()).toBe(9100);
+    expect(await repaymentTransactionAmount()).toBe(9300);
 
     // 還 95 > 欠 93：差額方向反過來（多收 2）。
     await request(server())
@@ -304,12 +310,12 @@ describe('Debts inline scenario (e2e)', () => {
       .set(auth(me.token))
       .send({ amount: 9500 })
       .expect(200);
-    expect(byKind((await entriesOf(me, landlord.id)).items, 'SETTLEMENT')).toMatchObject({
-      delta: 200,
-      settlesEntryId: repayment.id,
+    expect(byKind((await entriesOf(me, landlord.id)).items, 'COLLECT')!.difference).toMatchObject({
+      type: 'INCOME',
+      amount: 200,
     });
     expect(await balanceOf(landlord.id)).toBe(0);
-    expect(await repaymentTransactionAmount()).toBe(9500);
+    expect(await repaymentTransactionAmount()).toBe(9300);
 
     // 還 93 剛好還清：差額撤銷，之後是一般還款。
     await request(server())
@@ -318,8 +324,7 @@ describe('Debts inline scenario (e2e)', () => {
       .send({ amount: 9300 })
       .expect(200);
     const afterExact = (await entriesOf(me, landlord.id)).items;
-    expect(byKind(afterExact, 'SETTLEMENT')).toBeUndefined();
-    expect(byKind(afterExact, 'COLLECT')).toMatchObject({ delta: -9300 });
+    expect(byKind(afterExact, 'COLLECT')).toMatchObject({ delta: -9300, difference: null });
     expect(await balanceOf(landlord.id)).toBe(0);
     expect(await repaymentTransactionAmount()).toBe(9300);
 
@@ -332,7 +337,7 @@ describe('Debts inline scenario (e2e)', () => {
       kind: 'REPAYMENT',
       amount: 50000,
       date: date(11),
-      record: null,
+      record: record(me),
     });
     expect(await balanceOf(mingId)).toBe(0);
 
@@ -343,7 +348,7 @@ describe('Debts inline scenario (e2e)', () => {
       kind: 'LEND',
       amount: 9300,
       date: date(12),
-      record: null,
+      record: record(me),
     });
     const linkedRepaid = await postAndAccept({
       counterparty: { id: mingId },
@@ -351,24 +356,20 @@ describe('Debts inline scenario (e2e)', () => {
       amount: 9000,
       date: date(13),
       settle: true,
-      record: null,
+      record: record(me),
     });
     const myLinkedRepayment = linkedRepaid.entries[0]!;
-    const mySettlement = linkedRepaid.entries[1]!;
-    expect(mySettlement).toMatchObject({
-      kind: 'SETTLEMENT',
-      delta: -300,
-      settlesEntryId: myLinkedRepayment.id,
+    expect(linkedRepaid.entries).toHaveLength(1);
+    expect(myLinkedRepayment).toMatchObject({
+      kind: 'COLLECT',
+      difference: { type: 'EXPENSE', amount: 300 },
     });
     expect(await balanceOf(mingId)).toBe(0);
 
     // 小明那邊是 REPAY（他還我），差額 +300（對他有利），兩筆都綁在一起。
     const hisList = (await entriesOf(xiaoming, xiaomingsMe)).items;
     const hisRepayment = hisList.find((entry) => entry.kind === 'REPAY' && onDay(entry, 13))!;
-    expect(hisList.find((entry) => entry.kind === 'SETTLEMENT' && onDay(entry, 13))).toMatchObject({
-      delta: 300,
-      settlesEntryId: hisRepayment.id,
-    });
+    expect(hisRepayment.difference).toMatchObject({ type: 'INCOME', amount: 300 });
     expect((await getCounterparty(app, xiaoming, xiaomingsMe)).balance).toBe(0);
 
     // 我撤銷還款（差額一起撤銷）；小明接受刪除提議後，他那邊的還款與差額也撤銷。
@@ -461,7 +462,8 @@ describe('Debts inline scenario (e2e)', () => {
       record: { ledgerId: me.ledgerId, accountId: me.cashId },
     });
     const finalRepayment = reRecorded.entries[0]!;
-    expect(reRecorded.entries[1]!.settlesEntryId).toBe(finalRepayment.id);
+    expect(reRecorded.entries).toHaveLength(1);
+    expect(finalRepayment.difference).toMatchObject({ type: 'EXPENSE', amount: 300 });
     expect(await balanceOf(landlord.id)).toBe(0);
 
     // 撤銷 3/6 的還款：差額一起撤銷，房東只剩 3/2 的借出，回到「個人」分頁。

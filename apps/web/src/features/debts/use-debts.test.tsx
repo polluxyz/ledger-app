@@ -119,7 +119,7 @@ describe('Debt hooks', () => {
         kind: 'REPAYMENT',
         amount: 9000,
         date: '2026-09-01',
-        record: null,
+        record: { ledgerId: 'ledger-1', accountId: 'account-1' },
         settle: false,
       }),
     );
@@ -136,18 +136,17 @@ describe('Debt hooks', () => {
         kind: 'COLLECT',
         amount: 9000,
         date: 'd',
-        record: null,
+        record: { ledgerId: 'ledger-1', accountId: 'account-1' },
         settle: true,
       },
       method: 'POST',
       path: /\/debt-entries$/,
-      // `record: null` 必須原樣送出，不能被當成「沒給」丟掉——後端會把省略當成 400。
       body: {
         counterparty: { name: '小明' },
         kind: 'COLLECT',
         amount: 9000,
         date: 'd',
-        record: null,
+        record: { ledgerId: 'ledger-1', accountId: 'account-1' },
         settle: true,
       },
     },
@@ -184,9 +183,10 @@ describe('Debt hooks', () => {
     {
       name: 'forgive',
       hook: useForgiveCounterparty,
-      variables: 'cp-1',
+      variables: { counterpartyId: 'cp-1', ledgerId: 'ledger-1' },
       method: 'POST',
       path: /\/counterparties\/cp-1\/forgive$/,
+      body: { ledgerId: 'ledger-1' },
     },
   ])(
     '$name hits the right endpoint and invalidates debts, transactions and accounts',

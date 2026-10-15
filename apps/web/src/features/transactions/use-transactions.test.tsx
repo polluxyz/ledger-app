@@ -37,12 +37,18 @@ describe('Writing a transaction refreshes account balances', () => {
     name: '我的帳本',
     currency: 'TWD',
     kind: 'PERSONAL',
-    tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
   };
   const category = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 500000, balance: 500000 };
+  const account = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 500000,
+    balance: 500000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
@@ -105,6 +111,9 @@ describe('Writing a transaction refreshes account balances', () => {
       }
       if (url.includes('/categories')) {
         return Promise.resolve(jsonResponse(200, [category]));
+      }
+      if (url.includes('/users/me/record-defaults')) {
+        return Promise.resolve(jsonResponse(200, { ledgerId: ledger.id, accountId: account.id }));
       }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, [{ ...account, balance }]));

@@ -211,11 +211,19 @@ describe('Linking hooks', () => {
     expect(requests()[0]!.url).toMatch(path);
   });
 
-  it('accepts a proposal with the record as given, including null', async () => {
+  it('accepts a proposal with its ledger and account target', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useAcceptProposal(), { wrapper });
-    await act(() => result.current.mutateAsync({ proposalId: 'p-1', input: { record: null } }));
-    expect(requests()[0]).toMatchObject({ method: 'POST', body: { record: null } });
+    await act(() =>
+      result.current.mutateAsync({
+        proposalId: 'p-1',
+        input: { record: { ledgerId: 'ledger-1', accountId: 'account-1' } },
+      }),
+    );
+    expect(requests()[0]).toMatchObject({
+      method: 'POST',
+      body: { record: { ledgerId: 'ledger-1', accountId: 'account-1' } },
+    });
     expect(requests()[0]!.url).toMatch(/\/debt-proposals\/p-1\/accept$/);
     expect(invalidatedKeys(spy)).toEqual(expect.arrayContaining(EVERYTHING) as unknown);
   });

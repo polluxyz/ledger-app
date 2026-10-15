@@ -166,7 +166,7 @@ describe('Debt ledger (e2e)', () => {
       kind: 'LEND',
       amount: 2_000_000_000,
       date: DAY,
-      record: null,
+      record: { ledgerId: user.ledgerId, accountId: user.cashId },
     };
 
     const tooLarge = await post(user, { ...body, amount: 2_000_000_001 });
@@ -218,7 +218,7 @@ describe('Debt ledger (e2e)', () => {
     expect(list).toEqual([expect.objectContaining({ name: '小明', balance: 30 })]);
   });
 
-  // SC-L3（修訂 1）：沒勾結清的超額還款被擋；勾了結清就放行，差額記成結清差額。
+  // SC-L3（修訂 1）：沒勾結清的超額還款被擋；勾了結清就放行，差額成為還款交易的分支。
   it('refuses an overpayment unless it settles the balance', async () => {
     const user = await me();
     await entry(user, 'LEND', 9);
@@ -237,10 +237,12 @@ describe('Debt ledger (e2e)', () => {
     expect(await prisma.debtEntry.count()).toBe(1);
 
     const settled = await entry(user, 'REPAYMENT', 20, { settle: true });
-    expect(settled.entries.map((e) => [e.kind, e.delta])).toEqual([
-      ['COLLECT', -20],
-      ['SETTLEMENT', 11],
-    ]);
+    expect(settled.entries).toHaveLength(1);
+    expect(settled.entries[0]).toMatchObject({
+      kind: 'COLLECT',
+      delta: -9,
+      difference: { type: 'INCOME', amount: 11 },
+    });
     expect(settled.counterparty.balance).toBe(0);
   });
 
@@ -274,8 +276,8 @@ describe('Debt ledger (e2e)', () => {
     // SC-L18
     it('refuses a repayment when nothing is owed, without creating the counterparty', async () => {
       const user = await me();
-      await entry(user, 'LEND', 5, { record: null });
-      await entry(user, 'REPAYMENT', 5, { record: null });
+      await entry(user, 'LEND', 5);
+      await entry(user, 'REPAYMENT', 5);
 
       for (const name of ['小明', '新朋友']) {
         const res = await post(user, {
@@ -283,7 +285,7 @@ describe('Debt ledger (e2e)', () => {
           kind: 'REPAYMENT',
           amount: 1,
           date: DAY,
-          record: null,
+          record: { ledgerId: user.ledgerId, accountId: user.cashId },
         });
         expect(res.status).toBe(409);
         expect(errorCode(res)).toBe('NOTHING_TO_REPAY');
@@ -298,13 +300,13 @@ describe('Debt ledger (e2e)', () => {
       ['BORROW', { settle: true }],
     ])('rejects kind %s %j with 400', async (kind, extra) => {
       const user = await me();
-      await entry(user, 'LEND', 100, { record: null });
+      await entry(user, 'LEND', 100);
       const res = await post(user, {
         counterparty: { name: '小明' },
         kind,
         amount: 1,
         date: DAY,
-        record: null,
+        record: { ledgerId: user.ledgerId, accountId: user.cashId },
         ...extra,
       });
       expect(res.status).toBe(400);
@@ -337,7 +339,7 @@ describe('Debt ledger (e2e)', () => {
     // SC-L21（決策 50）：同時送出的還款在對象鎖上排隊，合計超過欠款時最多一筆成功。
     it('serialises concurrent repayments so the balance never flips', async () => {
       const user = await me();
-      const { counterparty } = await entry(user, 'LEND', 100, { record: null });
+      const { counterparty } = await entry(user, 'LEND', 100);
 
       const results = await Promise.all(
         [60, 60, 60].map((amount) =>
@@ -346,7 +348,7 @@ describe('Debt ledger (e2e)', () => {
             kind: 'REPAYMENT',
             amount,
             date: DAY,
-            record: null,
+            record: { ledgerId: user.ledgerId, accountId: user.cashId },
           }),
         ),
       );
@@ -358,27 +360,36 @@ describe('Debt ledger (e2e)', () => {
 
   // SC-L4
   describe('settle', () => {
-    it('adds a negative SETTLEMENT when the repayment falls short', async () => {
+    it('records a short collection as an expense branch of the cleared repayment', async () => {
       const user = await me();
       await entry(user, 'LEND', 93);
       const before = await cash(user);
 
       const res = await entry(user, 'REPAYMENT', 90, { settle: true });
 
-      expect(res.entries.map((e) => [e.kind, e.delta])).toEqual([
-        ['COLLECT', -90],
-        ['SETTLEMENT', -3],
-      ]);
+      expect(res.entries).toHaveLength(1);
+      expect(res.entries[0]).toMatchObject({
+        kind: 'COLLECT',
+        delta: -93,
+        difference: { type: 'EXPENSE', amount: 3 },
+      });
       expect(res.counterparty.balance).toBe(0);
       expect(await cash(user)).toBe(before + 90);
       expect((await ledgerTransactions(user)).filter((t) => t.type === 'COLLECT')).toHaveLength(1);
     });
 
-    it('adds a positive SETTLEMENT when they pay more', async () => {
+    it('records an overcollection as an income branch of the cleared repayment', async () => {
       const user = await me();
       await entry(user, 'LEND', 93);
+      const before = await cash(user);
       const res = await entry(user, 'REPAYMENT', 95, { settle: true });
-      expect(res.entries[1]).toMatchObject({ kind: 'SETTLEMENT', delta: 2 });
+      expect(res.entries).toHaveLength(1);
+      expect(res.entries[0]).toMatchObject({
+        kind: 'COLLECT',
+        delta: -93,
+        difference: { type: 'INCOME', amount: 2 },
+      });
+      expect(await cash(user)).toBe(before + 95);
     });
 
     it('rejects settle on a non-repayment kind', async () => {
@@ -388,7 +399,7 @@ describe('Debt ledger (e2e)', () => {
         kind: 'LEND',
         amount: 1,
         date: DAY,
-        record: null,
+        record: { ledgerId: user.ledgerId, accountId: user.cashId },
         settle: true,
       });
       expect(res.status).toBe(400);
@@ -491,19 +502,31 @@ describe('Debt ledger (e2e)', () => {
   // SC-L6
   it('forgives what they owe, and deleting the forgiveness restores it', async () => {
     const user = await me();
-    const { counterparty } = await entry(user, 'LEND', 50, { record: null });
+    const { counterparty } = await entry(user, 'LEND', 50);
 
     const forgiven = await request(server())
       .post(`/api/counterparties/${counterparty.id}/forgive`)
       .set(auth(user.token))
+      .send({ ledgerId: user.ledgerId })
       .expect(201);
     const body = forgiven.body as CreateDebtEntryResponse;
-    expect(body.entries[0]).toMatchObject({ kind: 'FORGIVE', delta: -50, transactionId: null });
+    expect(body.entries[0]).toMatchObject({ kind: 'FORGIVE', delta: -50 });
+    const badDebt = await request(server())
+      .get(`/api/ledgers/${user.ledgerId}/transactions/${body.entries[0]!.transactionId}`)
+      .set(auth(user.token))
+      .expect(200);
+    expect(badDebt.body as Transaction).toMatchObject({
+      type: 'EXPENSE',
+      amount: 50,
+      account: null,
+      category: null,
+    });
     expect(body.counterparty.balance).toBe(0);
 
     const again = await request(server())
       .post(`/api/counterparties/${counterparty.id}/forgive`)
-      .set(auth(user.token));
+      .set(auth(user.token))
+      .send({ ledgerId: user.ledgerId });
     expect(again.status).toBe(409);
     expect(errorCode(again)).toBe('NOTHING_TO_FORGIVE');
 
@@ -529,12 +552,13 @@ describe('Debt ledger (e2e)', () => {
     expect(await cash(user)).toBe(before - 150);
 
     const settled = await entry(user, 'REPAYMENT', 140, { settle: true });
+    const differenceId = settled.entries[0]!.difference!.transactionId;
     const adjustment = await request(server())
-      .patch(`/api/debt-entries/${settled.entries[1]!.id}`)
+      .patch(`/api/ledgers/${user.ledgerId}/transactions/${differenceId}`)
       .set(auth(user.token))
-      .send({ note: 'x' });
+      .send({ amount: 1 });
     expect(adjustment.status).toBe(409);
-    expect(errorCode(adjustment)).toBe('DEBT_ENTRY_NOT_EDITABLE');
+    expect(errorCode(adjustment)).toBe('DEBT_TRANSACTION_READ_ONLY');
   });
 
   // SC-L8
@@ -616,8 +640,7 @@ describe('Debt ledger (e2e)', () => {
 
     const list = await entriesOf(user, counterparty.id);
     expect(list.map((e) => [e.kind, e.balanceAfter])).toEqual([
-      ['SETTLEMENT', 0],
-      ['COLLECT', 4],
+      ['COLLECT', 0],
       ['BORROW', 9],
       ['LEND', 120],
     ]);
@@ -626,8 +649,8 @@ describe('Debt ledger (e2e)', () => {
   // SC-L14
   it('renames, refuses a taken name, and deletes only an empty counterparty', async () => {
     const user = await me();
-    const ming = await entry(user, 'LEND', 1, { record: null });
-    await entry(user, 'LEND', 1, { record: null, counterparty: { name: '小華' } });
+    const ming = await entry(user, 'LEND', 1);
+    await entry(user, 'LEND', 1, { counterparty: { name: '小華' } });
     const id = ming.counterparty.id;
 
     const taken = await request(server())
@@ -657,9 +680,9 @@ describe('Debt ledger (e2e)', () => {
 
   it('lists counterparties with a balance before settled ones', async () => {
     const user = await me();
-    await entry(user, 'LEND', 5, { record: null, counterparty: { name: '阿兩清' } });
-    await entry(user, 'REPAYMENT', 5, { record: null, counterparty: { name: '阿兩清' } });
-    await entry(user, 'LEND', 7, { record: null, counterparty: { name: '欠錢的' } });
+    await entry(user, 'LEND', 5, { counterparty: { name: '阿兩清' } });
+    await entry(user, 'REPAYMENT', 5, { counterparty: { name: '阿兩清' } });
+    await entry(user, 'LEND', 7, { counterparty: { name: '欠錢的' } });
 
     expect((await counterparties(user)).map((c) => [c.name, c.balance])).toEqual([
       ['欠錢的', 7],
@@ -670,7 +693,7 @@ describe('Debt ledger (e2e)', () => {
   // spec §4.3：delta 的正負號與交易的有無，資料庫另外用 CHECK 擋——繞過 service 也寫不進去。
   it('backs up the sign and transaction rules with database constraints', async () => {
     const user = await me();
-    const { counterparty } = await entry(user, 'LEND', 1, { record: null });
+    const { counterparty } = await entry(user, 'LEND', 1);
     const base = { counterpartyId: counterparty.id, date: new Date(DAY) };
 
     await expect(

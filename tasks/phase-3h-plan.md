@@ -124,4 +124,33 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 
 ## 6. 實作紀錄
 
-（實作時填寫）
+1. **H0 多做的機械式修正**（2026-10-14）：拿掉 `tracksBalance` 後 API 編譯不過，四個後端 worker 會互相卡住。協調者在契約 commit 先做最小修正，讓 API typecheck 與 lint 全綠：
+   - 帳本 DTO 與 `LedgersService` 拿掉 `tracksBalance`（原屬 H1）；`TRACKS_BALANCE_IMMUTABLE` 錯誤碼刪除，帶 `tracksBalance` 改由 `forbidNonWhitelisted` 回 400。
+   - `AccountsService`：餘額拿掉 `ledger.tracksBalance` 條件、回應帶 `isTemporary`（原屬 H1）。
+   - `TransactionsService`、`SettlementsService`、`SplitsService`：讀帳本的地方先固定成「計入餘額」，並刪掉 `assertAccountRules` 裡「不計入餘額」的分支（原屬 H2；H2 再把 `tracksBalance` 參數整個拿掉）。
+   - 借還 DTO：`record` 不可為 null（原屬 H3）。`toDebtEntry` 先放 `difference: null`、`toTransaction` 先放 `differenceOfId: null`、`difference: null` 佔位（H3 改成讀資料）。
+   - 刪掉兩個測舊行為的單元測試（`rename` 帶 `tracksBalance`、`record: null` 不產生交易）。
+   - 仍有 6 個單元測試在測「不計入餘額」，留給 H1（`AccountsService` 1 個）與 H2（`TransactionsService` 3 個、`SettlementsService` 2 個）改。既有 API e2e 的 `record: null`、`tracksBalance` 型別錯誤留給 H7。
+2. **隔離測試紅燈**：`every-entry-account-isolation.e2e-spec.ts` 8 個全紅（2026-10-14）。
+3. **`assertSelectableAccount` 改由協調者在 H0 寫**：原本排給 H1 先交，H2 要等。協調者直接寫進契約（`apps/api/src/accounts/account-selection.ts`，另附 `temporaryAccountIdOf`，6 個單元測試），H1～H4 同時開工。
+4. **H0 補的契約**（開工前已寫進 spec）：
+   - `Account.hasTransactions`：W174「裡面有交易才顯示」需要它，餘額為 0 不代表沒有交易。spec §4.4 同步補上。H1 實作。
+   - `GET /accounts` 臨時帳戶排最後：測試與畫面都有「預設選第一個帳戶」的寫法，排前面會選到臨時帳戶。
+   - 註冊時建立臨時帳戶、migration 的結構部分（欄位、索引、補建臨時帳戶、刪 `tracksBalance`）：H2～H4 跑 e2e 需要新欄位，不能等 H1。H1 只補 migration 的資料搬移兩段。
+   - shared `actualAmountOf`：修改還款表單要帶入實際收付金額，方向的判斷不能放前端。
+   - Web `selectableAccounts`：表單的帳戶選單排除臨時帳戶，H5、H6 共用。
+5. **migration 拆成兩個檔**：H3 發現既有的 CHECK 約束 `DebtEntry_transaction_by_kind` 規定免除不能帶交易。協調者另開 `20261014160000_forgiveness_has_transaction` 放寬（`SETTLEMENT` 照舊不能帶）。沒有改原本那個檔，是因為 Prisma 不讓 AI 執行 `migrate reset`，已套用的測試資料庫只能往後 `deploy`。spec §3.3 寫「同一個 migration」，實際是同一個 PR 的兩個 migration。
+6. **H1 的 migration 補一條**：不計入餘額帳本裡的借還交易（`LEND`、`BORROW`、`COLLECT`、`REPAY`）沒有帳戶時也移到記帳人的臨時帳戶，放在差額轉分支之前，分支才會拿到同一個帳戶。H1 的比對資料裡 r6 就是這種情況，原本分支的帳戶是空的。
+7. **migration 前後比對**（協調者用 H1 的比對資料重跑，2026-10-14）：一般帳戶 a1 845 → 845、a2 2000 → 2000；8 個對象的往來餘額全部不變；臨時帳戶 u1 −100（H1 回報時是 −140，差的 40 是第 6 項補上的 r6 實收）、u2 55；6 筆分支都符合「還款 ± 分支 = 原本實收」（80、120、45、80、120、40）；對不到還款的舊差額原樣保留；非成員付款、別人替我付的交易帳戶仍是空的。
+8. **migration SQL 開發者同意**（2026-10-14）。驗收 H1 時協調者先在本機合進了整合分支（沒推、沒碰 `ledger_dev`），比 plan 寫的「同意後才合」早一步，已向開發者說明。
+9. **H4 結果**：`record-defaults` 單元測試 11、e2e 5 全過；1 萬筆交易五次回應的中位數 6.6ms（目標 < 200ms），不需要加索引。
+10. **H2 結果**：付款人規則、`assertSelectableAccount` 全面替換、換帳戶只限「目前在自己的臨時帳戶」；`every-entry-account-payer` 4 條全過。協調者逐行看過 `payer-account-rules.ts`、`transactions.service.ts`、`settlements.service.ts` 的 diff。
+11. **H5 結果與協調者補正**：交易表單原本「沒選就用第一個帳戶」被改成只帶「最近一次」，從沒記過帳的新使用者會變成空欄位。協調者補回第三層預設（最近一次 → 第一個可選帳戶）。
+12. **H3 退回**：功能正確，但 `debt-entries.service.spec.ts` 從 28 條 `describe`／`it` 刪到 5 條（含與 3h 無關的核心規則：借出正負號、先鎖對象、帳本不能寫就不寫），`debt-recording.ts` 的「為什麼」註解被刪成一行。退回補測試與註解（新的 dispatch，同一個 worktree）。
+13. **H3 修正後合併**：`debt-entries.service.spec.ts` 回到 36 條 `describe`／`it`（含少收、多收、少付、多付、剛好還清），`debt-recording.ts` 的說明註解補回。H3 刪掉 `debts-bind.e2e-spec.ts`（測 3g 的 `SETTLEMENT` 綁定，行為已被分支取代，`every-entry-account-debts` 涵蓋新行為）。
+14. **第 1 波後端整合**（H1～H4 合併後的整合分支）：API 單元測試 441 個全綠；`every-entry-account*` 4 個 e2e 共 24 條全綠，隔離測試 8 條由紅轉綠；API typecheck 只剩既有 e2e 檔的 16 個錯誤（H7）。
+15. **H6 結果**：借還表單一律綁帳戶、免除先選帳本、分支畫在還款下面、修改有分支的還款帶入實收、交易列顯示「臨時帳戶」。中途 worker 誤用協調者的收信指令被擋（`consumer_fenced`）而停下，協調者在終端機請它繼續。合併後 Web lint、app typecheck 全綠，測試 763 個全過；`apps/web/e2e` 有 13 個型別錯誤（`record: null`、`tracksBalance`）留給 H8。免除的帳本沒有「最近一次」時是空的、要使用者自己選，沒有比照交易表單補「第一個帳本」。
+16. **H7 結果**：既有 16 個 API e2e 檔改成 3h 行為，沒有刪除或 skip 任何測試；新增 `every-entry-account.e2e-spec.ts` 補 SC-H2、SC-H9。worker 回報全套 34 個檔、282 條全綠，API typecheck 零錯誤。SC 對照：H1、H3～H7、H14 在 `-debts`；H8 在 `-payer`；H10 在 `-defaults`；H2、H9 在新檔；H11 在 `-isolation`。協調者合併後自己重跑：API typecheck 零錯誤、lint 全綠、API e2e 34 個檔 282 條全綠。
+17. **2026-10-14 深夜暫停**：開發者要睡覺並關機。H0～H7 完成；H8（Web e2e）、H9（PR）、H10（部署）待續。main 上 3g 的 Web e2e `debts-inline.spec.ts`「個人主線」在 PR #122 的 CI 偶發失敗一次（撤銷後餘額還沒刷新就斷言），H8 改寫時一併處理等待條件。
+18. **H8 結果**（2026-10-15）：Web e2e 型別錯誤清零，既有測試改成 3h 流程（沒有 skip；`ledgers.spec.ts` 情境 1、2 原本測不計入餘額帳本，改寫成 3h 對應情境，總數不變），新增 `every-entry-account.spec.ts` 兩條主線；`debts-inline` 個人主線改用會重試的斷言。worker 連續兩次 57/57 全綠。
+19. **spec §8 的文件影響**：2c 檔頭註明 `tracksBalance` 由 3h 取代；3b 決策 38、39，3e 決策 123、124、126，3g 決策 156～158 標「由 3h 取代」；`CLAUDE.md` §6 加「每一筆交易都要有帳戶」。`docs/README.md` 的 3h 狀態與 `CLAUDE.md` §4 留到部署後的收尾 PR 改（同 3g 的做法）。

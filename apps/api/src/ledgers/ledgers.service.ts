@@ -31,22 +31,17 @@ interface LedgerRow {
   name: string;
   currency: string;
   kind: LedgerKind;
-  tracksBalance: boolean;
   archivedAt: Date | null;
   createdAt: Date;
 }
 
 /**
- * 建立帳本所需的欄位。用具名物件而非一串位置參數——`name` 之後接的是一個布林
- * 與一個列舉，寫成 `create(userId, name, true, 'SHARED')` 的話，呼叫端讀起來
- * 認不出哪個是哪個。
+ * 建立帳本所需的欄位。用具名物件而非一串位置參數，呼叫端讀起來認得出哪個是哪個。
  */
 interface CreateLedgerInput {
   name: string;
   /** 省略時為 `PERSONAL`。建立後不可變更。 */
   kind?: LedgerKind;
-  /** 省略時為 `true`。建立後不可變更。 */
-  tracksBalance?: boolean;
 }
 
 /** 一筆成員關聯資料列，已 join 其 user，供成員相關回應使用。 */
@@ -74,8 +69,8 @@ export class LedgersService {
     userId: string,
     input: CreateLedgerInput,
   ) {
-    const { name, tracksBalance = true, kind = 'PERSONAL' } = input;
-    const ledger = await tx.ledger.create({ data: { name, tracksBalance, kind } });
+    const { name, kind = 'PERSONAL' } = input;
+    const ledger = await tx.ledger.create({ data: { name, kind } });
 
     await tx.ledgerMember.create({
       data: { ledgerId: ledger.id, userId, role: 'OWNER' },
@@ -146,26 +141,10 @@ export class LedgersService {
   /**
    * 改帳本名稱，並回傳更新後的明細。
    *
-   * `tracksBalance` 與 `kind` 明確擋在這裡，兩者都是建立後即定案的欄位：
-   *
-   * - `tracksBalance` 決定帳本裡的交易算不算進餘額，事後翻轉會讓每個成員的餘額
-   *   瞬間跳動，而畫面上沒有任何線索說明數字為何變了。
-   * - `kind` 決定這本帳本能不能加人。事後翻轉等於讓「誰看得到我的帳」在使用者
-   *   沒有心理準備的情況下改變。
+   * `kind` 明確擋在這裡，它是建立後即定案的欄位：它決定這本帳本能不能加人，事後翻轉
+   * 等於讓「誰看得到我的帳」在使用者沒有心理準備的情況下改變。
    */
-  async rename(
-    ledgerId: string,
-    name: string,
-    tracksBalance?: boolean,
-    kind?: LedgerKind,
-  ): Promise<LedgerDetail> {
-    if (tracksBalance !== undefined) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.TRACKS_BALANCE_IMMUTABLE,
-        'tracksBalance is fixed when the ledger is created and cannot be changed.',
-      );
-    }
+  async rename(ledgerId: string, name: string, kind?: LedgerKind): Promise<LedgerDetail> {
     if (kind !== undefined) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
@@ -456,7 +435,6 @@ export class LedgersService {
       name: ledger.name,
       currency: ledger.currency,
       kind: ledger.kind,
-      tracksBalance: ledger.tracksBalance,
       archivedAt: ledger.archivedAt?.toISOString() ?? null,
       createdAt: ledger.createdAt.toISOString(),
     };
