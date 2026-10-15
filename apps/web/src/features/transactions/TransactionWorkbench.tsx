@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
-import type { Cents, LedgerSummary, Transaction } from '@ledger/shared';
+import { actualAmountOf, type Cents, type LedgerSummary, type Transaction } from '@ledger/shared';
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
@@ -131,7 +131,7 @@ export function TransactionWorkbench({
           <DebtEntryEditForm
             key={activeTarget.transaction.debt.entryId}
             entryId={activeTarget.transaction.debt.entryId}
-            amount={activeTarget.transaction.amount}
+            amount={editableAmountOf(activeTarget.transaction)}
             date={activeTarget.transaction.date}
             note={activeTarget.transaction.debt.note}
             paired={activeTarget.transaction.debt.paired}
@@ -169,4 +169,15 @@ export function TransactionWorkbench({
       )}
     </RightPanelContent>
   );
+}
+
+/**
+ * 往來紀錄的修改表單要帶入實際收付（`PATCH /debt-entries/{id}` 的 `amount` 就是實際收付）。
+ * 有分支的還款，交易本身的金額是還清的欠款，要加減分支才是實收；其他交易就是交易金額。
+ */
+function editableAmountOf(transaction: Transaction): Cents {
+  if ((transaction.type === 'COLLECT' || transaction.type === 'REPAY') && transaction.difference) {
+    return actualAmountOf(transaction.type, transaction.amount, transaction.difference);
+  }
+  return transaction.amount;
 }
