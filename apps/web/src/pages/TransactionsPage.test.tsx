@@ -478,6 +478,61 @@ describe('Transactions page', () => {
     expect(within(dialog).getByLabelText('備註')).toHaveValue('晚餐錢');
   });
 
+  /*
+   * 3h 修訂 1：有分支的還款，交易金額是還清的欠款（93），分支是少收（3）。
+   * 修改表單的金額是實際收到的 90——送出的 `amount` 也是實收，帶錯會把差額算錯。
+   */
+  it('prefills the actual amount when editing a repayment with a branch', async () => {
+    const collectTxn = {
+      id: 'txn-collect',
+      type: 'COLLECT',
+      amount: 9300,
+      date: '2026-09-01T04:00:00.000Z',
+      note: null,
+      category: null,
+      account: { id: account.id, name: account.name },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      debt: {
+        entryId: 'entry-1',
+        counterpartyId: 'counterparty-1',
+        counterpartyName: '房東',
+        kind: 'COLLECT',
+        paired: false,
+        note: null,
+      },
+      difference: { id: 'difference-1', type: 'EXPENSE', amount: 300 },
+      createdAt: '2026-09-01T04:00:00.000Z',
+    };
+    fetchMock.mockImplementation((url: string) => {
+      const json = (body: unknown) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      if (url.includes('/transactions')) {
+        return json({ items: [collectTxn], page: 1, limit: 20, total: 1 });
+      }
+      if (url.includes('/categories')) {
+        return json([expenseCategory]);
+      }
+      if (url.includes('/accounts')) {
+        return json([account]);
+      }
+      return json([ledger]);
+    });
+
+    const user = userEvent.setup();
+    render(<App />);
+    const item = (await screen.findAllByRole('listitem', undefined, WAIT))[0]!;
+    await user.click(within(item).getByRole('button', { name: /^編輯/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue(90);
+  });
+
   it('keeps an open add panel open while switching between details and debts', async () => {
     const user = userEvent.setup();
     render(<App />);
