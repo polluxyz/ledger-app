@@ -216,7 +216,7 @@ export function debtEntry(scope: Locator, description: string): Locator {
   return scope.getByLabel(description, { exact: true });
 }
 
-/** 一筆紀錄右邊的「⋯」選單（3g W169）。綁定的差額沒有這顆按鈕。 */
+/** 一筆紀錄右邊的「⋯」選單；3h 的結清分支沒有自己的操作按鈕。 */
 export function entryMenu(entry: Locator): Locator {
   return entry.getByRole('button', { name: '更多操作', exact: true });
 }

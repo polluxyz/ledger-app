@@ -19,6 +19,7 @@ import type {
   LedgerRole,
   LedgerSummary,
   Paginated,
+  RecordDefaults,
   Split,
   Transaction,
   UpdateCounterpartyRequest,
@@ -117,7 +118,7 @@ export async function personalLedger(
   return personal;
 }
 
-/** 建立帳本。`kind` 省略時是 PERSONAL，`tracksBalance` 省略時是 true。 */
+/** 建立帳本。`kind` 省略時是 PERSONAL；所有帳本都計入帳戶餘額（3h）。 */
 export async function createLedger(
   request: APIRequestContext,
   token: string,
@@ -229,7 +230,7 @@ export async function createAccount(
 // 3b-2 連動：前置條件用（被測的流程走畫面）
 // ---------------------------------------------------------------------------
 
-/** 不記帳先新增一個人。 */
+/** 先新增對象，再於需要時記往來紀錄。 */
 export async function createCounterparty(
   request: APIRequestContext,
   token: string,
@@ -242,15 +243,37 @@ export async function createCounterparty(
   return readJson<Counterparty>(response, `新增對象「${name}」`);
 }
 
-/** 記一筆往來。`record` 一定要明確給（物件或 `null`）。 */
+/**
+ * API 前置資料也必須符合 3h 的綁帳戶規則。省略 `record` 時先讀產品預設；新帳號還沒有
+ * 最近交易時，測試前置資料明確使用個人帳本與第一個真正帳戶。
+ */
 export async function createDebtEntry(
   request: APIRequestContext,
   token: string,
-  body: CreateDebtEntryRequest,
+  body: Omit<CreateDebtEntryRequest, 'record'> & { record?: CreateDebtEntryRequest['record'] },
 ): Promise<CreateDebtEntryResponse> {
+  let record = body.record;
+  if (!record) {
+    const defaults = await readJson<RecordDefaults>(
+      await request.get(`${API_BASE_URL}/users/me/record-defaults`, {
+        headers: authHeaders(token),
+      }),
+      '讀取記帳預設',
+    );
+    const fallbackLedger = defaults.ledgerId ? null : await personalLedger(request, token);
+    const fallbackAccount = defaults.accountId
+      ? null
+      : (await listAccounts(request, token)).find((account) => !account.isTemporary);
+    const ledgerId = defaults.ledgerId ?? fallbackLedger?.id;
+    const accountId = defaults.accountId ?? fallbackAccount?.id;
+    if (!ledgerId || !accountId) {
+      throw new Error('建立往來前置資料時找不到可寫入的帳本或真正帳戶。');
+    }
+    record = { ledgerId, accountId };
+  }
   const response = await request.post(`${API_BASE_URL}/debt-entries`, {
     headers: authHeaders(token),
-    data: body,
+    data: { ...body, record } satisfies CreateDebtEntryRequest,
   });
   return readJson<CreateDebtEntryResponse>(response, '記一筆往來');
 }
