@@ -1,6 +1,5 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
 import {
   centsToInput,
   computeSplitShares,
@@ -8,7 +7,6 @@ import {
   fillRemainingShares,
   isDebtTransactionType,
   parseMoneyInput,
-  type Category,
   type CategoryType,
   type CreateTransactionRequest,
   type CreateSplitRequest,
@@ -26,7 +24,6 @@ import {
   type UpdateTransactionRequest,
 } from '@ledger/shared';
 import { Button } from '../../components/Button';
-import { CategoryIcon } from '../../components/CategoryIcon';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
@@ -61,80 +58,11 @@ import {
   useUpdateTransaction,
 } from './use-transactions';
 import styles from './TransactionForm.module.css';
-import fieldStyles from '../../components/TextField.module.css';
+import { CategoryPicker } from './CategoryPicker';
+import fieldLayoutStyles from './TransactionFieldLayout.module.css';
 
 /** 新增模式的分段控制多一格「借還」：它不是交易型別，只是改渲染 DebtEntryForm。 */
 type EntryTab = ManualTransactionType | 'DEBT';
-
-interface CategoryPickerProps {
-  categories: Category[];
-  value: string;
-  onChange: (categoryId: string) => void;
-}
-
-/** 分類選單用按鈕列出圖示與名稱，原生 select 的 option 無法顯示 lucide 圖示。 */
-function CategoryPicker({ categories, value, onChange }: CategoryPickerProps) {
-  const pickerId = useId();
-  const [isOpen, setIsOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const selectedCategory = categories.find((category) => category.id === value);
-
-  function handleOptionsKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape') {
-      setIsOpen(false);
-      triggerRef.current?.focus();
-    }
-  }
-
-  return (
-    <div className={`${fieldStyles.field} ${styles.categoryField}`}>
-      <span className={fieldStyles.label}>分類</span>
-      <button
-        ref={triggerRef}
-        type="button"
-        role="combobox"
-        className={`${fieldStyles.input} ${styles.categoryTrigger}`}
-        aria-label="分類"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-controls={pickerId}
-        aria-valuetext={selectedCategory?.name ?? '請選擇分類'}
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <CategoryIcon icon={selectedCategory?.icon} size={16} />
-        <span className={styles.categoryValue}>{selectedCategory?.name ?? '請選擇分類'}</span>
-        <ChevronDown aria-hidden="true" className={styles.categoryChevron} size={16} />
-      </button>
-      {isOpen && (
-        <div
-          id={pickerId}
-          role="listbox"
-          aria-label="分類"
-          className={styles.categoryOptions}
-          onKeyDown={handleOptionsKeyDown}
-        >
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              role="option"
-              aria-selected={category.id === value}
-              className={styles.categoryOption}
-              onClick={() => {
-                onChange(category.id);
-                setIsOpen(false);
-                triggerRef.current?.focus();
-              }}
-            >
-              <CategoryIcon icon={category.icon} size={16} />
-              <span className={styles.categoryValue}>{category.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface TransactionFormProps {
   ledger: LedgerSummary;
@@ -1093,7 +1021,7 @@ function TransactionFormContent({
   const transactionFields = (
     <>
       {/* 金額自成一列並放大：它是這張表單唯一非填不可的數字，要一眼看到。 */}
-      <div className={styles.amount}>
+      <div className={fieldLayoutStyles.amount}>
         <TextField
           label="金額"
           id={amountFieldId}
@@ -1107,7 +1035,7 @@ function TransactionFormContent({
         />
       </div>
 
-      <div className={styles.row}>
+      <div className={fieldLayoutStyles.row}>
         <TextField
           label="日期"
           type="date"

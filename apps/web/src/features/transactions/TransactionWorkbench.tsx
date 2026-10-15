@@ -134,8 +134,14 @@ export function TransactionWorkbench({
             amount={editableAmountOf(activeTarget.transaction)}
             date={activeTarget.transaction.date}
             note={activeTarget.transaction.debt.note}
+            title={activeTarget.transaction.title}
+            accountId={activeTarget.transaction.account?.id ?? null}
+            categoryId={activeTarget.transaction.category?.id ?? null}
+            ledgerId={ledger.id}
+            kind={activeTarget.transaction.debt.kind}
             paired={activeTarget.transaction.debt.paired}
-            displayName={activeTarget.transaction.debt.counterpartyName}
+            counterpartyName={activeTarget.transaction.debt.counterpartyName}
+            hasRecordedTransaction
             onClose={handleClose}
           />
         </Dialog>

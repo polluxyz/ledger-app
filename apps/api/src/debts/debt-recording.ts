@@ -30,6 +30,7 @@ export async function recordDebtTransaction(
     amount: number;
     date: Date;
     title?: string | null;
+    categoryId?: string;
     splitId?: string;
   },
 ): Promise<string> {
@@ -42,6 +43,7 @@ export async function recordDebtTransaction(
     date: input.date,
     accountId: input.record.accountId,
     title: input.title,
+    categoryId: input.categoryId,
     splitId: input.splitId,
   });
 }

@@ -125,6 +125,11 @@ describe('debt-entry-rules', () => {
       });
       expect(client.debtEntry.findFirst).toHaveBeenCalledWith({
         where: { id: 'e-1', deletedAt: null, counterparty: { ownerId: 'user-1' } },
+        include: {
+          transaction: {
+            select: { ledgerId: true, accountId: true, title: true, categoryId: true },
+          },
+        },
       });
     });
   });

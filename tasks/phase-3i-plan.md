@@ -93,4 +93,13 @@ spec：`docs/specs/phase-3i-debt-entry-edit.md`（決策 176～182、W178～W182
 
 ## 6. 實作紀錄
 
-（實作時填）
+- **I0**（2026-10-15）：shared 型別與 `debtCategoryTypeOf`（Node test 116 條全過）；`debt-entry-edit-isolation.e2e-spec.ts` 6 條全紅（預期 404 拿到 400、`recorded` 為 undefined）。
+- **I1**（`dee-api`，`backend`）：API e2e 36 suites／302 條、單元 468 條全綠；隔離測試 6 條轉綠。
+  - worker 發現既有缺口：只改金額、日期、備註與撤銷，沒有檢查帳本寫入權（降為檢視者或封存後仍能改）。依協調者回覆，3i 只對新欄位加 `assertLedgerWritable`，既有行為不動，另案請開發者決定。
+  - 協調者驗收時修：`updateDebtTransaction` 換帳戶時，缺 `callerUserId` 改成直接丟錯，不再拿交易建立者代替。
+- **I2**（`dee-web`，`default`）：Web 100 檔／775 條全綠。把 `CategoryPicker` 從 `TransactionForm` 抽成共用元件，加「不選」。
+- **協調者合併後修**：舊的 `PAID_FOR_ME` 紀錄沒有帳戶，API 改成名稱、帳戶、分類只開放借出、借入、收回、還款（其他 409 `DEBT_ENTRY_NOT_EDITABLE`），表單也不顯示這 3 個欄位；名稱欄 `maxLength` 從 200 改成 100，對齊 API。合併後單元測試：shared 116、API 471、Web 776 全綠。
+- **I3**（`dee-web-e2e`，`default`）：worker 寫完新主線與 3 個既有測試的調整，但 Orca 夜裡重開，終端機在回報前關掉（dispatch 標為 failed），改動留在 worktree 沒 commit。協調者接手驗收、跑完整 Web e2e 發現 2 條失敗並修好：
+  - `phase-3c-split.spec.ts` 接受連動時還在選帳本（決策 182 拿掉了）。
+  - `debts.spec.ts` 用 API 補的借出用「現在時間」，畫面記的是「當地日期的 UTC 0 點」；在 UTC+8 早上 8 點前會排到前一天，未還清的切點就錯。改成同一天的 UTC 中午。CI 跑在 UTC，碰不到。
+  - 最後 Web e2e 58 條全綠。

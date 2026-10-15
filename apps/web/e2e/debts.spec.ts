@@ -31,9 +31,9 @@ import {
  * 的步驟改成「切到借還的子分頁、展開那一列、在列上操作」，意圖不變。已還清的紀錄移到歷史（決策
  * 153），所以原本在同一張表裡一路看下去的步驟，改成「個人分頁看未還清、歷史看已還清」。
  *
- * ## 3h 更新
+ * ## 3h／3i 更新
  *
- * 借還表單都明確選帳本與真正帳戶；以此結清在還款下呈現分支，撤銷還款時分支一起消失。
+ * 借還表單直接使用目前作用中帳本，並選擇真正帳戶；以此結清在還款下呈現分支，撤銷還款時分支一起消失。
  * API 前置往來也透過測試 helper 綁到有效帳本與帳戶。
  *
  * 餘額一律用 API 讀：交易頁上沒有帳戶餘額，繞去首頁會整頁重載、清掉快取，反而驗不到畫面的更新。
@@ -53,20 +53,25 @@ async function openDebtTab(page: Page): Promise<Locator> {
   return form;
 }
 
-/** 在借還分頁填一筆（不送出）；帳本與帳戶由呼叫端明確選定（3h）。 */
+/** 今天的當地日期（`YYYY-MM-DD`），與畫面日期欄的預設值相同。 */
+function localDateString(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** 在借還分頁填一筆（不送出）；帳戶由呼叫端明確選定（3h）。 */
 async function fill(
   form: Locator,
   name: string,
   kind: string,
   amount: number,
-  options: { ledger?: string; account?: string; settle?: boolean } = {},
+  options: { account?: string; settle?: boolean } = {},
 ) {
   await typeCounterparty(form, name);
   await form.getByRole('group', { name: '往來種類' }).getByRole('button', { name: kind }).click();
   await form.getByLabel('金額').fill(String(amount));
-  if (options.ledger !== undefined) {
-    await form.getByLabel('記在哪本帳本').selectOption({ label: options.ledger });
-  }
   if (options.account !== undefined) {
     await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: options.account });
   }
@@ -88,12 +93,10 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
   await openTransactions(page);
   const form = await openDebtTab(page);
 
-  // 3h：新帳號沒有最近一次預設時，借出必須同時選帳本與帳戶才能送出。
+  // 3i：借還記在目前帳本；新帳號沒有最近使用的帳戶時，仍要選帳戶才能送出。
   await fill(form, '小明', '借出', 120);
   await expect(form.getByText('新對象，送出時建立')).toBeVisible();
-  await expect(form.getByLabel('記在哪本帳本')).toHaveValue('');
-  await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
-  await form.getByLabel('記在哪本帳本').selectOption({ label: '甲 的帳本' });
+  await expect(form.getByLabel('記在哪本帳本')).toHaveCount(0);
   await expect(form.getByRole('button', { name: '新增' })).toBeDisabled();
   await form.getByRole('combobox', { name: /帳戶/ }).selectOption({ label: '現金' });
   await expect(form.getByText('記完後：小明欠你 $120')).toHaveCount(1);
@@ -135,7 +138,9 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
     counterparty: { name: '小明' },
     kind: 'LEND',
     amount: 10000,
-    date: new Date().toISOString(),
+    // 畫面記的那幾筆存成「當地日期的 UTC 0 點」。這筆要排在它們之後，所以用同一天的 UTC 中午；
+    // 用現在時間的話，在 UTC+8 早上 8 點前會變成前一天，排到最前面，未還清的切點就錯了。
+    date: `${localDateString()}T12:00:00.000Z`,
   });
 
   // SC-W58：明細點借還列直接編輯該筆；收起後改從借還的個人分頁展開小明。
@@ -207,7 +212,7 @@ test('往來帳主線：借出、借入抵銷、以此結清、撤銷還款、�
 test('SC-W67：借還列收起後，右側欄維持收起、不冒出新增表單', async ({ signedInPage: page }) => {
   await openTransactions(page);
   const form = await openDebtTab(page);
-  await fill(form, '小明', '借出', 120, { ledger: '甲 的帳本', account: '現金' });
+  await fill(form, '小明', '借出', 120, { account: '現金' });
   await form.getByRole('button', { name: '新增', exact: true }).click();
   await page.getByRole('button', { name: '收起新增面板' }).click();
 
@@ -226,7 +231,7 @@ test('SC-W67：借還列收起後，右側欄維持收起、不冒出新增表�
 test('SC-W68：從明細編輯借出金額後更新明細並收起右側欄', async ({ signedInPage: page }) => {
   await openTransactions(page);
   const form = await openDebtTab(page);
-  await fill(form, '小明', '借出', 120, { ledger: '甲 的帳本', account: '現金' });
+  await fill(form, '小明', '借出', 120, { account: '現金' });
   await form.getByLabel('備註').fill('原備註');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
@@ -269,7 +274,7 @@ test('還款：沒有欠款不能還、我欠對方時是付錢、超過欠款�
   await expect(form.getByText('目前沒有欠款')).toBeVisible();
 
   // 向小華借 400 → 我欠小華。
-  await fill(form, '小華', '借入', 400, { ledger: '甲 的帳本', account: '現金' });
+  await fill(form, '小華', '借入', 400, { account: '現金' });
   await form.getByRole('button', { name: '新增' }).click();
   await expect.poll(() => cash(request, userA.token)).toBe(before + 40000);
 

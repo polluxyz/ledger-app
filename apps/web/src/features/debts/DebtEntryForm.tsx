@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type {
+  CategoryType,
   Counterparty,
   CreateDebtEntryKind,
   CreateDebtEntryRequest,
   LedgerSummary,
 } from '@ledger/shared';
-import { parseMoneyInput } from '@ledger/shared';
+import { debtCategoryTypeOf, parseMoneyInput } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
@@ -14,7 +15,9 @@ import { TextField } from '../../components/TextField';
 import { formatMoney, toDateInputValue } from '../../lib/format';
 import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
-import { useLedgers } from '../ledgers/use-ledgers';
+import { useCategories } from '../categories/use-categories';
+import { CategoryPicker } from '../transactions/CategoryPicker';
+import fieldLayoutStyles from '../transactions/TransactionFieldLayout.module.css';
 import { CounterpartyPicker, findCounterparty } from './CounterpartyPicker';
 import { useCounterparties, useCreateDebtEntry } from './use-debts';
 import styles from './DebtEntryForm.module.css';
@@ -46,6 +49,7 @@ const ACCOUNT_LABELS: Record<DebtEntryFormKind, string> = {
  * 只有送出前的餘額預覽依 W16 在畫面上試算；紀錄成功後餘額以伺服器回應為準。
  */
 export function DebtEntryForm({
+  ledger,
   amountFieldId,
   initialCounterpartyName = '',
   onSaved,
@@ -56,38 +60,25 @@ export function DebtEntryForm({
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => toDateInputValue());
-  const [ledgerId, setLedgerId] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
   const [settle, setSettle] = useState(false);
-  const ledgerTouched = useRef(false);
   const accountTouched = useRef(false);
   const defaultsApplied = useRef(false);
 
   const counterpartiesQuery = useCounterparties({ limit: 100 });
   const counterparties = counterpartiesQuery.data?.items ?? [];
-  const ledgersQuery = useLedgers();
   const accounts = useAccounts();
-  const recordDefaults = useRecordDefaults();
+  const recordDefaults = useRecordDefaults(ledger.id);
   const createEntry = useCreateDebtEntry();
-  const writableLedgers = useMemo(
-    () =>
-      (ledgersQuery.data ?? []).filter(
-        (item) => (item.role === 'OWNER' || item.role === 'EDITOR') && item.archivedAt === null,
-      ),
-    [ledgersQuery.data],
-  );
-  const accountsForSelection = useMemo(
-    () => selectableAccounts(accounts.data ?? []),
-    [accounts.data],
-  );
+  const accountsForSelection = selectableAccounts(accounts.data ?? []);
 
   useEffect(() => {
     if (
       recordDefaults.data === undefined ||
       !recordDefaults.isFetchedAfterMount ||
-      ledgersQuery.data === undefined ||
-      !ledgersQuery.isFetchedAfterMount ||
       accounts.data === undefined ||
       !accounts.isFetchedAfterMount ||
       defaultsApplied.current
@@ -98,13 +89,6 @@ export function DebtEntryForm({
     defaultsApplied.current = true;
     const defaults = recordDefaults.data;
     if (
-      !ledgerTouched.current &&
-      defaults.ledgerId !== null &&
-      writableLedgers.some((item) => item.id === defaults.ledgerId)
-    ) {
-      setLedgerId(defaults.ledgerId);
-    }
-    if (
       !accountTouched.current &&
       defaults.accountId !== null &&
       accountsForSelection.some((item) => item.id === defaults.accountId)
@@ -114,11 +98,8 @@ export function DebtEntryForm({
   }, [
     recordDefaults.data,
     recordDefaults.isFetchedAfterMount,
-    ledgersQuery.data,
-    ledgersQuery.isFetchedAfterMount,
     accounts.data,
     accounts.isFetchedAfterMount,
-    writableLedgers,
     accountsForSelection,
   ]);
 
@@ -126,6 +107,26 @@ export function DebtEntryForm({
   const counterparty = selectedCounterparty ?? findCounterparty(counterpartyName, counterparties);
   const repaymentAvailable = Boolean(counterparty && counterparty.balance !== 0);
   const canSettle = kind === 'REPAYMENT';
+  const categoryDebtKind =
+    kind === 'LEND'
+      ? 'LEND'
+      : kind === 'BORROW'
+        ? 'BORROW'
+        : counterparty && counterparty.balance > 0
+          ? 'COLLECT'
+          : counterparty && counterparty.balance < 0
+            ? 'REPAY'
+            : null;
+  const categoryType: CategoryType | null =
+    categoryDebtKind === null ? null : debtCategoryTypeOf(categoryDebtKind);
+  const categories = useCategories(ledger.id, categoryType ?? undefined);
+  const previousCategoryType = useRef(categoryType);
+  useEffect(() => {
+    if (previousCategoryType.current !== categoryType) {
+      setCategoryId('');
+      previousCategoryType.current = categoryType;
+    }
+  }, [categoryType]);
   const amountCents = parseMoneyInput(amount);
   const repaymentOverage =
     kind === 'REPAYMENT' &&
@@ -139,7 +140,6 @@ export function DebtEntryForm({
     normalizedName === '' ||
     amountCents === null ||
     amountCents <= 0 ||
-    ledgerId === '' ||
     accountId === '' ||
     (kind === 'REPAYMENT' && !repaymentAvailable) ||
     repaymentExceedsBalance ||
@@ -217,6 +217,7 @@ export function DebtEntryForm({
 
   function handleKindChange(nextKind: DebtEntryFormKind) {
     setKind(nextKind);
+    setCategoryId('');
     // 結清只適用還款；切換種類時清掉，避免勾選套用到下一筆。
     setSettle(false);
   }
@@ -249,7 +250,9 @@ export function DebtEntryForm({
       kind,
       amount: amountCents,
       date: new Date(date).toISOString(),
-      record: { ledgerId, accountId },
+      record: { ledgerId: ledger.id, accountId },
+      ...(title.trim() === '' ? {} : { title: title.trim() }),
+      ...(categoryId === '' ? {} : { categoryId }),
       ...(note === '' ? {} : { note }),
       ...(canSettle && settle ? { settle: true } : {}),
     };
@@ -258,6 +261,8 @@ export function DebtEntryForm({
       onSuccess: (response) => {
         // 一個對象常會連續記多筆；保留對象與種類，只清掉每筆通常不同的內容。
         setAmount('');
+        setTitle('');
+        setCategoryId('');
         setNote('');
         if (kind === 'REPAYMENT' && response.counterparty.balance === 0) {
           setKind('LEND');
@@ -325,31 +330,24 @@ export function DebtEntryForm({
         />
       </div>
 
-      <TextField
-        label="日期"
-        type="date"
-        value={date}
-        required
-        onChange={(event) => setDate(event.target.value)}
-      />
+      <div className={fieldLayoutStyles.row}>
+        <TextField
+          label="日期"
+          type="date"
+          value={date}
+          required
+          onChange={(event) => setDate(event.target.value)}
+        />
+        {categoryType !== null && (
+          <CategoryPicker
+            categories={categories.data ?? []}
+            value={categoryId}
+            allowClear
+            onChange={setCategoryId}
+          />
+        )}
+      </div>
 
-      <Select
-        label="記在哪本帳本"
-        value={ledgerId}
-        required
-        disabled={ledgersQuery.isLoading || writableLedgers.length === 0}
-        onChange={(event) => {
-          ledgerTouched.current = true;
-          setLedgerId(event.target.value);
-        }}
-      >
-        <option value="">請選擇</option>
-        {writableLedgers.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.name}
-          </option>
-        ))}
-      </Select>
       <Select
         label={accountLabel}
         value={accountId}
@@ -367,6 +365,13 @@ export function DebtEntryForm({
           </option>
         ))}
       </Select>
+
+      <TextField
+        label="名稱"
+        value={title}
+        maxLength={100}
+        onChange={(event) => setTitle(event.target.value)}
+      />
 
       <TextField
         label="備註"

@@ -3,6 +3,7 @@ import {
   DebtTransactionType,
   ErrorCode,
   computeSharesByKey,
+  debtCategoryTypeOf,
   isDebtTransactionType,
   ListTransactionsQuery,
   ManualTransactionType,
@@ -908,6 +909,7 @@ export class TransactionsService {
       accountId?: string;
       title?: string | null;
       splitId?: string;
+      categoryId?: string;
     },
   ): Promise<string> {
     const accounts = { accountId: input.accountId };
@@ -920,6 +922,9 @@ export class TransactionsService {
       client,
     );
 
+    if (input.categoryId !== undefined) {
+      await this.assertDebtCategory(client, input.ledgerId, input.type, input.categoryId);
+    }
     const created = await client.transaction.create({
       data: {
         ledgerId: input.ledgerId,
@@ -933,7 +938,7 @@ export class TransactionsService {
         accountId: input.accountId ?? null,
         title: input.title ?? null,
         splitId: input.splitId ?? null,
-        categoryId: null,
+        categoryId: input.categoryId ?? null,
         toAccountId: null,
       },
       select: { id: true },
@@ -1085,19 +1090,76 @@ export class TransactionsService {
     return row.id;
   }
 
-  /** 往來紀錄的金額或日期改了，對應的交易一起改。只動金額與日期，帳本、帳戶、分類不變。 */
+  /** 借還分類只是標記；依後端已決定的借還方向驗證，不影響型別與餘額。 */
+  async assertDebtCategory(
+    client: Prisma.TransactionClient,
+    ledgerId: string,
+    kind: TransactionType,
+    categoryId: string,
+  ): Promise<void> {
+    const category = await client.category.findFirst({ where: { id: categoryId, ledgerId } });
+    if (category === null) {
+      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Category not found.');
+    }
+    const expected = debtCategoryTypeOf(kind);
+    if (expected === null) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.VALIDATION_FAILED,
+        'This kind cannot have a debt category.',
+      );
+    }
+    if (category.type !== expected) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.CATEGORY_TYPE_MISMATCH,
+        "The category's type does not match the debt direction.",
+      );
+    }
+  }
+
+  /** 修改往來交易；換帳戶時分支跟隨，同一個呼叫端資料庫交易內一起提交。 */
   async updateDebtTransaction(
     client: Prisma.TransactionClient,
     transactionId: string,
-    input: { amount?: number; date?: Date },
+    input: {
+      amount?: number;
+      date?: Date;
+      title?: string | null;
+      accountId?: string;
+      categoryId?: string | null;
+    },
+    callerUserId?: string,
   ): Promise<void> {
+    if (input.accountId !== undefined || input.categoryId != null) {
+      const existing = await client.transaction.findUniqueOrThrow({ where: { id: transactionId } });
+      if (input.accountId !== undefined) {
+        // 帳戶一定要以呼叫者的身分檢查，不拿交易的建立者代替：漏傳就是程式錯誤，寧可失敗。
+        if (callerUserId === undefined) {
+          throw new Error('updateDebtTransaction needs callerUserId to change the account.');
+        }
+        await assertSelectableAccount(client, callerUserId, input.accountId);
+      }
+      if (input.categoryId != null) {
+        await this.assertDebtCategory(client, existing.ledgerId, existing.type, input.categoryId);
+      }
+    }
     await client.transaction.update({
       where: { id: transactionId },
       data: {
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
         ...(input.date !== undefined ? { date: input.date } : {}),
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+        ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
       },
     });
+    if (input.accountId !== undefined) {
+      await client.transaction.updateMany({
+        where: { differenceOfId: transactionId, deletedAt: null },
+        data: { accountId: input.accountId },
+      });
+    }
   }
 
   /** 刪除往來紀錄時，對應的交易一起軟刪除。已刪除的不會被重設時間。 */

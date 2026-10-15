@@ -22,6 +22,7 @@ describe('PendingCard', () => {
     createdAt: '2026-09-01T00:00:00.000Z',
   };
   const anotherLedger = { ...ledger, id: 'ledger-2', name: '另一個帳本' };
+  let ledgers = [ledger, anotherLedger];
   const account = {
     id: 'account-1',
     name: '現金',
@@ -97,6 +98,7 @@ describe('PendingCard', () => {
     proposals = [];
     proposalTotal = 0;
     recordDefaults = { ledgerId: 'ledger-1', accountId: 'account-1' };
+    ledgers = [ledger, anotherLedger];
     delayedRecordDefaults = null;
     failNextProposalAccept = null;
     acceptedLink = {
@@ -188,7 +190,7 @@ describe('PendingCard', () => {
         ]);
       }
       if (url.includes('/ledgers')) {
-        return response([ledger, anotherLedger]);
+        return response(ledgers);
       }
       return response([]);
     });
@@ -306,7 +308,7 @@ describe('PendingCard', () => {
     expect(card).toHaveTextContent('王小明 刪了 09/20 的借入 $120');
   });
 
-  it('renders a split proposal as an arrow and accepts it with ledger, category, and title only', async () => {
+  it('renders a split proposal as an arrow and accepts it with the active ledger, category, and title only', async () => {
     proposals = [
       proposal({ id: 'proposal-split', entryKind: 'PAID_FOR_ME', title: '晚餐', amount: 12000 }),
     ];
@@ -323,8 +325,8 @@ describe('PendingCard', () => {
     const expandedRow = within(card).getByRole('listitem');
     expect(within(expandedRow).getByLabelText('名稱')).toHaveValue('晚餐');
     expect(within(expandedRow).queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(within(expandedRow).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(within(expandedRow).queryByLabelText('不記入帳本（只記往來）')).not.toBeInTheDocument();
-    await user.selectOptions(within(expandedRow).getByLabelText('記在哪本帳本'), 'ledger-1');
     const category = await within(expandedRow).findByRole('combobox', { name: '分類' });
     await user.selectOptions(category, 'category-expense');
     await user.click(within(expandedRow).getByRole('button', { name: '接受' }));
@@ -373,7 +375,7 @@ describe('PendingCard', () => {
     }, WAIT);
   });
 
-  it('keeps only one proposal expanded at a time', async () => {
+  it('keeps only one proposal expanded at a time without a ledger picker', async () => {
     proposals = [
       proposal({ id: 'proposal-1' }),
       proposal({ id: 'proposal-2', otherUser: { id: 'user-3', name: '陳小華' } }),
@@ -384,10 +386,10 @@ describe('PendingCard', () => {
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getAllByRole('button', { name: '接受' })[0]!);
-    expect(await within(card).findByLabelText('記在哪本帳本')).toBeInTheDocument();
+    expect(await within(card).findByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
+    expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
 
     await user.click(within(card).getAllByRole('button', { name: '接受' })[1]!);
-    expect(await within(card).findByLabelText('記在哪本帳本')).toBeInTheDocument();
     expect(await within(card).findByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
   });
 
@@ -479,7 +481,8 @@ describe('PendingCard', () => {
     await user.click(within(card).getByRole('button', { name: '回答' }));
     expect(within(card).getByRole('radio', { name: '沒有' })).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: '接受' }));
-    expect(within(card).getByLabelText('記在哪本帳本')).toBeInTheDocument();
+    expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toBeInTheDocument();
+    expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(within(card).queryByRole('radio', { name: '沒有' })).not.toBeInTheDocument();
 
     await user.click(within(card).getByRole('button', { name: '回答' }));
@@ -487,7 +490,7 @@ describe('PendingCard', () => {
     expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
   });
 
-  it('prefills the ledger and selectable account and excludes the temporary account', async () => {
+  it('uses the active ledger, defaults the selectable account, and excludes temporary accounts', async () => {
     proposals = [proposal({ entryKind: 'BORROW' })];
     proposalTotal = 1;
     await renderHome();
@@ -496,7 +499,7 @@ describe('PendingCard', () => {
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
     const acceptButton = within(card).getByRole('button', { name: '接受' });
-    expect(within(card).getByLabelText('記在哪本帳本')).toHaveValue('ledger-1');
+    expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toHaveValue('account-1');
     expect(within(card).queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
     expect(acceptButton).toBeEnabled();
@@ -509,7 +512,7 @@ describe('PendingCard', () => {
     }, WAIT);
   });
 
-  it('does not use an unavailable default ledger or a temporary default account', async () => {
+  it('keeps the active ledger and rejects a temporary default account', async () => {
     proposals = [proposal({ entryKind: 'BORROW' })];
     proposalTotal = 1;
     recordDefaults = { ledgerId: 'ledger-archived', accountId: 'account-temp' };
@@ -518,13 +521,13 @@ describe('PendingCard', () => {
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
 
     await user.click(within(card).getByRole('button', { name: '接受' }));
-    expect(within(card).getByLabelText('記在哪本帳本')).toHaveValue('');
+    expect(within(card).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(within(card).getByLabelText('借到的錢進哪個帳戶')).toHaveValue('');
     expect(within(card).getByRole('button', { name: '接受' })).toBeDisabled();
     expect(within(card).queryByLabelText('不記入帳本（只記往來）')).not.toBeInTheDocument();
   });
 
-  it('keeps a manually selected ledger and account when defaults arrive later', async () => {
+  it('keeps a manually selected account when defaults arrive later', async () => {
     let resolveDefaults: ((value: Response) => void) | undefined;
     delayedRecordDefaults = new Promise((resolve) => {
       resolveDefaults = resolve;
@@ -536,9 +539,7 @@ describe('PendingCard', () => {
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
     await user.click(within(card).getByRole('button', { name: '接受' }));
 
-    const ledgerSelect = within(card).getByLabelText('記在哪本帳本');
     const accountSelect = within(card).getByLabelText('借到的錢進哪個帳戶');
-    await user.selectOptions(ledgerSelect, 'ledger-2');
     await user.selectOptions(accountSelect, 'account-1');
     resolveDefaults?.(
       new Response(JSON.stringify({ ledgerId: 'ledger-1', accountId: 'account-1' }), {
@@ -548,12 +549,11 @@ describe('PendingCard', () => {
     );
 
     await waitFor(() => {
-      expect(ledgerSelect).toHaveValue('ledger-2');
       expect(accountSelect).toHaveValue('account-1');
     }, WAIT);
   });
 
-  it('accepts a forgiveness proposal with a ledger and no account', async () => {
+  it('accepts a forgiveness proposal with the active ledger and no account picker', async () => {
     proposals = [proposal({ entryKind: 'FORGIVEN' })];
     proposalTotal = 1;
     await renderHome();
@@ -562,7 +562,7 @@ describe('PendingCard', () => {
     const row = within(card).getByRole('listitem');
 
     await user.click(within(row).getByRole('button', { name: '接受' }));
-    expect(within(row).getByLabelText('記在哪本帳本')).toHaveValue('ledger-1');
+    expect(within(row).queryByLabelText('記在哪本帳本')).not.toBeInTheDocument();
     expect(within(row).queryByLabelText('帳戶')).not.toBeInTheDocument();
     await user.click(within(row).getByRole('button', { name: '接受' }));
 
@@ -571,6 +571,18 @@ describe('PendingCard', () => {
         record: { ledgerId: 'ledger-1' },
       }),
     );
+  });
+
+  it('keeps decline available but hides record acceptance for a viewer ledger', async () => {
+    ledgers = [{ ...ledger, role: 'VIEWER' }, anotherLedger];
+    proposals = [proposal({ entryKind: 'BORROW' })];
+    proposalTotal = 1;
+    await renderHome();
+
+    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
+    const row = within(card).getByRole('listitem');
+    expect(within(row).getByRole('button', { name: '拒絕' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: '接受' })).not.toBeInTheDocument();
   });
 
   it('accepts an amend proposal directly with an empty body', async () => {

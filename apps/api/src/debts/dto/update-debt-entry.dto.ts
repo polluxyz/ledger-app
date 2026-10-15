@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   ValidateIf,
@@ -12,7 +13,7 @@ import {
 import { MAX_AMOUNT_CENTS } from '@ledger/shared';
 import type { UpdateDebtEntryRequest } from '@ledger/shared';
 
-/** `PATCH /debt-entries/{id}` 的 body。只有送出的欄位會變（決策 41）。 */
+/** `PATCH /debt-entries/{id}` 的 body。只有送出的欄位會變（3i 決策 176）。 */
 export class UpdateDebtEntryDto implements UpdateDebtEntryRequest {
   @ApiPropertyOptional({
     description: '正整數金額；單位：分（0.01 元），正負號由紀錄種類決定。',
@@ -37,4 +38,20 @@ export class UpdateDebtEntryDto implements UpdateDebtEntryRequest {
   @IsString()
   @MaxLength(500)
   note?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 100, nullable: true })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(100)
+  title?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsUUID()
+  accountId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsUUID()
+  categoryId?: string | null;
 }

@@ -51,6 +51,27 @@ export function actualAmountOf(
     : clearedAmount - difference.amount;
 }
 
+/**
+ * 借還交易可以選的分類方向（3i 決策 178）：錢出去的選支出分類，錢進來的選收入分類。
+ *
+ * | 種類                    | 分類方向  |
+ * | ----------------------- | --------- |
+ * | `LEND` 借出             | `EXPENSE` |
+ * | `REPAY` 我還對方        | `EXPENSE` |
+ * | `BORROW` 借入           | `INCOME`  |
+ * | `COLLECT` 對方還我      | `INCOME`  |
+ *
+ * 其他種類（代墊、分帳、免除、差額）不能從這裡選分類，回 `null`。後端用它檢查，前端用它決定
+ * 清單列哪一種分類，方向只有這一份。參數可以是往來紀錄的種類或交易型別，這 4 個名字兩邊相同。
+ */
+export function debtCategoryTypeOf(
+  kind: DebtEntryKind | TransactionType,
+): 'EXPENSE' | 'INCOME' | null {
+  if (kind === 'LEND' || kind === 'REPAY') return 'EXPENSE';
+  if (kind === 'BORROW' || kind === 'COLLECT') return 'INCOME';
+  return null;
+}
+
 /** 免除產生的交易名稱（決策 162）。 */
 export type ForgivenessLabel = '呆帳' | '債務免除';
 

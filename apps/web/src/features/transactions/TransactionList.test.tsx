@@ -168,6 +168,29 @@ describe('TransactionList', () => {
     expect(secondLine(unnamed)).toBe('');
   });
 
+  it('keeps the debt direction on the first line when it has a category', () => {
+    const lend = makeTransaction({
+      id: 'lend-with-category',
+      type: 'LEND',
+      title: '押金',
+      category: { id: 'cat-home', name: '居住', icon: 'home' },
+      debt: {
+        entryId: 'entry-lend',
+        counterpartyId: 'cp-ming',
+        counterpartyName: '明哥',
+        kind: 'LEND',
+        paired: false,
+        note: null,
+      },
+    });
+    renderList({ transactions: [lend] });
+
+    const transactionRow = row(0);
+    expect(transactionRow.querySelector('[class*="titleText"]')).toHaveTextContent('借出 · 明哥');
+    expect(transactionRow.querySelector('[class*="name"]')).toHaveTextContent('押金');
+    expect(transactionRow.querySelector('svg')?.getAttribute('data-category-icon')).toBe('home');
+  });
+
   it('shows category, generic, debt direction, and transfer icons', () => {
     const iconTransactions = [
       makeTransaction({
@@ -438,7 +461,7 @@ describe('TransactionList', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it('shows the actual amount on the repayment and the cleared amount on its branch', async () => {
+  it('shows the actual repayment amount and expands the cleared amount and difference', async () => {
     const user = userEvent.setup();
     const onEditDebtTransaction = vi.fn();
     const collect = makeTransaction({
@@ -470,15 +493,30 @@ describe('TransactionList', () => {
     });
 
     expect(within(row(0)).getByText('還清')).toBeInTheDocument();
-    // 主列是實際收付：93 少收 3 是 90、100 多收 5 是 105。分支開頭是還清的欠款。
+    // 主列是實際收付：93 少收 3 是 90、100 多收 5 是 105。
     expect(row(0)).toHaveTextContent('+$90');
-    expect(row(1)).toHaveTextContent('└+$93少收−$3');
-    expect(row(2)).toHaveTextContent('+$105');
-    expect(row(3)).toHaveTextContent('└+$100多收+$5');
-    for (const branch of [row(1), row(3)]) {
-      expect(branch.querySelectorAll('button')).toHaveLength(0);
-      await user.click(branch);
-    }
+    expect(row(0)).not.toHaveTextContent('欠款');
+    expect(row(0)).not.toHaveTextContent('少收');
+    expect(row(1)).toHaveTextContent('+$105');
+    expect(row(1)).not.toHaveTextContent('多收');
+
+    const collectExpand = within(row(0)).getByRole('button', { name: '展開細項' });
+    expect(collectExpand).toHaveAttribute('aria-expanded', 'false');
+    await user.click(collectExpand);
+    expect(within(row(0)).getByRole('button', { name: '收合細項' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(within(row(0)).getByText('欠款')).toBeInTheDocument();
+    expect(within(row(0)).getByText('+$93')).toBeInTheDocument();
+    expect(within(row(0)).getByText('少收')).toBeInTheDocument();
+    expect(within(row(0)).getByText('−$3')).toBeInTheDocument();
+
+    await user.click(within(row(1)).getByRole('button', { name: '展開細項' }));
+    expect(within(row(1)).getByText('欠款')).toBeInTheDocument();
+    expect(within(row(1)).getByText('+$100')).toBeInTheDocument();
+    expect(within(row(1)).getByText('多收')).toBeInTheDocument();
+    expect(within(row(1)).getByText('+$5')).toBeInTheDocument();
     expect(onEditDebtTransaction).not.toHaveBeenCalled();
   });
 

@@ -7,7 +7,41 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { actualAmountOf, differenceLabelOf, forgivenessLabelOf } from './entry-labels.ts';
+import {
+  actualAmountOf,
+  debtCategoryTypeOf,
+  differenceLabelOf,
+  forgivenessLabelOf,
+} from './entry-labels.ts';
+
+describe('debtCategoryTypeOf', () => {
+  it('money going out picks an expense category', () => {
+    assert.equal(debtCategoryTypeOf('LEND'), 'EXPENSE');
+    assert.equal(debtCategoryTypeOf('REPAY'), 'EXPENSE');
+  });
+
+  it('money coming in picks an income category', () => {
+    assert.equal(debtCategoryTypeOf('BORROW'), 'INCOME');
+    assert.equal(debtCategoryTypeOf('COLLECT'), 'INCOME');
+  });
+
+  it('returns null for kinds that cannot pick a category here', () => {
+    for (const kind of [
+      'PAID_FOR_ME',
+      'PAID_FOR_THEM',
+      'RECEIVED_FOR_THEM',
+      'RECEIVED_FOR_ME',
+      'SETTLEMENT',
+      'FORGIVE',
+      'FORGIVEN',
+      'EXPENSE',
+      'INCOME',
+      'TRANSFER',
+    ] as const) {
+      assert.equal(debtCategoryTypeOf(kind), null);
+    }
+  });
+});
 
 describe('differenceLabelOf', () => {
   it('names the difference under a collection', () => {

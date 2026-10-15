@@ -98,6 +98,7 @@ function makeEntry(kind: DebtEntryKind, delta: number): DebtEntry {
     date: '2026-09-20',
     note: null,
     transactionId: null,
+    recorded: null,
     splitId: null,
     settlesEntryId: null,
     difference: null,
