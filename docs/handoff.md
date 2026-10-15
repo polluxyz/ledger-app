@@ -6,24 +6,27 @@
 
 ---
 
-## 最新交接（2026-10-14，3g 已合併並部署；等開發者操作回饋）
+## 最新交接（2026-10-15，3h 已合併並部署；等開發者操作回饋）
 
 ### 現況
 
-- 3g（借還頁列內展開與四個子分頁）已合併（#115，squash `69a9077`）。驗證數字與 plan 的偏離記在 `tasks/phase-3g-plan.md` §6。
-- 已部署到 dev：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3g_20261013_2042.dump`，migration `20261013110026_debt_entry_settles_entry` 已套用。`web-redesign` worktree detached 在 `69a9077`，API 已 build。
-- 3g 的 worktree、分支、測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_78a4a8ab6c17` 沒有進行中的任務；新 session 用 `run-use` 重新綁定。
-- a@a.com 另有 3 個測試用對象。往來紀錄都是「不記入帳本」，所以不屬於任何帳本，也不動帳戶：
-  - 明哥：借出、還款、再借出，餘額 500。
-  - 房東：借出 93、還 90 以此結清（綁定的差額），餘額 0。測歷史的修改與撤銷。
-  - 阿德：每天借出 10，共 25 筆，餘額 250。測「載入更多」。
+- 3h（每一筆帳都要對到帳戶）已合併（#123，squash `aa370ab`）。spec `docs/specs/phase-3h-every-entry-has-account.md`，驗證數字與 plan 的偏離記在 `tasks/phase-3h-plan.md` §6。
+- 已部署到 dev（2026-10-15）：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3h_20261015_0852.dump`，migration `20261014150000_every_entry_has_account`、`20261014160000_forgiveness_has_transaction` 已套用。`web-redesign` worktree detached 在 `aa370ab`，API 已 build。
+  - 部署前刪掉測試資料：對象明哥、房東、阿德（用 API）；帳本 `ttt`、`家用（不連動測試）`（API 刪不掉——一本已封存、一本有別人的交易——開發者同意後用 SQL 刪）。
+  - 套用後比對：33 個一般帳戶餘額、往來餘額都不變；花蓮三日小明（b@b.com）付的 3 筆進了他的臨時帳戶（−1,850）；對象「t」的舊差額轉成分支（收回 101、少收 1）。
+- a@a.com 的測試情境（spec §1，現金、`test 的帳本`）：
+  - 房東：3/2 借出 93、3/6 還 90 以此結清 → 分支少收 3。
+  - 阿德：3/3 借出 100、3/7 還 105 以此結清 → 分支多收 5。
+  - 明哥：3/10 借出 500、免除 → 呆帳 500。
+  - 花蓮三日：小華（c@c.com）替我記的晚餐 600 → 我的臨時帳戶 −600。
+- 3h 的 worktree、分支、10 個測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_00e6b996bab7` 沒有進行中的任務。
 - `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env(.test)` 指向已刪除的資料庫，要跑 API 前先改。
-- 額度（2026-10-14）：Codex 已恢復，照 `docs/orca-multi-agent.md` §0 角色表派工（Codex → GLM → Gemini）。10-13 的「先 GLM、再 Haiku」臨時規則作廢。Orca 管理的 Codex 帳號實測 `gpt-6-sol` 與 `gpt-6-luna` 都能用；系統預設的 `~/.codex` 是免費帳號，不能拿來測（§5 Codex）。
+- 模型：`backend` 角色 2026-10-14 起用 `gpt-6.1-sol` high（#122），`default` 照舊 `gpt-6-luna` max。手動測 Codex 要把 `CODEX_HOME` 指向 Orca 的帳號目錄（`docs/orca-multi-agent.md` §5）。
 
 ### 下一步
 
-1. 等開發者操作 3g 後的回饋，依回饋開修訂（先改 spec 再改程式）。
-2. 2026-10-14 加了兩件開發者同意的小改動：shared 重新 build 後自動更新預先打包（#117）、錯誤邊界（畫面出錯時顯示錯誤頁而不是黑畫面）。部署到 dev 後請他重開 Vite。
+1. 等開發者操作 3h 後的回饋，依回饋開修訂（先改 spec 再改程式）。
+2. 已知小缺口（plan §6 第 15 項）：免除的帳本沒有「最近一次」時是空的，要使用者自己選；交易表單有補「第一個帳戶」，免除沒有比照。
 
 ### 開發者的偏好（不在 spec 裡的）
 
@@ -48,3 +51,5 @@
   3. schema 有變：先 `pg_dump` 備份 `ledger_dev`，在 `apps/api` 手動跑 `prisma generate`（`pnpm install --frozen-lockfile` 不一定會重跑），再跑 `prisma migrate deploy`。
   4. `apps/api` 跑 `pnpm build`，然後請他重開 API 與 Vite。
 - 測試帳號（dev 資料庫，密碼都是 `12345678`）：a@a.com（test）、b@b.com（小明）、c@c.com（小華）、d@d.com（小美，已離開花蓮三日）。
+- 要建測試資料時，開發者的 3000 若沒在跑，就暫時用 `PORT=3200 node dist/main` 起一個，用完關掉。登入端點有限流，同一個帳號只登入一次。
+- 用 `psql` 查含中文的資料：把 SQL 寫成 UTF-8 檔、加 `PGCLIENTENCODING=UTF8` 再用 `-f` 跑，直接在指令列打中文會遇到編碼錯誤。
