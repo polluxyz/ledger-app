@@ -1134,7 +1134,11 @@ export class TransactionsService {
     if (input.accountId !== undefined || input.categoryId != null) {
       const existing = await client.transaction.findUniqueOrThrow({ where: { id: transactionId } });
       if (input.accountId !== undefined) {
-        await assertSelectableAccount(client, callerUserId ?? existing.creatorId, input.accountId);
+        // 帳戶一定要以呼叫者的身分檢查，不拿交易的建立者代替：漏傳就是程式錯誤，寧可失敗。
+        if (callerUserId === undefined) {
+          throw new Error('updateDebtTransaction needs callerUserId to change the account.');
+        }
+        await assertSelectableAccount(client, callerUserId, input.accountId);
       }
       if (input.categoryId != null) {
         await this.assertDebtCategory(client, existing.ledgerId, existing.type, input.categoryId);
