@@ -154,3 +154,11 @@ spec：`docs/specs/phase-3h-every-entry-has-account.md`（決策 159～175、W17
 17. **2026-10-14 深夜暫停**：開發者要睡覺並關機。H0～H7 完成；H8（Web e2e）、H9（PR）、H10（部署）待續。main 上 3g 的 Web e2e `debts-inline.spec.ts`「個人主線」在 PR #122 的 CI 偶發失敗一次（撤銷後餘額還沒刷新就斷言），H8 改寫時一併處理等待條件。
 18. **H8 結果**（2026-10-15）：Web e2e 型別錯誤清零，既有測試改成 3h 流程（沒有 skip；`ledgers.spec.ts` 情境 1、2 原本測不計入餘額帳本，改寫成 3h 對應情境，總數不變），新增 `every-entry-account.spec.ts` 兩條主線；`debts-inline` 個人主線改用會重試的斷言。worker 連續兩次 57/57 全綠。
 19. **spec §8 的文件影響**：2c 檔頭註明 `tracksBalance` 由 3h 取代；3b 決策 38、39，3e 決策 123、124、126，3g 決策 156～158 標「由 3h 取代」；`CLAUDE.md` §6 加「每一筆交易都要有帳戶」。`docs/README.md` 的 3h 狀態與 `CLAUDE.md` §4 留到部署後的收尾 PR 改（同 3g 的做法）。
+20. **合併**（2026-10-15）：PR #123 CI 全綠後 squash 合併（`aa370ab`）。合併前協調者在整合分支自己跑：lint、typecheck、build、format:check 全綠；單元測試 shared 113、API 441、Web 763；API e2e 34 檔 282 條；Web e2e 57 條。
+21. **部署到 dev**（2026-10-15，開發者同意）：
+    - 備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3h_20261015_0852.dump`。
+    - 刪測試資料：明哥、房東、阿德用 API 撤銷並刪除。`ttt`（已封存，沒有解除封存的端點）與 `家用（不連動測試）`（有 b@b.com 的交易，規則上只能封存）API 刪不掉；開發者同意後用 SQL 在一個資料庫交易裡刪：先刪兩本帳本的 4 筆交易（連帶分帳名單，否則 `LedgerShare` 的 RESTRICT 會擋），再刪帳本（連帶 3 個帳本裡的人、24 個分類）。
+    - `web-redesign` 切到 `aa370ab`，`prisma generate`、`migrate deploy`、API build。
+    - 比對：33 個一般帳戶餘額、往來餘額都不變；被搬到臨時帳戶的正好是預期的 3 筆（花蓮三日小明付的 1,500、150 與結清的 200，合計 −1,850）；對象「t」的舊差額轉成分支（收回 101、少收 1、實收 100）。
+    - 用新版 API 重建 spec §1 的情境（房東少收 3、阿德多收 5、明哥呆帳 500、小華替我記的晚餐 600 進臨時帳戶）。
+    - 10 個 `ledger_eea_*_test` 經開發者同意刪除，只剩 `ledger_dev`、`ledger_test`。
