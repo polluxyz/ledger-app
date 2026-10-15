@@ -18,7 +18,7 @@ plan：`tasks/phase-3h-plan.md`；spec：`docs/specs/phase-3h-every-entry-has-ac
       驗收：元件測試涵蓋借還表單沒有「不記入帳本」且帶入預設、免除先選帳本、分支畫在還款下面且沒有「⋯」、呆帳的名稱、交易列顯示「臨時帳戶」；Web 檢查全綠。
 - [x] **H7 API e2e**（依賴 H1～H4；`eea-api-e2e`）：plan §1.4 G7。
       驗收：`every-entry-account.e2e-spec.ts` 走完 SC-H1～H10、SC-H14；既有 API e2e 全綠。
-- [ ] **H8 Web e2e**（依賴 H1～H6；`eea-web-e2e`）：plan §1.4 G8。
+- [x] **H8 Web e2e**（依賴 H1～H6；`eea-web-e2e`）：plan §1.4 G8。
       驗收：兩套 Web e2e 全綠，含 spec §6 的兩條主線。
 - [ ] **H9 整體驗收與 PR**（協調者）：plan §4。
       驗收：隔離測試由紅轉綠；`tracksBalance` grep 無結果；migration 前後比對自己重跑一致；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §8 的文件影響都改了；PR 依模板填寫、CI 全綠、squash merge。

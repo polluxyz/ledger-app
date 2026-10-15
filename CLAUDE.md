@@ -141,6 +141,7 @@ Specify --> Plan --> Tasks --> Implement
 - 使用者與帳本多對多，透過成員關聯表並帶**角色**（owner / editor / viewer）。
 - **金額不可使用浮點數。** 用整數（最小貨幣單位）或 Prisma `Decimal`。
 - **帳戶屬於使用者，不屬於帳本**；餘額由交易即時算出，不存欄位。
+- **每一筆交易都要有帳戶**（3h）：付款人是別的成員時記到他的臨時帳戶。例外只有錢不經過我的帳戶、對應的是欠款的情況，見 `docs/specs/phase-3h-every-entry-has-account.md` 決策 159～162。
 - 重要資料表保留 `createdAt` / `updatedAt`；交易採軟刪除（`deletedAt`）以利稽核與未來同步。
 
 ---
