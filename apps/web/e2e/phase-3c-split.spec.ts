@@ -80,7 +80,8 @@ test('SC-W80：甲記晚餐分帳，乙接受並在自己的帳本記下一份',
   await expect(proposal.getByLabel('名稱')).toHaveValue('晚餐');
   await expect(proposal.getByLabel('分類')).toBeVisible();
   await expect(proposal.getByLabel('帳戶')).toHaveCount(0);
-  await proposal.getByLabel('記在哪本帳本').selectOption(bPersonal.id);
+  // 3i 決策 182：接受連動記在目前選的帳本（乙登入後就是他的個人帳本），沒有帳本欄位。
+  await expect(proposal.getByLabel('記在哪本帳本')).toHaveCount(0);
   // 待確認卡片的分類仍是原生下拉（3d 只把記帳表單換成圖示選單）。
   await proposal.getByLabel('分類').selectOption(bCategory.id);
   await proposal.getByRole('button', { name: '接受' }).click();
