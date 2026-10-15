@@ -9,12 +9,12 @@
 | 角色         | 什麼時候用                                                      | 啟動方式                                                                                                           |
 | ------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `default`    | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"` |
-| `backend`    | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6-sol --effort high`                                                              |
+| `backend`    | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6.1-sol --effort high`                                                            |
 | `fallback-1` | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
 | `fallback-2` | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
 | `fallback-3` | 前三層都不能用                                                  | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                     |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，`gpt-6-sol` 用 high（2026-10-03），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
 
 兩種啟動方式：
 
