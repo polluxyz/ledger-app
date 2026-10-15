@@ -29,8 +29,10 @@ import {
   resolveRepayment,
   toCounterparty,
   toDebtEntry,
+  DEBT_ENTRY_INCLUDE,
 } from './debt-entry-rules';
 import { linkInfoFor } from './counterparty-links';
+import { assertLedgerWritable } from './debt-ledger-access';
 import type { RecordedDebtEntryKind } from './debt-entry-rules';
 import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
 
@@ -92,6 +94,7 @@ export class DebtEntriesService {
           note: input.note ?? null,
           transactionId,
         },
+        include: DEBT_ENTRY_INCLUDE,
       });
       if (input.settle === true) {
         await writeDifference(tx, this.transactions, entry, input.amount);
@@ -133,12 +136,12 @@ export class DebtEntriesService {
   }
 
   /**
-   * 改金額、日期、備註（決策 41）。對應的交易一起改，否則帳戶餘額與往來餘額會對不起來。
+   * 改金額、日期、備註與交易的名稱、帳戶、分類（3i 決策 176）。交易與往來紀錄一起改。
    * 調整紀錄是系統算出來的，不能改（決策 40）；要調整就刪掉重記。
    *
    * 有分支的還款改實收時，只重算分支，讓餘額仍然歸零（3h 決策 172）；改成超過原本
    * 欠款也可以（差額方向反過來），不做超額檢查。已配對或還在等對方確認的紀錄，改金額或日期
-   * 會送變更給對方（決策 67）；只改備註不送，備註各記各的。先鎖對象：與對方同時接受提議時，
+   * 會送變更給對方（決策 67）；只改名稱、帳戶、分類、備註不送（3i 決策 180）。先鎖對象：
    * 兩邊對配對狀態的讀寫要排隊。
    */
   update(userId: string, entryId: string, input: UpdateDebtEntryRequest): Promise<DebtEntry> {
@@ -159,6 +162,22 @@ export class DebtEntriesService {
         );
       }
 
+      const changesRecording =
+        input.title !== undefined ||
+        input.accountId !== undefined ||
+        input.categoryId !== undefined;
+      if (changesRecording && existing.transactionId === null) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.DEBT_ENTRY_NOT_EDITABLE,
+          'This legacy entry has no transaction to edit.',
+        );
+      }
+      if (changesRecording && existing.transaction !== null) {
+        // 3i 新欄位寫入交易，須仍有帳本寫入權；既有金額、日期、備註流程維持原規則。
+        await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
+      }
+
       // 正負號沿用原本那一筆（由種類決定，不會因為改金額而翻轉）。
       const proposedDelta =
         input.amount === undefined ? undefined : Math.sign(existing.delta) * input.amount;
@@ -177,6 +196,24 @@ export class DebtEntriesService {
       }
       const delta = branchHandled ? undefined : proposedDelta;
 
+      if (
+        existing.transactionId !== null &&
+        (input.amount !== undefined || date !== undefined || changesRecording)
+      ) {
+        await this.transactions.updateDebtTransaction(
+          tx,
+          existing.transactionId,
+          {
+            ...(delta !== undefined ? { amount: input.amount } : {}),
+            ...(date !== undefined ? { date } : {}),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+            ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+          },
+          userId,
+        );
+      }
+
       const updated = await tx.debtEntry.update({
         where: { id: existing.id },
         data: {
@@ -184,14 +221,8 @@ export class DebtEntriesService {
           ...(date !== undefined ? { date } : {}),
           ...(input.note !== undefined ? { note: input.note } : {}),
         },
+        include: DEBT_ENTRY_INCLUDE,
       });
-
-      if (existing.transactionId !== null && (input.amount !== undefined || date !== undefined)) {
-        await this.transactions.updateDebtTransaction(tx, existing.transactionId, {
-          ...(delta !== undefined ? { amount: input.amount } : {}),
-          ...(date !== undefined ? { date } : {}),
-        });
-      }
 
       const difference = await this.differenceOf(tx, updated.transactionId);
       const amountChanged =
@@ -290,6 +321,8 @@ export class DebtEntriesService {
       kind,
       amount,
       date,
+      title: input.title,
+      categoryId: input.categoryId,
     });
   }
 
@@ -326,9 +359,6 @@ function assertEntryShape(input: CreateDebtEntryDto): void {
   if (input.record === undefined || input.record === null) {
     throw badRequest('record is required.');
   }
-
-  if (input.categoryId !== undefined)
-    throw badRequest('categoryId is only valid for split entries.');
 
   if (
     input.settle !== undefined &&

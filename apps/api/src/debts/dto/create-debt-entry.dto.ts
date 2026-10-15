@@ -42,8 +42,8 @@ export class DebtEntryCounterpartyDto {
 /**
  * `POST /debt-entries` 的 body。
  *
- * 種類與其他欄位的組合規則（`record` 能不能是 null、`categoryId` 與 `settle` 能不能帶）
- * 要看 `kind`，由 service 的 `assertEntryShape` 集中檢查，這裡只驗格式。
+ * 種類與 `settle` 的組合由 `assertEntryShape` 檢查；分類方向要先解析還款方向，
+ * 交給 `TransactionsService.assertDebtCategory`。這裡只驗格式。
  */
 export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counterparty'> {
   @ApiProperty({ type: DebtEntryCounterpartyDto })
@@ -79,6 +79,12 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
   @MaxLength(500)
   note?: string;
 
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
+
   /**
    * 必填物件（3h 決策 163）：沒有「不記入帳本」。`null` 與省略都過不了 `@IsDefined` 與
    * `@ValidateNested`，回 400。
@@ -91,7 +97,8 @@ export class CreateDebtEntryDto implements Omit<CreateDebtEntryRequest, 'counter
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Required for PAID_FOR_ME; an expense category of the ledger.',
+    description:
+      '選填；同帳本分類。借出、還款用支出分類，借入、收回用收入分類；只是標記，不改變交易型別。',
   })
   @IsOptional()
   @IsUUID()

@@ -638,6 +638,66 @@ describe('TransactionsService', () => {
   });
 
   describe('createDebtTransaction', () => {
+    it.each([
+      ['LEND', 'EXPENSE'],
+      ['REPAY', 'EXPENSE'],
+      ['BORROW', 'INCOME'],
+      ['COLLECT', 'INCOME'],
+    ] as const)('accepts %s with a %s category and keeps its type', async (type, categoryType) => {
+      allowEverything();
+      const client = {
+        account: prisma.account,
+        category: { findFirst: jest.fn().mockResolvedValue({ type: categoryType }) },
+        transaction: { create: jest.fn().mockResolvedValue({ id: 'debt' }) },
+      };
+      await service.createDebtTransaction(client as never, {
+        ledgerId,
+        creatorId,
+        type,
+        amount: 500,
+        date: new Date(),
+        accountId,
+        categoryId: 'category',
+        title: '押金',
+      });
+      expect(client.category.findFirst).toHaveBeenCalledWith({
+        where: { id: 'category', ledgerId },
+      });
+      expect(client.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type,
+            categoryId: 'category',
+            title: '押金',
+            amount: 500,
+          }) as unknown,
+        }),
+      );
+      client.category.findFirst.mockResolvedValue({
+        type: categoryType === 'EXPENSE' ? 'INCOME' : 'EXPENSE',
+      });
+      await expect(
+        service.assertDebtCategory(client as never, ledgerId, type, 'category'),
+      ).rejects.toMatchObject({ status: 400, errorCode: 'CATEGORY_TYPE_MISMATCH' });
+    });
+
+    it('returns 404 for inaccessible or deleted categories before checking kind', async () => {
+      const client = { category: { findFirst: jest.fn().mockResolvedValue(null) } };
+      await expect(
+        service.assertDebtCategory(client as never, ledgerId, 'LEND', 'missing'),
+      ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
+      await expect(
+        service.assertDebtCategory(client as never, ledgerId, 'EXPENSE', 'missing'),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('returns 400 for a kind that cannot select a debt category', async () => {
+      const client = { category: { findFirst: jest.fn().mockResolvedValue({ type: 'EXPENSE' }) } };
+      await expect(
+        service.assertDebtCategory(client as never, ledgerId, 'EXPENSE', 'category'),
+      ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
+    });
+
     it('writes a debt transaction with no category, using the account rules', async () => {
       prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
       prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: false });
@@ -701,6 +761,70 @@ describe('TransactionsService', () => {
         }),
       ).rejects.toMatchObject({ errorCode: 'NOT_FOUND' });
       expect(client.transaction.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateDebtTransaction', () => {
+    function client() {
+      return {
+        account: {
+          findUnique: jest.fn().mockResolvedValue({ userId: creatorId, isTemporary: false }),
+        },
+        category: { findFirst: jest.fn().mockResolvedValue({ type: 'INCOME' }) },
+        transaction: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ ledgerId, creatorId, type: 'COLLECT' }),
+          update: jest.fn(),
+          updateMany: jest.fn(),
+        },
+      };
+    }
+
+    it('updates the repayment and all active difference branches on the same client', async () => {
+      const tx = client();
+      await service.updateDebtTransaction(
+        tx as never,
+        'repayment',
+        { accountId: 'bank', categoryId: 'income', title: '房租' },
+        creatorId,
+      );
+      expect(tx.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'repayment' },
+        data: { accountId: 'bank', categoryId: 'income', title: '房租' },
+      });
+      expect(tx.transaction.updateMany).toHaveBeenCalledWith({
+        where: { differenceOfId: 'repayment', deletedAt: null },
+        data: { accountId: 'bank' },
+      });
+    });
+
+    it.each([
+      [{ userId: otherUserId, isTemporary: false }, 404, 'NOT_FOUND'],
+      [{ userId: creatorId, isTemporary: true }, 400, 'TEMPORARY_ACCOUNT_NOT_SELECTABLE'],
+    ] as const)(
+      'does not update repayment or branch for an invalid account %j',
+      async (account, status, errorCode) => {
+        const tx = client();
+        tx.account.findUnique.mockResolvedValue(account);
+        await expect(
+          service.updateDebtTransaction(tx as never, 'repayment', { accountId: 'bad' }, creatorId),
+        ).rejects.toMatchObject({ status, errorCode });
+        expect(tx.transaction.update).not.toHaveBeenCalled();
+        expect(tx.transaction.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('clears title and category without assigning a type or changing branches', async () => {
+      const tx = client();
+      await service.updateDebtTransaction(tx as never, 'repayment', {
+        title: null,
+        categoryId: null,
+      });
+      expect(tx.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'repayment' },
+        data: { title: null, categoryId: null },
+      });
+      expect(tx.category.findFirst).not.toHaveBeenCalled();
+      expect(tx.transaction.updateMany).not.toHaveBeenCalled();
     });
   });
 });
