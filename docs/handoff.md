@@ -6,27 +6,29 @@
 
 ---
 
-## 最新交接（2026-10-15，3h 已合併並部署；等開發者操作回饋）
+## 最新交接（2026-10-16，3i 已合併並部署；等開發者操作回饋）
 
 ### 現況
 
-- 3h（每一筆帳都要對到帳戶）已合併（#123，squash `aa370ab`）。spec `docs/specs/phase-3h-every-entry-has-account.md`，驗證數字與 plan 的偏離記在 `tasks/phase-3h-plan.md` §6。
-- 已部署到 dev（2026-10-15）：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3h_20261015_0852.dump`，migration `20261014150000_every_entry_has_account`、`20261014160000_forgiveness_has_transaction` 已套用。`web-redesign` worktree detached 在 `aa370ab`，API 已 build。
-  - 部署前刪掉測試資料：對象明哥、房東、阿德（用 API）；帳本 `ttt`、`家用（不連動測試）`（API 刪不掉——一本已封存、一本有別人的交易——開發者同意後用 SQL 刪）。
-  - 套用後比對：33 個一般帳戶餘額、往來餘額都不變；花蓮三日小明（b@b.com）付的 3 筆進了他的臨時帳戶（−1,850）；對象「t」的舊差額轉成分支（收回 101、少收 1）。
-- a@a.com 的測試情境（spec §1，現金、`test 的帳本`）：
+- 3i（借還紀錄可改名稱、帳戶、分類）已合併（spec #127、實作 #128，squash `0846188`）。spec `docs/specs/phase-3i-debt-entry-edit.md`，驗證數字與偏離記在 `tasks/phase-3i-plan.md` §6。
+  - 記借還、免除剩餘、接受連動都不再選帳本，記在目前選的帳本（決策 182）。
+  - 交易明細的還款分支收進 › 展開的細項（欠款、少收兩行，W181）。
+- 已部署到 dev（2026-10-16）：沒有 migration，`web-redesign` worktree detached 在 `0846188`，shared 與 API 已 build。部署後用暫時的 3200 埠把 a@a.com 房東那筆換到 test1 再換回現金，兩個帳戶餘額都回到原值。**要請開發者重開 API 與 Vite、按 `Ctrl + Shift + R`。**
+- 3i 的 worktree、分支、測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_3c25c6818af9` 沒有進行中的任務。
+- `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env` 與 `.env.test` 指向 `ledger_test`。
+- 3h 部署紀錄（2026-10-15）：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3h_20261015_0852.dump`，細節見 `tasks/phase-3h-plan.md` §6。
+- a@a.com 的測試情境（3h spec §1，現金、`test 的帳本`）：
   - 房東：3/2 借出 93、3/6 還 90 以此結清 → 分支少收 3。
   - 阿德：3/3 借出 100、3/7 還 105 以此結清 → 分支多收 5。
   - 明哥：3/10 借出 500、免除 → 呆帳 500。
   - 花蓮三日：小華（c@c.com）替我記的晚餐 600 → 我的臨時帳戶 −600。
-- 3h 的 worktree、分支、10 個測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_00e6b996bab7` 沒有進行中的任務。
-- `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env(.test)` 指向已刪除的資料庫，要跑 API 前先改。
 - 模型：`backend` 角色 2026-10-14 起用 `gpt-6.1-sol` high（#122），`default` 照舊 `gpt-6-luna` max。手動測 Codex 要把 `CODEX_HOME` 指向 Orca 的帳號目錄（`docs/orca-multi-agent.md` §5）。
 
 ### 下一步
 
-1. 等開發者操作 3h 後的回饋，依回饋開修訂（先改 spec 再改程式）。
-2. 已知小缺口（plan §6 第 15 項）：免除的帳本沒有「最近一次」時是空的，要使用者自己選；交易表單有補「第一個帳戶」，免除沒有比照。
+1. 等開發者操作 3i 後的回饋，依回饋開修訂（先改 spec 再改程式）。
+2. **待開發者決定**：往來紀錄只改金額、日期、備註，或撤銷時，不檢查帳本寫入權（被降為檢視者或帳本封存後仍能改）。3i 只替新欄位加了檢查（`tasks/phase-3i-plan.md` §6）。
+3. 借還頁的往來紀錄列還沒顯示名稱與分類（3i 範圍外）；共享帳本的其他成員看別人的借出有分類時，第一行會是分類名稱（看不到對象，W179 只對自己的紀錄生效）。
 
 ### 開發者的偏好（不在 spec 裡的）
 
@@ -34,7 +36,9 @@
 - **介面文字極簡，能用符號就不用文字**，同一種意思全站用同一種表示法（「使用者習慣後就都會很便利」）。
 - 版面先做出來給他操作再調整，不急著開 PR（2026-10-07 起的 3g 原型）。他會逐點改細節。
 - 要保留轉圜的餘地：已還清的紀錄也能修改、撤銷。
-- 「以此結清」的差額照實際收付：帳戶只記實際收到的錢，差額不產生交易，留到統計時計入；多收、少收都允許（2026-10-13 確認）。
+- 「以此結清」照實際收付：帳戶只記實際收到的錢，差額是還款底下同帳戶的分支交易（3h）；多收、少收都允許。
+- 編輯要有意義：借還能直接改名稱、帳戶、分類，不要逼使用者撤銷重記（2026-10-15）。
+- 介面設計先給預覽頁看（`docs/artifacts/`），他會直接指出要改的樣式。
 - 動畫只看站內的 `--motion-*` token，不看作業系統的 `prefers-reduced-motion`。
 - 前端改動切到 dev 後，提醒他按 `Ctrl + Shift + R`（曾因 Vite 舊快取出現黑畫面）。
 - **多用 worker**；做完的 worker 驗收後立刻清 worktree、分支、終端機。

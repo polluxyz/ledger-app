@@ -57,7 +57,7 @@
 | [`phase-3f-unified-debts.md`](specs/phase-3f-unified-debts.md)                     | 階段三：3f 共享帳本的人併入對象頁與借還   | 已完成    |
 | [`phase-3g-debts-inline.md`](specs/phase-3g-debts-inline.md)                       | 階段三：3g 借還頁列內展開與四個子分頁     | 已完成    |
 | [`phase-3h-every-entry-has-account.md`](specs/phase-3h-every-entry-has-account.md) | 階段三：3h 每一筆帳都要對到帳戶           | 已完成    |
-| [`phase-3i-debt-entry-edit.md`](specs/phase-3i-debt-entry-edit.md)                 | 階段三：3i 借還紀錄可改名稱、帳戶、分類   | 進行中    |
+| [`phase-3i-debt-entry-edit.md`](specs/phase-3i-debt-entry-edit.md)                 | 階段三：3i 借還紀錄可改名稱、帳戶、分類   | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                          | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
