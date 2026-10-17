@@ -233,8 +233,14 @@ describe('Ledger removal', () => {
       entry('lend'),
       { ...entry('settlement', -100), settlesEntryId: 'repayment' },
       { ...entry('split', 50), splitId: 'split' },
+      // 借了又還清：前後都是兩清，預覽不列。
+      { ...entry('settled-lend', 300), counterpartyId: 'settled' },
+      { ...entry('settled-repay', -300), counterpartyId: 'settled' },
     ]);
-    tx.counterparty.findMany.mockResolvedValue([{ id: 'person', name: 'Bob' }]);
+    tx.counterparty.findMany.mockResolvedValue([
+      { id: 'person', name: 'Bob' },
+      { id: 'settled', name: '阿德' },
+    ]);
     tx.debtEntry.groupBy.mockResolvedValue([{ counterpartyId: 'person', _sum: { delta: 600 } }]);
     const preview = await service.removalPreview('ledger', 'me');
     expect(preview.accounts).toEqual([
@@ -254,7 +260,7 @@ describe('Ledger removal', () => {
     const [scopedQuery] = tx.transaction.groupBy.mock.calls[2] as [{ where: unknown }];
     expect(scopedQuery.where).toMatchObject({ ledgerId: 'ledger', deletedAt: null });
     expect(tx.counterparty.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { ownerId: 'me', id: { in: ['person'] } } }),
+      expect.objectContaining({ where: { ownerId: 'me', id: { in: ['person', 'settled'] } } }),
     );
   });
 

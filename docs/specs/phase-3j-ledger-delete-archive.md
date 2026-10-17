@@ -101,7 +101,7 @@ interface LedgerRemovalPreview {
     linked: boolean; // 連動中：撤銷會送給對方確認
     balance: Cents;
     balanceAfter: Cents;
-  }>; // 只列我在這本帳本有借還的對象
+  }>; // 只列刪除後餘額會變的對象（借了又還清的不列，開發者 2026-10-17）
   withdrawsDebts: boolean; // 刪除時會撤銷借還（決策 186）
   delete: {
     allowed: boolean;
