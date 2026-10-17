@@ -46,6 +46,7 @@ import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
  *   進去，讓「檢查失敗」與「什麼都沒寫」是同一件事——連新建的對象也不會留下（SC-L11）。
  * - **`delta` 的正負號只由種類決定**（`deltaFor`），呼叫者只給正的金額。資料庫另有 CHECK。
  * - **讀一律走 `loadOwnedCounterparty` / `loadOwnedEntry`**，不是自己的一律 404。
+ * 有交易的紀錄在修改或撤銷前，也須確認該交易所在帳本可寫，避免借還端點繞過唯讀限制（3j 決策 183）。
  *
  * 連動（spec 3b-2）只在這裡加一個動作：寫入之後呼叫 `propose*`，在同一個資料庫交易裡
  * 送提議給對方。對象沒有連動時那些函式什麼都不做。
@@ -139,6 +140,7 @@ export class DebtEntriesService {
   /**
    * 改金額、日期、備註與交易的名稱、帳戶、分類（3i 決策 176）。交易與往來紀錄一起改。
    * 調整紀錄是系統算出來的，不能改（決策 40）；要調整就刪掉重記。
+   * 有交易時所有欄位都先驗帳本寫入權，備註也不能繞過唯讀限制；沒有交易的舊紀錄維持原規則。
    *
    * 有分支的還款改實收時，只重算分支，讓餘額仍然歸零（3h 決策 172）；改成超過原本
    * 欠款也可以（差額方向反過來），不做超額檢查。已配對或還在等對方確認的紀錄，改金額或日期
@@ -183,8 +185,8 @@ export class DebtEntriesService {
           'This legacy entry has no transaction to edit.',
         );
       }
-      if (changesRecording && existing.transaction !== null) {
-        // 3i 新欄位寫入交易，須仍有帳本寫入權；既有金額、日期、備註流程維持原規則。
+      if (existing.transaction !== null) {
+        // 包含只改備註；先檢查再重算分支，權限失敗時不能留下任何寫入（3j 決策 183）。
         await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
       }
 
@@ -265,10 +267,14 @@ export class DebtEntriesService {
    * 撤銷（3g 決策 156）；綁定的差額不能單獨撤銷（決策 157），要撤就撤那筆還款。已配對的
    * 紀錄同時送刪除給對方（只送還款那筆——分支本來就不配對）；還在等對方確認的新增直接作廢
    * （決策 67）。
+   * 有交易就先驗其帳本寫入權，讓還款與分支的連帶撤銷也受同一個唯讀限制（3j 決策 183）。
    */
   remove(userId: string, entryId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await loadOwnedEntry(tx, userId, entryId);
+      if (existing.transaction !== null) {
+        await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
+      }
       if (existing.splitId != null)
         throw new AppException(
           HttpStatus.CONFLICT,

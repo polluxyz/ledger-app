@@ -55,6 +55,7 @@ const RECORDABLE_KINDS = new Set([
  * 2. 寫入時的帳本、帳戶檢查一律以**接受者**的身分做，與他自己記帳完全相同。
  * 3. 以接受者**自己的餘額**檢查還款與結清（決策 65）：雙方餘額可能不同（連動前的紀錄不同步），
  *    不能拿發起者的數字寫進接受者的帳。
+ * 接受修改或撤銷也要驗目標交易所在帳本的寫入權；拒絕不動帳本，所以不受唯讀限制（3j 決策 183）。
  *
  * 狀態轉換用條件式更新（`status: 'PENDING'` 當條件），並且放在同一個資料庫交易的最前面：
  * 兩次接受同時送達時只有一次拿得到 `count = 1`；之後任何一步失敗，整筆回滾，提議回到
@@ -162,7 +163,7 @@ export class DebtProposalsService {
     });
   }
 
-  /** 拒絕。對方那筆保留，標示「對方未接受」（決策 66）；系統不重送。 */
+  /** 拒絕不動自己的帳本，不檢查帳本寫入權；對方那筆保留，系統不重送（決策 66、183）。 */
   async decline(userId: string, proposalId: string): Promise<DebtProposal> {
     const row = await this.loadForAction(userId, proposalId);
     return this.prisma.$transaction(async (tx) => {
@@ -328,6 +329,7 @@ export class DebtProposalsService {
    * 接受「改金額或日期」：把接受者那筆改成提議的值，交易一起改。那筆已經被接受者自己刪掉、
    * 或不再在這個連動的對象底下，就照樣接受、什麼都不改（§3.3）。目標是還款且對方那邊綁定
    * 差額時，重算自己這邊的差額，讓結清後的餘額仍然歸零（3g 決策 158）。
+   * 先驗目標交易所在帳本的寫入權，再重算分支；失敗時連提議狀態一起回滾（3j 決策 183）。
    */
   private async acceptAmend(
     tx: Prisma.TransactionClient,
@@ -337,6 +339,9 @@ export class DebtProposalsService {
     const target = await this.loadTarget(tx, row, counterpartyId);
     if (target === null) {
       return;
+    }
+    if (target.transaction !== null) {
+      await assertLedgerWritable(tx, row.toUserId, target.transaction.ledgerId);
     }
     // 重算差額要在還款那筆改之前做：它需要「改之前的 delta」當基準。沒綁定差額時是 no-op。
     const branchHandled = await recalculateSettlement(tx, target, row.amount, row.date);
@@ -356,6 +361,7 @@ export class DebtProposalsService {
   /**
    * 接受「刪除」：軟刪除接受者那筆與它的交易。對方撤銷的是還款且自己這邊綁定差額時，差額
    * 在同一個時間戳一起撤銷（3g 決策 156）。配對在發起者刪除時就已清空。
+   * 有交易時先驗接受者對該帳本的寫入權，避免連帶撤銷分支後才發現帳本唯讀（3j 決策 183）。
    */
   private async acceptDelete(
     tx: Prisma.TransactionClient,
@@ -367,6 +373,9 @@ export class DebtProposalsService {
     if (target === null) {
       return;
     }
+    if (target.transaction !== null) {
+      await assertLedgerWritable(tx, row.toUserId, target.transaction.ledgerId);
+    }
     await voidRepaymentWithSettlement(tx, this.transactions, target, deletedAt);
   }
 
@@ -377,6 +386,7 @@ export class DebtProposalsService {
     }
     return tx.debtEntry.findFirst({
       where: { id: row.targetEntryId, counterpartyId, deletedAt: null },
+      include: { transaction: { select: { ledgerId: true } } },
     });
   }
 
