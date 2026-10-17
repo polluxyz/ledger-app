@@ -203,8 +203,8 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await page.goto(`/ledgers/${ledger.id}`);
   await page.getByRole('button', { name: '封存帳本' }).click();
 
-  const dialog = page.getByRole('dialog', { name: '封存帳本' });
-  await dialog.getByLabel(`請輸入「${TRIP_LEDGER_NAME}」以確認`).fill(TRIP_LEDGER_NAME);
+  const dialog = page.getByRole('dialog', { name: `封存「${TRIP_LEDGER_NAME}」` });
+  await expect(dialog.getByLabel('請輸入')).toHaveCount(0);
   await dialog.getByRole('button', { name: '封存', exact: true }).click();
 
   // SC-17：封存的帳本不再出現在切換器——切過去只會讓每一次記帳都是 409。
@@ -222,7 +222,7 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await expect(row).toContainText('已封存');
 });
 
-test('情境 6：刪除帳本要打對名稱，而且有別人的交易時會被擋下', async ({
+test('情境 6：有別人的交易時刪除對話框只提供封存', async ({
   signedInPage: page,
   userA,
   userB,
@@ -251,19 +251,11 @@ test('情境 6：刪除帳本要打對名稱，而且有別人的交易時會被
   await page.goto(`/ledgers/${ledger.id}`);
   await page.getByRole('button', { name: '刪除帳本' }).click();
 
-  const dialog = page.getByRole('dialog', { name: '刪除帳本' });
-  const confirmButton = dialog.getByRole('button', { name: '刪除', exact: true });
-  const confirmField = dialog.getByLabel(`請輸入「${TRIP_LEDGER_NAME}」以確認`);
-
-  // 第一道關卡：名稱打錯就按不下去。
-  await confirmField.fill('出遊分帳本');
-  await expect(confirmButton).toBeDisabled();
-
-  // 第二道關卡：名稱打對了，後端仍以 409 擋下，並引導改用封存。
-  await confirmField.fill(TRIP_LEDGER_NAME);
-  await expect(confirmButton).toBeEnabled();
-  await confirmButton.click();
-
-  await expect(dialog.getByText('這本帳本有其他成員記的交易，不能刪除')).toBeVisible();
-  await expect(dialog.getByText('改用「封存帳本」')).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: `刪除「${TRIP_LEDGER_NAME}」` });
+  await expect(dialog.getByText('有其他成員的交易，只能封存', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^(取消|封存)$/ })).toHaveCount(2);
+  await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '封存', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '刪除', exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel('輸入帳本名稱')).toHaveCount(0);
 });
