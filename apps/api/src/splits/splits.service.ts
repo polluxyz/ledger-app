@@ -255,23 +255,28 @@ export class SplitsService {
   }
 
   async remove(userId: string, id: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await lockSplit(tx, id);
-      const row = await this.loadOwned(tx, userId, id);
-      await assertLedgerWritable(tx, userId, row.ledgerId);
-      const entries = row.entries.filter((entry) => entry.deletedAt === null);
-      for (const counterpartyId of [
-        ...new Set(entries.map((entry) => entry.counterpartyId)),
-      ].sort())
-        await lockCounterparty(tx, counterpartyId);
-      const now = new Date();
-      await this.deleteEntries(tx, userId, entries, now, row.title);
-      await tx.transaction.updateMany({
-        where: { splitId: id, deletedAt: null },
-        data: { deletedAt: now },
-      });
-      await tx.split.update({ where: { id }, data: { deletedAt: now } });
+    await this.prisma.$transaction((tx) => this.removeInTransaction(tx, userId, id));
+  }
+
+  /** 供帳本刪除共用，所有撤銷仍使用呼叫端的同一個交易。 */
+  async removeInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    id: string,
+  ): Promise<void> {
+    await lockSplit(tx, id);
+    const row = await this.loadOwned(tx, userId, id);
+    await assertLedgerWritable(tx, userId, row.ledgerId);
+    const entries = row.entries.filter((entry) => entry.deletedAt === null);
+    for (const counterpartyId of [...new Set(entries.map((entry) => entry.counterpartyId))].sort())
+      await lockCounterparty(tx, counterpartyId);
+    const now = new Date();
+    await this.deleteEntries(tx, userId, entries, now, row.title);
+    await tx.transaction.updateMany({
+      where: { splitId: id, deletedAt: null },
+      data: { deletedAt: now },
     });
+    await tx.split.update({ where: { id }, data: { deletedAt: now } });
   }
 
   private shares(input: Omit<Input, 'fromTransactionId'>, allowDissolve: boolean): number[] {

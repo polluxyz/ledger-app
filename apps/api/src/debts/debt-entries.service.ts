@@ -270,29 +270,36 @@ export class DebtEntriesService {
    * 有交易就先驗其帳本寫入權，讓還款與分支的連帶撤銷也受同一個唯讀限制（3j 決策 183）。
    */
   remove(userId: string, entryId: string): Promise<void> {
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await loadOwnedEntry(tx, userId, entryId);
-      if (existing.transaction !== null) {
-        await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
-      }
-      if (existing.splitId != null)
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          ErrorCode.SPLIT_ENTRY_READ_ONLY,
-          'Change this entry through its split.',
-        );
-      await lockCounterparty(tx, existing.counterpartyId);
-      if (existing.kind === 'SETTLEMENT' && existing.settlesEntryId !== null) {
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          ErrorCode.SETTLEMENT_BOUND_TO_REPAYMENT,
-          'This settlement belongs to a repayment; withdraw the repayment instead.',
-        );
-      }
-      const deletedAt = new Date();
-      await voidRepaymentWithSettlement(tx, this.transactions, existing, deletedAt);
-      await proposeDelete(tx, { fromUserId: userId, entry: existing, now: deletedAt });
-    });
+    return this.prisma.$transaction((tx) => this.removeInTransaction(tx, userId, entryId));
+  }
+
+  /** 供帳本刪除共用；呼叫端負責整批撤銷與刪除的原子性。 */
+  async removeInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    entryId: string,
+  ): Promise<void> {
+    const existing = await loadOwnedEntry(tx, userId, entryId);
+    if (existing.transaction !== null) {
+      await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
+    }
+    if (existing.splitId != null)
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.SPLIT_ENTRY_READ_ONLY,
+        'Change this entry through its split.',
+      );
+    await lockCounterparty(tx, existing.counterpartyId);
+    if (existing.kind === 'SETTLEMENT' && existing.settlesEntryId !== null) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.SETTLEMENT_BOUND_TO_REPAYMENT,
+        'This settlement belongs to a repayment; withdraw the repayment instead.',
+      );
+    }
+    const deletedAt = new Date();
+    await voidRepaymentWithSettlement(tx, this.transactions, existing, deletedAt);
+    await proposeDelete(tx, { fromUserId: userId, entry: existing, now: deletedAt });
   }
 
   /**
