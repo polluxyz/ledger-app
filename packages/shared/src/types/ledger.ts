@@ -137,7 +137,7 @@ export type LedgerDeleteBlocker = (typeof LEDGER_DELETE_BLOCKERS)[number];
 export interface LedgerRemovalPreview {
   /** 只列餘額會變的帳戶。 */
   accounts: LedgerRemovalAccountImpact[];
-  /** 只列我在這本帳本有借還（含分帳）的對象。 */
+  /** 只列刪除後餘額會變的對象（我在這本帳本有借還或分帳，且淨影響不是 0）。 */
   counterparties: LedgerRemovalCounterpartyImpact[];
   /**
    * 刪除時會撤銷我在這本帳本的借還與分帳（3j 決策 186，只有私人帳本）。為真時

@@ -317,20 +317,23 @@ export class LedgersService {
         const links = await linkInfoFor(tx, ids);
         return {
           accounts,
-          counterparties: counterparties.map((row) => {
-            const balance = sums.find((sum) => sum.counterpartyId === row.id)?._sum.delta ?? 0;
-            const impact = plan.entries
-              .filter((entry) => entry.counterpartyId === row.id)
-              .reduce((sum, entry) => sum + entry.delta, 0);
-            const link = links.get(row.id);
-            return {
-              counterpartyId: row.id,
-              displayName: row.name ?? link?.userName ?? '',
-              linked: link != null,
-              balance,
-              balanceAfter: balance - impact,
-            };
-          }),
+          // 只列刪除後餘額會變的對象；借了又還清的，前後都是兩清，不必列（開發者 2026-10-17）。
+          counterparties: counterparties
+            .map((row) => {
+              const balance = sums.find((sum) => sum.counterpartyId === row.id)?._sum.delta ?? 0;
+              const impact = plan.entries
+                .filter((entry) => entry.counterpartyId === row.id)
+                .reduce((sum, entry) => sum + entry.delta, 0);
+              const link = links.get(row.id);
+              return {
+                counterpartyId: row.id,
+                displayName: row.name ?? link?.userName ?? '',
+                linked: link != null,
+                balance,
+                balanceAfter: balance - impact,
+              };
+            })
+            .filter((row) => row.balance !== row.balanceAfter),
           withdrawsDebts: plan.withdrawsDebts,
           delete: { allowed: true, blockedBy: null },
         };
