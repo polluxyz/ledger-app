@@ -47,8 +47,10 @@ export const ErrorCode = {
   TRANSFER_SAME_ACCOUNT: 'TRANSFER_SAME_ACCOUNT',
   /** 帳本已封存，僅可讀取，不可再寫入。 */
   LEDGER_ARCHIVED: 'LEDGER_ARCHIVED',
-  /** 帳本內有其他成員記下的交易，因此不可刪除（請改用封存）。 */
+  /** 帳本內有其他成員記下的交易，或記到別人帳戶的交易（3j 決策 187），因此不可刪除（請改用封存）。 */
   LEDGER_HAS_OTHERS_TRANSACTIONS: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
+  /** 取消封存一本沒封存的帳本（3j 決策 184）。409。 */
+  LEDGER_NOT_ARCHIVED: 'LEDGER_NOT_ARCHIVED',
   /** 帳本的「私人 / 共享」建立後不可變更。 */
   LEDGER_KIND_IMMUTABLE: 'LEDGER_KIND_IMMUTABLE',
   /** 私人帳本不得加入成員。想共享請另建一本共享帳本。 */
@@ -82,6 +84,8 @@ export const ErrorCode = {
   DEBT_TRANSACTION_READ_ONLY: 'DEBT_TRANSACTION_READ_ONLY',
   /** 帳本內有往來紀錄產生的交易，不能真刪（請改用封存）。 */
   LEDGER_HAS_DEBT_TRANSACTIONS: 'LEDGER_HAS_DEBT_TRANSACTIONS',
+  /** 刪除私人帳本會撤銷借還或分帳，但沒帶 `withdrawDebts=true`（3j 決策 186）。409。 */
+  DEBT_WITHDRAWAL_REQUIRED: 'DEBT_WITHDRAWAL_REQUIRED',
   /** 這兩位使用者已經連動，或這個對象已經連到別人（3b-2 決策 57）。 */
   ALREADY_LINKED: 'ALREADY_LINKED',
   /** 這個對象正在連動中：不能刪除，也不能再接到另一個人（決策 57、72）。 */

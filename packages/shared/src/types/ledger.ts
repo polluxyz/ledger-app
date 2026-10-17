@@ -1,3 +1,5 @@
+import type { Cents } from '../money';
+
 /**
  * 使用者在某帳本中的角色。與 Prisma 的 `LedgerRole` enum 對應。宣告成 const
  * tuple，好讓這組值也能重用於執行期驗證（例如 class-validator 的 @IsIn）。
@@ -115,4 +117,63 @@ export interface AddMemberByCounterpartyRequest {
 /** PATCH /ledgers/{ledgerId}/members/{userId} 的請求 body：變更成員角色。 */
 export interface UpdateMemberRequest {
   role: LedgerRole;
+}
+
+/** 預覽說不能刪的原因（3j §4.2）。 */
+export const LEDGER_DELETE_BLOCKERS = [
+  'LEDGER_ARCHIVED',
+  'HAS_OTHERS_TRANSACTIONS',
+  'SHARED_HAS_DEBTS',
+] as const;
+export type LedgerDeleteBlocker = (typeof LEDGER_DELETE_BLOCKERS)[number];
+
+/**
+ * GET /ledgers/{ledgerId}/removal-preview 的回應（3j 決策 188）：刪除這本帳本後，
+ * 呼叫者自己的帳戶與往來對象的餘額會變成多少。只有擁有者能查。
+ *
+ * 數字全部由後端算，與實際刪除用同一套規則；前端只排版。只含呼叫者自己的帳戶與對象。
+ * 不能刪時 `accounts`、`counterparties` 是空陣列，畫面只顯示原因。
+ */
+export interface LedgerRemovalPreview {
+  /** 只列餘額會變的帳戶。 */
+  accounts: LedgerRemovalAccountImpact[];
+  /** 只列我在這本帳本有借還（含分帳）的對象。 */
+  counterparties: LedgerRemovalCounterpartyImpact[];
+  /**
+   * 刪除時會撤銷我在這本帳本的借還與分帳（3j 決策 186，只有私人帳本）。為真時
+   * `DELETE /ledgers/{ledgerId}` 要帶 `withdrawDebts=true`，否則回 409 `DEBT_WITHDRAWAL_REQUIRED`。
+   */
+  withdrawsDebts: boolean;
+  delete: {
+    allowed: boolean;
+    /** `allowed` 為真時是 `null`。 */
+    blockedBy: LedgerDeleteBlocker | null;
+  };
+}
+
+export interface LedgerRemovalAccountImpact {
+  accountId: string;
+  name: string;
+  /** 現在的餘額。 */
+  balance: Cents;
+  /** 刪除後的餘額。 */
+  balanceAfter: Cents;
+}
+
+export interface LedgerRemovalCounterpartyImpact {
+  counterpartyId: string;
+  displayName: string;
+  /** 連動中：撤銷會送給對方確認。 */
+  linked: boolean;
+  /** 現在的往來餘額，正數＝對方欠我（同 `Counterparty.balance`）。 */
+  balance: Cents;
+  balanceAfter: Cents;
+}
+
+/** DELETE /ledgers/{ledgerId} 的查詢參數。 */
+export interface DeleteLedgerQuery {
+  /** 必須等於帳本名稱，防手滑。 */
+  confirm: string;
+  /** 同意撤銷我在這本帳本的借還與分帳（3j 決策 186）。 */
+  withdrawDebts?: boolean;
 }
