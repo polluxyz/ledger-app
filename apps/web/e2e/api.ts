@@ -15,6 +15,7 @@ import type {
   FriendRequest,
   LedgerMemberInfo,
   LedgerPerson,
+  LedgerRemovalPreview,
   LinkAccepted,
   LedgerRole,
   LedgerSummary,
@@ -184,6 +185,30 @@ export async function listAccounts(request: APIRequestContext, token: string): P
     headers: authHeaders(token),
   });
   return readJson<Account[]>(response, '列出帳戶');
+}
+
+/** 讀取刪除帳本前由後端計算的餘額預覽。 */
+export async function getLedgerRemovalPreview(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+): Promise<LedgerRemovalPreview> {
+  const response = await request.get(`${API_BASE_URL}/ledgers/${ledgerId}/removal-preview`, {
+    headers: authHeaders(token),
+  });
+  return readJson<LedgerRemovalPreview>(response, '讀取刪除帳本預覽');
+}
+
+/** 讀取單一往來對象，供 e2e 核對刪除帳本後的實際餘額。 */
+export async function getCounterparty(
+  request: APIRequestContext,
+  token: string,
+  counterpartyId: string,
+): Promise<Counterparty> {
+  const response = await request.get(`${API_BASE_URL}/counterparties/${counterpartyId}`, {
+    headers: authHeaders(token),
+  });
+  return readJson<Counterparty>(response, '讀取往來對象');
 }
 
 /** 記一筆交易。欄位的條件必填規則見 `CreateTransactionRequest` 的說明。 */
