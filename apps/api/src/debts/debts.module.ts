@@ -19,5 +19,6 @@ import { DebtProposalsService } from './debt-proposals.service';
   imports: [TransactionsModule, FriendsModule, LedgerGroupsModule],
   controllers: [CounterpartiesController, DebtEntriesController, DebtProposalsController],
   providers: [CounterpartiesService, DebtEntriesService, DebtProposalsService],
+  exports: [DebtEntriesService],
 })
 export class DebtsModule {}

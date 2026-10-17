@@ -22,6 +22,7 @@ import {
  * 2. **交易怎麼產生**：型別由種類決定；`record: null` 在寫入之前被拒絕。
  * 3. **以此結清**：還款清掉全部欠款，實收差額另記分支交易，不新增 `SETTLEMENT`。
  * 4. **調整紀錄不能改**，改一般紀錄時正負號沿用原本那一筆。
+ * 5. **帳本唯讀限制**：有交易的修改與撤銷都先驗寫入權，還款分支與提議不能先被寫入。
  *
  * 策略：Prisma 全程 mock，`$transaction` 直接把同一個 mock 當 tx 傳進 callback；
  * `TransactionsService` 也是 mock——它有自己的測試檔。
@@ -505,34 +506,49 @@ describe('DebtEntriesService', () => {
       },
     );
 
-    it.each([{ title: '押金' }, { categoryId: null }, { accountId: 'bank' }])(
-      'checks ledger write access for %j',
+    it.each([
+      { amount: 150 },
+      { date: '2026-10-17T00:00:00.000Z' },
+      { note: '備註' },
+      { title: '押金' },
+      { categoryId: null },
+      { accountId: 'bank' },
+    ])('checks ledger write access for %j', async (input) => {
+      prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
+      prisma.ledgerMember.findUnique.mockResolvedValue({
+        role: 'VIEWER',
+        ledger: { archivedAt: null },
+      });
+      await expect(service.update(USER, 'entry-1', input)).rejects.toMatchObject({ status: 403 });
+      expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
+      expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+      expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
+      expect(prisma.debtProposal.create).not.toHaveBeenCalled();
+      expect(prisma.ledgerMember.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { ledgerId_userId: { ledgerId: LEDGER, userId: USER } } }),
+      );
+    });
+
+    it.each([{ amount: 150 }, { note: '我的備註' }, { date: DATE }])(
+      'does not check a legacy entry without a transaction for %j',
       async (input) => {
-        prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
-        prisma.ledgerMember.findUnique.mockResolvedValue({
-          role: 'VIEWER',
-          ledger: { archivedAt: null },
-        });
-        await expect(service.update(USER, 'entry-1', input)).rejects.toMatchObject({ status: 403 });
-        expect(transactions.updateDebtTransaction).not.toHaveBeenCalled();
-        expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+        prisma.debtEntry.findFirst.mockResolvedValue(
+          entryRow({ transactionId: null, transaction: null }),
+        );
+        prisma.ledgerMember.findUnique.mockResolvedValue(null);
+        await service.update(USER, 'entry-1', input);
+        expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
       },
     );
-
-    it('keeps the existing note-only behavior when ledger access was lost', async () => {
-      prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
-      prisma.ledgerMember.findUnique.mockResolvedValue(null);
-      await service.update(USER, 'entry-1', { note: '我的備註' });
-      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
-    });
 
     it.each([
       [null, 404, 'NOT_FOUND'],
       [{ role: 'EDITOR', ledger: { archivedAt: new Date(DATE) } }, 409, 'LEDGER_ARCHIVED'],
-    ])('refuses new fields when ledger membership is %j', async (membership, status, errorCode) => {
+    ])('refuses writes when ledger membership is %j', async (membership, status, errorCode) => {
       prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
       prisma.ledgerMember.findUnique.mockResolvedValue(membership);
-      await expect(service.update(USER, 'entry-1', { title: '押金' })).rejects.toMatchObject({
+      await expect(service.update(USER, 'entry-1', { note: '備註' })).rejects.toMatchObject({
         status,
         errorCode,
       });
@@ -582,6 +598,34 @@ describe('DebtEntriesService', () => {
   });
 
   describe('remove', () => {
+    it.each([
+      [null, 404, 'NOT_FOUND'],
+      [{ role: 'VIEWER', ledger: { archivedAt: null } }, 403, 'FORBIDDEN'],
+      [{ role: 'EDITOR', ledger: { archivedAt: new Date(DATE) } }, 409, 'LEDGER_ARCHIVED'],
+    ])(
+      'rejects removal before writing when membership is %j',
+      async (membership, status, errorCode) => {
+        prisma.debtEntry.findFirst.mockResolvedValue(entryRow({ kind: 'COLLECT' }));
+        prisma.ledgerMember.findUnique.mockResolvedValue(membership);
+        await expect(service.remove(USER, 'entry-1')).rejects.toMatchObject({ status, errorCode });
+        expect(prisma.debtEntry.update).not.toHaveBeenCalled();
+        expect(prisma.debtEntry.updateMany).not.toHaveBeenCalled();
+        expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
+        expect(transactions.softDeleteDebtTransactions).not.toHaveBeenCalled();
+        expect(prisma.debtProposal.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not check a legacy entry without a transaction', async () => {
+      prisma.debtEntry.findFirst.mockResolvedValue(
+        entryRow({ transactionId: null, transaction: null }),
+      );
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      await service.remove(USER, 'entry-1');
+      expect(prisma.ledgerMember.findUnique).not.toHaveBeenCalled();
+      expect(prisma.debtEntry.update).toHaveBeenCalled();
+    });
+
     it('soft-deletes the entry and its transaction with the same timestamp', async () => {
       prisma.debtEntry.findFirst.mockResolvedValue(entryRow());
 

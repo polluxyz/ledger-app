@@ -36,6 +36,7 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   CANNOT_MANAGE_OTHER_MEMBER: '只有擁有者能移除或調整其他成員。',
   PERSONAL_LEDGER_CANNOT_SHARE: '私人帳本不能加入成員。想一起記帳，請另建一本共享帳本。',
   LEDGER_ARCHIVED: '這本帳本已封存，只能查看，不能再修改。',
+  LEDGER_NOT_ARCHIVED: '這本帳本目前沒有封存。',
   LEDGER_HAS_OTHERS_TRANSACTIONS: '這本帳本還有其他成員記的交易，不能刪除。請改用封存。',
 
   // ── 共享帳本分帳與結清 ────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   DEBT_ENTRY_NOT_EDITABLE: '結清差額與免除不能修改，要調整請刪除後重記。',
   DEBT_TRANSACTION_READ_ONLY: '這筆交易來自借還，請到借還的往來帳修改。',
   LEDGER_HAS_DEBT_TRANSACTIONS: '這本帳本有借還交易，不能刪除。請改用封存。',
+  DEBT_WITHDRAWAL_REQUIRED: '刪除這本帳本會撤銷借還與分帳，請重新確認。',
   NOTHING_TO_REPAY: '目前和對方沒有欠款，不需要還款。',
   REPAYMENT_EXCEEDS_BALANCE: '還款超過目前的欠款。要兩清請勾「以此結清」，或把多出的部分另記一筆。',
 

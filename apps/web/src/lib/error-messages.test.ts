@@ -14,6 +14,8 @@ describe('toUserMessage', () => {
       LEDGER_PERSON_NOT_SELECTABLE: '這個人已經刪除，請重新選擇。',
       LEDGER_PERSON_NAME_TAKEN: '這個名字已經有人用了。',
       LEDGER_PERSON_IN_USE: '還有交易或結清用到這個人。',
+      LEDGER_NOT_ARCHIVED: '這本帳本目前沒有封存。',
+      DEBT_WITHDRAWAL_REQUIRED: '刪除這本帳本會撤銷借還與分帳，請重新確認。',
       ACCOUNT_NOT_PAYERS: '只能選自己的帳戶。',
       SETTLEMENT_SAME_PERSON: '付錢和收錢的人要不同。',
       SETTLEMENT_TRANSACTION_READ_ONLY: '請從結清修改或刪除。',

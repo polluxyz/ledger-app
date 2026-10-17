@@ -2,13 +2,13 @@
 
 plan：`tasks/phase-3j-plan.md`；spec：`docs/specs/phase-3j-ledger-delete-archive.md`。
 
-- [ ] **J0 契約與隔離測試**（協調者）：plan §1.1。
+- [x] **J0 契約與隔離測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`ledger-delete-archive-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 通過。
-- [ ] **J1 後端 A：借還寫入權**（依賴 J0；`lld-api-a`）：plan §1.2。
+- [x] **J1 後端 A：借還寫入權**（依賴 J0；`lld-api-a`）：plan §1.2。
       驗收：單元測試涵蓋 4 個寫入點的檢查與拒絕不檢查；SC-J1 的 API e2e 通過；既有 API e2e 全綠。
-- [ ] **J2 後端 B：取消封存、預覽、刪除**（依賴 J0；`lld-api-b`）：plan §1.3。
+- [x] **J2 後端 B：取消封存、預覽、刪除**（依賴 J0；`lld-api-b`）：plan §1.3。
       驗收：單元測試涵蓋預覽與刪除一致、撤銷失敗時整筆回滾、刪除前的關聯處理、擋下順序；SC-J2～J5 的 API e2e 通過；隔離測試轉綠；既有 API e2e 全綠。
-- [ ] **J3 畫面**（依賴 J0；`lld-web`）：plan §1.4。
+- [x] **J3 畫面**（依賴 J0；`lld-web`）：plan §1.4。
       驗收：元件測試涵蓋 SC-J7；Web 檢查全綠。
 - [ ] **J4 Web e2e**（依賴 J1～J3；`lld-web-e2e`）：plan §1.5。
       驗收：兩套 Web e2e 全綠，含 spec §6 的主線。

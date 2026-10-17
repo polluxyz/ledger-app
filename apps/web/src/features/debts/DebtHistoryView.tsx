@@ -8,7 +8,7 @@ import { getAvatarLabels } from '../../lib/avatar-labels';
 import { formatDate, formatMoney } from '../../lib/format';
 import { useCurrentUser } from '../auth/use-current-user';
 import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
-import { useLedgers } from '../ledgers/use-ledgers';
+import { isLedgerWritable, useLedgers } from '../ledgers/use-ledgers';
 import { SettlementForm } from '../settlements/SettlementForm';
 import { useDeleteSettlement, useLedgerSettlementPages } from '../settlements/use-settlements';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
@@ -42,6 +42,10 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
   );
   const ledgersById = useMemo(
     () => new Map((ledgers.data ?? []).map((item) => [item.id, item])),
+    [ledgers.data],
+  );
+  const writableLedgerIds = useMemo(
+    () => new Set((ledgers.data ?? []).filter(isLedgerWritable).map((item) => item.id)),
     [ledgers.data],
   );
 
@@ -94,6 +98,7 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
                     <PersonHistoryDetail
                       person={person}
                       avatarLabels={avatarLabels}
+                      writableLedgerIds={writableLedgerIds}
                       onEditSplit={onEditSplit}
                     />
                   </AnimatedDisclosure>
@@ -144,10 +149,12 @@ export function DebtHistoryView({ onEditSplit }: DebtHistoryViewProps) {
 function PersonHistoryDetail({
   person,
   avatarLabels,
+  writableLedgerIds,
   onEditSplit,
 }: {
   person: Counterparty;
   avatarLabels: ReadonlyMap<string, string>;
+  writableLedgerIds: ReadonlySet<string>;
   onEditSplit: (splitId: string) => void;
 }) {
   const entriesQuery = useCounterpartyEntryPages(person.id, 'history');
@@ -172,6 +179,7 @@ function PersonHistoryDetail({
         displayName={person.displayName}
         avatarLabels={avatarLabels}
         editable
+        writableLedgerIds={writableLedgerIds}
         onEditSplit={onEditSplit}
       />
       {entriesQuery.hasNextPage && (
@@ -221,7 +229,7 @@ function LedgerHistoryDetail({
       ]),
     [currentUserId, settlements],
   );
-  const canWrite = ledger !== undefined && ledger.role !== 'VIEWER' && ledger.archivedAt === null;
+  const canWrite = isLedgerWritable(ledger);
 
   if (settlementsQuery.isLoading) {
     return <p className={styles.status}>載入中…</p>;

@@ -8,5 +8,6 @@ import { SplitsService } from './splits.service';
   imports: [TransactionsModule],
   controllers: [SplitsController],
   providers: [SplitsService],
+  exports: [SplitsService],
 })
 export class SplitsModule {}
