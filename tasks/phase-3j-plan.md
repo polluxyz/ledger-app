@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3j-ledger-leave-delete.md`（決策 183～191、W183～W187、SC-J1～SC-J9）。後端、畫面、e2e 合成一個 PR。
 
-> 核可：**待核可**（與 spec 一起送審）。
+> 核可：**已核可**（開發者 2026-10-17，與 spec 一起）。
 
 ## 0. 起點
 
