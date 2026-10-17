@@ -114,16 +114,15 @@
   box-shadow: var(--shadow-sm);
 }
 
-.dangerNote {
-  margin: var(--space-sm) 0 var(--space-md);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
 .dangerActions {
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+}
+
+.confirmActions {
+  display: grid;
+  gap: var(--space-lg);
 }
 
 /*

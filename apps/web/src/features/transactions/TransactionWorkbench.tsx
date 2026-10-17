@@ -3,6 +3,7 @@ import { actualAmountOf, type Cents, type LedgerSummary, type Transaction } from
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
+import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
 import { DebtEntryEditForm } from '../debts/DebtEntryEditDialog';
 import { TransactionDialog } from './TransactionDialog';
@@ -11,6 +12,7 @@ import { SplitEditPanel } from './SplitEditPanel';
 import { getTransactionLabel } from './transaction-label';
 import { FillAccountForm } from '../settlements/FillAccountForm';
 import { SettlementForm } from '../settlements/SettlementForm';
+import { isLedgerWritable, useLedgers } from '../ledgers/use-ledgers';
 import styles from './TransactionWorkbench.module.css';
 
 /**
@@ -80,6 +82,8 @@ export function TransactionWorkbench({
   const handleClose = onClose ?? onEditDone ?? (() => {});
   const activeTarget: PanelTarget =
     target ?? (editing ? { kind: 'transaction', transaction: editing } : { kind: 'new' });
+  const ledgers = useLedgers(true, activeTarget.kind === 'debtTransaction');
+  const debtLedger = ledgers.data?.find((item) => item.id === ledger.id);
 
   useEffect(() => {
     if (focusRequest === seenFocusRequest.current) {
@@ -127,23 +131,33 @@ export function TransactionWorkbench({
       )}
       {activeTarget.kind === 'debtTransaction' && activeTarget.transaction.debt && (
         <Dialog open={true} title="編輯交易" variant="panel" onClose={handleClose}>
-          <p>{getTransactionLabel(activeTarget.transaction)}</p>
-          <DebtEntryEditForm
-            key={activeTarget.transaction.debt.entryId}
-            entryId={activeTarget.transaction.debt.entryId}
-            amount={editableAmountOf(activeTarget.transaction)}
-            date={activeTarget.transaction.date}
-            note={activeTarget.transaction.debt.note}
-            title={activeTarget.transaction.title}
-            accountId={activeTarget.transaction.account?.id ?? null}
-            categoryId={activeTarget.transaction.category?.id ?? null}
-            ledgerId={ledger.id}
-            kind={activeTarget.transaction.debt.kind}
-            paired={activeTarget.transaction.debt.paired}
-            counterpartyName={activeTarget.transaction.debt.counterpartyName}
-            hasRecordedTransaction
-            onClose={handleClose}
-          />
+          {ledgers.isLoading ? (
+            <p>載入中…</p>
+          ) : ledgers.error ? (
+            <FormError error={ledgers.error} />
+          ) : (
+            isLedgerWritable(debtLedger) && (
+              <>
+                <p>{getTransactionLabel(activeTarget.transaction)}</p>
+                <DebtEntryEditForm
+                  key={activeTarget.transaction.debt.entryId}
+                  entryId={activeTarget.transaction.debt.entryId}
+                  amount={editableAmountOf(activeTarget.transaction)}
+                  date={activeTarget.transaction.date}
+                  note={activeTarget.transaction.debt.note}
+                  title={activeTarget.transaction.title}
+                  accountId={activeTarget.transaction.account?.id ?? null}
+                  categoryId={activeTarget.transaction.category?.id ?? null}
+                  ledgerId={ledger.id}
+                  kind={activeTarget.transaction.debt.kind}
+                  paired={activeTarget.transaction.debt.paired}
+                  counterpartyName={activeTarget.transaction.debt.counterpartyName}
+                  hasRecordedTransaction
+                  onClose={handleClose}
+                />
+              </>
+            )
+          )}
         </Dialog>
       )}
       {activeTarget.kind === 'settlement' && (

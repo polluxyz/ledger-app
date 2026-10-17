@@ -70,7 +70,7 @@ describe('Editing and deleting a transaction', () => {
   }
 
   /** 列表固定回傳一筆；`items` 可換成別的形狀（例如別人記的那一筆）。 */
-  function routeFetch(overrides: { items?: unknown[] } = {}) {
+  function routeFetch(overrides: { items?: unknown[]; allLedgers?: unknown[] } = {}) {
     const items = overrides.items ?? [lunch];
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
@@ -90,6 +90,17 @@ describe('Editing and deleting a transaction', () => {
       }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, [account]));
+      }
+      if (url.includes('/ledgers')) {
+        const parsed = new URL(url);
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            parsed.searchParams.get('includeArchived') === 'true'
+              ? (overrides.allLedgers ?? [ledger])
+              : [ledger],
+          ),
+        );
       }
       return Promise.resolve(jsonResponse(200, [ledger]));
     });
@@ -146,6 +157,24 @@ describe('Editing and deleting a transaction', () => {
     expect(within(dialog).getByLabelText('帳戶')).toHaveValue('acc-1');
     expect(within(dialog).getByLabelText('名稱')).toHaveValue('押金');
     expect(within(dialog).getByLabelText('備註')).toHaveValue('借款備註');
+  });
+
+  it('does not offer debt editing when that transaction ledger is archived', async () => {
+    routeFetch({
+      items: [debtTransaction],
+      allLedgers: [{ ...ledger, archivedAt: '2026-09-15T00:00:00.000Z' }],
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^編輯/ }));
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' });
+
+    await waitFor(() => expect(within(dialog).queryByLabelText('金額')).not.toBeInTheDocument());
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => new URL(String(url)).searchParams.get('includeArchived') === 'true',
+      ),
+    ).toBe(true);
   });
 
   it('sends only a PATCH with the edited values', async () => {
