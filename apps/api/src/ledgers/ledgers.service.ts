@@ -8,20 +8,24 @@ import {
   LedgerMemberInfo,
   LedgerRole,
   LedgerSummary,
+  LedgerRemovalPreview,
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
-import { findLinkOfCounterparty, otherSide } from '../debts/counterparty-links';
+import { findLinkOfCounterparty, linkInfoFor, otherSide } from '../debts/counterparty-links';
+import { AccountsService } from '../accounts/accounts.service';
+import { DebtEntriesService } from '../debts/debt-entries.service';
+import { SplitsService } from '../splits/splits.service';
 
 /**
  * 帳本與成員的業務邏輯——授權與資料隔離的重心。個人模式與家庭模式共用同一套
  * 帳本模型，差別只在成員數與角色。
  *
- * 這裡的方法本身「不做」成員資格檢查（那由 LedgerAccessGuard 在上游把關），
- * 專注在跨成員的規則上，其中最關鍵的是「一個帳本永遠至少保留一位 owner」——
+ * 一般帳本與成員操作由 LedgerAccessGuard 在上游檢查資格；取消封存、刪除與預覽
+ * 另在資料庫交易內重查擁有者。跨成員最關鍵的規則是「永遠至少保留一位 owner」——
  * 降級或移除最後一位 owner 都會被擋下，且在交易內重查以避開競態。
  */
 
@@ -56,6 +60,9 @@ export class LedgersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerPeople: LedgerPeopleService,
+    private readonly accounts: AccountsService,
+    private readonly debtEntries: DebtEntriesService,
+    private readonly splits: SplitsService,
   ) {}
 
   /**
@@ -179,57 +186,228 @@ export class LedgersService {
     return this.getDetail(ledgerId);
   }
 
+  /** 取消封存保留成員與交易；只有擁有者能恢復寫入。 */
+  async unarchive(ledgerId: string, userId: string): Promise<LedgerDetail> {
+    await this.prisma.$transaction(async (tx) => {
+      const ledger = await this.loadOwnedLedger(tx, ledgerId, userId);
+      if (!ledger.archivedAt) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.LEDGER_NOT_ARCHIVED,
+          'This ledger is not archived.',
+        );
+      }
+      await tx.ledger.update({ where: { id: ledgerId }, data: { archivedAt: null } });
+    });
+    return this.getDetail(ledgerId);
+  }
+
   /**
-   * 刪除帳本（連帶 cascade 刪除成員、分類與交易）。有兩道關卡：
-   *
-   * 1. 呼叫端要在 `confirm` 回填帳本名稱，防手滑；
-   * 2. **帳本內若有其他成員記的交易，一律不准刪**——那些交易掛在對方的帳戶上，
-   *    刪掉會讓對方的餘額被回溯性改變，而他甚至不會知道發生了什麼事。這種情況
-   *    請改用封存。只有自己記的（或空的）帳本才收得掉，好讓人能清掉建錯的帳本。
+   * 刪除前先確認名稱，再共用預覽的阻擋規則。私人帳本必須明確同意撤銷自己的借還與分帳；
+   * 共享帳本有借還、或任何帳本會影響別人的交易／帳戶時只能封存。
+   * 撤銷、解除往來的外鍵、刪分帳與帳本在同一個交易中完成，往來紀錄本身永遠保留。
    */
-  async remove(ledgerId: string, actingUserId: string, confirm: string | undefined): Promise<void> {
-    const ledger = await this.prisma.ledger.findUnique({
-      where: { id: ledgerId },
-    });
-    if (!ledger) {
-      throw this.notFound();
-    }
-    if (confirm !== ledger.name) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.VALIDATION_FAILED,
-        'confirm must exactly match the ledger name.',
-      );
-    }
+  async remove(
+    ledgerId: string,
+    actingUserId: string,
+    confirm: string | undefined,
+    withdrawDebts = false,
+  ): Promise<void> {
+    await this.prisma.$transaction(
+      async (tx) => {
+        const ledger = await this.loadOwnedLedger(tx, ledgerId, actingUserId);
+        if (confirm !== ledger.name) {
+          throw new AppException(
+            HttpStatus.BAD_REQUEST,
+            ErrorCode.VALIDATION_FAILED,
+            'confirm must exactly match the ledger name.',
+          );
+        }
+        const plan = await this.removalPlan(tx, ledger, actingUserId);
+        if (plan.blockedBy) {
+          const code =
+            plan.blockedBy === 'HAS_OTHERS_TRANSACTIONS'
+              ? ErrorCode.LEDGER_HAS_OTHERS_TRANSACTIONS
+              : plan.blockedBy === 'LEDGER_ARCHIVED'
+                ? ErrorCode.LEDGER_ARCHIVED
+                : ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS;
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            code,
+            'This ledger cannot be deleted; archive it instead.',
+          );
+        }
+        if (plan.withdrawsDebts && !withdrawDebts) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            ErrorCode.DEBT_WITHDRAWAL_REQUIRED,
+            'Set withdrawDebts=true to withdraw this ledger’s debts.',
+          );
+        }
+        for (const split of plan.activeSplits) {
+          await this.splits.removeInTransaction(tx, actingUserId, split.id);
+        }
+        for (const entry of plan.entries) {
+          if (entry.splitId === null && entry.settlesEntryId === null) {
+            await this.debtEntries.removeInTransaction(tx, actingUserId, entry.id);
+          }
+        }
+        // 3j spec §3：先解除 Restrict 外鍵，再刪分帳，最後 cascade 刪帳本內的交易。
+        await tx.debtEntry.updateMany({
+          where: { OR: [{ transaction: { ledgerId } }, { split: { ledgerId } }] },
+          data: { transactionId: null, splitId: null },
+        });
+        await tx.transaction.updateMany({
+          where: { ledgerId, splitId: { not: null } },
+          data: { splitId: null },
+        });
+        await tx.split.deleteMany({ where: { ledgerId } });
+        await tx.ledger.delete({ where: { id: ledgerId } });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
 
-    // 計數不過濾 deletedAt：軟刪除的交易仍是別人的紀錄，且仍佔著他的帳戶引用。
-    const othersTransactions = await this.prisma.transaction.count({
-      where: { ledgerId, creatorId: { not: actingUserId } },
-    });
-    if (othersTransactions > 0) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.LEDGER_HAS_OTHERS_TRANSACTIONS,
-        'This ledger holds transactions recorded by other members; archive it instead.',
-      );
-    }
+  /** 只讀自己的帳戶與對象；不能刪時不回任何餘額。 */
+  async removalPreview(ledgerId: string, userId: string): Promise<LedgerRemovalPreview> {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const ledger = await this.loadOwnedLedger(tx, ledgerId, userId);
+        const plan = await this.removalPlan(tx, ledger, userId);
+        if (plan.blockedBy) {
+          return {
+            accounts: [],
+            counterparties: [],
+            withdrawsDebts: false,
+            delete: { allowed: false, blockedBy: plan.blockedBy },
+          };
+        }
+        const rows = await tx.account.findMany({
+          where: { userId },
+          orderBy: [{ isTemporary: 'asc' }, { createdAt: 'asc' }],
+        });
+        const { balances } = await this.accounts.calculateBalances(rows, tx);
+        const { balances: impacts } = await this.accounts.calculateBalances(
+          rows.map((row) => ({ ...row, initialBalance: 0 })),
+          tx,
+          { ledgerId },
+        );
+        const accounts = rows
+          .filter((row) => impacts.get(row.id) !== 0)
+          .map((row) => ({
+            accountId: row.id,
+            name: row.name,
+            balance: balances.get(row.id)!,
+            balanceAfter: balances.get(row.id)! - impacts.get(row.id)!,
+          }));
+        const ids = [...new Set(plan.entries.map((entry) => entry.counterpartyId))];
+        const counterparties = await tx.counterparty.findMany({
+          where: { ownerId: userId, id: { in: ids } },
+          orderBy: { id: 'asc' },
+        });
+        const sums = await tx.debtEntry.groupBy({
+          by: ['counterpartyId'],
+          where: {
+            deletedAt: null,
+            counterparty: { ownerId: userId },
+            counterpartyId: { in: ids },
+          },
+          _sum: { delta: true },
+        });
+        const links = await linkInfoFor(tx, ids);
+        return {
+          accounts,
+          counterparties: counterparties.map((row) => {
+            const balance = sums.find((sum) => sum.counterpartyId === row.id)?._sum.delta ?? 0;
+            const impact = plan.entries
+              .filter((entry) => entry.counterpartyId === row.id)
+              .reduce((sum, entry) => sum + entry.delta, 0);
+            const link = links.get(row.id);
+            return {
+              counterpartyId: row.id,
+              displayName: row.name ?? link?.userName ?? '',
+              linked: link != null,
+              balance,
+              balanceAfter: balance - impact,
+            };
+          }),
+          withdrawsDebts: plan.withdrawsDebts,
+          delete: { allowed: true, blockedBy: null },
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
 
-    // 借還帳（3b 決策 21）：真刪會 cascade 刪掉往來紀錄產生的交易（借還交易與代付支出），
-    // 往來帳就跟帳戶對不起來；外鍵是 Restrict，真刪也會直接失敗。所以先用明確的錯誤擋下。
-    // 同樣不過濾 deletedAt——軟刪除的紀錄與交易仍然互相引用。
-    const debtTransactions = await this.prisma.debtEntry.count({
-      where: { transaction: { ledgerId } },
+  private async loadOwnedLedger(tx: Prisma.TransactionClient, ledgerId: string, userId: string) {
+    const member = await tx.ledgerMember.findUnique({
+      where: { ledgerId_userId: { ledgerId, userId } },
     });
-    const splits = await this.prisma.split.count({ where: { ledgerId } });
-    if (debtTransactions > 0 || splits > 0) {
+    if (!member) throw this.notFound();
+    if (member.role !== 'OWNER')
       throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS,
-        'This ledger holds debt transactions; archive it instead.',
+        HttpStatus.FORBIDDEN,
+        ErrorCode.FORBIDDEN,
+        'Only an owner can perform this action.',
       );
-    }
+    const ledger = await tx.ledger.findUnique({ where: { id: ledgerId } });
+    if (!ledger) throw this.notFound();
+    return ledger;
+  }
 
-    await this.prisma.ledger.delete({ where: { id: ledgerId } });
+  /** 預覽與實際刪除唯一的資格檢查；已撤銷的私人往來只需解除外鍵。 */
+  private async removalPlan(tx: Prisma.TransactionClient, ledger: LedgerRow, userId: string) {
+    type BlockedBy = LedgerRemovalPreview['delete']['blockedBy'];
+    let blockedBy: BlockedBy = ledger.archivedAt ? 'LEDGER_ARCHIVED' : null;
+    const ledgerId = ledger.id;
+    // 3j 決策 187，將來退出規則定案為『退出就不算』時要放寬，見 spec §1『延後』。
+    // 不過濾 deletedAt：已軟刪除的交易仍是他人的紀錄與帳戶引用。
+    if (
+      !blockedBy &&
+      (await tx.transaction.count({
+        where: {
+          ledgerId,
+          OR: [
+            { creatorId: { not: userId } },
+            { account: { userId: { not: userId } } },
+            { toAccount: { userId: { not: userId } } },
+          ],
+        },
+      })) > 0
+    )
+      blockedBy = 'HAS_OTHERS_TRANSACTIONS';
+    const debtRows = blockedBy
+      ? []
+      : await tx.debtEntry.findMany({
+          where: {
+            OR: [
+              { transaction: { ledgerId } },
+              { split: { ledgerId } },
+              { settlesEntry: { transaction: { ledgerId } } },
+            ],
+          },
+          include: { counterparty: { select: { ownerId: true } } },
+          orderBy: { id: 'asc' },
+        });
+    const splitRows = blockedBy
+      ? []
+      : await tx.split.findMany({ where: { ledgerId }, orderBy: { id: 'asc' } });
+    const active = debtRows.filter((entry) => entry.deletedAt === null);
+    const activeSplits = splitRows.filter((split) => split.deletedAt === null);
+    if (
+      !blockedBy &&
+      ((ledger.kind === 'SHARED' && (debtRows.length > 0 || splitRows.length > 0)) ||
+        active.some((entry) => entry.counterparty.ownerId !== userId) ||
+        activeSplits.some((split) => split.ownerId !== userId))
+    )
+      blockedBy = 'SHARED_HAS_DEBTS';
+    const entries = active.filter((entry) => entry.counterparty.ownerId === userId);
+    return {
+      blockedBy,
+      entries,
+      activeSplits,
+      withdrawsDebts: !blockedBy && (entries.length > 0 || activeSplits.length > 0),
+    };
   }
 
   /** 列出帳本的所有成員。存取權限在上游把關。 */

@@ -1,0 +1,57 @@
+J2 backend completion report
+
+Implemented
+- POST /ledgers/:ledgerId/unarchive: OWNER, AllowOnArchived, HTTP 200 LedgerDetail, 409 LEDGER_NOT_ARCHIVED.
+- GET /ledgers/:ledgerId/removal-preview: OWNER, shared LedgerRemovalPreview response DTO, only the caller's accounts and counterparties.
+- DELETE /ledgers/:ledgerId: validated boolean withdrawDebts, confirmation first, then common removalPlan eligibility checks; other creators and account/toAccount owners count even for soft-deleted transactions.
+- Personal ledgers withdraw the caller's active debts and splits in the same Serializable transaction as removal; shared debts and active third-party debt references remain blocked.
+- Preview uses a RepeatableRead snapshot and AccountsService.calculateBalances for both current balances and ledger impacts, including the existing directionOf logic.
+- Debts are retained; debt transaction/split references and transaction split references are cleared before deleting splits and cascading ledger removal.
+- The decision 187 comment points to the deferred exit rule in spec section 1.
+
+Reused/extracted logic
+- DebtEntriesService.removeInTransaction(tx, userId, entryId): moved the original remove callback unchanged; public remove signature unchanged and delegates through its own transaction.
+- SplitsService.removeInTransaction(tx, userId, id): moved the original remove callback unchanged; public remove signature unchanged and delegates through its own transaction.
+- AccountsService.calculateBalances(accounts, client, scope): made accessible with default client/scope preserving existing behavior; preview supplies zero initial balances and ledgerId scope to obtain transaction impacts.
+- Module exports and forwardRef imports wire these existing services without duplicating withdrawal implementations.
+
+J1 integration note
+- J1's new remove write-access check belongs inside removeInTransaction immediately after loadOwnedEntry (before mutation), where the old remove callback now lives.
+- J2 did not change update, debt-proposals acceptance, or any existing write-access behavior.
+
+Approved database exception
+- The existing DebtEntry_transaction_by_kind CHECK prevented clearing transactionId for PAID_FOR_ME/RECEIVED_FOR_ME, including already withdrawn rows.
+- Asked the coordinator and received the developer's explicit approval via msg_ae7565c94caf.
+- Added exactly one migration: 20261017140000_debt_entry_withdrawn_without_transaction.
+- Only change: allow null transactionId for those two kinds when deletedAt IS NOT NULL; active rows retain the original requirement.
+- Applied using DOTENV_CONFIG_PATH=.env.test prisma migrate deploy; output confirmed ledger_lld_api_b_test at localhost:5432.
+- No schema.prisma model changes, data updates, shared contract edits, isolation-suite edits, or web edits.
+- Transaction_splitId_fkey is also Restrict; clearing this nullable reference before deleting Split requires no additional migration.
+
+Null transactionId read-path audit (no extra changes needed)
+- debt-entry-rules.ts: toDebtEntry maps transactionId directly and recorded via transaction ?? null; loadOwnedEntry excludes deleted rows.
+- counterparties.service.ts: entries/history exclude deleted rows, filter null transaction IDs before querying repayment branches, and guard branch lookups.
+- debt-entries.service.ts: differenceOf returns null immediately for null transactionId; update/remove load only active owned entries.
+- debt-proposal-rules.ts: PROPOSAL_INCLUDE selects only target delta/date/deletedAt; toDebtProposal/previousOf do not dereference a transaction, and previousOf handles withdrawn targets.
+- debt-proposals.service.ts: list/present use the nullable-safe proposal mapping; existing target transaction updates already check transactionId !== null; acceptance logic was not changed.
+- splits.service.ts: loadOwned excludes deleted splits; deleteEntries checks transactionId before passing IDs to the existing transaction deletion method.
+- Searched all apps/api/src for transactionId!, transaction!, and recorded!: no non-null assertions found.
+- E2e reads incoming/outgoing deletion proposals and counterparties history after both PAID_FOR_ME and RECEIVED_FOR_ME rows are detached, then accepts the deletion proposal successfully.
+
+Existing behavior test updated
+- apps/api/test/debts.e2e-spec.ts SC-L10: personal paid-for-me ledger deletion now requires DEBT_WITHDRAWAL_REQUIRED without consent, succeeds with withdrawDebts=true, and retains the withdrawn debt row with null transaction/split references.
+- apps/api/test/ledgers.e2e-spec.ts had no obsolete debt-deletion assertion requiring changes.
+
+Validation
+- Root pnpm lint: passed.
+- Root pnpm typecheck: passed.
+- Root pnpm test: passed (494 API, 776 web, 116 shared tests).
+- Root pnpm format:check: passed.
+- Complete API e2e: 317 passed, 4 failed, 321 total, 38 suites; the only failures are the four expected unmerged J1 SC-J1 cases in ledger-delete-archive-isolation.e2e-spec.ts.
+- Focused latest-code J2 and coordinator isolation run with SC-J1 excluded: 15 passed, 4 skipped, 2 suites passed.
+- New ledger-delete-archive.e2e-spec.ts: 9 cases covering unarchive, withdrawal consent, paired proposals, repayment branches, own-paid splits, other-paid expense/income splits, null-link retention, preview equality, previous withdrawals, real database rollback on second withdrawal failure, archived/shared blocks, other-person temporary account references (including soft-deleted transactions), and invalid boolean consent.
+- Unit coverage includes all eligibility stages, shared preview/delete removalPlan reuse, balance calculations, same-transaction withdrawal failure handling, and relation cleanup order; actual database rollback is verified by e2e.
+
+Remaining integration work
+- Merge J1 with the extraction note above and rerun the four SC-J1 cases.
+- Apply the approved migration during the normal integration/deployment workflow.

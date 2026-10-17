@@ -21,7 +21,7 @@ import {
 
 /**
  * 往來帳（3b-1 往來帳版）的端對端流程：借與還互相抵銷、還款方向與超額檢查、以此結清、代付、
- * 免除、改與刪、交易端點的唯讀、帳本不能真刪、對象的改名與刪除、同時還款的鎖。
+ * 免除、改與刪、交易端點的唯讀、私人帳本確認撤銷後刪除、對象的改名與刪除、同時還款的鎖。
  * 對應 spec SC-L1～L10、L13～L15、L17～L21（修訂 1）。
  *
  * 每個測試用註冊時自動建立的個人帳本（連動帳本）與預設的「現金」帳戶。帳戶餘額一律從
@@ -606,8 +606,8 @@ describe('Debt ledger (e2e)', () => {
     expect(create.status).toBe(400);
   });
 
-  // SC-L10
-  it('refuses to hard-delete a ledger that holds a paid-for-me expense', async () => {
+  // 3j 決策 186 改寫 SC-L10：私人帳本明確同意撤銷後可以刪，保留往來紀錄。
+  it('requires withdrawal consent before deleting a personal ledger with a paid-for-me expense', async () => {
     const user = await me();
     const created = await request(server())
       .post('/api/ledgers')
@@ -621,14 +621,33 @@ describe('Debt ledger (e2e)', () => {
       .set(auth(user.token))
       .expect(200);
 
-    await paidForMe(user, 400, ledgerId, (categories.body as Array<{ id: string }>)[0]!.id);
+    const paid = await paidForMe(
+      user,
+      400,
+      ledgerId,
+      (categories.body as Array<{ id: string }>)[0]!.id,
+    );
 
     const res = await request(server())
       .delete(`/api/ledgers/${ledgerId}`)
       .query({ confirm: '旅行' })
       .set(auth(user.token));
     expect(res.status).toBe(409);
-    expect(errorCode(res)).toBe('LEDGER_HAS_DEBT_TRANSACTIONS');
+    expect(errorCode(res)).toBe('DEBT_WITHDRAWAL_REQUIRED');
+    await request(server())
+      .delete(`/api/ledgers/${ledgerId}`)
+      .query({ confirm: '旅行', withdrawDebts: true })
+      .set(auth(user.token))
+      .expect(204);
+    expect(
+      await prisma.debtEntry.findMany({ where: { counterpartyId: paid.counterparty.id } }),
+    ).toEqual([
+      expect.objectContaining({
+        transactionId: null,
+        splitId: null,
+        deletedAt: expect.any(Date) as Date,
+      }),
+    ]);
   });
 
   // SC-L13

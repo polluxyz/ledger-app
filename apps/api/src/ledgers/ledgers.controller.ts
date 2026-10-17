@@ -11,8 +11,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
-import type { JwtPayload, LedgerDetail, LedgerSummary } from '@ledger/shared';
+import { ApiBearerAuth, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { JwtPayload, LedgerDetail, LedgerSummary, LedgerRemovalPreview } from '@ledger/shared';
+import { AllowOnArchived } from '../common/decorators/allow-on-archived.decorator';
+import { RemoveLedgerQueryDto } from './dto/remove-ledger-query.dto';
+import { LedgerRemovalPreviewDto } from './dto/ledger-removal-preview.dto';
+import { LedgerDetailDto } from './dto/ledger-detail.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { LeftMemberAccess } from '../common/decorators/left-member-access.decorator';
@@ -70,7 +74,7 @@ export class LedgersController {
 
   /**
    * 封存帳本：轉為唯讀並從預設清單中收起。這是結束一本帳本的正常途徑；
-   * 刪除只保留給「自己建錯、還沒有別人記過帳」的情況。
+   * 刪除不影響別人的交易與帳戶；私人帳本可明確同意一併撤銷自己的借還。
    */
   @Post(':ledgerId/archive')
   @RequireLedgerRole('OWNER')
@@ -78,15 +82,57 @@ export class LedgersController {
     return this.ledgers.archive(ledgerId);
   }
 
+  @Post(':ledgerId/unarchive')
+  @RequireLedgerRole('OWNER')
+  @AllowOnArchived()
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 200, type: LedgerDetailDto })
+  @ApiResponse({ status: 403, description: 'Only an owner can unarchive.' })
+  @ApiResponse({ status: 404, description: 'Ledger not found or caller is not a member.' })
+  @ApiResponse({ status: 409, description: 'LEDGER_NOT_ARCHIVED' })
+  unarchive(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<LedgerDetail> {
+    return this.ledgers.unarchive(ledgerId, user.sub);
+  }
+
+  @Get(':ledgerId/removal-preview')
+  @RequireLedgerRole('OWNER')
+  @ApiResponse({ status: 200, type: LedgerRemovalPreviewDto })
+  @ApiResponse({ status: 403, description: 'Only an owner can preview deletion.' })
+  @ApiResponse({ status: 404, description: 'Ledger not found or caller is not a member.' })
+  removalPreview(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<LedgerRemovalPreview> {
+    return this.ledgers.removalPreview(ledgerId, user.sub);
+  }
+
   @Delete(':ledgerId')
   @RequireLedgerRole('OWNER')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiQuery({ name: 'confirm', description: 'Must equal the ledger name.' })
+  @ApiQuery({
+    name: 'withdrawDebts',
+    required: false,
+    type: Boolean,
+    description: 'Explicitly consent to withdrawing personal ledger debts and splits.',
+  })
+  @ApiResponse({ status: 204, description: 'Ledger deleted; debt history retained.' })
+  @ApiResponse({ status: 400, description: 'Invalid query or ledger name confirmation.' })
+  @ApiResponse({ status: 403, description: 'Only an owner can delete.' })
+  @ApiResponse({ status: 404, description: 'Ledger not found or caller is not a member.' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'LEDGER_ARCHIVED, LEDGER_HAS_OTHERS_TRANSACTIONS, LEDGER_HAS_DEBT_TRANSACTIONS or DEBT_WITHDRAWAL_REQUIRED.',
+  })
   remove(
     @Param('ledgerId') ledgerId: string,
     @CurrentUser() user: JwtPayload,
-    @Query('confirm') confirm: string,
+    @Query() query: RemoveLedgerQueryDto,
   ): Promise<void> {
-    return this.ledgers.remove(ledgerId, user.sub, confirm);
+    return this.ledgers.remove(ledgerId, user.sub, query.confirm, query.withdrawDebts);
   }
 }

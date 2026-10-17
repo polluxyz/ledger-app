@@ -2,6 +2,9 @@ import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgersService } from './ledgers.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
+import { AccountsService } from '../accounts/accounts.service';
+import { DebtEntriesService } from '../debts/debt-entries.service';
+import { SplitsService } from '../splits/splits.service';
 
 /**
  * 聚焦成員管理的不變量（最具安全性關鍵的邏輯）：加入成員的查無／重複、最後一位
@@ -24,9 +27,9 @@ describe('LedgersService (members)', () => {
       delete: jest.Mock;
       count: jest.Mock;
     };
-    transaction: { count: jest.Mock };
-    debtEntry: { count: jest.Mock };
-    split: { count: jest.Mock };
+    transaction: { count: jest.Mock; updateMany: jest.Mock };
+    debtEntry: { findMany: jest.Mock; updateMany: jest.Mock };
+    split: { findMany: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
   };
   const ledgerPeople = { ensureMemberPerson: jest.fn() };
@@ -57,22 +60,25 @@ describe('LedgersService (members)', () => {
       },
       category: { createMany: jest.fn() },
       ledgerMember: {
-        findUnique: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }),
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
         count: jest.fn(),
       },
-      transaction: { count: jest.fn().mockResolvedValue(0) },
-      debtEntry: { count: jest.fn().mockResolvedValue(0) },
-      split: { count: jest.fn().mockResolvedValue(0) },
+      transaction: { count: jest.fn().mockResolvedValue(0), updateMany: jest.fn() },
+      debtEntry: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
+      split: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn() },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     ledgerPeople.ensureMemberPerson.mockReset();
     service = new LedgersService(
       prisma as unknown as PrismaService,
       ledgerPeople as unknown as LedgerPeopleService,
+      {} as AccountsService,
+      {} as DebtEntriesService,
+      {} as SplitsService,
     );
   });
 
@@ -176,7 +182,14 @@ describe('LedgersService (members)', () => {
 
       // 不過濾 deletedAt：軟刪除的仍是別人的紀錄，且仍佔著他的帳戶引用。
       expect(prisma.transaction.count).toHaveBeenCalledWith({
-        where: { ledgerId, creatorId: { not: 'user-1' } },
+        where: {
+          ledgerId,
+          OR: [
+            { creatorId: { not: 'user-1' } },
+            { account: { userId: { not: 'user-1' } } },
+            { toAccount: { userId: { not: 'user-1' } } },
+          ],
+        },
       });
     });
 
@@ -189,7 +202,7 @@ describe('LedgersService (members)', () => {
     // SC-L10（3b 決策 21）：即使全是自己記的，只要有往來紀錄產生的交易（借還交易或代付支出）
     // 就不能真刪——cascade 會刪掉往來紀錄引用的交易。
     it('409s when the ledger holds debt transactions, even the caller’s own', async () => {
-      prisma.debtEntry.count.mockResolvedValue(1);
+      prisma.debtEntry.findMany.mockResolvedValue([{ deletedAt: new Date() }]);
 
       await expect(service.remove(ledgerId, 'user-1', ledgerRow.name)).rejects.toMatchObject({
         status: 409,
@@ -198,9 +211,17 @@ describe('LedgersService (members)', () => {
       expect(prisma.ledger.delete).not.toHaveBeenCalled();
       // 同樣不過濾 deletedAt：軟刪除的紀錄與交易仍然互相引用。依往來紀錄計數，
       // 代付支出（一般 EXPENSE）才算得進去。
-      expect(prisma.debtEntry.count).toHaveBeenCalledWith({
-        where: { transaction: { ledgerId } },
-      });
+      expect(prisma.debtEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { transaction: { ledgerId } },
+              { split: { ledgerId } },
+              { settlesEntry: { transaction: { ledgerId } } },
+            ],
+          },
+        }),
+      );
     });
   });
 

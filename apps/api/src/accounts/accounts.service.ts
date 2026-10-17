@@ -86,9 +86,13 @@ export class AccountsService {
    *
    * 共通的 `where` 條件 `deletedAt: null` 是正確性的關鍵：軟刪除的交易不該再影響餘額。
    * 3h 起沒有「不計入餘額」的帳本（決策 165），所有帳本的交易都算進來。
+   * `client` 讓刪除預覽在同一個快照讀取餘額；`scope` 可計算指定帳本的影響，
+   * 呼叫端給 initialBalance = 0 即取得交易淨變動，正負號仍只有這裡的公式。
    */
-  private async calculateBalances(
+  async calculateBalances(
     accounts: AccountRow[],
+    client: Prisma.TransactionClient = this.prisma,
+    scope: Prisma.TransactionWhereInput = {},
   ): Promise<{ balances: Map<string, number>; used: Set<string> }> {
     const balances = new Map(accounts.map((account) => [account.id, account.initialBalance]));
     const used = new Set<string>();
@@ -98,18 +102,19 @@ export class AccountsService {
 
     const accountIds = accounts.map((account) => account.id);
     const countedTransactions: Prisma.TransactionWhereInput = {
+      ...scope,
       deletedAt: null,
     };
 
     const [outgoing, incoming] = await Promise.all([
       // 這個帳戶作為「交易的帳戶」時的加總，方向由 directionOf 依型別決定。
-      this.prisma.transaction.groupBy({
+      client.transaction.groupBy({
         by: ['accountId', 'type'],
         where: { ...countedTransactions, accountId: { in: accountIds } },
         _sum: { amount: true },
       }),
       // 轉入：只有 TRANSFER 會填 toAccountId，這裡的加總一律是加。
-      this.prisma.transaction.groupBy({
+      client.transaction.groupBy({
         by: ['toAccountId'],
         where: { ...countedTransactions, type: 'TRANSFER', toAccountId: { in: accountIds } },
         _sum: { amount: true },
