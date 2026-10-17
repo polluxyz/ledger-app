@@ -8,7 +8,7 @@ spec：`docs/specs/phase-3j-ledger-delete-archive.md`（決策 183～188、W183�
 
 - 整合分支：`feature/ledger-leave-delete`（已從 `main` 開好，worktree `lld-integration`）。worker 從協調者的契約 commit 開分支，驗收後 merge 回來，最後一個 PR。
 - 授權與刪除時的關聯處理派 `backend`；畫面與 e2e 派 `default`。模型看 `docs/orca-multi-agent.md` §0。
-- 不改 schema、沒有 migration、不改餘額公式。部署只要 build、重開 API。
+- 不改資料表與欄位、不改餘額公式。有 1 個放寬 CHECK 的 migration（spec §3），部署要先備份 `ledger_dev`、`migrate deploy`、build、重開 API。
 
 ## 1. 元件與相依
 
@@ -90,3 +90,4 @@ spec：`docs/specs/phase-3j-ledger-delete-archive.md`（決策 183～188、W183�
 ## 6. 實作紀錄
 
 - 2026-10-17：原 spec 含退出規則（餘額只算成員帳本），寫完發現跟 3f 決策 152 衝突，開發者選 A 縮小範圍；同時補決策 187。
+- 2026-10-17：J2 發現 `PAID_FOR_ME`／`RECEIVED_FOR_ME` 的 CHECK 擋住刪除私人帳本，開發者同意放寬（spec §3）；`Transaction.splitId` 的 `Restrict` 在刪分帳前清掉。J2 把撤銷抽成 `DebtEntriesService.removeInTransaction`、`SplitsService.removeInTransaction`，協調者合併時把 J1 的寫入權檢查搬進前者。`AccountsService.calculateBalances` 改成可傳資料庫交易與範圍，預覽用同一個公式算影響。

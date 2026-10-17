@@ -68,9 +68,11 @@
 
 ## 3. 資料模型
 
-**不改 schema。** 刪除私人帳本前要先處理資料庫的關聯：往來紀錄 → 交易（`DebtEntry.transactionId`）、往來紀錄 → 分帳（`DebtEntry.splitId`）、分帳 → 帳本（`Split.ledgerId`）都是 `Restrict`。
+**不改資料表與欄位，只放寬 1 條 CHECK（實作時發現，開發者 2026-10-17 同意）。** 刪除私人帳本前要先處理資料庫的關聯：往來紀錄 → 交易（`DebtEntry.transactionId`）、往來紀錄 → 分帳（`DebtEntry.splitId`）、分帳 → 帳本（`Split.ledgerId`）都是 `Restrict`。
 
 做法：撤銷後，把指向這本帳本的往來紀錄（此時都已撤銷）的 `transactionId`、`splitId` 設成 `null`，刪掉分帳，再刪帳本。往來紀錄本身留著，對方的待確認、配對紀錄都還在。**如果做不到、一定要改 schema，停下來問開發者。**
+
+實作時發現：「別人替我付」「別人替我收」（`PAID_FOR_ME`、`RECEIVED_FOR_ME`）有 CHECK 規定一定要有交易（3h migration `20261014160000_forgiveness_has_transaction`），撤銷後也清不掉 `transactionId`。開發者 2026-10-17 選「放寬規則」：migration `20261017140000_debt_entry_withdrawn_without_transaction` 讓這 2 種紀錄**已撤銷時**可以沒有交易，沒撤銷的照舊一定要有。另外分帳產生的交易指向分帳（`Transaction.splitId`）也是 `Restrict`，刪分帳前先清掉，不必改 schema。
 
 ---
 
@@ -157,7 +159,7 @@ interface LedgerRemovalPreview {
 - **Ask first**：改 schema（例如關聯改成 `SetNull`）；替別人撤銷；動到退出的規則（已延後）。
 - **Never**：刪除帳本時刪掉往來紀錄本身（對方的待確認會跟著消失）；前端自己算預覽的數字。
 
-## 8. 部署風險
+- 有 1 個 migration（放寬 CHECK，不動資料）。部署前先備份 `ledger_dev`，再 `prisma migrate deploy`。不改餘額公式，部署後既有的餘額都不變。
 
 - 不改 schema、不改餘額公式，部署後既有的餘額都不變。
 - 決策 187 讓一些原本刪得掉的共享帳本刪不掉了。這是預期的，部署前不用查資料。
