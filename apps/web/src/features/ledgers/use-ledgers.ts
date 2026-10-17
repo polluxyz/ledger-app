@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateLedgerRequest, LedgerDetail, LedgerSummary } from '@ledger/shared';
+import type {
+  CreateLedgerRequest,
+  LedgerDetail,
+  LedgerRemovalPreview,
+  LedgerSummary,
+} from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
 
 /**
@@ -35,6 +40,11 @@ export function useLedgers(includeArchived = false, enabled = true) {
       apiRequest<LedgerSummary[]>(`/ledgers${includeArchived ? '?includeArchived=true' : ''}`),
     enabled,
   });
+}
+
+/** 編輯者與擁有者可寫入尚未封存的帳本。 */
+export function isLedgerWritable(ledger: Pick<LedgerSummary, 'role' | 'archivedAt'> | undefined) {
+  return ledger !== undefined && ledger.role !== 'VIEWER' && ledger.archivedAt === null;
 }
 
 /** 單一帳本的明細，含成員清單。無權存取時後端回 404（不是 403）。 */
@@ -84,9 +94,6 @@ export function useRenameLedger() {
 
 /**
  * 封存帳本：轉為唯讀，並從預設清單中收起。
- *
- * ⚠️ **這個動作無法復原**——後端沒有解除封存的端點（決議見
- * `tasks/phase-2b-slice-2-plan.md` D3）。呼叫端必須先讓使用者打字輸入帳本名稱確認。
  */
 export function useArchiveLedger() {
   const queryClient = useQueryClient();
@@ -113,13 +120,49 @@ export function useDeleteLedger() {
 
   return useMutation({
     // 成功時後端回 204 無 body，`apiRequest` 會回 undefined。
-    mutationFn: ({ id, confirm }: { id: string; confirm: string }) =>
-      apiRequest<void>(`/ledgers/${id}?confirm=${encodeURIComponent(confirm)}`, {
-        method: 'DELETE',
-      }),
+    mutationFn: ({
+      id,
+      confirm,
+      withdrawDebts,
+    }: {
+      id: string;
+      confirm: string;
+      withdrawDebts?: boolean;
+    }) => {
+      const query = new URLSearchParams({ confirm });
+      if (withdrawDebts) {
+        query.set('withdrawDebts', 'true');
+      }
+      return apiRequest<void>(`/ledgers/${id}?${query.toString()}`, { method: 'DELETE' });
+    },
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       queryClient.removeQueries({ queryKey: ['ledger', id] });
     },
+  });
+}
+
+/** 已封存帳本的取消封存動作；成功後更新切換器與明細快取。 */
+export function useUnarchiveLedger() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<LedgerDetail>(`/ledgers/${id}/unarchive`, { method: 'POST' }),
+    onSuccess: (ledger) => {
+      void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['ledger', ledger.id] });
+    },
+  });
+}
+
+/** 刪除帳本前的伺服器計算預覽；每次打開刪除對話框都重新查詢。 */
+export function useRemovalPreview(ledgerId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['ledger-removal-preview', ledgerId],
+    queryFn: () => apiRequest<LedgerRemovalPreview>(`/ledgers/${ledgerId}/removal-preview`),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }

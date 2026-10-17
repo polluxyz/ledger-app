@@ -80,6 +80,7 @@ describe('CounterpartyDetail', () => {
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
       entryPages?: Record<number, unknown[]>;
+      ledgers?: LedgerSummary[];
     } = {},
   ) {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -117,8 +118,8 @@ describe('CounterpartyDetail', () => {
           },
         ]);
       }
-      if (url.endsWith('/ledgers')) {
-        return json([ledger]);
+      if (parsedUrl.pathname.endsWith('/ledgers')) {
+        return json(options.ledgers ?? [ledger]);
       }
       if (url.includes('/users/me/record-defaults')) {
         return json({ ledgerId: 'ledger-1', accountId: 'account-1' });
@@ -158,6 +159,7 @@ describe('CounterpartyDetail', () => {
       displayName?: string;
       ledgerParts?: Counterparty['ledgerParts'];
       entryPages?: Record<number, unknown[]>;
+      ledgers?: LedgerSummary[];
     } = {},
     mode: 'overview' | 'personal' = 'personal',
     selectedLedger: LedgerSummary = ledger,
@@ -322,6 +324,49 @@ describe('CounterpartyDetail', () => {
       true,
     );
     expect(screen.queryByRole('button', { name: '歷史' })).not.toBeInTheDocument();
+  });
+
+  it('shows entry actions from each recorded ledger and keeps legacy entries on the selected-ledger rule', async () => {
+    const writableLedger: LedgerSummary = { ...ledger, id: 'ledger-writable', role: 'EDITOR' };
+    const viewerLedger: LedgerSummary = { ...ledger, id: 'ledger-viewer', role: 'VIEWER' };
+    const archivedLedger: LedgerSummary = {
+      ...ledger,
+      id: 'ledger-archived',
+      archivedAt: '2026-09-15T00:00:00.000Z',
+    };
+    const recordedEntry = (id: string, ledgerId: string) => ({
+      ...baseEntry,
+      id,
+      recorded: { ...baseEntry.recorded, ledgerId },
+    });
+    const entries = [
+      recordedEntry('writable', writableLedger.id),
+      recordedEntry('viewer', viewerLedger.id),
+      recordedEntry('archived', archivedLedger.id),
+      { ...baseEntry, id: 'legacy', recorded: null },
+    ];
+
+    renderDetail(
+      900,
+      entries,
+      entries.length,
+      { ledgers: [writableLedger, viewerLedger, archivedLedger] },
+      'personal',
+      viewerLedger,
+    );
+
+    await waitFor(() => {
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0]!).getByRole('button', { name: '更多操作' })).toBeInTheDocument();
+      for (const row of rows.slice(1)) {
+        expect(within(row).queryByRole('button', { name: '更多操作' })).not.toBeInTheDocument();
+      }
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => new URL(String(url)).searchParams.get('includeArchived') === 'true',
+      ),
+    ).toBe(true);
   });
 
   it('keeps only the account: no counterparty management buttons (SC-W63)', async () => {

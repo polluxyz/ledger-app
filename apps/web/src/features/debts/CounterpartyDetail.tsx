@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -9,6 +9,7 @@ import { DebtEntriesList } from './DebtEntriesList';
 import { DebtEntryForm } from './DebtEntryForm';
 import { useCounterparty, useCounterpartyEntryPages, useForgiveCounterparty } from './use-debts';
 import { LedgerSourceList } from './LedgerSourceList';
+import { isLedgerWritable, useLedgers } from '../ledgers/use-ledgers';
 import styles from './CounterpartyDetail.module.css';
 
 interface CounterpartyDetailProps {
@@ -37,7 +38,12 @@ export function CounterpartyDetail({
 }: CounterpartyDetailProps) {
   const counterparty = useCounterparty(counterpartyId);
   const entries = useCounterpartyEntryPages(counterpartyId, 'outstanding');
+  const ledgers = useLedgers(true);
   const forgive = useForgiveCounterparty();
+  const writableLedgerIds = useMemo(
+    () => new Set((ledgers.data ?? []).filter(isLedgerWritable).map((item) => item.id)),
+    [ledgers.data],
+  );
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
   const [entryFormOpen, setEntryFormOpen] = useState(false);
@@ -92,7 +98,9 @@ export function CounterpartyDetail({
           <DebtEntriesList
             entries={outstandingEntries}
             balance={person.balance}
-            editable={canWrite}
+            editable={mode === 'personal'}
+            fallbackEditable={canWrite}
+            writableLedgerIds={writableLedgerIds}
             displayName={person.displayName}
             avatarLabels={avatarLabels}
             onEditSplit={onEditSplit}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
@@ -57,6 +57,8 @@ describe('Ledger detail page', () => {
       detail?: () => Promise<Response>;
       me?: Record<string, unknown>;
       remove?: () => Promise<Response>;
+      preview?: unknown;
+      unarchive?: () => Promise<Response>;
       people?: unknown[];
       groups?: unknown[];
       counterparties?: unknown[];
@@ -81,6 +83,25 @@ describe('Ledger detail page', () => {
       }
       if (target.includes('/ledgers/led-2/archive')) {
         return Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archivedOn }));
+      }
+      if (target.endsWith('/ledgers/led-2/unarchive') && init?.method === 'POST') {
+        return (
+          overrides.unarchive?.() ??
+          Promise.resolve(jsonResponse(200, { ...detail, archivedAt: null }))
+        );
+      }
+      if (target.endsWith('/ledgers/led-2/removal-preview')) {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            overrides.preview ?? {
+              accounts: [],
+              counterparties: [],
+              withdrawsDebts: false,
+              delete: { allowed: true, blockedBy: null },
+            },
+          ),
+        );
       }
       // 刪除的網址帶著 ?confirm=，接不到下面那個 endsWith 的分支。
       if (init?.method === 'DELETE' && target.includes('/ledgers/led-2')) {
@@ -247,7 +268,7 @@ describe('Ledger detail page', () => {
     });
   });
 
-  it('offers no rename on an archived ledger', async () => {
+  it('offers unarchive but not rename on an archived ledger', async () => {
     routeFetch({
       detail: () => Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archivedOn })),
     });
@@ -256,8 +277,9 @@ describe('Ledger detail page', () => {
 
     expect(await screen.findByText('封存後僅可讀取')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '改名' })).not.toBeInTheDocument();
-    // 已封存的帳本沒有東西好封存，後端也不接受刪除。
-    expect(screen.queryByRole('heading', { name: '危險操作' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '危險操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消封存' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '刪除帳本' })).not.toBeInTheDocument();
   });
 
   it('hides the danger zone from someone who is not the owner', async () => {
@@ -269,21 +291,17 @@ describe('Ledger detail page', () => {
     expect(screen.queryByRole('heading', { name: '危險操作' })).not.toBeInTheDocument();
   });
 
-  it('archives the ledger only after the name is typed', async () => {
+  it('archives the ledger without typing a name or showing a description', async () => {
     routeFetch();
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: '封存帳本' }));
-    // 文案要把「無法解除封存」講在按鈕之前，不能等按下去才說。
-    expect(screen.getByText(/無法解除封存/)).toBeInTheDocument();
-
-    const confirm = screen.getByRole('button', { name: '封存' });
-    expect(confirm).toBeDisabled();
-
-    await user.type(screen.getByLabelText('請輸入「家庭帳本」以確認'), '家庭帳本');
-    await user.click(confirm);
+    expect(screen.getByRole('heading', { name: '封存「家庭帳本」' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/輸入/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/無法解除封存/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '封存' }));
 
     await waitFor(() => {
       const archive = fetchMock.mock.calls.find((call) =>
@@ -308,14 +326,18 @@ describe('Ledger detail page', () => {
     expect(screen.getByRole('button', { name: '封存帳本' }).className).not.toMatch(/deleteButton/);
   });
 
-  it('deletes the ledger with the name as confirm and returns to the list', async () => {
+  it('loads the removal preview, deletes with the typed name, and returns to the list', async () => {
     routeFetch();
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: '刪除帳本' }));
-    await user.type(screen.getByLabelText('請輸入「家庭帳本」以確認'), '家庭帳本');
+    expect(await screen.findByRole('heading', { name: '刪除「家庭帳本」' })).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledgers/led-2/removal-preview')),
+    ).toBe(true);
+    await user.type(screen.getByLabelText('輸入帳本名稱'), '家庭帳本');
     await user.click(screen.getByRole('button', { name: '刪除' }));
 
     await waitFor(() => {
@@ -323,37 +345,63 @@ describe('Ledger detail page', () => {
         (call) => (call[1] as RequestInit | undefined)?.method === 'DELETE',
       );
       expect(remove).toBeDefined();
-      // 送出去的是帳本原本的名稱，不是使用者打的字。
-      expect(String(remove?.[0])).toContain(`confirm=${encodeURIComponent('家庭帳本')}`);
+      const deleteUrl = new URL(String(remove?.[0]));
+      expect(deleteUrl.searchParams.get('confirm')).toBe('家庭帳本');
+      expect(deleteUrl.searchParams.has('withdrawDebts')).toBe(false);
     });
     await waitFor(() => {
       expect(window.location.pathname).toBe('/ledgers');
     });
   });
 
-  it('points the owner at archiving when others have recorded transactions', async () => {
+  it('shows unarchive only to the owner and refreshes the ledger list after success', async () => {
+    let archived = true;
     routeFetch({
-      remove: () =>
-        Promise.resolve(
-          jsonResponse(409, {
-            statusCode: 409,
-            errorCode: 'LEDGER_HAS_OTHERS_TRANSACTIONS',
-            message: 'Ledger has transactions recorded by other members.',
-          }),
-        ),
+      detail: () =>
+        Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archived ? archivedOn : null })),
+      unarchive: () => {
+        archived = false;
+        return Promise.resolve(jsonResponse(200, { ...detail, archivedAt: null }));
+      },
     });
     const user = userEvent.setup();
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '刪除帳本' }));
-    await user.type(screen.getByLabelText('請輸入「家庭帳本」以確認'), '家庭帳本');
-    await user.click(screen.getByRole('button', { name: '刪除' }));
+    await user.click(await screen.findByRole('button', { name: '取消封存' }));
+    const confirmation = screen.getByRole('dialog', { name: '取消封存「家庭帳本」' });
+    expect(confirmation).toBeInTheDocument();
+    await user.click(within(confirmation).getByRole('button', { name: '取消封存' }));
 
-    // 光說「不能刪除」不夠，要講出下一步是什麼——封存鈕就在同一區塊裡。
-    expect(await screen.findByText(/改用「封存帳本」/)).toBeInTheDocument();
-    // 彈窗留著。關掉的話使用者只會看到「什麼都沒發生」。
-    expect(screen.getByRole('dialog', { name: '刪除帳本' })).toBeInTheDocument();
-    expect(window.location.pathname).toBe('/ledgers/led-2');
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith('/ledgers/led-2/unarchive') &&
+            (init as RequestInit)?.method === 'POST',
+        ),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith('/ledgers') && (init as RequestInit)?.method !== 'POST',
+        ),
+      ).toBe(true);
+      expect(window.location.pathname).toBe('/ledgers/led-2');
+    });
+    expect(await screen.findByRole('button', { name: '封存帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消封存' })).not.toBeInTheDocument();
+  });
+
+  it('hides unarchive from an archived ledger to a non-owner', async () => {
+    routeFetch({
+      detail: () => Promise.resolve(jsonResponse(200, { ...detail, archivedAt: archivedOn })),
+      me: { id: 'u2', email: 'bob@example.com', name: 'Bob' },
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '家庭帳本' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消封存' })).not.toBeInTheDocument();
   });
 });

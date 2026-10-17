@@ -19,6 +19,10 @@ interface DebtEntriesListProps {
   displayName: string;
   balance: number;
   editable?: boolean;
+  /** 可寫入且未封存的帳本；有 `recorded` 的紀錄依自己的帳本決定操作權。 */
+  writableLedgerIds?: ReadonlySet<string>;
+  /** 沒有 `recorded` 的舊紀錄沿用原本依目前檢視情境決定的操作權。 */
+  fallbackEditable?: boolean;
   onEditSplit?: (splitId: string) => void;
   avatarLabels?: ReadonlyMap<string, string>;
 }
@@ -38,6 +42,8 @@ export function DebtEntriesList({
   displayName,
   balance,
   editable = true,
+  writableLedgerIds,
+  fallbackEditable = editable,
   onEditSplit,
   avatarLabels,
 }: DebtEntriesListProps) {
@@ -77,6 +83,11 @@ export function DebtEntriesList({
         {entries.map((entry) => {
           const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
           const isUnrecorded = entry.transactionId === null && !isAdjustment;
+          const canEditEntry =
+            editable &&
+            (entry.recorded === null
+              ? fallbackEditable
+              : (writableLedgerIds?.has(entry.recorded.ledgerId) ?? fallbackEditable));
           const flow = getDebtEntryFlow(entry, displayName);
           const from = flow.direction === 'iOweThem' ? '我' : displayName;
           const to = flow.direction === 'iOweThem' ? displayName : '我';
@@ -135,7 +146,7 @@ export function DebtEntriesList({
                 <span className={rowStyles.amount}>
                   <span className={rowStyles.amountText}>{formatMoney(Math.abs(entry.delta))}</span>
                 </span>
-                {editable && entry.settlesEntryId === null && (
+                {canEditEntry && entry.settlesEntryId === null && (
                   <span className={rowStyles.actions}>
                     <EntryMenu
                       hasEdit={!isAdjustment}
