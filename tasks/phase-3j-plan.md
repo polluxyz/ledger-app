@@ -91,3 +91,6 @@ spec：`docs/specs/phase-3j-ledger-delete-archive.md`（決策 183～188、W183�
 
 - 2026-10-17：原 spec 含退出規則（餘額只算成員帳本），寫完發現跟 3f 決策 152 衝突，開發者選 A 縮小範圍；同時補決策 187。
 - 2026-10-17：J2 發現 `PAID_FOR_ME`／`RECEIVED_FOR_ME` 的 CHECK 擋住刪除私人帳本，開發者同意放寬（spec §3）；`Transaction.splitId` 的 `Restrict` 在刪分帳前清掉。J2 把撤銷抽成 `DebtEntriesService.removeInTransaction`、`SplitsService.removeInTransaction`，協調者合併時把 J1 的寫入權檢查搬進前者。`AccountsService.calculateBalances` 改成可傳資料庫交易與範圍，預覽用同一個公式算影響。
+- 2026-10-17：J4 合併後協調者在整合分支自己重跑：shared 116、API 517、Web 783、API e2e 39 檔 324 條、Web e2e 61 條全綠。PR #131 squash `052a80d`。
+- 2026-10-17 部署 dev：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3j_20261017_2256.dump`，`migrate deploy` 套上 `20261017140000_debt_entry_withdrawn_without_transaction`（查過 CHECK 已含 `deletedAt`），build。
+- 2026-10-17：開發者操作後回報刪除對話框列出「兩清 → 兩清」。改成往來段只列刪除後餘額會變的對象（#132，`1b9d5fb`），已部署。5 個 `ledger_lld_*_test` 經開發者同意刪除，worktree、分支都已清掉。
