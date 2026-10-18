@@ -248,6 +248,7 @@ Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 - 難或要求高準確的工作（migration SQL、授權與資料隔離、鎖、金額與帳戶規則）派 `backend` 角色；其餘，包括單純的 API 端點與補測試，派 `default`。schema、API、授權的產出不管哪個角色做，驗收時都逐行看 diff，自己重跑隔離測試與 e2e。
 - 額度用完由協調者主動查（`orca account list` 的用量與 worker 畫面），自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
+- 設計取捨多的計畫，可以先派 `advisor` 角色討論，想清楚再回報開發者（`docs/orca-multi-agent.md` §1.1）。advisor 只給意見、不改檔；決定仍由開發者核可。
 - worker 的產出一律由協調者驗收後才進 PR。
 - 換 session 時先讀 `docs/handoff.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
 

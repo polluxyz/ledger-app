@@ -6,15 +6,17 @@
 
 其他文件、`CLAUDE.md`、Task spec 一律只寫**角色名**，不寫模型 id。換模型時改這張表，再依「啟動方式」那一欄派工。
 
-| 角色         | 什麼時候用                                                      | 啟動方式                                                                                                           |
-| ------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `default`    | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"` |
-| `backend`    | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6.1-sol --effort high`                                                            |
-| `fallback-1` | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                 |
-| `fallback-2` | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                          |
-| `fallback-3` | 前三層都不能用                                                  | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                     |
+| 角色           | 什麼時候用                                                      | 啟動方式                                                                                                              |
+| -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `default`      | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6-luna -c model_reasoning_effort=max"`    |
+| `backend`      | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6.1-sol --effort high`                                                               |
+| `fallback-1`   | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                    |
+| `fallback-2`   | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                             |
+| `fallback-3`   | 前三層都不能用                                                  | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                        |
+| `advisor`      | 跟協調者討論計畫或設計，不寫程式（見 §1.1）                     | 一行，`--agent antigravity --model gemini-4-argon-high`，不帶 `--effort`（強度寫在模型 id 裡）                        |
+| `advisor` 備援 | `advisor` 額度用完                                              | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh"` |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。`advisor` 先用 Gemini 4 Argon high，用完改 Codex `gpt-6.1-sol` xhigh（2026-10-18）。
 
 兩種啟動方式：
 
@@ -42,6 +44,16 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - 動到 schema、API、授權的產出，不管哪個角色做，協調者驗收時都要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
+
+### 1.1 advisor（討論計畫）
+
+開發者 2026-10-18 同意：有些計畫可以先跟 `advisor` 討論，想清楚再回報開發者。
+
+- 適合：設計取捨多、會牽動既有決策的計畫（例如退出規則與複製功能），寫 spec 前的前提清單、替代方案、風險。
+- Task spec 要自足：附上相關 spec 的段落路徑與要回答的問題。advisor 只讀檔與回答，**不改檔、不 commit、不跑 migration**，用 `worker_done` 的摘要或 `--report-path` 帶回意見。
+- 放在協調者寫文件用的 worktree，不另開；它不碰資料庫。
+- advisor 的意見只是參考：取捨與決定仍由開發者核可，協調者回報時要分清楚「advisor 的意見」與「協調者的建議」。
+- 額度用完的判定與換層照 §4；`advisor` 備援是 Codex，`orca account list` 查得到用量。
 
 ## 2. 派工迴圈
 
