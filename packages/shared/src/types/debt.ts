@@ -179,6 +179,8 @@ export interface DebtEntryRecorded {
   accountId: string | null;
   title: string | null;
   categoryId: string | null;
+  /** 分類的圖示代號（借還頁紀錄列顯示用）；沒有分類或分類用通用圖示時為 null。 */
+  categoryIcon: string | null;
 }
 
 /** 還款底下的結清分支（3h 決策 170）。名稱用 `differenceLabelOf` 由還款與分支的型別決定。 */

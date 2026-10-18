@@ -6,6 +6,7 @@ import type {
   CounterpartyLedgerPart,
   DebtEntry,
   DebtEntryKind,
+  DebtEntryRecorded,
   DebtEntrySyncStatus,
   DebtTransactionType,
 } from '@ledger/shared';
@@ -137,7 +138,15 @@ export function runningBalances<T extends OrderedEntry>(entries: ReadonlyArray<T
 type CounterpartyRow = Prisma.CounterpartyGetPayload<object>;
 /** 回應所需交易欄位隨紀錄一起查出，清單不逐筆查詢。 */
 export const DEBT_ENTRY_INCLUDE = {
-  transaction: { select: { ledgerId: true, accountId: true, title: true, categoryId: true } },
+  transaction: {
+    select: {
+      ledgerId: true,
+      accountId: true,
+      title: true,
+      categoryId: true,
+      category: { select: { icon: true } },
+    },
+  },
 } satisfies Prisma.DebtEntryInclude;
 
 type DebtEntryRow = Prisma.DebtEntryGetPayload<{ include: typeof DEBT_ENTRY_INCLUDE }>;
@@ -167,6 +176,13 @@ export function toCounterparty(
   };
 }
 
+/** 交易的分類圖示攤平成 `categoryIcon`，借還頁不必另外查分類。 */
+function toRecorded(transaction: DebtEntryRow['transaction']): DebtEntryRecorded | null {
+  if (transaction === null) return null;
+  const { category, ...rest } = transaction;
+  return { ...rest, categoryIcon: category?.icon ?? null };
+}
+
 /**
  * `sync` 由呼叫端用 `syncStatuses` 查出來傳入（要看提議）；沒傳時只依配對推，給不牽涉提議的
  * 情境（例如剛寫入、還沒送任何提議的紀錄）。
@@ -188,7 +204,7 @@ export function toDebtEntry(
     date: row.date.toISOString(),
     note: row.note,
     transactionId: row.transactionId,
-    recorded: row.transaction ?? null,
+    recorded: toRecorded(row.transaction),
     splitId: row.splitId,
     settlesEntryId: row.settlesEntryId,
     difference: extra.difference ?? null,

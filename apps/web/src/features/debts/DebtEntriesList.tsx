@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { differenceLabelOf, type DebtEntry, type DebtEntryKind } from '@ledger/shared';
 import { Check, MoreHorizontal } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import confirmStyles from '../../components/ConfirmDialog.module.css';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
@@ -131,6 +132,20 @@ export function DebtEntriesList({
                     )
                   )}
                 </span>
+                {/* 名稱緊接在箭頭右邊，才看得出是哪一筆；標籤與備註留在金額左邊（開發者 2026-10-18）。 */}
+                {entry.recorded !== null &&
+                  (entry.recorded.title !== null || entry.recorded.categoryId !== null) && (
+                    <span className={styles.title}>
+                      {entry.recorded.categoryId !== null && (
+                        <span className={styles.titleIcon} aria-hidden="true">
+                          <CategoryIcon icon={entry.recorded.categoryIcon} size={14} />
+                        </span>
+                      )}
+                      {entry.recorded.title !== null && (
+                        <span className={styles.titleText}>{entry.recorded.title}</span>
+                      )}
+                    </span>
+                  )}
                 <span className={rowStyles.spacer} />
                 <span className={rowStyles.label}>
                   {entry.splitId !== null && <span className={styles.splitBadge}>分帳</span>}

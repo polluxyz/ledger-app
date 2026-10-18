@@ -30,6 +30,7 @@ describe('DebtEntriesList', () => {
       accountId: 'account-1',
       title: null,
       categoryId: null,
+      categoryIcon: null,
     },
     splitId: null,
     settlesEntryId: null,
@@ -114,6 +115,33 @@ describe('DebtEntriesList', () => {
     // 調整紀錄只有打勾圖示，兩端頭貼不出現。
     expect(within(rows[3]!).queryByText(/^(小|我)$/)).not.toBeInTheDocument();
     expect(rows[3]!.querySelector('svg.lucide-check')).not.toBeNull();
+  });
+
+  it('shows the category icon and title right after the arrow, before the note', () => {
+    const recorded = {
+      ledgerId: 'ledger-1',
+      accountId: 'account-1',
+      title: '晚餐',
+      categoryId: 'category-1',
+      categoryIcon: 'food',
+    };
+    renderList([
+      entry({ id: 'titled', note: 'AA', recorded }),
+      entry({ id: 'plain', note: '借款' }),
+      entry({ id: 'unrecorded', transactionId: null, recorded: null, note: '舊帳' }),
+    ]);
+
+    const [titled, plain, unrecorded] = screen.getAllByRole('listitem');
+    const cells = Array.from(titled!.querySelector(`.${rowStyles.row}`)!.children);
+    const titleCell = within(titled!).getByText('晚餐').closest(`.${styles.title}`)!;
+    expect(cells.indexOf(titleCell)).toBe(
+      cells.indexOf(titled!.querySelector(`.${rowStyles.arrow}`)!) + 1,
+    );
+    expect(titleCell.querySelector('[data-category-icon="food"]')).not.toBeNull();
+    expect(within(titled!).getByText('AA')).toBeInTheDocument();
+    // 沒名稱、沒分類的紀錄不多出空的名稱格。
+    expect(plain!.querySelector(`.${styles.title}`)).toBeNull();
+    expect(unrecorded!.querySelector(`.${styles.title}`)).toBeNull();
   });
 
   it('omits the more-actions menu in read-only mode but keeps the split badge', () => {
