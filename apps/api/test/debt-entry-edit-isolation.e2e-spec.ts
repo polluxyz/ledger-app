@@ -193,6 +193,7 @@ describe('Debt entry edit — isolation (e2e)', () => {
         accountId: s.alice.cashId,
         title: null,
         categoryId: null,
+        categoryIcon: null,
       });
 
       for (const outsider of [s.bob, s.eve]) {

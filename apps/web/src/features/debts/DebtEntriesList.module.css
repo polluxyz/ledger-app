@@ -94,6 +94,28 @@
   color: var(--color-expense);
 }
 
+.title {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.titleIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-accent);
+}
+
+.titleText {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .note {
   flex: 0 1 12rem;
   min-width: 0;

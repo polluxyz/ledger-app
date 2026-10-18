@@ -284,6 +284,12 @@ describe('Debt entry edit (e2e)', () => {
         accountId: alice.cashId,
         title: '押金',
         categoryId,
+        categoryIcon: (
+          await prisma.category.findUniqueOrThrow({
+            where: { id: categoryId },
+            select: { icon: true },
+          })
+        ).icon,
       });
       expect(await transaction(alice, entry)).toMatchObject({
         type: kind,
@@ -379,9 +385,25 @@ describe('Debt entry edit (e2e)', () => {
           ? null
           : await prisma.transaction.findUniqueOrThrow({
               where: { id: row.transactionId },
-              select: { ledgerId: true, accountId: true, title: true, categoryId: true },
+              select: {
+                ledgerId: true,
+                accountId: true,
+                title: true,
+                categoryId: true,
+                category: { select: { icon: true } },
+              },
             });
-      expect(row.recorded).toEqual(tx);
+      expect(row.recorded).toEqual(
+        tx === null
+          ? null
+          : {
+              ledgerId: tx.ledgerId,
+              accountId: tx.accountId,
+              title: tx.title,
+              categoryId: tx.categoryId,
+              categoryIcon: tx.category?.icon ?? null,
+            },
+      );
     }
     expect(rows.find((r) => r.splitId !== null)?.recorded).toMatchObject({
       ledgerId: alice.ledgerId,

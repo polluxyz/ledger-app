@@ -26,6 +26,7 @@ describe('CounterpartyDetail', () => {
       accountId: 'account-1',
       title: null,
       categoryId: null,
+      categoryIcon: null,
     },
     splitId: null,
     settlesEntryId: null,

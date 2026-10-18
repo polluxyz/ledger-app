@@ -6,6 +6,7 @@ import {
   loadOwnedEntry,
   resolveRepayment,
   runningBalances,
+  toDebtEntry,
 } from './debt-entry-rules';
 
 /**
@@ -127,10 +128,50 @@ describe('debt-entry-rules', () => {
         where: { id: 'e-1', deletedAt: null, counterparty: { ownerId: 'user-1' } },
         include: {
           transaction: {
-            select: { ledgerId: true, accountId: true, title: true, categoryId: true },
+            select: {
+              ledgerId: true,
+              accountId: true,
+              title: true,
+              categoryId: true,
+              category: { select: { icon: true } },
+            },
           },
         },
       });
+    });
+  });
+
+  describe('toDebtEntry', () => {
+    const row = (transaction: unknown) =>
+      ({
+        id: 'e-1',
+        counterpartyId: 'cp-1',
+        kind: 'LEND',
+        delta: 100,
+        date: new Date('2026-10-18T00:00:00.000Z'),
+        note: null,
+        transactionId: transaction === null ? null : 't-1',
+        splitId: null,
+        settlesEntryId: null,
+        pairedEntryId: null,
+        createdAt: new Date('2026-10-18T00:00:00.000Z'),
+        updatedAt: new Date('2026-10-18T00:00:00.000Z'),
+        transaction,
+      }) as never;
+
+    // 分類圖示攤平成 categoryIcon，借還頁的紀錄列不必另外查分類。
+    it('flattens the category icon into recorded', () => {
+      const base = { ledgerId: 'l-1', accountId: 'a-1', title: '晚餐', categoryId: 'c-1' };
+      expect(toDebtEntry(row({ ...base, category: { icon: 'food' } })).recorded).toEqual({
+        ...base,
+        categoryIcon: 'food',
+      });
+      expect(toDebtEntry(row({ ...base, categoryId: null, category: null })).recorded).toEqual({
+        ...base,
+        categoryId: null,
+        categoryIcon: null,
+      });
+      expect(toDebtEntry(row(null)).recorded).toBeNull();
     });
   });
 });
