@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193、SC-K1～SC-K12）。後端、畫面、e2e 合成一個 PR。
 
-> 核可：**待核可**（spec 與 spec §10 的 5 條已由開發者 2026-10-18 核可）。
+> 核可：開發者 2026-10-18 核可（含 §1.3、§1.5 核可時補的說明）。
 
 ## 0. 起點
 
@@ -38,6 +38,7 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 | 206、207 | 移除有帳的成員 409；舊的自己退出 409 `LEAVE_REQUIRES_MERGE`                          | `ledgers/ledgers.service.ts` 的 `removeMember`                                                                |
 | 204      | 共享帳本只剩我一個時 `removal-preview` 回 `blockedBy: null`；拿掉 `creatorId` 那一條 | `ledgers/ledgers.service.ts` 的 `removalPlan`                                                                 |
 
+- 「統計」目前沒有彙總端點（首頁統計卡仍是「即將推出」），只能從各帳本的交易列表看。所以決策 189 的「不算進統計」由「打不開」達成：退出後這本帳本的交易列表、`settlement-summary` 都回 404。
 - 單元測試；API e2e：SC-K4、SC-K9，SC-K3 中「打不開」的部分。
 
 ### 1.4 後端 C：合併計畫、預覽、退出（K3，worker）
@@ -58,6 +59,7 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 
 - `transactions.service.ts`：
   - 回應加 `merge`（`sourceLedgerName`、`share`）；合併過的交易 `accountPending` 為 `false`。
+  - **交易列表由後端把同一個 `mergedFromId` 的兩筆合成一列**（比照分帳只回一列，3c §5.2）：回份額那一筆的 id，`amount` 是兩筆合計 T，`merge.share` 是份額 m；代墊那一筆不另列，分頁筆數照合成後算。份額是 0 時只有代墊一筆，照常列出，`merge.share` 為 `null`。前端只排版（W191）。
   - 補帳戶時這筆我合併過 → 409 `TRANSACTION_ALREADY_MERGED`（決策 199）。
   - 合併來的交易只能改名稱、分類、帳戶與刪除，其他欄位 400；同一個 `mergedFromId` 的兩筆一起改、一起刪（決策 202）。
   - 借還型別的交易端點限制照舊，`mergeId` 有值的例外。
@@ -134,4 +136,10 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 
 ## 6. 實作紀錄
 
-（實作時補）
+### K0（協調者，2026-10-18）
+
+- shared 新檔 `types/ledger-leave.ts`：`LeaveRequest`、`LedgerLeavePreview`（項目、帳戶、帳本轉入、撤銷拆成具名型別）、`LEDGER_LEAVE_BLOCKERS`、`TransactionMerge`。
+- spec 沒寫、契約補上的：`LEDGER_DELETE_BLOCKERS` 加 `HAS_OTHER_MEMBERS`。共享帳本還有其他成員時，刪除預覽要有一個原因可以顯示（W190 的「一行原因」）。
+- 新的借還種類讓 web 兩張種類對照表少一項，先補「帳本轉入」（`entry-flow.ts`、`PendingCard.tsx`）；刪除對話框補 `HAS_OTHER_MEMBERS` 的原因。K5 可以再調。
+- API 端 `merge` 先一律回 `null`，K4 填值。`debt-proposals.service.ts` 加一個型別收窄：Prisma 還沒有 `LEDGER_CARRY_OVER`，K1 之後可以拿掉。
+- 隔離測試 9 條：8 條紅燈（端點不存在、移除與舊退出照舊 204、已退出的付款人仍記到臨時帳戶），1 條綠燈（沒帳的成員可以移除，防止 K2 擋過頭）。SC-K4 用資料庫刪成員模擬退出，K2 單獨就能轉綠。
