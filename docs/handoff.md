@@ -6,25 +6,29 @@
 
 ---
 
-## 最新交接（2026-10-18，3j 已合併並部署；等開發者操作回饋）
+## 最新交接（2026-10-18，3k spec 已核可；plan 與 todo 待核可）
 
 ### 現況
 
-- 3j（帳本刪除、封存、取消封存）已合併（spec #130、實作 #131 squash `052a80d`、修訂 #132 `1b9d5fb`）。spec `docs/specs/phase-3j-ledger-delete-archive.md`，驗證數字與偏離記在 `tasks/phase-3j-plan.md` §6。
-  - 借還紀錄的每一種寫入都檢查帳本寫入權（決策 183，補上 3i 的缺口）。
-  - 取消封存、封存不用打名稱；刪除前先看帳戶與往來的影響；私人帳本有借還也能刪（借還照撤銷處理）。
-  - **決策 187（記到別人帳戶的交易擋刪除）是暫時的**：將來退出規則若定案為「退出後餘額不算」，一定要放寬（spec §1「延後」）。
-- 已部署到 dev（2026-10-17）：有 1 個 migration（放寬 CHECK），備份 `D:Projectsledger-app-backupsledger_dev_before_3j_20261017_2256.dump`。`web-redesign` detached 在 `1b9d5fb`。**要請開發者重開 API、按 `Ctrl + Shift + R`。**
-- 3j 的 worktree、分支、測試資料庫都已清掉，資料庫只剩 `ledger_dev`、`ledger_test`。Orca Run `run_2f928c8df06c` 沒有進行中的派工。
-- `ledger-split-web` worktree 是協調者寫文件用的，它的 `apps/api/.env` 與 `.env.test` 指向 `ledger_test`。
+- 3k（退出共享帳本並合併到別的帳本）的 spec 已核可：`docs/specs/phase-3k-leave-and-merge.md`，含 §10 的 5 條。plan `tasks/phase-3k-plan.md` 與 todo `tasks/phase-3k-todo.md` 已寫，**還沒核可**。三份跟本檔在同一個 docs PR。
+- 預覽頁 `docs/artifacts/step-3k-leave-merge-preview.html`（在 `web-redesign` worktree，不進版控）已發布成 artifact `https://claude.ai/artifact/8uXoEdW3PWM1RcAc1QdDm2`（Version 4）。
+- 討論時開發者的取捨（理由都寫進 spec 的決策與 W189）：
+  - 退出＝從我這邊刪除；只有「合併」、沒有「保留」；沒勾的交易對帳戶的影響直接消失。
+  - 我付的代墊整筆合併，別人付的只合併我的份額、沒有帳戶。欠款不逐筆標，只在「帳本轉入」的總數出現一次（3f 決策 142 整群抵銷）。選擇畫面上別人付的列寫「小華付」，不寫「不動帳戶」。
+  - 「選擇交易」另開一個比較大的畫面；下方的帳戶段每勾一次就同步變化。
+- 借還頁紀錄列加了分類圖示與名稱（#135，`92a3293`），已部署到 dev。3i 已知限制「往來紀錄列沒顯示名稱與分類」因此解掉了。
+- dev 上 2 位舊規則下退出的成員已用擁有者身分透過 API 加回：d@d.com 回到花蓮三日、a2@a.com 回到 share，角色都是 EDITOR。3k 上線後要請他們用新流程退出。
+- `web-redesign` detached 在 `92a3293`。資料庫只剩 `ledger_dev`、`ledger_test`。沒有進行中的 Orca Run 或 worker。
+- worktree：`leave-merge-spec`（這個 docs PR 用，合併後可以清）、`ledger-split-web`（協調者寫文件用，`.env` 指向 `ledger_test`）、`web-redesign`（開發者的 dev）。
 - a@a.com 的測試情境見 3h spec §1（房東、阿德、明哥、花蓮三日）。
-- 模型：`backend` 用 `gpt-6.1-sol` high，`default` 用 `gpt-6-luna` max（`docs/orca-multi-agent.md` §0）。Codex 啟動時可能卡在「有新版本」提示，選 3 後重派。
+- 模型：看 `docs/orca-multi-agent.md` §0。設計取捨多時可以先派 `advisor`（§1.1）。
 
 ### 下一步
 
-1. 等開發者操作 3j 後的回饋，依回饋開修訂（先改 spec 再改程式）。
-2. 延後的退出規則（退出前看影響、撤銷並退出、共享帳本只剩自己可刪、複製到別的帳本）等複製功能時，跟 3f 決策 151、152 一起重想，並放寬決策 187。
-3. 3i 已知限制還沒做：借還頁的往來紀錄列沒顯示名稱與分類；共享帳本其他成員看別人的借出有分類時，第一行是分類名稱。
+1. 請開發者核可 3k plan 與 todo（docs PR 合併不等於 plan 核可，先問）。
+2. 核可後照 plan §2：從 `main` 開整合分支 `feature/ledger-leave-merge`，協調者做 K0（shared 契約、隔離測試先紅），再派第 1 波 K1、K2、K5。
+3. K7 部署前跑 spec §8 的查詢，備份 `ledger_dev` 再 `migrate deploy`。
+4. 3k 完成後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
 
 ### 開發者的偏好（不在 spec 裡的）
 
@@ -51,6 +55,6 @@
   2. `pnpm --filter @ledger/shared build`。Vite 會自己更新預先打包，不必刪 `.vite`。
   3. schema 有變：先 `pg_dump` 備份 `ledger_dev`，在 `apps/api` 手動跑 `prisma generate`（`pnpm install --frozen-lockfile` 不一定會重跑），再跑 `prisma migrate deploy`。
   4. `apps/api` 跑 `pnpm build`，然後請他重開 API 與 Vite。
-- 測試帳號（dev 資料庫，密碼都是 `12345678`）：a@a.com（test）、b@b.com（小明）、c@c.com（小華）、d@d.com（小美，已離開花蓮三日）。
+- 測試帳號（dev 資料庫，密碼都是 `12345678`）：a@a.com（test）、b@b.com（小明）、c@c.com（小華）、d@d.com（小美，花蓮三日）、a2@a.com（share）。
 - 要建測試資料時，開發者的 3000 若沒在跑，就暫時用 `PORT=3200 node dist/main` 起一個，用完關掉。登入端點有限流，同一個帳號只登入一次。
 - 用 `psql` 查含中文的資料：把 SQL 寫成 UTF-8 檔、加 `PGCLIENTENCODING=UTF8` 再用 `-f` 跑，直接在指令列打中文會遇到編碼錯誤。
