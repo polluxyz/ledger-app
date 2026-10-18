@@ -794,6 +794,7 @@ function entryKindLabel(kind: DebtEntryKind): string {
     PAID_FOR_THEM: '幫對方付',
     RECEIVED_FOR_THEM: '替對方代收',
     RECEIVED_FOR_ME: '對方代收',
+    LEDGER_CARRY_OVER: '帳本轉入',
   };
   return labels[kind];
 }

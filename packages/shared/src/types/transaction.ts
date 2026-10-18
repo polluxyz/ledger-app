@@ -8,6 +8,7 @@ import type {
   TransactionSettlementRef,
 } from './ledger-split';
 import type { TransactionSplitRef } from './split';
+import type { TransactionMerge } from './ledger-leave';
 
 /**
  * 一筆交易的型別：支出、收入、轉帳，以及借還帳的 4 種（見 `DEBT_TRANSACTION_TYPES`）。
@@ -47,6 +48,10 @@ export type ManualTransactionType = (typeof MANUAL_TRANSACTION_TYPES)[number];
  *
  * 使用者不會自己挑這 4 種：建立債務時說「我借出／我借入」，記還款時由系統依角色決定
  * `COLLECT` 或 `REPAY`。這類交易在一般交易端點是唯讀的。
+ *
+ * 例外（3k §3）：退出共享帳本合併來的「帳本往來」也用這幾種型別，不從往來帳產生——代墊與付出的
+ * 結清記 `LEND`、收到的結清記 `COLLECT`、代收記 `BORROW`。它們的 `merge` 有值，在一般交易端點
+ * 可以改名稱、分類、帳戶與刪除（決策 202）。
  */
 export const DEBT_TRANSACTION_TYPES = ['LEND', 'BORROW', 'COLLECT', 'REPAY'] as const;
 export type DebtTransactionType = (typeof DEBT_TRANSACTION_TYPES)[number];
@@ -138,6 +143,8 @@ export interface Transaction {
   differenceOfId: string | null;
   /** 還款底下的結清分支（3h 決策 170、W175）；沒有分支為 `null`。明細把它畫在還款下面一行。 */
   difference: TransactionDifferenceRef | null;
+  /** 退出共享帳本時合併來的（3k 決策 196、W191）；只有合併者本人看得到，其他為 `null`。 */
+  merge: TransactionMerge | null;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }

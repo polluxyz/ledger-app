@@ -119,9 +119,13 @@ export interface UpdateMemberRequest {
   role: LedgerRole;
 }
 
-/** 預覽說不能刪的原因（3j §4.2）。 */
+/**
+ * 預覽說不能刪的原因（3j §4.2）。`HAS_OTHER_MEMBERS`：共享帳本還有其他成員（3k 決策 204）；
+ * 只剩我一個時預覽不擋，畫面改用退出對話框的合併內容刪除（W190）。
+ */
 export const LEDGER_DELETE_BLOCKERS = [
   'LEDGER_ARCHIVED',
+  'HAS_OTHER_MEMBERS',
   'HAS_OTHERS_TRANSACTIONS',
   'SHARED_HAS_DEBTS',
 ] as const;

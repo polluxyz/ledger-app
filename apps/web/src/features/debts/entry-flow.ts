@@ -34,6 +34,7 @@ const DESCRIPTION_TEMPLATES: Record<DebtEntryKind, (displayName: string) => stri
   SETTLEMENT: (name) => `我和${name}結清差額`,
   FORGIVE: (name) => `我免除${name}欠我的`,
   FORGIVEN: (name) => `${name}免除我欠的款項`,
+  LEDGER_CARRY_OVER: () => '帳本轉入',
 };
 
 /**

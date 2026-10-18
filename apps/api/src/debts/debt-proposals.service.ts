@@ -278,7 +278,8 @@ export class DebtProposalsService {
     const entry = await tx.debtEntry.create({
       data: {
         counterpartyId,
-        kind,
+        // 上面已擋掉同步種類以外的值；帳本轉入（3k）不會出現在提議裡。
+        kind: kind as Exclude<typeof kind, 'LEDGER_CARRY_OVER'>,
         delta: deltaFor(
           kind as
             | 'LEND'

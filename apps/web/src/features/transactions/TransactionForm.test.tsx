@@ -313,6 +313,7 @@ describe('TransactionForm', () => {
       accountPending: false,
       differenceOfId: null,
       difference: null,
+      merge: null,
       createdAt: '2026-09-15T04:00:00.000Z',
       ...overrides,
     };

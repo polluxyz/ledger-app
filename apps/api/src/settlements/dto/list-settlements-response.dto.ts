@@ -139,6 +139,9 @@ export class SettlementTransactionDto implements Transaction {
   @ApiProperty({ type: Object, nullable: true, description: '結清沒有分支，恆為 null。' })
   difference!: null;
 
+  @ApiProperty({ type: Object, nullable: true, description: '結清不是合併來的，恆為 null（3k）。' })
+  merge!: null;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 }

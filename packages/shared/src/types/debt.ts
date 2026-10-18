@@ -20,6 +20,9 @@ import type { Cents } from '../money';
  * `PAID_FOR_ME` 對方幫我付（delta < 0，沒有帳戶的支出）、`RECEIVED_FOR_THEM` 我幫對方收
  * （delta < 0，交易型別 `BORROW`）、`RECEIVED_FOR_ME` 對方幫我收（delta > 0，沒有帳戶的收入）。
  * 它們只能從分帳端點產生，或由接受對方的提議產生；連動的鏡像兩兩相對。
+ *
+ * `LEDGER_CARRY_OVER` 帳本轉入（3k 決策 198）：退出共享帳本時沒結清的錢。不產生交易、不動帳戶、
+ * 不送給對方確認；只能由退出端點產生。
  */
 export const DEBT_ENTRY_KINDS = [
   'LEND',
@@ -33,6 +36,7 @@ export const DEBT_ENTRY_KINDS = [
   'PAID_FOR_THEM',
   'RECEIVED_FOR_THEM',
   'RECEIVED_FOR_ME',
+  'LEDGER_CARRY_OVER',
 ] as const;
 export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
 

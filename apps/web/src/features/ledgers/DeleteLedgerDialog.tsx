@@ -19,6 +19,7 @@ interface DeleteLedgerDialogProps {
 }
 
 const BLOCKED_REASON = {
+  HAS_OTHER_MEMBERS: '還有其他成員，只能封存',
   HAS_OTHERS_TRANSACTIONS: '有其他成員的交易，只能封存',
   SHARED_HAS_DEBTS: '有借還或分帳，只能封存',
   LEDGER_ARCHIVED: '帳本已封存',

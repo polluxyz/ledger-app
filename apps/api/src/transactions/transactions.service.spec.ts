@@ -123,6 +123,7 @@ describe('TransactionsService', () => {
       accountPending: false,
       differenceOfId: null,
       difference: null,
+      merge: null,
       createdAt: joined.createdAt.toISOString(),
     });
   });

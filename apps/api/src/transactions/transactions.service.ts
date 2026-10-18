@@ -1421,6 +1421,8 @@ export class TransactionsService {
               amount: row.difference.amount,
             }
           : null,
+      // 3k K4 會填入合併來源；在那之前一律不是合併來的。
+      merge: null,
       createdAt: row.createdAt.toISOString(),
     };
   }

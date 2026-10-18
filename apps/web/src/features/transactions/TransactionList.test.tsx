@@ -58,6 +58,7 @@ describe('TransactionList', () => {
       accountPending: false,
       differenceOfId: null,
       difference: null,
+      merge: null,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };
