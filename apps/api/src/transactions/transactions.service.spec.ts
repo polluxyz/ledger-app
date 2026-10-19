@@ -17,6 +17,7 @@ describe('TransactionsService', () => {
     debtEntry: { findUnique: jest.Mock };
     ledgerSettlement: { findUnique: jest.Mock };
     ledgerPerson: { findUnique: jest.Mock };
+    ledgerMerge: { findUnique: jest.Mock };
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
     transaction: {
@@ -78,6 +79,7 @@ describe('TransactionsService', () => {
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerPerson: { findUnique: jest.fn().mockResolvedValue({ id: 'person-1' }) },
+      ledgerMerge: { findUnique: jest.fn().mockResolvedValue({ userId: creatorId }) },
       $transaction: jest.fn((callback: (client: unknown) => unknown) => callback(prisma)),
       $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
@@ -851,9 +853,17 @@ describe('TransactionsService', () => {
       expect(prisma.debtEntry.findUnique).not.toHaveBeenCalled();
     });
 
-    it('rejects an account not owned by the editor', async () => {
+    it('rejects an account change by anyone other than the merger', async () => {
       await expect(
         service.update(ledgerId, share.id, otherUserId, { accountId }),
+      ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_NOT_PAYERS' });
+      expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects an account the merger does not own', async () => {
+      prisma.account.findUnique.mockResolvedValue({ userId: otherUserId, isTemporary: false });
+      await expect(
+        service.update(ledgerId, share.id, creatorId, { accountId }),
       ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
       expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
     });
