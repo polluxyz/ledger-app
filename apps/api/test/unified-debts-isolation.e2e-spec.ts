@@ -4,7 +4,6 @@ import type {
   Counterparty,
   CreateSettlementRequest,
   CreateTransactionRequest,
-  LedgerDetail,
   LedgerGroup,
   LedgerPerson,
   Paginated,
@@ -261,11 +260,10 @@ describe('Unified debts isolation (e2e)', () => {
         .get(`/api/ledgers/${s.ledgerId}`)
         .set(auth(s.carol.token))
         .expect(404);
-      const ownerView = await request(server())
+      await request(server())
         .get(`/api/ledgers/${s.ledgerId}`)
         .set(auth(s.alice.token))
         .expect(200);
-      expect((ownerView.body as LedgerDetail).left).toBe(false);
     });
 
     it('其他帳本端點與所有寫入都是 404，什麼都沒寫', async () => {
@@ -342,11 +340,10 @@ describe('Unified debts isolation (e2e)', () => {
       await leave(s.carol, s.ledgerId);
       await addMember(s.alice, s.ledgerId, s.carol.email, 'EDITOR');
 
-      const res = await request(server())
+      await request(server())
         .get(`/api/ledgers/${s.ledgerId}`)
         .set(auth(s.carol.token))
         .expect(200);
-      expect((res.body as LedgerDetail).left).toBe(false);
       await request(server())
         .get(`/api/ledgers/${s.ledgerId}/people`)
         .set(auth(s.carol.token))

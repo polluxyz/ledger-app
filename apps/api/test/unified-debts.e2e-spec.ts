@@ -262,7 +262,6 @@ describe('Unified debts scenario (e2e)', () => {
         personId: people.ming.id,
         personName: '小明',
         amount: 51200,
-        left: false,
       },
     ]);
     expect(mingRow.totalBalance).toBe(101200);
@@ -277,7 +276,7 @@ describe('Unified debts scenario (e2e)', () => {
 
     const fullGroups = await groups(me);
     expect(fullGroups).toHaveLength(1);
-    expect(fullGroups[0]!.ledger).toEqual({ id: ledgerId, name: '花蓮三日', left: false });
+    expect(fullGroups[0]!.ledger).toEqual({ id: ledgerId, name: '花蓮三日' });
     expect(fullGroups[0]!.people.map(({ person, amount }) => [person.id, amount])).toEqual([
       [people.ming.id, 51200],
       [people.hua.id, 139400],
@@ -303,7 +302,6 @@ describe('Unified debts scenario (e2e)', () => {
         personId: people.hua.id,
         personName: '小華',
         amount: 139400,
-        left: false,
       },
     ]);
     expect(landlordRow.totalBalance).toBe(139400);

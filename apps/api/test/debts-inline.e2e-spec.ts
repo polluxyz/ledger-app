@@ -418,7 +418,6 @@ describe('Debts inline scenario (e2e)', () => {
       .expect(200)
       .then((res) => res.body as LedgerGroup[]);
     const groupBefore = groupsBefore.find((group) => group.ledger.id === hualienId)!;
-    expect(groupBefore.ledger.left).toBe(false);
     expect(groupBefore.settlementCount).toBe(4);
 
     // 3k：退出花蓮三日後不能打開結清清單，也不列入群組。

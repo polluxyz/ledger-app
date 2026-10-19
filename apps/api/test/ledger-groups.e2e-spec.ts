@@ -123,7 +123,6 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
         personId: bobPerson!.id,
         personName: 'Bob',
         amount: 51200,
-        left: false,
       },
     ]);
     expect(linkedView.totalBalance).toBe(101200);
