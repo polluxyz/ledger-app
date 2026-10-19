@@ -501,6 +501,17 @@ export class LedgersService {
         include: { user: true },
       });
       await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, targetUserId);
+      // 3k 決策 208：被加回時，他上次退出這本帳本留下的帳本轉入撤銷，這筆錢回到帳本裡算，
+      // 借還頁不會重複。只動他自己的；帳本轉入沒有交易、不送提議，軟刪除即可。
+      await tx.debtEntry.updateMany({
+        where: {
+          kind: 'LEDGER_CARRY_OVER',
+          deletedAt: null,
+          counterparty: { ownerId: targetUserId },
+          merge: { userId: targetUserId, sourceLedgerId: ledgerId },
+        },
+        data: { deletedAt: new Date() },
+      });
       return created;
     });
     return this.toMemberInfo(member);

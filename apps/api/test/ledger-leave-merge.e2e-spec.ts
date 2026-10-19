@@ -698,4 +698,43 @@ describe('Ledger leave and merge (e2e)', () => {
     expect(await copies()).toBe(copiesBefore);
     expect(await listAccounts(app, s.me.token)).toEqual(before);
   });
+
+  // 決策 208：被加回時撤銷我上次的帳本轉入，這筆錢回到帳本裡算，小華欠我的總額不會變成兩倍；
+  // 再退出只留一筆帳本轉入。小華自己先退出留下的帳本轉入是他的，不能被動到。
+  // 「總額」＝我未撤銷的帳本轉入 ＋ 借還頁這本帳本裡小華的金額（退出時指向已照決策 190 刪掉，
+  // 被加回後那 $500 列在帳本區，不掛在對象底下）。
+  it('被加回時撤銷上次的帳本轉入：總額不重複，再退出只有一筆，別人的帳本轉入不動', async () => {
+    const s = await scene();
+    const carryOvers = (userId: string) =>
+      prisma.debtEntry.findMany({
+        where: { kind: 'LEDGER_CARRY_OVER', deletedAt: null, counterparty: { ownerId: userId } },
+      });
+    const owedByHua = async () => {
+      const personal = (await carryOvers(s.me.userId)).reduce((sum, e) => sum + e.delta, 0);
+      const group = (await groups(s.me)).find((g) => g.ledger.id === s.ledgerId);
+      const inLedger = group?.people.find((p) => p.person.id === s.huaId)?.amount ?? 0;
+      return personal + inLedger;
+    };
+    expect(await owedByHua()).toBe(50000);
+
+    await leave(s.hua, s.ledgerId, body(s.hua)).expect(204);
+    const huaCarryOvers = await carryOvers(s.hua.userId);
+    expect(huaCarryOvers.length).toBeGreaterThan(0);
+    await leave(s.me, s.ledgerId).expect(204);
+    expect((await carryOvers(s.me.userId)).map((e) => e.delta)).toEqual([50000]);
+    expect(await owedByHua()).toBe(50000);
+
+    await request(server())
+      .post(`/api/ledgers/${s.ledgerId}/members`)
+      .set(auth(s.ming.token))
+      .send({ email: s.me.email, role: 'EDITOR' })
+      .expect(201);
+    expect(await carryOvers(s.me.userId)).toHaveLength(0);
+    expect(await owedByHua()).toBe(50000);
+    expect(await carryOvers(s.hua.userId)).toEqual(huaCarryOvers);
+
+    await leave(s.me, s.ledgerId).expect(204);
+    expect((await carryOvers(s.me.userId)).map((e) => e.delta)).toEqual([50000]);
+    expect(await owedByHua()).toBe(50000);
+  });
 });
