@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateLedgerRequest,
   LedgerDetail,
+  LedgerLeavePreview,
   LedgerRemovalPreview,
   LedgerSummary,
+  LeaveRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
 
@@ -162,7 +164,57 @@ export function useRemovalPreview(ledgerId: string, enabled = true) {
     queryKey: ['ledger-removal-preview', ledgerId],
     queryFn: () => apiRequest<LedgerRemovalPreview>(`/ledgers/${ledgerId}/removal-preview`),
     enabled,
+    placeholderData: (previousData) => previousData,
     staleTime: 0,
     refetchOnMount: 'always',
+  });
+}
+
+/**
+ * 退出／刪除共享帳本前的伺服器預覽。所有可能改變結果的輸入都放進 query key，
+ * 因此勾選狀態快速變動時，舊請求只會寫回舊 key，不會蓋掉目前畫面。
+ */
+export function useLeavePreview(
+  ledgerId: string,
+  request: Pick<LeaveRequest, 'targetLedgerId' | 'excludedItemIds' | 'deleteLedger'>,
+  enabled = true,
+) {
+  const excludedItemIds = [...request.excludedItemIds].sort();
+  return useQuery({
+    queryKey: [
+      'ledger-leave-preview',
+      ledgerId,
+      request.targetLedgerId,
+      excludedItemIds,
+      request.deleteLedger ?? false,
+    ],
+    queryFn: () =>
+      apiRequest<LedgerLeavePreview>(`/ledgers/${ledgerId}/leave-preview`, {
+        method: 'POST',
+        body: { ...request, excludedItemIds },
+      }),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+}
+
+/** 執行退出或「先合併再刪除」；成功後讓帳本、帳戶與往來頁面重讀伺服器資料。 */
+export function useLeaveLedger() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...request }: LeaveRequest & { id: string }) =>
+      apiRequest<void>(`/ledgers/${id}/leave`, { method: 'POST', body: request }),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
+      void queryClient.removeQueries({ queryKey: ['ledger', id] });
+      void queryClient.invalidateQueries({ queryKey: ['members', id] });
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['counterparties'] });
+      void queryClient.invalidateQueries({ queryKey: ['ledger-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['ledger-settlements'] });
+    },
   });
 }

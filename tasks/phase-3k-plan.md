@@ -143,3 +143,9 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 新的借還種類讓 web 兩張種類對照表少一項，先補「帳本轉入」（`entry-flow.ts`、`PendingCard.tsx`）；刪除對話框補 `HAS_OTHER_MEMBERS` 的原因。K5 可以再調。
 - API 端 `merge` 先一律回 `null`，K4 填值。`debt-proposals.service.ts` 加一個型別收窄：Prisma 還沒有 `LEDGER_CARRY_OVER`，K1 之後可以拿掉。
 - 隔離測試 9 條：8 條紅燈（端點不存在、移除與舊退出照舊 204、已退出的付款人仍記到臨時帳戶），1 條綠燈（沒帳的成員可以移除，防止 K2 擋過頭）。SC-K4 用資料庫刪成員模擬退出，K2 單獨就能轉綠。
+
+### K5（lvm-web，2026-10-19）
+
+- 完成退出與合併預覽、交易選擇器、共享帳本刪除、交易合併資訊與成員改檢視者流程；移除帳本歷史頁、路由及相關導覽分支。
+- shared 的 `DebtEntry` 尚無來源帳本名稱欄位，`LEDGER_CARRY_OVER` 往來列暫顯示既有「帳本轉入」；未修改 shared 契約。
+- 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、792 個測試）與 `pnpm format:check`。

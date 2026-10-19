@@ -327,7 +327,9 @@ describe('Ledger detail page', () => {
   });
 
   it('loads the removal preview, deletes with the typed name, and returns to the list', async () => {
-    routeFetch();
+    routeFetch({
+      detail: () => Promise.resolve(jsonResponse(200, { ...detail, kind: 'PERSONAL' })),
+    });
     const user = userEvent.setup();
 
     render(<App />);

@@ -144,6 +144,21 @@ describe('DebtEntriesList', () => {
     expect(unrecorded!.querySelector(`.${styles.title}`)).toBeNull();
   });
 
+  it('uses the existing carry-over label when the debt entry has no source ledger name', () => {
+    renderList([
+      entry({
+        kind: 'LEDGER_CARRY_OVER',
+        delta: 5000,
+        transactionId: null,
+        recorded: null,
+      }),
+    ]);
+
+    const row = screen.getByRole('listitem');
+    expect(within(row).getByText('帳本轉入')).toBeInTheDocument();
+    expect(within(row).queryByText('未記帳')).not.toBeInTheDocument();
+  });
+
   it('omits the more-actions menu in read-only mode but keeps the split badge', () => {
     renderList([entry({ splitId: 'split-1' })], false);
 

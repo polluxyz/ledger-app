@@ -11,6 +11,8 @@ interface MemberListProps {
   isOwner: boolean;
   /** 帳本已封存時整個唯讀。 */
   isArchived: boolean;
+  /** 是否顯示自己退出共享帳本的入口。 */
+  canLeave?: boolean;
   /** 是否能管理虛擬成員；與角色及封存狀態由頁面決定。 */
   canManageVirtualMembers: boolean;
   /** 正在被改角色或移除的成員；用來停用該列，避免重複送出。 */
@@ -38,6 +40,7 @@ export function MemberList({
   currentUserId,
   isOwner,
   isArchived,
+  canLeave = true,
   canManageVirtualMembers,
   pendingUserId,
   rowError,
@@ -146,7 +149,7 @@ export function MemberList({
         ))}
       </ul>
 
-      {currentMember && !isArchived && (
+      {currentMember && canLeave && !isArchived && (
         <div className={styles.footer}>
           <button
             type="button"

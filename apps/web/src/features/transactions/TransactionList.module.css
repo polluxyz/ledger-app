@@ -158,6 +158,16 @@
   white-space: nowrap;
 }
 
+.mergeSource {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .details {
   grid-column: 1 / -1;
   display: flex;
