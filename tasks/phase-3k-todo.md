@@ -16,5 +16,5 @@ plan：`tasks/phase-3k-plan.md`；spec：`docs/specs/phase-3k-leave-and-merge.md
       驗收：元件測試涵蓋 W188～W193，含選擇畫面每勾一次就重新取預覽、只顯示最新結果；歷史頁與它的路由已拿掉；Web 檢查全綠。
 - [x] **K6 Web e2e**（依賴 K2～K5；`lvm-web-e2e`）：plan §1.7。
       驗收：兩套 Web e2e 全綠，含 spec §6 的主線。
-- [ ] **K7 整體驗收、PR、部署**（協調者）：plan §4。
+- [x] **K7 整體驗收、PR、部署**（協調者）：plan §4。
       驗收：隔離測試紅轉綠；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；部署前跑 spec §8 的查詢；dev 備份後 `migrate deploy`，照 plan §4 點過一次；請 d@d.com、a2@a.com 用新流程退出；worktree、分支、測試資料庫清掉。
