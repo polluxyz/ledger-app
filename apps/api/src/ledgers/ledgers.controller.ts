@@ -19,9 +19,6 @@ import { LedgerRemovalPreviewDto } from './dto/ledger-removal-preview.dto';
 import { LedgerDetailDto } from './dto/ledger-detail.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
-import { LeftMemberAccess } from '../common/decorators/left-member-access.decorator';
-import { LedgerAccessKind } from '../common/decorators/ledger-access-kind.decorator';
-import type { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 import { CreateLedgerDto } from './dto/create-ledger.dto';
 import { ListLedgersQueryDto } from './dto/list-ledgers-query.dto';
 import { UpdateLedgerDto } from './dto/update-ledger.dto';
@@ -58,12 +55,8 @@ export class LedgersController {
 
   @Get(':ledgerId')
   @RequireLedgerRole('VIEWER')
-  @LeftMemberAccess('read')
-  detail(
-    @Param('ledgerId') ledgerId: string,
-    @LedgerAccessKind() access: LedgerAccess,
-  ): Promise<LedgerDetail> {
-    return this.ledgers.getDetail(ledgerId, access);
+  detail(@Param('ledgerId') ledgerId: string): Promise<LedgerDetail> {
+    return this.ledgers.getDetail(ledgerId);
   }
 
   @Patch(':ledgerId')

@@ -411,9 +411,9 @@ describe('SettlementsService', () => {
   describe('list (settlements list)', () => {
     it('delegates to the transaction list with the internal settlements-only scope', async () => {
       const query = { page: 2, limit: 50 };
-      await service.list(ledgerId, callerId, query, 'LEFT');
+      await service.list(ledgerId, callerId, query);
 
-      expect(transactions.list).toHaveBeenCalledWith(ledgerId, callerId, query, 'LEFT', {
+      expect(transactions.list).toHaveBeenCalledWith(ledgerId, callerId, query, {
         settlementsOnly: true,
       });
       // 範圍與轉換重用交易列表：這裡不另外查結清，確保遮蔽規則只有一份。
@@ -426,7 +426,7 @@ describe('SettlementsService', () => {
     it('returns 404 for personal ledgers before touching the transaction list', async () => {
       prisma.ledger.findUnique.mockResolvedValueOnce({ kind: 'PERSONAL' });
 
-      await expect(service.list(ledgerId, callerId, {}, 'MEMBER')).rejects.toMatchObject({
+      await expect(service.list(ledgerId, callerId, {})).rejects.toMatchObject({
         constructor: AppException,
         status: 404,
         errorCode: 'NOT_FOUND',

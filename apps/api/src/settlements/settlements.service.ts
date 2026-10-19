@@ -10,7 +10,6 @@ import {
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
-import type { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 import {
   LedgerPeopleService,
   type LedgerPersonRecord,
@@ -71,17 +70,15 @@ export class SettlementsService {
   /**
    * 那本帳本已記的結清，依日期、再依建立時間由新到舊，分頁（3g §4.2）。範圍與轉換重用
    * 交易列表：內部選項 `settlementsOnly` 只取有 `LedgerSettlement` 的交易，因此帳戶遮蔽與
-   * `settlement` 欄位跟 `GET /ledgers/{id}/transactions` 完全一致；已退出者的範圍（只回
-   * 自己是任一方的結清）同樣在 SQL 裡以 AND 收斂，分頁與 total 一起受限，放寬不了。
+   * `settlement` 欄位跟 `GET /ledgers/{id}/transactions` 完全一致。只有現任成員能存取。
    */
   async list(
     ledgerId: string,
     viewerUserId: string,
     query: ListLedgerSettlementsQuery,
-    access: LedgerAccess,
   ): Promise<Paginated<Transaction>> {
     await this.assertSharedLedger(this.prisma, ledgerId);
-    return this.transactions.list(ledgerId, viewerUserId, query, access, {
+    return this.transactions.list(ledgerId, viewerUserId, query, {
       settlementsOnly: true,
     });
   }
@@ -200,10 +197,10 @@ export class SettlementsService {
       if (input.amount !== undefined) transactionData.amount = input.amount;
       if (input.date !== undefined) transactionData.date = new Date(input.date);
       if (input.note !== undefined) transactionData.note = input.note;
-      if (input.fromAccountId !== undefined || fromChanged) {
+      if (input.fromAccountId !== undefined || fromChanged || from.status !== 'MEMBER') {
         transactionData.accountId = fromAccountId;
       }
-      if (input.toAccountId !== undefined || toChanged) {
+      if (input.toAccountId !== undefined || toChanged || to.status !== 'MEMBER') {
         transactionData.toAccountId = toAccountId;
       }
       if (Object.keys(transactionData).length > 0) {

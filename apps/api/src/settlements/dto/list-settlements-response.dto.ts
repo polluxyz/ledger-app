@@ -128,8 +128,7 @@ export class SettlementTransactionDto implements Transaction {
 
   @ApiProperty({
     type: Boolean,
-    description:
-      '這一邊在檢視者本人的臨時帳戶（付錢或收錢的那位，3h 決策 168）；已退出者恆為 false。',
+    description: '這一邊在檢視者本人的臨時帳戶（付錢或收錢的那位，3h 決策 168）。',
   })
   accountPending!: boolean;
 
