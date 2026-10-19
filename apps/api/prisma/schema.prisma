@@ -193,15 +193,15 @@ model LedgerMerge {
   sourceLedgerId   String
   /// 合併當下的來源帳本名稱，供畫面標示來源。
   sourceLedgerName String
-  /// 合併的目標帳本；全部取消勾選時為 null。
+  /// 合併的目標帳本；全部取消勾選、或目標帳本之後被刪掉時為 null。
   targetLedgerId   String?
   /// 退出並合併的時間。
   createdAt        DateTime @default(now())
 
   /// 本人刪除帳號時一併刪除合併紀錄。
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 目標帳本刪除時一併刪除合併紀錄。
-  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: Cascade)
+  /// 目標帳本刪除時合併紀錄留著、改成 null：帳本轉入仍指向它，來源帳本名稱才不會消失。
+  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: SetNull)
   /// 這次合併寫入的交易。
   transactions Transaction[]
   /// 這次退出留下的帳本轉入往來。
