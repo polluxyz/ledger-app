@@ -169,7 +169,7 @@ function LedgerDetailView({
     });
   }
 
-  function confirmPromoteToViewer() {
+  function confirmChangeToViewer() {
     if (!removing) return;
     setRoleError(undefined);
     updateRole.mutate(
@@ -355,7 +355,7 @@ function LedgerDetailView({
         confirmLabel={memberHasTransactions ? '改成檢視者' : '移除'}
         error={memberHasTransactions ? updateRole.error : removeMember.error}
         isPending={removeMember.isPending || updateRole.isPending}
-        onConfirm={memberHasTransactions ? confirmPromoteToViewer : confirmRemove}
+        onConfirm={memberHasTransactions ? confirmChangeToViewer : confirmRemove}
         onCancel={closeRemove}
       />
 

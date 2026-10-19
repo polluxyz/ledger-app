@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { LedgerLeaveItem, LedgerLeavePreview } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -166,14 +166,16 @@ export function LeavePreviewSections({
     ...preview.withdrawals.map((item) => item.displayName),
   ];
   const avatarLabels = getAvatarLabels(['我', ...names]);
+  // 退出對話框與選擇畫面會同時掛著這一段，標題 id 不能寫死。
+  const headingId = useId();
   const hasAccounts = showUnchanged || preview.accounts.length > 0;
   const hasRelations = preview.carryOvers.length > 0 || preview.withdrawals.length > 0;
 
   return (
     <div className={styles.sections}>
       {hasAccounts && (
-        <section className={styles.section} aria-labelledby="leave-picker-accounts-heading">
-          <h3 id="leave-picker-accounts-heading" className={styles.sectionTitle}>
+        <section className={styles.section} aria-labelledby={`${headingId}-accounts`}>
+          <h3 id={`${headingId}-accounts`} className={styles.sectionTitle}>
             帳戶
           </h3>
           {preview.accounts.length === 0 ? (
@@ -198,8 +200,8 @@ export function LeavePreviewSections({
         </section>
       )}
       {hasRelations && (
-        <section className={styles.section} aria-labelledby="leave-picker-relations-heading">
-          <h3 id="leave-picker-relations-heading" className={styles.sectionTitle}>
+        <section className={styles.section} aria-labelledby={`${headingId}-relations`}>
+          <h3 id={`${headingId}-relations`} className={styles.sectionTitle}>
             往來
           </h3>
           <ul className={styles.summaryList}>

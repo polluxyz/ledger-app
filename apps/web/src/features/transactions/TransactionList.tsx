@@ -199,6 +199,12 @@ export function TransactionList({
               const settlement = transaction.settlement;
               const hasSplit = Boolean(split || ledgerSplit);
               const hasMergeDetails = transaction.merge != null && transaction.merge.share !== null;
+              // 合併來的代墊與結清（帳本往來）沿用借還型別，畫面用轉帳圖示（W191）。
+              const isMergedLedgerTransfer =
+                transaction.merge != null &&
+                (transaction.type === 'LEND' ||
+                  transaction.type === 'COLLECT' ||
+                  transaction.type === 'BORROW');
               const hasExpandableDetails = hasSplit || hasMergeDetails;
               const expanded = expandedId === transaction.id;
               const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
@@ -294,19 +300,9 @@ export function TransactionList({
                     <span className={styles.iconBadge} aria-hidden="true">
                       <CategoryIcon
                         className={styles.categoryIcon}
-                        icon={
-                          transaction.merge &&
-                          (transaction.type === 'LEND' ||
-                            transaction.type === 'COLLECT' ||
-                            transaction.type === 'BORROW')
-                            ? null
-                            : transaction.category?.icon
-                        }
+                        icon={isMergedLedgerTransfer ? null : transaction.category?.icon}
                         transactionType={
-                          transaction.merge &&
-                          (transaction.type === 'LEND' ||
-                            transaction.type === 'COLLECT' ||
-                            transaction.type === 'BORROW')
+                          isMergedLedgerTransfer
                             ? 'TRANSFER'
                             : transaction.category
                               ? undefined

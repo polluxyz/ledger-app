@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateLedgerRequest,
   LedgerDetail,
@@ -164,7 +164,6 @@ export function useRemovalPreview(ledgerId: string, enabled = true) {
     queryKey: ['ledger-removal-preview', ledgerId],
     queryFn: () => apiRequest<LedgerRemovalPreview>(`/ledgers/${ledgerId}/removal-preview`),
     enabled,
-    placeholderData: (previousData) => previousData,
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -173,6 +172,7 @@ export function useRemovalPreview(ledgerId: string, enabled = true) {
 /**
  * 退出／刪除共享帳本前的伺服器預覽。所有可能改變結果的輸入都放進 query key，
  * 因此勾選狀態快速變動時，舊請求只會寫回舊 key，不會蓋掉目前畫面。
+ * `keepPreviousData`：新的勾選還在算時先留著上一份，帳戶段不會每勾一次就閃掉。
  */
 export function useLeavePreview(
   ledgerId: string,
@@ -194,6 +194,7 @@ export function useLeavePreview(
         body: { ...request, excludedItemIds },
       }),
     enabled,
+    placeholderData: keepPreviousData,
     staleTime: 0,
     refetchOnMount: 'always',
   });

@@ -3,6 +3,7 @@ import type { LedgerLeaveItem, LeaveRequest } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
+import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import confirmStyles from '../../components/ConfirmDialog.module.css';
 import { useArchiveLedger, useLeaveLedger, useLeavePreview, useLedgers } from './use-ledgers';
@@ -49,12 +50,12 @@ export function LeaveLedgerDialog({
   const [selectedTargetLedgerId, setSelectedTargetLedgerId] = useState<string>();
   const targetLedgerId = selectedTargetLedgerId ?? defaultTargetLedger?.id ?? null;
   const [excludedItemIds, setExcludedItemIds] = useState<string[]>([]);
-  const [items, setItems] = useState<LedgerLeaveItem[]>([]);
-  const [itemsLoaded, setItemsLoaded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [typedName, setTypedName] = useState('');
   const leave = useLeaveLedger();
   const archive = useArchiveLedger();
+  const [items, setItems] = useState<LedgerLeaveItem[]>([]);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
   const selectedCount = items.reduce(
     (count, item) => count + (excludedItemIds.includes(item.id) ? 0 : 1),
     0,
@@ -73,7 +74,7 @@ export function LeaveLedgerDialog({
 
   useEffect(() => {
     if (preview.data) {
-      // Preserve the candidate list while React Query switches to a new, keyed preview.
+      // 預覽的參數要靠清單決定「是否全部取消」，清單又來自預覽，所以存一份在 state。
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(preview.data.items);
       setItemsLoaded(true);
@@ -81,7 +82,7 @@ export function LeaveLedgerDialog({
   }, [preview.data]);
 
   const isPending = leave.isPending || archive.isPending;
-  const allowed = preview.data?.leave.allowed === true && !preview.isFetching;
+  const allowed = preview.data?.leave.allowed === true;
   const canSubmit = selectedCount === 0 || targetLedgerId !== null;
   const error = leave.error ?? archive.error ?? preview.error;
 
@@ -94,7 +95,7 @@ export function LeaveLedgerDialog({
   }
 
   function confirm() {
-    if (!allowed || !canSubmit || isPending) return;
+    if (!allowed || preview.isFetching || !canSubmit || isPending) return;
     leave.mutate(
       {
         id: ledgerId,
@@ -122,22 +123,18 @@ export function LeaveLedgerDialog({
           {preview.data?.leave.allowed && (
             <>
               {selectedCount > 0 && (
-                <label className={styles.targetLabel}>
-                  合併到
-                  <select
-                    className={styles.target}
-                    aria-label="合併到"
-                    value={targetLedgerId ?? ''}
-                    disabled={isPending || eligibleLedgers.length === 0}
-                    onChange={(event) => setSelectedTargetLedgerId(event.target.value)}
-                  >
-                    {eligibleLedgers.map((targetLedger) => (
-                      <option key={targetLedger.id} value={targetLedger.id}>
-                        {targetLedger.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <Select
+                  label="合併到"
+                  value={targetLedgerId ?? ''}
+                  disabled={isPending || eligibleLedgers.length === 0}
+                  onChange={(event) => setSelectedTargetLedgerId(event.target.value)}
+                >
+                  {eligibleLedgers.map((targetLedger) => (
+                    <option key={targetLedger.id} value={targetLedger.id}>
+                      {targetLedger.name}
+                    </option>
+                  ))}
+                </Select>
               )}
               {items.length > 0 && (
                 <button
@@ -191,7 +188,10 @@ export function LeaveLedgerDialog({
                 type="button"
                 className={confirmStyles.danger}
                 disabled={
-                  isPending || !canSubmit || (mode === 'delete' && typedName.trim() !== ledgerName)
+                  isPending ||
+                  preview.isFetching ||
+                  !canSubmit ||
+                  (mode === 'delete' && typedName.trim() !== ledgerName)
                 }
                 onClick={confirm}
               >
