@@ -143,3 +143,21 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 新的借還種類讓 web 兩張種類對照表少一項，先補「帳本轉入」（`entry-flow.ts`、`PendingCard.tsx`）；刪除對話框補 `HAS_OTHER_MEMBERS` 的原因。K5 可以再調。
 - API 端 `merge` 先一律回 `null`，K4 填值。`debt-proposals.service.ts` 加一個型別收窄：Prisma 還沒有 `LEDGER_CARRY_OVER`，K1 之後可以拿掉。
 - 隔離測試 9 條：8 條紅燈（端點不存在、移除與舊退出照舊 204、已退出的付款人仍記到臨時帳戶），1 條綠燈（沒帳的成員可以移除，防止 K2 擋過頭）。SC-K4 用資料庫刪成員模擬退出，K2 單獨就能轉綠。
+
+### K1（`lvm-migrate`，2026-10-19）
+
+- migration `20261019000000_ledger_merge`：照 spec §3 加表、加欄位、加 enum 值、加 2 條 CHECK，另加 `mergeId` 與 `LedgerMerge.targetLedgerId` 的索引。`DebtEntry` 的 CHECK 用 `kind::text` 比較：PostgreSQL 在新增 enum 值的交易提交前不能直接用該常值。
+- 用 SQL 驗證 CHECK：違反的 5 條被擋、合法的 3 條成功，全部 ROLLBACK。
+- 拿掉 K0 在 `debt-proposals.service.ts` 加的型別收窄；`debt-proposal-rules.spec.ts` 的 fixture 補 `mergeId: null`（協調者授權）。
+- **待開發者決定**：spec §3 的 `LedgerMerge.targetLedger` 是 `onDelete: Cascade`，`DebtEntry.mergeId` 是 `Restrict`。協調者實測：目標帳本有帳本轉入時，刪除目標帳本被外鍵擋下（500）；沒有轉入時 `LedgerMerge` 被連帶刪掉，帳本轉入拿不到 W192 要的來源名稱。建議改 `SetNull`，已回報總控。
+
+### K2（`lvm-rules`，2026-10-19）
+
+- `resolvePayerAccount` 輸入加人物狀態；付款人不是現任成員（已退出或虛擬）→ 不記帳戶、不建臨時帳戶，修改時也清掉舊帳戶引用。結清修改時，已退出的一方即使沒換人也清掉帳戶。
+- 拿掉 `LeftMemberAccess`、`LedgerAccessKind`、`LedgerAccess`；已退出者一律 404，API 不再丟 `LEDGER_LEFT`。借還頁、對象頁、結清計數只算現任成員的共享帳本。
+- shared 裡現在 API 一律回 `false` 的欄位：`LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`。型別沒改，要不要拿掉由總控決定（shared 在整合分支改）。
+- `removeMember`：自己 → 409 `LEAVE_REQUIRES_MERGE`（在最後一位擁有者檢查之前）；對方有帳 → 409 `MEMBER_HAS_TRANSACTIONS`。「有帳」＝交易引用對方帳戶（含軟刪除、含臨時帳戶），或對方未撤銷的個人借還、個人分帳（與 3j `removalPlan` 的 active 判斷一致）。
+- `removalPlan`：順序改成封存 → 其他成員（`HAS_OTHER_MEMBERS`）→ 交易引用別人的帳戶 → 別人的未撤銷借還；拿掉 `creatorId` 條件與「共享帳本有借還就擋」。只剩自己的共享帳本，舊的 `DELETE /ledgers/{id}` 比照私人帳本（撤銷自己的借還後刪除）；畫面走 K3 的退出端點。
+- 既有 e2e 照新規則改了 26 條、刪 1 條（`unified-debts-isolation`「退出不影響帳戶餘額」：驗的是已取消的 3f 決策 152）。退出前提一律改用 Prisma 刪成員模擬。
+- 發現：`isAccountPending` 只認臨時帳戶，重新加入後 `accountId` 為 `null` 的交易不會顯示待補，補帳戶端點也只收臨時帳戶。SC-K5「沒合併的可以補」需要它，協調者已把規則補給 K4。
+- K3 回報：`DebtEntriesService`／`SplitsService` 的 `removeInTransaction` 要求寫入權，檢視者退出時撤銷沒勾的借還會 403（決策 206 的主流程就是先降成檢視者再退出）。協調者授權 K3 加一個只給退出流程用的內部選項，跳過寫入角色檢查、保留本人與封存檢查。
