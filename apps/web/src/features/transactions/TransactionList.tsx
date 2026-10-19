@@ -171,6 +171,10 @@ export function TransactionList({
 
   /** 點一列（或它的第一格按鈕）要做的事：一般交易或自己的往來紀錄進入編輯。 */
   function openRow(transaction: Transaction) {
+    if (transaction.merge != null) {
+      onEdit(transaction);
+      return;
+    }
     if (transaction.debt) {
       onEditDebtTransaction?.(transaction);
       return;
@@ -207,7 +211,9 @@ export function TransactionList({
                   transaction.type === 'BORROW');
               const hasExpandableDetails = hasSplit || hasMergeDetails;
               const expanded = expandedId === transaction.id;
-              const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
+              const isClickable =
+                transaction.merge != null ||
+                (transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt);
               const repaymentType =
                 transaction.type === 'COLLECT' || transaction.type === 'REPAY'
                   ? transaction.type
@@ -272,7 +278,7 @@ export function TransactionList({
                     ) : (
                       <span className={styles.name}>{rowName(transaction)}</span>
                     )}
-                    {transaction.merge && (
+                    {transaction.merge?.sourceLedgerName && (
                       <span className={styles.mergeSource}>
                         {transaction.merge.sourceLedgerName}
                       </span>

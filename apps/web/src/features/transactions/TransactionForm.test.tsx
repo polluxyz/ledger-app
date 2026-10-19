@@ -94,6 +94,7 @@ describe('TransactionForm', () => {
       items?: unknown[];
       ledgerPeople?: LedgerPerson[];
       accounts?: unknown[];
+      categories?: unknown[];
       defaultAccountId?: string | null;
     } = {},
   ) {
@@ -166,7 +167,7 @@ describe('TransactionForm', () => {
       }
       if (url.endsWith('/splits')) return json({ id: 'split-1' });
       if (url.includes('/categories')) {
-        return json([category]);
+        return json(options.categories ?? [category]);
       }
       if (url.includes('/accounts')) {
         return json(options.accounts ?? accounts);
@@ -459,6 +460,146 @@ describe('TransactionForm', () => {
     const dialog = await screen.findByRole('dialog', {}, WAIT);
     expect(within(dialog).queryByRole('button', { name: '借還' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '支出' })).toBeInTheDocument();
+  });
+
+  it('keeps merged expenses read-only except for name, category, and account', async () => {
+    const otherCategory = { id: 'cat-2', name: '居住', type: 'EXPENSE' as const, icon: null };
+    routeFetch(sharedLedger, { categories: [category, otherCategory] });
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({
+        id: 'txn-merged-expense',
+        account: null,
+        merge: { sourceLedgerName: '花蓮三日', share: 5000 },
+      }),
+    );
+
+    const amount = await screen.findByLabelText('金額', {}, WAIT);
+    const date = screen.getByLabelText('日期');
+    const type = screen.getByLabelText('類型');
+    expect(amount).toHaveAttribute('readonly');
+    expect(amount).toHaveValue(1500);
+    expect(date).toHaveAttribute('readonly');
+    expect(date).toHaveValue('2026-09-15');
+    expect(type).toHaveAttribute('readonly');
+    expect(type).toHaveValue('支出');
+    expect(screen.queryByRole('button', { name: '支出' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收入' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '轉帳' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('備註')).not.toBeInTheDocument();
+
+    await screen.findByRole('option', { name: '現金' }, WAIT);
+    expect(screen.getByLabelText('帳戶')).toHaveValue('');
+    const title = screen.getByLabelText('名稱');
+    await user.clear(title);
+    await user.type(title, '新的名稱');
+    await user.click(screen.getByRole('combobox', { name: '分類' }));
+    await user.click(await screen.findByRole('option', { name: '居住' }, WAIT));
+    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails(
+      'PATCH',
+      '/ledgers/ledger-shared/transactions/txn-merged-expense',
+    );
+    expect(request.body).toEqual({ title: '新的名稱', categoryId: 'cat-2', accountId: 'acc-2' });
+  });
+
+  it('does not assign an account to an accountless merged share unless selected', async () => {
+    const otherCategory = { id: 'cat-2', name: '居住', type: 'EXPENSE' as const, icon: null };
+    routeFetch(sharedLedger, { categories: [category, otherCategory] });
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({
+        id: 'txn-merged-share-without-account',
+        account: null,
+        merge: { sourceLedgerName: '花蓮三日', share: 5000 },
+      }),
+    );
+
+    await screen.findByRole('option', { name: '現金' }, WAIT);
+    expect(screen.getByLabelText('帳戶')).toHaveValue('');
+    await waitFor(() => expect(screen.getByRole('button', { name: '儲存' })).toBeEnabled(), WAIT);
+    await user.clear(screen.getByLabelText('名稱'));
+    await user.type(screen.getByLabelText('名稱'), '只改名稱');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails(
+      'PATCH',
+      '/ledgers/ledger-shared/transactions/txn-merged-share-without-account',
+    );
+    expect(request.body).toEqual({ title: '只改名稱', categoryId: 'cat-1' });
+  });
+
+  it('lets a merged transfer change both accounts and sends no other fields', async () => {
+    routeFetch(sharedLedger);
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({
+        id: 'txn-merged-transfer',
+        type: 'TRANSFER',
+        category: null,
+        account: { id: 'acc-1', name: '現金' },
+        toAccount: { id: 'acc-2', name: '銀行' },
+        merge: { sourceLedgerName: '花蓮三日', share: null },
+      }),
+    );
+
+    expect(await screen.findByLabelText('類型', {}, WAIT)).toHaveValue('轉帳');
+    expect(screen.queryByRole('combobox', { name: '分類' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('轉出帳戶')).toHaveValue('acc-1'), WAIT);
+    await waitFor(() => expect(screen.getByRole('button', { name: '儲存' })).toBeEnabled(), WAIT);
+    await user.selectOptions(screen.getByLabelText('轉出帳戶'), 'acc-2');
+    await user.selectOptions(screen.getByLabelText('轉入帳戶'), 'acc-1');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails(
+      'PATCH',
+      '/ledgers/ledger-shared/transactions/txn-merged-transfer',
+    );
+    expect(request.body).toEqual({ title: '晚餐', accountId: 'acc-2', toAccountId: 'acc-1' });
+  });
+
+  it('edits and deletes a merged debt-type transaction without a category field', async () => {
+    routeFetch(sharedLedger);
+    const user = userEvent.setup();
+    renderSharedForm(
+      sharedTransaction({
+        id: 'txn-merged-debt',
+        type: 'LEND',
+        category: null,
+        debt: null,
+        merge: { sourceLedgerName: '花蓮三日', share: null },
+      }),
+    );
+
+    expect(await screen.findByLabelText('類型', {}, WAIT)).toHaveValue('借出');
+    expect(screen.queryByRole('combobox', { name: '分類' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '儲存' })).toBeEnabled(), WAIT);
+    const title = screen.getByLabelText('名稱');
+    await user.clear(title);
+    await user.type(title, '帳本往來');
+    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+
+    const request = await requestDetails(
+      'PATCH',
+      '/ledgers/ledger-shared/transactions/txn-merged-debt',
+    );
+    expect(request.body).toEqual({ title: '帳本往來', accountId: 'acc-2' });
+
+    await user.click(screen.getByRole('button', { name: '刪除' }));
+    const confirmation = await screen.findByRole('dialog', {}, WAIT);
+    await user.click(within(confirmation).getByRole('button', { name: '刪除' }));
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            url.endsWith('/ledgers/ledger-shared/transactions/txn-merged-debt') &&
+            init?.method === 'DELETE',
+        ),
+      ).toBe(true);
+    }, WAIT);
   });
 
   it('converts a decimal amount to cents before submitting', async () => {
