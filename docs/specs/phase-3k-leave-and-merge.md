@@ -138,11 +138,11 @@ model LedgerMerge {
   userId           String
   sourceLedgerId   String   // 不設外鍵：來源帳本刪掉後合併的帳要留著
   sourceLedgerName String   // 當下的名稱，畫面標來源用
-  targetLedgerId   String?  // 全部取消勾選時為 null
+  targetLedgerId   String?  // 全部取消勾選、或目標帳本之後被刪掉時為 null
   createdAt        DateTime @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: Cascade)
+  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: SetNull)
   transactions Transaction[]
   debtEntries  DebtEntry[]
 
@@ -173,6 +173,8 @@ model DebtEntry {
 }
 ```
 
+刪除目標帳本時，合併來的交易跟著帳本刪掉，`LedgerMerge` 留著、`targetLedgerId` 變 `null`（開發者 2026-10-19 核可，原本是 `Cascade`）。帳本轉入的往來紀錄仍指向它，W192 的來源帳本名稱才不會消失；若是 `Cascade`，有帳本轉入時刪除目標帳本會被 `DebtEntry.mergeId` 的 `Restrict` 擋下。
+
 CHECK：
 
 - `Transaction`：`mergedFromId` 有值 ⇔ `mergeId` 有值。
@@ -185,7 +187,7 @@ CHECK：
 
 不改餘額公式。退出時清帳戶（決策 190）、合併寫入、撤銷沒勾的借還，都在同一個資料庫交易。
 
-部署：migration 只加表、加欄位、加 enum 值、加 CHECK，不動既有資料。部署前備份 `ledger_dev`。
+部署：2 個 migration。第一個加表、加欄位、加 enum 值、加 CHECK；第二個把 `LedgerMerge.targetLedgerId` 的外鍵改成 `SET NULL`。都不動既有資料。部署前備份 `ledger_dev`。
 
 ---
 
@@ -305,7 +307,7 @@ body 同 `LeaveRequest`。成功 204。
 
 ## 8. 部署與資料
 
-- 1 個 migration：加表、加欄位、加 enum 值、加 CHECK，不動既有資料。部署前備份 `ledger_dev`，`migrate deploy`，build，重開 API。
+- 2 個 migration：加表、加欄位、加 enum 值、加 CHECK；再把 `LedgerMerge.targetLedgerId` 的外鍵改成 `SET NULL`。都不動既有資料。部署前備份 `ledger_dev`，`migrate deploy`，build，重開 API。
 - 部署前查一次「已退出、帳戶還在算」的成員（§1 的查詢），應為 0。不是 0 → 照 2026-10-18 的作法先加回，不寫特別的程式。
 - 上線後請 d@d.com、a2@a.com 用新流程退出（開發者 2026-10-18 同意）。
 
