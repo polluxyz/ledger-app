@@ -27,7 +27,7 @@ export interface SettleIntent {
   amount: Cents;
 }
 
-/** 回傳一個函式：導到交易頁並記這筆結清。已退出的帳本（`left`）不要呼叫，改開唯讀畫面（W139）。 */
+/** 回傳一個函式：導到交易頁並記這筆結清；來源須是目前可操作的共享帳本。 */
 export function useOpenSettleIntent(): (intent: SettleIntent) => void {
   const navigate = useNavigate();
   return useCallback(

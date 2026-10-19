@@ -18,6 +18,8 @@ interface DialogProps {
   onClose: () => void;
   /** 預設 `modal`，既有呼叫端不必改。 */
   variant?: DialogVariant;
+  /** modal 尺寸需由內容調整時，附加在原生 `<dialog>` 的 CSS Module class。 */
+  className?: string;
   children: ReactNode;
 }
 
@@ -32,7 +34,14 @@ interface DialogProps {
  * 技術做」隔離在這一個檔案裡。日後若要換成別的實作，呼叫端一行都不必動——它們只
  * 知道 `open` / `title` / `onClose` / `variant`。
  */
-export function Dialog({ open, title, onClose, variant = 'modal', children }: DialogProps) {
+export function Dialog({
+  open,
+  title,
+  onClose,
+  variant = 'modal',
+  className,
+  children,
+}: DialogProps) {
   // 關閉時整個卸載（而非只是隱藏），因此下次開啟的內容必定是乾淨的——不會殘留
   // 上一次輸入到一半的文字或錯誤訊息。這件事刻意由 Dialog 自己負責，呼叫端就
   // 不可能忘記；忘記的症狀是「第二次打開還留著上次的東西」，很難聯想到原因。
@@ -44,7 +53,7 @@ export function Dialog({ open, title, onClose, variant = 'modal', children }: Di
       {children}
     </PanelFrame>
   ) : (
-    <ModalFrame title={title} onClose={onClose}>
+    <ModalFrame title={title} onClose={onClose} className={className}>
       {children}
     </ModalFrame>
   );
@@ -53,6 +62,7 @@ export function Dialog({ open, title, onClose, variant = 'modal', children }: Di
 interface FrameProps {
   title: string;
   onClose: () => void;
+  className?: string;
   children: ReactNode;
 }
 
@@ -67,7 +77,7 @@ function Header({ title, onClose }: { title: string; onClose: () => void }) {
   );
 }
 
-function ModalFrame({ title, onClose, children }: FrameProps) {
+function ModalFrame({ title, onClose, className, children }: FrameProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   // 掛載後才開啟：必須呼叫 showModal() 才會有焦點鎖定與遮罩，
@@ -78,7 +88,7 @@ function ModalFrame({ title, onClose, children }: FrameProps) {
 
   return (
     <dialog
-      className={styles.dialog}
+      className={className ? `${styles.dialog} ${className}` : styles.dialog}
       ref={dialogRef}
       aria-label={title}
       // 使用者按 Esc（或其他方式）關閉時，讓父層狀態跟著同步。

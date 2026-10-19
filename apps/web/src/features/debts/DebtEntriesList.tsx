@@ -10,7 +10,7 @@ import { formatDate, formatMoney, formatTransactionAmount } from '../../lib/form
 import { useDeleteSplit } from '../transactions/use-splits';
 import rowStyles from './DebtRow.module.css';
 import { DebtEntryEditDialog } from './DebtEntryEditDialog';
-import { getDebtEntryFlow } from './entry-flow';
+import { getDebtEntryFlow, LEDGER_CARRY_OVER_LABEL } from './entry-flow';
 import { MiniOweArrow } from './MiniOweArrow';
 import { useDeleteDebtEntry } from './use-debts';
 import styles from './DebtEntriesList.module.css';
@@ -83,7 +83,8 @@ export function DebtEntriesList({
       <ul className={styles.entryList}>
         {entries.map((entry) => {
           const isAdjustment = ADJUSTMENT_KINDS.has(entry.kind);
-          const isUnrecorded = entry.transactionId === null && !isAdjustment;
+          const isUnrecorded =
+            entry.transactionId === null && !isAdjustment && entry.kind !== 'LEDGER_CARRY_OVER';
           const canEditEntry =
             editable &&
             (entry.recorded === null
@@ -133,7 +134,12 @@ export function DebtEntriesList({
                   )}
                 </span>
                 {/* 名稱緊接在箭頭右邊，才看得出是哪一筆；標籤與備註留在金額左邊（開發者 2026-10-18）。 */}
-                {entry.recorded !== null &&
+                {entry.kind === 'LEDGER_CARRY_OVER' ? (
+                  <span className={styles.title}>
+                    <span className={styles.titleText}>{LEDGER_CARRY_OVER_LABEL}</span>
+                  </span>
+                ) : (
+                  entry.recorded !== null &&
                   (entry.recorded.title !== null || entry.recorded.categoryId !== null) && (
                     <span className={styles.title}>
                       {entry.recorded.categoryId !== null && (
@@ -145,7 +151,8 @@ export function DebtEntriesList({
                         <span className={styles.titleText}>{entry.recorded.title}</span>
                       )}
                     </span>
-                  )}
+                  )
+                )}
                 <span className={rowStyles.spacer} />
                 <span className={rowStyles.label}>
                   {entry.splitId !== null && <span className={styles.splitBadge}>分帳</span>}

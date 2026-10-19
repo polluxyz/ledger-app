@@ -14,6 +14,7 @@ import { useCounterparties } from '../features/debts/use-debts';
 import { AddCounterpartyMemberDialog } from '../features/ledgers/AddCounterpartyMemberDialog';
 import { AddMemberMenu } from '../features/ledgers/AddMemberMenu';
 import { DeleteLedgerDialog } from '../features/ledgers/DeleteLedgerDialog';
+import { LeaveLedgerDialog } from '../features/ledgers/LeaveLedgerDialog';
 import { LedgerRenameDialog } from '../features/ledgers/LedgerRenameDialog';
 import { MemberDialog } from '../features/ledgers/MemberDialog';
 import { MemberList } from '../features/ledgers/MemberList';
@@ -107,6 +108,7 @@ function LedgerDetailView({
     if (person.userId !== null) pointerNames[person.userId] = displayName;
   }
   const [removing, setRemoving] = useState<LedgerMemberInfo | null>(null);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   // 危險操作同時間只會開一個彈窗，用一個欄位表示比多個布林值更不容易出錯。
   const [danger, setDanger] = useState<'archive' | 'delete' | 'unarchive' | null>(null);
   // 改角色的錯誤（例如降級最後一位 owner）貼在那一列底下，不放頁面頂端——
@@ -117,9 +119,9 @@ function LedgerDetailView({
   const removeMember = useRemoveMember(ledger.id);
   const archiveLedger = useArchiveLedger();
   const unarchiveLedger = useUnarchiveLedger();
-  // 兩邊都是 undefined 時 `?.` 會相等，答案就變成「正在退出自己」。彈窗那時是關的，
-  // 目前不會出事，但那種相等是巧合不是意思，先擋掉 null 才是真的在問那件事。
-  const leavingSelf = removing !== null && removing.userId === currentUser.data?.id;
+  const memberHasTransactions =
+    removeMember.error instanceof ApiError &&
+    removeMember.error.errorCode === 'MEMBER_HAS_TRANSACTIONS';
   function handleChangeRole(member: LedgerMemberInfo, role: LedgerRole) {
     setRoleError(undefined);
     updateRole.mutate(
@@ -151,24 +153,37 @@ function LedgerDetailView({
     setRemoving(null);
     // 清掉上一次的失敗，下次開啟才不會殘留紅字。
     removeMember.reset();
+    updateRole.reset();
   }
 
   function confirmRemove() {
     if (!removing) {
       return;
     }
-    const leaving = removing.userId === currentUser.data?.id;
     removeMember.mutate(removing.userId, {
       onSuccess: () => {
         closeRemove();
-        // 自己退出之後這一頁已經看不到了（後端會回 404），直接離開。
-        if (leaving) {
-          void navigate('/ledgers');
-        }
       },
       // 失敗時**不關彈窗**——409 是按下確認之後才發生的，關掉的話使用者只會
       // 看到「什麼都沒發生」。錯誤由 ConfirmDialog 就地顯示。
     });
+  }
+
+  function confirmChangeToViewer() {
+    if (!removing) return;
+    setRoleError(undefined);
+    updateRole.mutate(
+      { userId: removing.userId, role: 'VIEWER' },
+      {
+        onSuccess: closeRemove,
+        onError: (error) => {
+          setRoleError({
+            userId: removing.userId,
+            message: error instanceof ApiError ? error.message : '無法連線到伺服器，請稍後再試。',
+          });
+        },
+      },
+    );
   }
 
   function closeDanger() {
@@ -274,13 +289,18 @@ function LedgerDetailView({
               currentUserId={currentUser.data?.id}
               isOwner={isOwner}
               isArchived={isArchived}
+              canLeave={ledger.kind === 'SHARED'}
               canManageVirtualMembers={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
               pendingUserId={updateRole.isPending ? updateRole.variables?.userId : undefined}
               rowError={roleError}
               pointerNames={pointerNames}
               onChangeRole={handleChangeRole}
-              onRemove={setRemoving}
-              onLeave={setRemoving}
+              onRemove={(member) => {
+                removeMember.reset();
+                updateRole.reset();
+                setRemoving(member);
+              }}
+              onLeave={() => setLeaveDialogOpen(true)}
               onRenameVirtualMember={openRename}
               onDeleteVirtualMember={openDelete}
             />
@@ -326,18 +346,30 @@ function LedgerDetailView({
 
       <ConfirmDialog
         open={removing !== null}
-        title={leavingSelf ? '退出帳本' : '移除成員'}
+        title="移除成員"
         message={
-          leavingSelf
-            ? `退出「${ledger.name}」？你將無法再看到裡面的交易，包括自己記的那些。`
+          memberHasTransactions
+            ? `${removing?.name ?? ''}在這本帳本有帳，只能改成檢視者`
             : `將 ${removing?.name ?? ''} 移出這本帳本？他先前記的交易會留下。`
         }
-        confirmLabel={leavingSelf ? '退出' : '移除'}
-        error={removeMember.error}
-        isPending={removeMember.isPending}
-        onConfirm={confirmRemove}
+        confirmLabel={memberHasTransactions ? '改成檢視者' : '移除'}
+        error={memberHasTransactions ? updateRole.error : removeMember.error}
+        isPending={removeMember.isPending || updateRole.isPending}
+        onConfirm={memberHasTransactions ? confirmChangeToViewer : confirmRemove}
         onCancel={closeRemove}
       />
+
+      {leaveDialogOpen && (
+        <LeaveLedgerDialog
+          ledgerId={ledger.id}
+          ledgerName={ledger.name}
+          onCancel={() => setLeaveDialogOpen(false)}
+          onCompleted={() => {
+            setLeaveDialogOpen(false);
+            void navigate('/ledgers');
+          }}
+        />
+      )}
 
       <Dialog
         open={danger === 'archive' || danger === 'unarchive'}
@@ -374,6 +406,7 @@ function LedgerDetailView({
         <DeleteLedgerDialog
           ledgerId={ledger.id}
           ledgerName={ledger.name}
+          ledgerKind={ledger.kind}
           onCancel={closeDanger}
           onDeleted={() => {
             setDanger(null);

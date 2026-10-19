@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { LedgerGroup, LedgerSummary } from '@ledger/shared';
+import type { LedgerSummary } from '@ledger/shared';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { DebtArrow } from '../../components/DebtArrow';
 import { FormError } from '../../components/FormError';
-import { getAvatarLabels } from '../../lib/avatar-labels';
-import { formatMoney } from '../../lib/format';
 import { useCurrentUser } from '../auth/use-current-user';
-import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { useLedgerPeople } from '../ledger-people/use-ledger-people';
 import { useLedgers } from '../ledgers/use-ledgers';
 import type { SettlementPrefill } from '../transactions/TransactionWorkbench';
@@ -28,7 +24,6 @@ interface ActiveSettlement {
 /** 借還共享分頁按帳本分組呈現結清，所有讀寫都以各組的帳本 id 為準。 */
 export function SharedSettlementsView({ settleIntent }: SharedSettlementsViewProps) {
   const ledgers = useLedgers(true);
-  const ledgerGroups = useLedgerGroups({});
   const currentUser = useCurrentUser();
   const targetLedger = ledgers.data?.find(
     (ledger) => ledger.id === settleIntent?.ledgerId && ledger.kind === 'SHARED',
@@ -92,7 +87,7 @@ export function SharedSettlementsView({ settleIntent }: SharedSettlementsViewPro
     }
   }, [handledIntentKey, location.key, setSearchParams, settleIntent]);
 
-  if (ledgers.isLoading || ledgerGroups.isLoading) {
+  if (ledgers.isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
   if (ledgers.error) {
@@ -100,19 +95,12 @@ export function SharedSettlementsView({ settleIntent }: SharedSettlementsViewPro
   }
 
   const sharedLedgers = (ledgers.data ?? []).filter((ledger) => ledger.kind === 'SHARED');
-  const leftLedgerGroups = (ledgerGroups.data ?? []).filter(
-    (group) => group?.ledger?.left === true && (group.people?.length ?? 0) > 0,
-  );
-  if (sharedLedgers.length === 0 && leftLedgerGroups.length === 0) {
-    if (ledgerGroups.error) {
-      return <FormError error={ledgerGroups.error} />;
-    }
+  if (sharedLedgers.length === 0) {
     return <p className={styles.status}>目前沒有共享帳本。</p>;
   }
 
   return (
     <div className={styles.groups}>
-      {ledgerGroups.error && <FormError error={ledgerGroups.error} />}
       {sharedLedgers.map((ledger) => (
         <SharedSettlementLedger
           key={ledger.id}
@@ -132,43 +120,7 @@ export function SharedSettlementsView({ settleIntent }: SharedSettlementsViewPro
           }}
         />
       ))}
-      {leftLedgerGroups.map((group) => (
-        <LeftSharedSettlementLedger key={group.ledger.id} group={group} />
-      ))}
     </div>
-  );
-}
-
-function LeftSharedSettlementLedger({ group }: { group: LedgerGroup }) {
-  const avatarLabels = getAvatarLabels(['我', ...group.people.map(({ person }) => person.name)]);
-
-  return (
-    <section className={styles.group} aria-labelledby={`settlement-ledger-${group.ledger.id}`}>
-      <h2 className={styles.ledgerHeading} id={`settlement-ledger-${group.ledger.id}`}>
-        {group.ledger.name} <span className={styles.leftBadge}>已退出</span>
-      </h2>
-      <ul className={styles.readOnlyGrid}>
-        {group.people.map(({ person, amount }) => {
-          const from = amount > 0 ? person.name : '我';
-          const to = amount > 0 ? '我' : person.name;
-
-          return (
-            <li key={person.id} className={styles.readOnlyTileItem}>
-              <div className={styles.readOnlyTile}>
-                <DebtArrow
-                  from={from}
-                  fromLabel={avatarLabels.get(from)}
-                  to={to}
-                  toLabel={avatarLabels.get(to)}
-                  amount={Math.abs(amount)}
-                  srText={`${from}欠${to} ${formatMoney(Math.abs(amount))}`}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 

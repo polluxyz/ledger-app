@@ -19,6 +19,9 @@ export interface DebtEntryFlow {
   description: string;
 }
 
+/** `LEDGER_CARRY_OVER` 目前尚無來源帳本名稱欄位時，列內沿用的名稱。 */
+export const LEDGER_CARRY_OVER_LABEL = '帳本轉入';
+
 const CHECK_KINDS: ReadonlySet<DebtEntryKind> = new Set(['SETTLEMENT', 'FORGIVE', 'FORGIVEN']);
 const REPAY_KINDS: ReadonlySet<DebtEntryKind> = new Set(['COLLECT', 'REPAY']);
 
@@ -34,7 +37,7 @@ const DESCRIPTION_TEMPLATES: Record<DebtEntryKind, (displayName: string) => stri
   SETTLEMENT: (name) => `我和${name}結清差額`,
   FORGIVE: (name) => `我免除${name}欠我的`,
   FORGIVEN: (name) => `${name}免除我欠的款項`,
-  LEDGER_CARRY_OVER: () => '帳本轉入',
+  LEDGER_CARRY_OVER: () => LEDGER_CARRY_OVER_LABEL,
 };
 
 /**
