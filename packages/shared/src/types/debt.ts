@@ -104,7 +104,7 @@ export interface Counterparty {
 
 /**
  * 對象總額的一個帳本來源（3f §4.2）。`amount` 正數＝對方欠我、負數＝我欠對方，不為 0。
- * `left` 為 `true` 代表我已退出那本帳本：只能打開唯讀畫面，不能記結清（W139）。
+ * 只列我現在是成員的帳本（3k 決策 189）。
  */
 export interface CounterpartyLedgerPart {
   ledgerId: string;
@@ -112,7 +112,6 @@ export interface CounterpartyLedgerPart {
   personId: string;
   personName: string;
   amount: Cents;
-  left: boolean;
 }
 
 /** 一筆往來紀錄。 */

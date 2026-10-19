@@ -136,8 +136,6 @@ export const ErrorCode = {
   SETTLEMENT_SAME_PERSON: 'SETTLEMENT_SAME_PERSON',
   /** 結清產生的交易只能從結清端點修改或刪除（3e 決策 132）。409。 */
   SETTLEMENT_TRANSACTION_READ_ONLY: 'SETTLEMENT_TRANSACTION_READ_ONLY',
-  /** 已退出帳本的人對那本帳本做寫入，含設定指向（3f §4.5）。409。 */
-  LEDGER_LEFT: 'LEDGER_LEFT',
   /** 單獨撤銷綁定在還款上的結清差額；要撤銷就撤銷那筆還款（3g 決策 157）。409。 */
   SETTLEMENT_BOUND_TO_REPAYMENT: 'SETTLEMENT_BOUND_TO_REPAYMENT',
   /** 刪除共享帳本時還有其他成員（3k 決策 204）。409。 */

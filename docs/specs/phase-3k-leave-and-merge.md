@@ -268,6 +268,7 @@ body 同 `LeaveRequest`。成功 204。
 - `Transaction` 回應多 `merge: { sourceLedgerName: string; share: Cents | null } | null`。
 - `DebtEntry` 回應多 `merge: { sourceLedgerName: string } | null`：帳本轉入才有值，往來紀錄列用它顯示帳本名（W192；開發者 2026-10-19 核可補進契約）。
 - 借還頁、對象頁、統計的共享帳本部分：只算我現在是成員的帳本（決策 189）。
+- 拿掉 3f 的「已退出」欄位：`LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`，以及錯誤碼 `LEDGER_LEFT`。決策 189 之後已退出的帳本一律 404，這些欄位恆為 `false`（開發者 2026-10-19 同意拿掉）。畫面上的「已退出」標籤與唯讀分支一併拿掉。
 
 ### 4.4 shared
 

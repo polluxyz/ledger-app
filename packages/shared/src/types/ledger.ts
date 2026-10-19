@@ -56,13 +56,7 @@ export interface LedgerMemberInfo {
 
 /** 帳本＋其完整成員清單（帳本明細端點）。 */
 export interface LedgerDetail extends Ledger {
-  /** 已退出的人（`left: true`）一律是空陣列，看不到成員（3f 決策 151）。 */
   members: LedgerMemberInfo[];
-  /**
-   * 呼叫者已退出這本帳本（3f §4.4）。這時帳本只能唯讀：交易列表只回跟呼叫者有關的帳，
-   * 其他帳本端點回 404，寫入回 409 `LEDGER_LEFT`。現任成員一律 `false`。
-   */
-  left: boolean;
 }
 
 /** GET /ledgers 的查詢參數。 */
