@@ -28,7 +28,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
-import { formatMoney, toDateInputValue } from '../../lib/format';
+import { formatMoney, toDateInputValue, TRANSACTION_TYPE_LABELS } from '../../lib/format';
 import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCurrentUser } from '../auth/use-current-user';
@@ -115,6 +115,17 @@ interface TransactionFormProps {
  * 新增模式出現。
  */
 export function TransactionForm({ ledger, transaction, split, ...props }: TransactionFormProps) {
+  if (transaction?.merge != null) {
+    return (
+      <MergedTransactionForm
+        ledger={ledger}
+        transaction={transaction}
+        onSaved={props.onSaved}
+        onCancel={props.onCancel}
+      />
+    );
+  }
+
   const hasLegacySplit = split !== undefined || transaction?.split != null;
   if (ledger.kind === 'SHARED' && !hasLegacySplit) {
     return (
@@ -139,6 +150,203 @@ export function TransactionForm({ ledger, transaction, split, ...props }: Transa
       createLedgerPerson={undefined}
       {...props}
     />
+  );
+}
+
+interface MergedTransactionFormProps {
+  ledger: LedgerSummary;
+  transaction: Transaction;
+  onSaved?: () => void;
+  onCancel?: () => void;
+}
+
+/** 合併來的交易只呈現決策 202 開放的欄位，金額、日期與型別只讀。 */
+function MergedTransactionForm({
+  ledger,
+  transaction,
+  onSaved,
+  onCancel,
+}: MergedTransactionFormProps) {
+  const isTransfer = transaction.type === 'TRANSFER';
+  const hasCategory = transaction.type === 'EXPENSE' || transaction.type === 'INCOME';
+  const categoryType: CategoryType = transaction.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
+  const categories = useCategories(ledger.id, categoryType);
+  const accounts = useAccounts();
+  const accountOptions = selectableAccounts(accounts.data ?? []);
+  const updateTransaction = useUpdateTransaction(ledger.id);
+  const deleteTransaction = useDeleteTransaction(ledger.id);
+  const [title, setTitle] = useState(transaction.title ?? '');
+  const [categoryId, setCategoryId] = useState(transaction.category?.id ?? '');
+  const [accountId, setAccountId] = useState(transaction.account?.id ?? '');
+  const [accountSelectionTouched, setAccountSelectionTouched] = useState(false);
+  const [toAccountId, setToAccountId] = useState(transaction.toAccount?.id ?? '');
+  const [toAccountSelectionTouched, setToAccountSelectionTouched] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [submissionError, setSubmissionError] = useState<unknown>(null);
+
+  const selectedAccountId = accountOptions.some((account) => account.id === accountId)
+    ? accountId
+    : '';
+  const otherAccounts = accountOptions.filter((account) => account.id !== selectedAccountId);
+  const selectedToAccountId = otherAccounts.some((account) => account.id === toAccountId)
+    ? toAccountId
+    : isTransfer && transaction.toAccount === null
+      ? ''
+      : (otherAccounts[0]?.id ?? '');
+  const shouldSendToAccount =
+    isTransfer &&
+    (toAccountSelectionTouched || selectedToAccountId !== (transaction.toAccount?.id ?? ''));
+  const pending = updateTransaction.isPending || accounts.isLoading || categories.isLoading;
+  const error = submissionError ?? updateTransaction.error ?? deleteTransaction.error;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmissionError(null);
+    const input: UpdateTransactionRequest = {
+      title,
+      ...(hasCategory ? { categoryId } : {}),
+      ...(accountSelectionTouched ? { accountId: selectedAccountId } : {}),
+      ...(shouldSendToAccount ? { toAccountId: selectedToAccountId } : {}),
+    };
+
+    void updateTransaction
+      .mutateAsync({ transactionId: transaction.id, input })
+      .then(() => onSaved?.())
+      .catch(setSubmissionError);
+  }
+
+  return (
+    <>
+      <form onSubmit={handleSubmit} noValidate>
+        <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
+          <FormError error={error} />
+          <TextField label="類型" value={TRANSACTION_TYPE_LABELS[transaction.type]} readOnly />
+          <div className={fieldLayoutStyles.amount}>
+            <TextField
+              label="金額"
+              type="number"
+              value={centsToInput(transaction.amount)}
+              readOnly
+            />
+          </div>
+          <div className={fieldLayoutStyles.row}>
+            <TextField
+              label="日期"
+              type="date"
+              value={toDateInputValue(new Date(transaction.date))}
+              readOnly
+            />
+            {hasCategory && (
+              <CategoryPicker
+                categories={categories.data ?? []}
+                value={categoryId}
+                onChange={setCategoryId}
+              />
+            )}
+          </div>
+          {isTransfer ? (
+            <>
+              <Select
+                label="轉出帳戶"
+                value={selectedAccountId}
+                required
+                onChange={(event) => {
+                  setAccountSelectionTouched(true);
+                  setAccountId(event.target.value);
+                }}
+              >
+                <option value="">選擇帳戶</option>
+                {accountOptions.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                label="轉入帳戶"
+                value={selectedToAccountId}
+                required
+                onChange={(event) => {
+                  setToAccountSelectionTouched(true);
+                  setToAccountId(event.target.value);
+                }}
+              >
+                <option value="">選擇帳戶</option>
+                {otherAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+            </>
+          ) : (
+            <Select
+              label="帳戶"
+              value={selectedAccountId}
+              required
+              onChange={(event) => {
+                setAccountSelectionTouched(true);
+                setAccountId(event.target.value);
+              }}
+            >
+              <option value="">選擇帳戶</option>
+              {accountOptions.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          )}
+          <TextField
+            label="名稱"
+            value={title}
+            maxLength={200}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+          <div className={styles.actions}>
+            <Button type="submit" block disabled={pending}>
+              {pending ? '儲存中…' : '儲存'}
+            </Button>
+            {onCancel && (
+              <Button type="button" variant="secondary" onClick={onCancel}>
+                取消
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              className={styles.deleteButton}
+              onClick={() => {
+                deleteTransaction.reset();
+                setDeleteOpen(true);
+              }}
+            >
+              刪除
+            </Button>
+          </div>
+        </fieldset>
+      </form>
+      <ConfirmDialog
+        open={deleteOpen}
+        title="刪除交易"
+        message="確定要刪除這筆交易嗎？刪除後無法復原。"
+        confirmLabel="刪除"
+        error={deleteTransaction.error}
+        isPending={deleteTransaction.isPending}
+        onCancel={() => {
+          setDeleteOpen(false);
+          deleteTransaction.reset();
+        }}
+        onConfirm={() => {
+          deleteTransaction.mutate(transaction.id, {
+            onSuccess: () => {
+              setDeleteOpen(false);
+              onSaved?.();
+            },
+          });
+        }}
+      />
+    </>
   );
 }
 

@@ -650,6 +650,30 @@ describe('TransactionList', () => {
       await user.click(screen.getByText('借出'));
     });
 
+    it('opens a merged debt-type row through the ordinary transaction editor', async () => {
+      const user = userEvent.setup();
+      const onEdit = vi.fn();
+      const onEditDebtTransaction = vi.fn();
+      const mergedDebt = makeTransaction({
+        id: 'merged-ledger-carry-over',
+        type: 'LEND',
+        title: '代墊',
+        category: null,
+        debt: null,
+        merge: { sourceLedgerName: '花蓮三日', share: null },
+      });
+      renderList({ transactions: [mergedDebt], onEdit, onEditDebtTransaction });
+
+      const listRow = row(0);
+      expect(listRow).toHaveClass(cssClass('clickable'));
+      expect(within(listRow).getByRole('button', { name: /^編輯/ })).toBeInTheDocument();
+      expect(within(listRow).getByText('花蓮三日')).toBeInTheDocument();
+      await user.click(within(listRow).getByRole('button', { name: /^編輯/ }));
+
+      expect(onEdit).toHaveBeenCalledWith(mergedDebt);
+      expect(onEditDebtTransaction).not.toHaveBeenCalled();
+    });
+
     it('shows a merged source, a transfer icon, and my-share and advance details', async () => {
       const user = userEvent.setup();
       const merged = makeTransaction({
