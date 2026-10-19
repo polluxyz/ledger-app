@@ -197,6 +197,13 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、797 個測試）與 `pnpm format:check`。
 - 協調者驗收時修正：帳戶下拉選回空值時不送 `accountId`／`toAccountId`（空字串會被後端 400）。
 
+### K6（lvm-web-e2e，2026-10-19）
+
+- 新增 `apps/web/e2e/ledger-leave-merge.spec.ts`，以三位真實使用者覆蓋完整合併、取消住宿後的帳戶預覽、最後一人輸入名稱刪除共享帳本，以及 W193 將有帳成員改成檢視者。
+- 更新 `ledger-delete-archive.spec.ts` 與 `ledgers.spec.ts` 的共享帳本刪除阻擋文案與案例名稱：W190 現在只要還有其他成員就只能封存，所以斷言從「有其他成員的交易，只能封存」改成「還有其他成員，只能封存」；封存限制的測試意圖不變。
+- 搜尋既有 e2e 後，沒有找到使用已刪除 `/ledgers/:id/history` 頁面或舊的自己退出端點的測試；借還「歷史」子分頁仍存在，相關測試不需改動。
+- 驗證：新增主線 4/4 通過；完整 `pnpm --filter @ledger/web test:e2e` 共 65/65 通過，0 失敗、0 fixme；`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 全綠。
+
 ### 待開發者決定（2026-10-19，已回報總控）
 
 1. `LedgerMerge.targetLedger` 改 `onDelete: SetNull`（見 K1）。
