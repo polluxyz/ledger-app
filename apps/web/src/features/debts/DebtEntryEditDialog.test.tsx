@@ -26,6 +26,7 @@ describe('DebtEntryEditDialog', () => {
     splitId: null,
     settlesEntryId: null,
     difference: null,
+    merge: null,
     balanceAfter: 12000,
     sync: 'NONE',
     paired: false,

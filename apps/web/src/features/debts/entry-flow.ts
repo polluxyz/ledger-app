@@ -19,7 +19,7 @@ export interface DebtEntryFlow {
   description: string;
 }
 
-/** `LEDGER_CARRY_OVER` 目前尚無來源帳本名稱欄位時，列內沿用的名稱。 */
+/** `LEDGER_CARRY_OVER` 的通用名稱；往來紀錄列有 `merge.sourceLedgerName` 時改顯示帳本名（W192）。 */
 export const LEDGER_CARRY_OVER_LABEL = '帳本轉入';
 
 const CHECK_KINDS: ReadonlySet<DebtEntryKind> = new Set(['SETTLEMENT', 'FORGIVE', 'FORGIVEN']);
