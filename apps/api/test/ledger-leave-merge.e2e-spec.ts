@@ -676,6 +676,39 @@ describe('Ledger leave and merge (e2e)', () => {
     expect(entries.find((entry) => entry.kind === 'LEND')!.merge).toBeNull();
   });
 
+  // spec §3（SetNull）：刪掉合併的目標帳本時，合併來的交易跟著刪，合併紀錄留著、目標變 null；
+  // 帳本轉入照樣指向它，往來紀錄仍顯示來源帳本名稱。原本是 Cascade，有帳本轉入時刪除會被擋下。
+  it('刪掉合併的目標帳本：合併紀錄留著，帳本轉入仍帶來源帳本名稱', async () => {
+    const s = await scene();
+    await leave(s.me, s.ledgerId).expect(204);
+    const target = await prisma.ledger.findUniqueOrThrow({ where: { id: s.me.ledgerId } });
+    expect(
+      await prisma.transaction.count({ where: { ledgerId: target.id, mergeId: { not: null } } }),
+    ).toBeGreaterThan(0);
+
+    await request(server())
+      .delete(`/api/ledgers/${target.id}`)
+      .set(auth(s.me.token))
+      .query({ confirm: target.name })
+      .expect(204);
+
+    const merge = await prisma.ledgerMerge.findFirstOrThrow({ where: { userId: s.me.userId } });
+    expect(merge.targetLedgerId).toBeNull();
+    expect(merge.sourceLedgerName).toBe('花蓮三日');
+    expect(await prisma.transaction.count({ where: { mergeId: merge.id } })).toBe(0);
+    const carry = await prisma.debtEntry.findFirstOrThrow({
+      where: { kind: 'LEDGER_CARRY_OVER', deletedAt: null, mergeId: merge.id },
+    });
+    const res = await request(server())
+      .get(`/api/counterparties/${carry.counterpartyId}/entries`)
+      .set(auth(s.me.token))
+      .expect(200);
+    const entries = (res.body as { items: Array<{ id: string; merge: unknown }> }).items;
+    expect(entries.find((entry) => entry.id === carry.id)!.merge).toEqual({
+      sourceLedgerName: '花蓮三日',
+    });
+  });
+
   // 決策 199「不會重複計算」：被加回後再退出，第一次已合併過的原交易不再列為項目、不再合併，
   // 目標帳本不會多出第二份份額（統計重複）；帳戶也照樣不變。
   it('被加回後再退出：已合併過的交易不再合併第二次', async () => {
