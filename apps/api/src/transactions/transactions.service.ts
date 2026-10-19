@@ -727,6 +727,21 @@ export class TransactionsService {
     if (input.toAccountId !== undefined && primary.type !== 'TRANSFER') {
       throw this.invalidMergedChange();
     }
+    // 合併交易的帳戶只屬於合併者（spec §7 Never）。目標是共享帳本時其他編輯者可以改名稱與
+    // 分類，但改帳戶會把他自己的帳戶寫進別人的合併帳。
+    if (
+      (input.accountId !== undefined || input.toAccountId !== undefined) &&
+      (await tx.ledgerMerge.findUnique({
+        where: { id: existing.mergeId! },
+        select: { userId: true },
+      }))!.userId !== callerUserId
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.ACCOUNT_NOT_PAYERS,
+        'Only the person who merged this transaction can change its account.',
+      );
+    }
     for (const accountId of [input.accountId, input.toAccountId]) {
       if (accountId !== undefined) await assertSelectableAccount(tx, callerUserId, accountId);
     }

@@ -292,13 +292,24 @@ describe('Ledger merged transactions (e2e)', () => {
         .send(body)
         .expect(status);
     }
+    // 其他編輯者可以改名稱，但合併交易的帳戶只屬於合併者（spec §7 Never：不能把別人的帳戶
+    // 寫進合併的交易），連同名稱一起送也整筆擋下、不寫入。
+    const changeAccount = await request(server())
+      .patch(`${s.root}/${s.share.id}`)
+      .set(auth(s.other.token))
+      .send({ title: '編輯者可改', accountId: s.other.cashId });
+    expect(changeAccount.status).toBe(400);
+    expect((changeAccount.body as { errorCode: string }).errorCode).toBe('ACCOUNT_NOT_PAYERS');
+    expect(
+      await prisma.transaction.count({ where: { mergeId: s.merge.id, accountId: s.me.cashId } }),
+    ).toBe(2);
     await request(server())
       .patch(`${s.root}/${s.share.id}`)
       .set(auth(s.other.token))
-      .send({ title: '編輯者可改', accountId: s.other.cashId })
+      .send({ title: '編輯者可改' })
       .expect(200);
     expect(
-      await prisma.transaction.count({ where: { mergeId: s.merge.id, accountId: s.other.cashId } }),
+      await prisma.transaction.count({ where: { mergeId: s.merge.id, title: '編輯者可改' } }),
     ).toBe(2);
     await prisma.ledgerMember.update({
       where: { ledgerId_userId: { ledgerId: s.targetId, userId: s.other.userId } },
