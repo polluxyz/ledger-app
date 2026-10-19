@@ -136,7 +136,9 @@ export function DebtEntriesList({
                 {/* 名稱緊接在箭頭右邊，才看得出是哪一筆；標籤與備註留在金額左邊（開發者 2026-10-18）。 */}
                 {entry.kind === 'LEDGER_CARRY_OVER' ? (
                   <span className={styles.title}>
-                    <span className={styles.titleText}>{LEDGER_CARRY_OVER_LABEL}</span>
+                    <span className={styles.titleText}>
+                      {entry.merge?.sourceLedgerName ?? LEDGER_CARRY_OVER_LABEL}
+                    </span>
                   </span>
                 ) : (
                   entry.recorded !== null &&

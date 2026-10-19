@@ -118,6 +118,7 @@ describe('DebtHistoryView', () => {
       splitId: null,
       settlesEntryId: null,
       difference: null,
+      merge: null,
       balanceAfter: 0,
       sync: 'NONE',
       paired: false,
