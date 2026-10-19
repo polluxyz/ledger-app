@@ -262,6 +262,7 @@ body 同 `LeaveRequest`。成功 204。
 - `PATCH /ledgers/{id}/transactions/{tid}` 補帳戶：這筆我合併過 → 409 `TRANSACTION_ALREADY_MERGED`（決策 199）；回應的 `accountPending` 對合併過的為 `false`。
 - 合併來的交易：可以改名稱、分類、帳戶與刪除，其他欄位 → 400（決策 202）。兩筆內部紀錄一起改、一起刪。
 - `Transaction` 回應多 `merge: { sourceLedgerName: string; share: Cents | null } | null`。
+- `DebtEntry` 回應多 `merge: { sourceLedgerName: string } | null`：帳本轉入才有值，往來紀錄列用它顯示帳本名（W192；開發者 2026-10-19 核可補進契約）。
 - 借還頁、對象頁、統計的共享帳本部分：只算我現在是成員的帳本（決策 189）。
 
 ### 4.4 shared

@@ -157,6 +157,11 @@ export interface DebtEntry {
    * `accountId` 一定是我自己的帳戶；呆帳、債務免除沒有帳戶，為 `null`。沒有交易的舊資料整個為 `null`。
    */
   recorded: DebtEntryRecorded | null;
+  /**
+   * 帳本轉入（`LEDGER_CARRY_OVER`，3k 決策 198）的來源：往來紀錄列用它顯示帳本名（W192）。
+   * 其他種類為 `null`。
+   */
+  merge: DebtEntryMerge | null;
   /** 與對方的同步狀態（3b-2 §3.4），由後端算出。 */
   sync: DebtEntrySyncStatus;
   /** 是否與對方那邊的一筆紀錄配對。畫面用它決定改或刪之前要不要警告（決策 67）。 */
@@ -185,6 +190,11 @@ export interface DebtEntryRecorded {
   categoryId: string | null;
   /** 分類的圖示代號（借還頁紀錄列顯示用）；沒有分類或分類用通用圖示時為 null。 */
   categoryIcon: string | null;
+}
+
+/** 帳本轉入的來源（3k W192）。名稱是退出當下的快照，來源帳本之後可能被刪掉。 */
+export interface DebtEntryMerge {
+  sourceLedgerName: string;
 }
 
 /** 還款底下的結清分支（3h 決策 170）。名稱用 `differenceLabelOf` 由還款與分支的型別決定。 */

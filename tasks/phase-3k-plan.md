@@ -200,5 +200,5 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 ### 待開發者決定（2026-10-19，已回報總控）
 
 1. `LedgerMerge.targetLedger` 改 `onDelete: SetNull`（見 K1）。
-2. shared `DebtEntry` 加 `merge: { sourceLedgerName } | null`，W192 才有來源帳本名可顯示；核可後由總控改 shared、後端填值。
+2. ~~shared `DebtEntry` 加 `merge: { sourceLedgerName } | null`~~：開發者 2026-10-19 核可，總控已改 shared 與 spec §4.3，後端填值、前端顯示。
 3. 被加回後再退出：同一筆沒結清的錢會再轉一次「帳本轉入」。第一次退出時已轉成個人借還，被加回後借還頁的帳本部分又算一次，再退出就重複。spec 沒寫被加回後這筆錢怎麼算。
