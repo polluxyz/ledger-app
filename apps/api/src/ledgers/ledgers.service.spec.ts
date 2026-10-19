@@ -326,6 +326,16 @@ describe('LedgersService (members)', () => {
       });
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(ledgerPeople.ensureMemberPerson).toHaveBeenCalledWith(prisma, ledgerId, 'user-2');
+      // 3k 決策 208：只撤銷被加回者自己、來源是這本帳本的帳本轉入。
+      expect(prisma.debtEntry.updateMany).toHaveBeenCalledWith({
+        where: {
+          kind: 'LEDGER_CARRY_OVER',
+          deletedAt: null,
+          counterparty: { ownerId: 'user-2' },
+          merge: { userId: 'user-2', sourceLedgerId: ledgerId },
+        },
+        data: { deletedAt: expect.any(Date) as unknown },
+      });
     });
 
     it('hides another user’s counterparty and does not look up its link', async () => {
