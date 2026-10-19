@@ -151,7 +151,7 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、792 個測試）與 `pnpm format:check`。
 - 協調者驗收時修正：`keepPreviousData` 從刪除預覽移到退出預覽（每勾一次帳戶段不會先消失）；預覽載入中「退出」按鈕停用、不隱藏；「合併到」改用共用 `Select`；預覽段標題 id 改用 `useId`（退出對話框與選擇畫面同時掛著會重複）；合併來的帳本往來判斷抽成一個變數。
 - 契約缺口（已回報總控）：`DebtEntry` 沒有來源帳本名稱，W192 要求帳本轉入的往來紀錄列顯示帳本名，目前顯示「帳本轉入」。
-- 範圍外、留給後續：合併來的交易打開的是一般編輯面板，沒有照決策 202 限制只能改名稱、分類、帳戶（plan §1.6 沒列這一項）。後端會擋其他欄位（400），但畫面沒有預先鎖住。
+- plan §1.6 漏列決策 202 的編輯限制，總控 2026-10-19 指示補成 K5b（見下）。
 
 ### K5b（lvm-web，2026-10-19）
 
@@ -159,3 +159,4 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 合併來的借還型別列可開一般交易編輯表單；有來源帳本名稱時在交易第二行顯示。
 - 偏離／問題：沒有 spec 偏離。K5 記錄的 W192「帳本轉入」來源帳本名契約缺口仍未解，屬往來列資料，不在本次交易編輯範圍；測試中的數字欄位斷言型別與帳戶載入時序已修正。
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、797 個測試）與 `pnpm format:check`。
+- 協調者驗收時修正：帳戶下拉選回空值時不送 `accountId`／`toAccountId`（空字串會被後端 400）。

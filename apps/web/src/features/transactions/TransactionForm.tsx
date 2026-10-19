@@ -205,8 +205,13 @@ function MergedTransactionForm({
     const input: UpdateTransactionRequest = {
       title,
       ...(hasCategory ? { categoryId } : {}),
-      ...(accountSelectionTouched ? { accountId: selectedAccountId } : {}),
-      ...(shouldSendToAccount ? { toAccountId: selectedToAccountId } : {}),
+      // 選回「選擇帳戶」（空值）不送：空字串不是合法的帳戶 id，後端會回 400。
+      ...(accountSelectionTouched && selectedAccountId !== ''
+        ? { accountId: selectedAccountId }
+        : {}),
+      ...(shouldSendToAccount && selectedToAccountId !== ''
+        ? { toAccountId: selectedToAccountId }
+        : {}),
     };
 
     void updateTransaction
