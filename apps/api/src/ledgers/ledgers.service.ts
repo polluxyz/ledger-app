@@ -139,7 +139,6 @@ export class LedgersService {
     return {
       ...this.toLedger(ledger),
       members: ledger.members.map((member) => this.toMemberInfo(member)),
-      left: false,
     };
   }
 

@@ -13,7 +13,7 @@ import { computeLedgerSummary } from '../settlements/ledger-summary';
 
 /** 只查目前仍有成員資格的共享帳本，再批次取指向；封存仍保留欠款。 */
 export interface MyLedgerDebt {
-  ledger: { id: string; name: string; left: boolean };
+  ledger: { id: string; name: string };
   people: LedgerGroupPerson[];
 }
 
@@ -40,7 +40,7 @@ export class LedgerDebtsService {
         );
         const myPersonId = ledger.people[0]!.id;
         return {
-          ledger: { id: ledger.id, name: ledger.name, left: false },
+          ledger: { id: ledger.id, name: ledger.name },
           people: summary.people
             .map(({ person }) => person)
             .filter((person) => person.id !== myPersonId),
@@ -72,7 +72,6 @@ export class LedgerDebtsService {
           personId: person.id,
           personName: person.name,
           amount,
-          left: ledger.left,
         };
         parts.set(pointer.counterpartyId, [...(parts.get(pointer.counterpartyId) ?? []), part]);
       }

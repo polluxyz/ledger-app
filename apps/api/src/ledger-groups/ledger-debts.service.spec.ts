@@ -19,7 +19,7 @@ describe('LedgerDebtsService.groups', () => {
   });
   const debts: MyLedgerDebt[] = [
     {
-      ledger: { id: 'z', name: '乙帳本', left: false },
+      ledger: { id: 'z', name: '乙帳本' },
       people: [
         person('member', 'MEMBER', 0),
         person('guest', 'GUEST', 200, true),
@@ -27,11 +27,11 @@ describe('LedgerDebtsService.groups', () => {
       ],
     },
     {
-      ledger: { id: 'a', name: '甲帳本', left: false },
+      ledger: { id: 'a', name: '甲帳本' },
       people: [person('stillOwed', 'MEMBER', -100), person('zero', 'GUEST', 0)],
     },
     {
-      ledger: { id: 'empty', name: '丙帳本', left: false },
+      ledger: { id: 'empty', name: '丙帳本' },
       people: [person('zeroLeft', 'MEMBER', 0)],
     },
   ];
@@ -61,15 +61,15 @@ describe('LedgerDebtsService.groups with hasSettlements', () => {
   // 三本都是現任成員的帳本；甲沒有未結清金額，丙沒有結清歷史。
   const debts: MyLedgerDebt[] = [
     {
-      ledger: { id: 'z', name: '乙帳本', left: false },
+      ledger: { id: 'z', name: '乙帳本' },
       people: [person('member', 'MEMBER', 0), person('gone', 'LEFT', 0)],
     },
     {
-      ledger: { id: 'a', name: '甲帳本', left: false },
+      ledger: { id: 'a', name: '甲帳本' },
       people: [],
     },
     {
-      ledger: { id: 'empty', name: '丙帳本', left: false },
+      ledger: { id: 'empty', name: '丙帳本' },
       people: [person('zero', 'GUEST', 0)],
     },
   ];
@@ -100,7 +100,7 @@ describe('LedgerDebtsService.groups with hasSettlements', () => {
       settlementCount: 3,
     });
     expect(groups[1]).toMatchObject({
-      ledger: { id: 'a', left: false },
+      ledger: { id: 'a' },
       people: [],
       settlementCount: 1,
     });
