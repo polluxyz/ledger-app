@@ -334,19 +334,14 @@ describe('Ledger delete and archive (e2e)', () => {
     expect(await prisma.ledger.findUnique({ where: { id } })).not.toBeNull();
   });
 
-  it('SC-J5: shared debts and archived ledgers return blocked previews without balances', async () => {
+  it('SC-K3: sole-member shared debts can be withdrawn; archive still blocks deletion', async () => {
     const alice = await person(app, 'alice@example.com', 'Alice');
     const other = await createCounterparty(app, alice, 'Ming');
     const id = await createSharedLedger(app, alice.token, 'Trip');
     await debt(alice, id, other.id);
-    expect(await preview(alice, id)).toEqual({
-      accounts: [],
-      counterparties: [],
-      withdrawsDebts: false,
-      delete: { allowed: false, blockedBy: 'SHARED_HAS_DEBTS' },
-    });
-    expect((await remove(alice, id, true).expect(409)).body as object).toMatchObject({
-      errorCode: 'LEDGER_HAS_DEBT_TRANSACTIONS',
+    expect((await preview(alice, id)).delete).toEqual({ allowed: true, blockedBy: null });
+    expect((await remove(alice, id).expect(409)).body as object).toMatchObject({
+      errorCode: 'DEBT_WITHDRAWAL_REQUIRED',
     });
     await request(server()).post(`/api/ledgers/${id}/archive`).set(auth(alice.token)).expect(201);
     expect(await preview(alice, id)).toEqual({
@@ -381,6 +376,9 @@ describe('Ledger delete and archive (e2e)', () => {
       })
       .expect(201);
     const transactionId = (created.body as { id: string }).id;
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: id, userId: bob.userId } },
+    });
     const before = await listAccounts(app, bob.token);
     expect((await remove(alice, id, true).expect(409)).body as object).toMatchObject({
       errorCode: 'LEDGER_HAS_OTHERS_TRANSACTIONS',

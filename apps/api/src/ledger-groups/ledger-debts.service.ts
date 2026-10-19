@@ -11,7 +11,7 @@ import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { loadEffectivePointers } from '../ledger-people/ledger-pointers';
 import { computeLedgerSummary } from '../settlements/ledger-summary';
 
-/** 先用我的 LedgerPerson 限定帳本，再批次取指向；退出與封存均不能抹掉既有欠款。 */
+/** 只查目前仍有成員資格的共享帳本，再批次取指向；封存仍保留欠款。 */
 export interface MyLedgerDebt {
   ledger: { id: string; name: string; left: boolean };
   people: LedgerGroupPerson[];
@@ -26,11 +26,10 @@ export class LedgerDebtsService {
 
   async loadMyLedgerDebts(userId: string): Promise<MyLedgerDebt[]> {
     const ledgers = await this.prisma.ledger.findMany({
-      where: { kind: 'SHARED', people: { some: { userId } } },
+      where: { kind: 'SHARED', members: { some: { userId } } },
       select: {
         id: true,
         name: true,
-        members: { where: { userId }, select: { userId: true } },
         people: { where: { userId }, select: { id: true } },
       },
     });
@@ -41,7 +40,7 @@ export class LedgerDebtsService {
         );
         const myPersonId = ledger.people[0]!.id;
         return {
-          ledger: { id: ledger.id, name: ledger.name, left: ledger.members.length === 0 },
+          ledger: { id: ledger.id, name: ledger.name, left: false },
           people: summary.people
             .map(({ person }) => person)
             .filter((person) => person.id !== myPersonId),
@@ -95,29 +94,18 @@ export class LedgerDebtsService {
         people: people.filter(({ person, amount, pointer }) =>
           unpointed
             ? pointer.counterpartyId === null && amount !== 0
-            : ledger.left
-              ? amount !== 0
-              : person.status !== 'LEFT' || amount !== 0,
+            : person.status !== 'LEFT' || amount !== 0,
         ),
         ...(counts ? { settlementCount: counts.get(ledger.id) ?? 0 } : {}),
       }))
       .filter(({ ledger, people }) =>
-        counts
-          ? // 歷史分頁（3g W161）：只回有我看得到的結清的帳本，已退出的帳本不受
-            // 「已退出只在還有轉帳時列」的限制，即使 people 是空的也列出。
-            (counts.get(ledger.id) ?? 0) > 0
-          : (!unpointed && !ledger.left) || people.length > 0,
+        counts ? (counts.get(ledger.id) ?? 0) > 0 : !unpointed || people.length > 0,
       )
       .sort((a, b) => a.ledger.name.localeCompare(b.ledger.name, 'zh-Hant'));
   }
 
   /**
-   * 一次查詢算出我在每本共享帳本看得到的未刪除結清筆數（3g §4.2）。現任成員算全部；
-   * 已退出只算我是付錢或收錢一方的結清（3f 決策 151 的範圍）。
-   *
-   * 以 `LedgerPerson`（曾參與過就有列）對上 `LedgerMember`（仍在名單）判別身分：
-   * 成員資格在則全部可見；不在則用 `me."id"` 比對結清的兩位。查不到的帳本不會
-   * 出現在回傳的 Map，呼叫端以 `?? 0` 視為沒有結清。
+   * 3k 決策 189：結清歷史也只算現任成員的共享帳本，避免退出後從彙總洩漏資料。
    */
   private async settlementCounts(userId: string): Promise<Map<string, number>> {
     const rows = await this.prisma.$queryRaw<Array<{ ledgerId: string; count: number | bigint }>>(
@@ -125,9 +113,8 @@ export class LedgerDebtsService {
         SELECT t."ledgerId" AS "ledgerId", COUNT(*)::int AS "count"
         FROM "LedgerSettlement" st
         JOIN "Transaction" t ON t."id" = st."transactionId" AND t."deletedAt" IS NULL
-        JOIN "LedgerPerson" me ON me."ledgerId" = t."ledgerId" AND me."userId" = ${userId}
-        LEFT JOIN "LedgerMember" mem ON mem."ledgerId" = t."ledgerId" AND mem."userId" = ${userId}
-        WHERE mem."userId" IS NOT NULL OR st."fromPersonId" = me."id" OR st."toPersonId" = me."id"
+        JOIN "LedgerMember" mem ON mem."ledgerId" = t."ledgerId" AND mem."userId" = ${userId}
+        JOIN "Ledger" l ON l."id" = t."ledgerId" AND l."kind" = 'SHARED'
         GROUP BY t."ledgerId"
       `,
     );

@@ -3,7 +3,7 @@
  * 改付款人時不能沿用舊付款人的帳戶；實際查詢與帳戶驗證由呼叫端執行。
  */
 export interface PayerAccountInput {
-  payer: { userId: string | null };
+  payer: { userId: string | null; status: 'MEMBER' | 'LEFT' | 'GUEST' };
   callerUserId: string;
   requestedAccountId: string | undefined;
   mode: 'CREATE' | 'UPDATE';
@@ -22,6 +22,11 @@ export type PayerAccountResult =
 
 export function resolvePayerAccount(input: PayerAccountInput): PayerAccountResult {
   const { payer, callerUserId, requestedAccountId, mode, payerChanged, currentAccountId } = input;
+  // 3k 決策 191：退出後不能再動到他的帳戶，修改時也必須清掉舊帳戶引用。
+  if (payer.userId === null || payer.status !== 'MEMBER') {
+    if (requestedAccountId !== undefined) return { ok: false, error: 'ACCOUNT_NOT_PAYERS' };
+    return { ok: true, accountId: null, needsOwnershipCheck: false, needsTemporaryAccount: false };
+  }
   if (payer.userId === callerUserId) {
     if (requestedAccountId !== undefined) {
       return {
@@ -42,9 +47,9 @@ export function resolvePayerAccount(input: PayerAccountInput): PayerAccountResul
   if (requestedAccountId !== undefined) return { ok: false, error: 'ACCOUNT_NOT_PAYERS' };
   return {
     ok: true,
-    accountId: payer.userId === null || payerChanged || mode === 'CREATE' ? null : currentAccountId,
+    accountId: payerChanged || mode === 'CREATE' ? null : currentAccountId,
     needsOwnershipCheck: false,
-    needsTemporaryAccount: payer.userId !== null && (mode === 'CREATE' || payerChanged),
+    needsTemporaryAccount: mode === 'CREATE' || payerChanged,
   };
 }
 

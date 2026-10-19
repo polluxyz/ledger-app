@@ -46,6 +46,8 @@ model User {
   ledgerPersonPointers LedgerPersonPointer[]
   transactions         Transaction[]         @relation("TransactionCreator")
   accounts             Account[]
+  /// 本人退出共享帳本時留下的合併紀錄（3k）。
+  ledgerMerges         LedgerMerge[]
 
   // 好友系統（3a）。Friendship 一對只存一筆，所以一個人可能出現在 low 或 high 任一側。
   friendshipsAsLow       Friendship[]       @relation("FriendshipLow")
@@ -177,6 +179,36 @@ model Ledger {
   categories   Category[]
   transactions Transaction[]
   splits       Split[]
+  /// 合併到此帳本的紀錄；來源帳本刪除後仍保留（3k）。
+  merges       LedgerMerge[]
+}
+
+/// 一次合併（3k）。只有本人看得到；來源帳本可能被刪掉，所以保存名稱、不設來源外鍵。
+model LedgerMerge {
+  /// 這次合併的識別碼。
+  id               String   @id @default(uuid())
+  /// 執行退出與合併的使用者。
+  userId           String
+  /// 來源帳本識別碼，不設外鍵，來源刪除後合併的帳仍須保留。
+  sourceLedgerId   String
+  /// 合併當下的來源帳本名稱，供畫面標示來源。
+  sourceLedgerName String
+  /// 合併的目標帳本；全部取消勾選時為 null。
+  targetLedgerId   String?
+  /// 退出並合併的時間。
+  createdAt        DateTime @default(now())
+
+  /// 本人刪除帳號時一併刪除合併紀錄。
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 目標帳本刪除時一併刪除合併紀錄。
+  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: Cascade)
+  /// 這次合併寫入的交易。
+  transactions Transaction[]
+  /// 這次退出留下的帳本轉入往來。
+  debtEntries  DebtEntry[]
+
+  @@index([userId, sourceLedgerId])
+  @@index([targetLedgerId])
 }
 
 model LedgerMember {
@@ -257,6 +289,10 @@ model Transaction {
   title          String?
   splitId        String?
   payerPersonId  String?
+  /// 合併來的交易屬於哪一次合併（3k）。
+  mergeId        String?
+  /// 原交易識別碼，不設外鍵；同一原交易的份額與代墊共用此值，供畫面合併顯示。
+  mergedFromId   String?
   /// 這筆是哪一筆還款的結清分支（3h 決策 170）：以此結清時，還款記還清的欠款，實收與欠款的差記成
   /// 這筆收支，同帳本、同帳戶。只有分支有值；一筆還款最多一筆分支。
   differenceOfId String?         @unique
@@ -276,6 +312,8 @@ model Transaction {
   payerPerson LedgerPerson?     @relation("TransactionPayer", fields: [payerPersonId], references: [id], onDelete: Restrict)
   ledgerSplit LedgerSplit?
   settlement  LedgerSettlement?
+  /// 仍有交易引用時不可刪除這次合併紀錄。
+  merge       LedgerMerge?      @relation(fields: [mergeId], references: [id], onDelete: Restrict)
 
   // 借還帳（3b）：這筆交易若是某筆債務的本金或還款，由債務那一側持有外鍵（spec §4.4）。
   debtEntry DebtEntry?
@@ -291,6 +329,8 @@ model Transaction {
   @@index([toAccountId])
   @@index([splitId])
   @@index([payerPersonId])
+  @@index([mergeId])
+  @@index([mergedFromId])
 }
 
 model LedgerSplit {
@@ -347,6 +387,8 @@ enum DebtEntryKind {
   PAID_FOR_THEM
   RECEIVED_FOR_THEM
   RECEIVED_FOR_ME
+  /// 帳本轉入（3k 決策 198）：退出時尚未結清的錢，不產生交易。
+  LEDGER_CARRY_OVER
 }
 
 /// 記帳者的一個往來對象，只存名字（spec 3b 決策 33）。一個對象一本往來帳。
@@ -406,6 +448,8 @@ model DebtEntry {
   note           String?
   /// 產生的交易。調整紀錄與「不記入帳本」為 null。
   transactionId  String?       @unique
+  /// 帳本轉入才有值，指向這筆往來所屬的退出合併紀錄（3k）。
+  mergeId        String?
   splitId        String?
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
@@ -416,6 +460,8 @@ model DebtEntry {
   // 另外先擋（LEDGER_HAS_DEBT_TRANSACTIONS，spec 決策 21），這裡是最後防線。
   transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
   split        Split?       @relation(fields: [splitId], references: [id], onDelete: Restrict)
+  /// 仍有帳本轉入往來引用時不可刪除合併紀錄。
+  merge        LedgerMerge? @relation(fields: [mergeId], references: [id], onDelete: Restrict)
 
   /// 對方那邊配對的紀錄（3b-2）。雙向各存一次，在同一個資料庫交易裡寫入與清空。
   /// SetNull：對方刪帳號時他的紀錄跟著刪，我的紀錄自動變回未配對。
@@ -433,6 +479,7 @@ model DebtEntry {
   proposalsAsTarget DebtProposal[] @relation("DebtProposalTarget")
 
   @@index([counterpartyId, deletedAt])
+  @@index([mergeId])
   @@index([splitId])
 }
 

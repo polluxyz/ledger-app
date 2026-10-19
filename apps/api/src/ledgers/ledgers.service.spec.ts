@@ -8,7 +8,7 @@ import { SplitsService } from '../splits/splits.service';
 
 /**
  * 聚焦成員管理的不變量（最具安全性關鍵的邏輯）：加入成員的查無／重複、最後一位
- * owner 不可降級或移除、非 owner 不可移除他人、可自行退出。Prisma 全程 mock；
+ * owner 不可降級或移除、非 owner 不可移除他人、自行退出必須合併、有帳不能被移除。Prisma 全程 mock；
  * $transaction 直接以同一個 mock client 執行其 callback。
  */
 describe('LedgersService (members)', () => {
@@ -27,9 +27,9 @@ describe('LedgersService (members)', () => {
       delete: jest.Mock;
       count: jest.Mock;
     };
-    transaction: { count: jest.Mock; updateMany: jest.Mock };
-    debtEntry: { findMany: jest.Mock; updateMany: jest.Mock };
-    split: { findMany: jest.Mock; deleteMany: jest.Mock };
+    transaction: { count: jest.Mock; updateMany: jest.Mock; deleteMany: jest.Mock };
+    debtEntry: { count: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+    split: { count: jest.Mock; findMany: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
   };
   const ledgerPeople = { ensureMemberPerson: jest.fn() };
@@ -65,11 +65,23 @@ describe('LedgersService (members)', () => {
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
-        count: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
-      transaction: { count: jest.fn().mockResolvedValue(0), updateMany: jest.fn() },
-      debtEntry: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
-      split: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn() },
+      transaction: {
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      debtEntry: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn(),
+      },
+      split: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     ledgerPeople.ensureMemberPerson.mockReset();
@@ -185,7 +197,6 @@ describe('LedgersService (members)', () => {
         where: {
           ledgerId,
           OR: [
-            { creatorId: { not: 'user-1' } },
             { account: { userId: { not: 'user-1' } } },
             { toAccount: { userId: { not: 'user-1' } } },
           ],
@@ -201,16 +212,11 @@ describe('LedgersService (members)', () => {
 
     // SC-L10（3b 決策 21）：即使全是自己記的，只要有往來紀錄產生的交易（借還交易或代付支出）
     // 就不能真刪——cascade 會刪掉往來紀錄引用的交易。
-    it('409s when the ledger holds debt transactions, even the caller’s own', async () => {
+    it('detaches already withdrawn debts and deletes a sole-member shared ledger', async () => {
       prisma.debtEntry.findMany.mockResolvedValue([{ deletedAt: new Date() }]);
 
-      await expect(service.remove(ledgerId, 'user-1', ledgerRow.name)).rejects.toMatchObject({
-        status: 409,
-        errorCode: 'LEDGER_HAS_DEBT_TRANSACTIONS',
-      });
-      expect(prisma.ledger.delete).not.toHaveBeenCalled();
-      // 同樣不過濾 deletedAt：軟刪除的紀錄與交易仍然互相引用。依往來紀錄計數，
-      // 代付支出（一般 EXPENSE）才算得進去。
+      await service.remove(ledgerId, 'user-1', ledgerRow.name);
+      expect(prisma.ledger.delete).toHaveBeenCalled();
       expect(prisma.debtEntry.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -398,12 +404,44 @@ describe('LedgersService (members)', () => {
   });
 
   describe('removeMember', () => {
-    it('lets a user remove themselves (leave)', async () => {
+    it.each(['transaction', 'debtEntry', 'split'] as const)(
+      'blocks a member with active %s records',
+      async (kind) => {
+        prisma.ledgerMember.findUnique
+          .mockResolvedValueOnce({ role: 'EDITOR' })
+          .mockResolvedValueOnce({ role: 'OWNER' });
+        prisma[kind].count.mockResolvedValue(1);
+        await expect(service.removeMember(ledgerId, 'user-2', 'owner-1')).rejects.toMatchObject({
+          status: 409,
+          errorCode: 'MEMBER_HAS_TRANSACTIONS',
+        });
+        expect(prisma.ledgerMember.delete).not.toHaveBeenCalled();
+        expect(prisma.transaction.count).toHaveBeenCalledWith({
+          where: {
+            ledgerId,
+            OR: [{ account: { userId: 'user-2' } }, { toAccount: { userId: 'user-2' } }],
+          },
+        });
+        expect(prisma.debtEntry.count).toHaveBeenCalledWith({
+          where: {
+            deletedAt: null,
+            transaction: { ledgerId },
+            counterparty: { ownerId: 'user-2' },
+          },
+        });
+        expect(prisma.split.count).toHaveBeenCalledWith({
+          where: { ledgerId, ownerId: 'user-2', deletedAt: null },
+        });
+      },
+    );
+    it('requires the merge flow when removing oneself', async () => {
       prisma.ledgerMember.findUnique.mockResolvedValue({ role: 'EDITOR' });
 
-      await service.removeMember(ledgerId, 'user-2', 'user-2');
-
-      expect(prisma.ledgerMember.delete).toHaveBeenCalled();
+      await expect(service.removeMember(ledgerId, 'user-2', 'user-2')).rejects.toMatchObject({
+        status: 409,
+        errorCode: 'LEAVE_REQUIRES_MERGE',
+      });
+      expect(prisma.ledgerMember.delete).not.toHaveBeenCalled();
     });
 
     it('forbids a non-owner from removing someone else', async () => {
@@ -418,13 +456,13 @@ describe('LedgersService (members)', () => {
       expect(prisma.ledgerMember.delete).not.toHaveBeenCalled();
     });
 
-    it('blocks removing the last owner (self-leave included)', async () => {
+    it('requires the merge flow even for the last owner', async () => {
       prisma.ledgerMember.findUnique.mockResolvedValue({ role: 'OWNER' });
       prisma.ledgerMember.count.mockResolvedValue(1);
 
       await expect(service.removeMember(ledgerId, 'owner-1', 'owner-1')).rejects.toMatchObject({
         constructor: AppException,
-        errorCode: 'LAST_OWNER_CANNOT_LEAVE',
+        errorCode: 'LEAVE_REQUIRES_MERGE',
       });
       expect(prisma.ledgerMember.delete).not.toHaveBeenCalled();
     });

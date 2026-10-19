@@ -14,7 +14,6 @@ import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
-import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 import { findLinkOfCounterparty, linkInfoFor, otherSide } from '../debts/counterparty-links';
 import { AccountsService } from '../accounts/accounts.service';
 import { DebtEntriesService } from '../debts/debt-entries.service';
@@ -128,7 +127,7 @@ export class LedgersService {
   }
 
   /** 回傳帳本及其完整成員清單。存取權限在上游（guard）把關。 */
-  async getDetail(ledgerId: string, access: LedgerAccess = 'MEMBER'): Promise<LedgerDetail> {
+  async getDetail(ledgerId: string): Promise<LedgerDetail> {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
       include: { members: { include: { user: true } } },
@@ -139,9 +138,8 @@ export class LedgersService {
 
     return {
       ...this.toLedger(ledger),
-      // 已退出者不再有成員清單的讀取權；唯讀畫面只需要帳本基本資訊。
-      members: access === 'LEFT' ? [] : ledger.members.map((member) => this.toMemberInfo(member)),
-      left: access === 'LEFT',
+      members: ledger.members.map((member) => this.toMemberInfo(member)),
+      left: false,
     };
   }
 
@@ -203,8 +201,8 @@ export class LedgersService {
   }
 
   /**
-   * 刪除前先確認名稱，再共用預覽的阻擋規則。私人帳本必須明確同意撤銷自己的借還與分帳；
-   * 共享帳本有借還、或任何帳本會影響別人的交易／帳戶時只能封存。
+   * 刪除前先確認名稱，再共用預覽的阻擋規則。自己的借還與分帳必須明確同意撤銷；
+   * 共享帳本只剩自己時比照私人帳本，有其他成員或仍引用別人的帳戶時不能刪除。
    * 撤銷、解除往來的外鍵、刪分帳與帳本在同一個交易中完成，往來紀錄本身永遠保留。
    */
   async remove(
@@ -228,9 +226,11 @@ export class LedgersService {
           const code =
             plan.blockedBy === 'HAS_OTHERS_TRANSACTIONS'
               ? ErrorCode.LEDGER_HAS_OTHERS_TRANSACTIONS
-              : plan.blockedBy === 'LEDGER_ARCHIVED'
-                ? ErrorCode.LEDGER_ARCHIVED
-                : ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS;
+              : plan.blockedBy === 'HAS_OTHER_MEMBERS'
+                ? ErrorCode.LEDGER_HAS_OTHER_MEMBERS
+                : plan.blockedBy === 'LEDGER_ARCHIVED'
+                  ? ErrorCode.LEDGER_ARCHIVED
+                  : ErrorCode.LEDGER_HAS_DEBT_TRANSACTIONS;
           throw new AppException(
             HttpStatus.CONFLICT,
             code,
@@ -252,20 +252,27 @@ export class LedgersService {
             await this.debtEntries.removeInTransaction(tx, actingUserId, entry.id);
           }
         }
-        // 3j spec §3：先解除 Restrict 外鍵，再刪分帳，最後 cascade 刪帳本內的交易。
-        await tx.debtEntry.updateMany({
-          where: { OR: [{ transaction: { ledgerId } }, { split: { ledgerId } }] },
-          data: { transactionId: null, splitId: null },
-        });
-        await tx.transaction.updateMany({
-          where: { ledgerId, splitId: { not: null } },
-          data: { splitId: null },
-        });
-        await tx.split.deleteMany({ where: { ledgerId } });
-        await tx.ledger.delete({ where: { id: ledgerId } });
+        await this.deleteLedgerRows(tx, ledgerId);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  /** 3j §3：授權與撤銷由呼叫端完成，再依序解除外鍵、刪分帳、刪帳本。 */
+  async deleteLedgerRows(tx: Prisma.TransactionClient, ledgerId: string): Promise<void> {
+    await tx.debtEntry.updateMany({
+      where: { OR: [{ transaction: { ledgerId } }, { split: { ledgerId } }] },
+      data: { transactionId: null, splitId: null },
+    });
+    await tx.transaction.updateMany({
+      where: { ledgerId, splitId: { not: null } },
+      data: { splitId: null },
+    });
+    await tx.split.deleteMany({ where: { ledgerId } });
+    // LedgerShare / LedgerSettlement / payerPerson 對 LedgerPerson 是 RESTRICT。
+    // 先刪交易，讓共享分帳與結清 cascade 清除，再刪帳本，不能依賴同時 cascade 的順序。
+    await tx.transaction.deleteMany({ where: { ledgerId } });
+    await tx.ledger.delete({ where: { id: ledgerId } });
   }
 
   /** 只讀自己的帳戶與對象；不能刪時不回任何餘額。 */
@@ -363,15 +370,20 @@ export class LedgersService {
     type BlockedBy = LedgerRemovalPreview['delete']['blockedBy'];
     let blockedBy: BlockedBy = ledger.archivedAt ? 'LEDGER_ARCHIVED' : null;
     const ledgerId = ledger.id;
-    // 3j 決策 187，將來退出規則定案為『退出就不算』時要放寬，見 spec §1『延後』。
-    // 不過濾 deletedAt：已軟刪除的交易仍是他人的紀錄與帳戶引用。
+    // 3k 決策 204：共享帳本只剩自己才可刪；其他人建立的交易本身不再阻擋。
+    if (
+      !blockedBy &&
+      ledger.kind === 'SHARED' &&
+      (await tx.ledgerMember.count({ where: { ledgerId, userId: { not: userId } } })) > 0
+    )
+      blockedBy = 'HAS_OTHER_MEMBERS';
+    // 不過濾 deletedAt：已軟刪除的交易仍引用他人的帳戶。
     if (
       !blockedBy &&
       (await tx.transaction.count({
         where: {
           ledgerId,
           OR: [
-            { creatorId: { not: userId } },
             { account: { userId: { not: userId } } },
             { toAccount: { userId: { not: userId } } },
           ],
@@ -399,8 +411,7 @@ export class LedgersService {
     const activeSplits = splitRows.filter((split) => split.deletedAt === null);
     if (
       !blockedBy &&
-      ((ledger.kind === 'SHARED' && (debtRows.length > 0 || splitRows.length > 0)) ||
-        active.some((entry) => entry.counterparty.ownerId !== userId) ||
+      (active.some((entry) => entry.counterparty.ownerId !== userId) ||
         activeSplits.some((split) => split.ownerId !== userId))
     )
       blockedBy = 'SHARED_HAS_DEBTS';
@@ -548,8 +559,7 @@ export class LedgersService {
   }
 
   /**
-   * 移除成員。使用者永遠可以移除自己（退出）；移除他人則要求操作者是 owner。
-   * 最後一位 owner 不可被移除。
+   * 3k：自己退出必須走合併流程；擁有者只能移除沒有帳的成員。
    */
   async removeMember(ledgerId: string, targetUserId: string, actingUserId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
@@ -558,6 +568,14 @@ export class LedgersService {
       });
       if (!target) {
         throw this.memberNotFound();
+      }
+
+      if (targetUserId === actingUserId) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.LEAVE_REQUIRES_MERGE,
+          'Use the leave flow to decide how to merge your entries.',
+        );
       }
 
       if (targetUserId !== actingUserId) {
@@ -571,6 +589,31 @@ export class LedgersService {
             'Only an owner can remove another member.',
           );
         }
+      }
+
+      // 帳戶引用含軟刪交易；個人往來與分帳只看未撤銷的，與 removalPlan 一致。
+      const [transactions, debts, splits] = await Promise.all([
+        tx.transaction.count({
+          where: {
+            ledgerId,
+            OR: [{ account: { userId: targetUserId } }, { toAccount: { userId: targetUserId } }],
+          },
+        }),
+        tx.debtEntry.count({
+          where: {
+            deletedAt: null,
+            transaction: { ledgerId },
+            counterparty: { ownerId: targetUserId },
+          },
+        }),
+        tx.split.count({ where: { ledgerId, ownerId: targetUserId, deletedAt: null } }),
+      ]);
+      if (transactions > 0 || debts > 0 || splits > 0) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.MEMBER_HAS_TRANSACTIONS,
+          'This member has entries; change their role to viewer and let them leave.',
+        );
       }
 
       if (target.role === 'OWNER') {

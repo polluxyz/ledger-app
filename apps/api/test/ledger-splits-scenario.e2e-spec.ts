@@ -756,10 +756,9 @@ describe('Ledger split cross-module scenario (e2e)', () => {
     });
 
     // SC-E14：離開者保留淨額；新交易仍可選他（修訂 2），也可代他結清並改動舊名單。
-    await request(server())
-      .delete(`/api/ledgers/${s.ledgerId}/members/${s.ming.userId}`)
-      .set(auth(s.ming.token))
-      .expect(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.ming.userId } },
+    });
     const afterLeavePeople: ExpectedPersonNet[] = [
       ['我', 'MEMBER', 415000],
       ['小明', 'LEFT', -210000],

@@ -318,10 +318,9 @@ describe('Ledger settlements (e2e)', () => {
   it('SC-E14: keeps a departed member in summary and accepts a settlement on their behalf', async () => {
     const s = await scene();
     await addTripExpenses(s);
-    await request(server())
-      .delete('/api/ledgers/' + s.ledgerId + '/members/' + s.bob.userId)
-      .set(auth(s.bob.token))
-      .expect(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.bob.userId } },
+    });
 
     const before = await summary(s.alice, s.ledgerId);
     expect(namedNets(before)).toEqual([
@@ -343,7 +342,7 @@ describe('Ledger settlements (e2e)', () => {
       select: { accountId: true, toAccountId: true },
     });
     expect(saved).toEqual({
-      accountId: await temporaryAccountId(s.bob),
+      accountId: null,
       toAccountId: s.alice.cashId,
     });
   });

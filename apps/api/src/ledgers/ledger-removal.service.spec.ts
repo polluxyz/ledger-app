@@ -28,7 +28,10 @@ describe('Ledger removal', () => {
   });
   const setup = () => {
     const tx = {
-      ledgerMember: { findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
+      ledgerMember: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }),
+        count: jest.fn().mockResolvedValue(0),
+      },
       ledger: {
         findUnique: jest.fn().mockResolvedValue(ledger),
         delete: jest.fn(),
@@ -38,6 +41,7 @@ describe('Ledger removal', () => {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       debtEntry: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -95,11 +99,7 @@ describe('Ledger removal', () => {
     expect(tx.transaction.count).toHaveBeenCalledWith({
       where: {
         ledgerId: 'ledger',
-        OR: [
-          { creatorId: { not: 'me' } },
-          { account: { userId: { not: 'me' } } },
-          { toAccount: { userId: { not: 'me' } } },
-        ],
+        OR: [{ account: { userId: { not: 'me' } } }, { toAccount: { userId: { not: 'me' } } }],
       },
     });
   });
@@ -111,18 +111,40 @@ describe('Ledger removal', () => {
     expect(tx.account.findMany).not.toHaveBeenCalled();
   });
 
-  it.each(['debt', 'split'])('blocks a shared ledger with a historical %s', async (kind) => {
+  it.each(['debt', 'split'])(
+    'allows a sole-member shared ledger with a historical %s',
+    async (kind) => {
+      const { service, tx } = setup();
+      tx.ledger.findUnique.mockResolvedValue({ ...ledger, kind: 'SHARED' });
+      if (kind === 'debt')
+        tx.debtEntry.findMany.mockResolvedValue([{ ...entry('old'), deletedAt: new Date() }]);
+      else
+        tx.split.findMany.mockResolvedValue([{ id: 'old', deletedAt: new Date(), ownerId: 'me' }]);
+      expect((await service.removalPreview('ledger', 'me')).delete.blockedBy).toBeNull();
+      await service.remove('ledger', 'me', 'Trip', true);
+      expect(tx.ledger.delete).toHaveBeenCalled();
+    },
+  );
+
+  it('checks archive, then other members, then account references', async () => {
     const { service, tx } = setup();
+    tx.ledger.findUnique.mockResolvedValue({ ...ledger, kind: 'SHARED', archivedAt: new Date() });
+    tx.ledgerMember.count.mockResolvedValue(1);
+    tx.transaction.count.mockResolvedValue(1);
+    expect((await service.removalPreview('ledger', 'me')).delete.blockedBy).toBe('LEDGER_ARCHIVED');
+    expect(tx.ledgerMember.count).not.toHaveBeenCalled();
     tx.ledger.findUnique.mockResolvedValue({ ...ledger, kind: 'SHARED' });
-    if (kind === 'debt')
-      tx.debtEntry.findMany.mockResolvedValue([{ ...entry('old'), deletedAt: new Date() }]);
-    else tx.split.findMany.mockResolvedValue([{ id: 'old', deletedAt: new Date(), ownerId: 'me' }]);
     expect((await service.removalPreview('ledger', 'me')).delete.blockedBy).toBe(
-      'SHARED_HAS_DEBTS',
+      'HAS_OTHER_MEMBERS',
     );
-    await expect(service.remove('ledger', 'me', 'Trip', true)).rejects.toMatchObject({
-      errorCode: 'LEDGER_HAS_DEBT_TRANSACTIONS',
+    await expect(service.remove('ledger', 'me', 'Trip')).rejects.toMatchObject({
+      errorCode: 'LEDGER_HAS_OTHER_MEMBERS',
     });
+    expect(tx.transaction.count).not.toHaveBeenCalled();
+    tx.ledgerMember.count.mockResolvedValue(0);
+    expect((await service.removalPreview('ledger', 'me')).delete.blockedBy).toBe(
+      'HAS_OTHERS_TRANSACTIONS',
+    );
   });
 
   it('protects another owner’s active debt before requiring consent', async () => {

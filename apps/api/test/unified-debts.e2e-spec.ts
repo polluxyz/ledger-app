@@ -2,12 +2,10 @@ import { INestApplication } from '@nestjs/common';
 import type {
   ApiErrorResponse,
   Counterparty,
-  LedgerDetail,
   LedgerGroup,
   LedgerPerson,
   Paginated,
   SettlementSummary,
-  Transaction,
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -194,7 +192,7 @@ describe('Unified debts scenario (e2e)', () => {
 
     // 三筆支出（金額單位：分）。我付的由我記；小美、阿美付款以 payerPersonId 指定，
     // 名單刻意都不含我，讓「跟我有關的轉帳」只能來自結清算法。
-    const lodging = await request(server())
+    await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
       .set(auth(me.token))
       .send({
@@ -213,7 +211,7 @@ describe('Unified debts scenario (e2e)', () => {
         },
       })
       .expect(201);
-    const snack = await request(server())
+    await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
       .set(auth(s.mei.token))
       .send({
@@ -227,7 +225,7 @@ describe('Unified debts scenario (e2e)', () => {
         ledgerSplit: { method: 'AMOUNT', shares: [{ personId: people.ming.id, amount: 40000 }] },
       })
       .expect(201);
-    const ticket = await request(server())
+    await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
       .set(auth(me.token))
       .send({
@@ -350,7 +348,7 @@ describe('Unified debts scenario (e2e)', () => {
 
     // SC-F6：小明結清他欠我的 512 → 明哥的帳本部分歸零，只剩個人往來（之後的斷言
     // 都用更新後的數字：剩下小華欠我 139400）。
-    const settled = await request(server())
+    await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
       .set(auth(ming.token))
       .send({
@@ -380,76 +378,35 @@ describe('Unified debts scenario (e2e)', () => {
     // SC-F9 前置：把小華指向重建的房東，退出後才有「掛在對象上的帳本金額」可驗。
     await putPointer(me, ledgerId, people.hua.id, landlordAgain.id).expect(200);
 
-    // SC-F9：最後一位 OWNER 不能直接退出（既有規則）→ 先把 OWNER 給小明再退出。
+    // 3k：舊的自行退出端點一律要求合併；轉交擁有者後，直接刪成員模擬退出。
     const premature = await request(server())
       .delete(`/api/ledgers/${ledgerId}/members/${me.userId}`)
       .set(auth(me.token));
     expect(premature.status).toBe(409);
-    expect((premature.body as ApiErrorResponse).errorCode).toBe('LAST_OWNER_CANNOT_LEAVE');
+    expect((premature.body as ApiErrorResponse).errorCode).toBe('LEAVE_REQUIRES_MERGE');
 
     await request(server())
       .patch(`/api/ledgers/${ledgerId}/members/${ming.userId}`)
       .set(auth(me.token))
       .send({ role: 'OWNER' })
       .expect(200);
-    await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${me.userId}`)
-      .set(auth(me.token))
-      .expect(204);
-
-    // 退出後：總額照樣有花蓮三日的金額，並標記 left（決策 151、W133）。
-    const landlordAfter = await counterpartyRow(me, landlordAgain.id);
-    expect(landlordAfter.ledgerParts).toEqual([
-      {
-        ledgerId,
-        ledgerName: '花蓮三日',
-        personId: people.hua.id,
-        personName: '小華',
-        amount: 139400,
-        left: true,
-      },
-    ]);
-    expect(landlordAfter.totalBalance).toBe(139400);
-    const groupsAfter = await groups(me);
-    expect(groupsAfter).toHaveLength(1);
-    expect(groupsAfter[0]!.ledger).toEqual({ id: ledgerId, name: '花蓮三日', left: true });
-    expect(groupsAfter[0]!.people).toEqual([
-      {
-        person: { id: people.hua.id, name: '小華', userId: s.hua.userId, status: 'MEMBER' },
-        amount: 139400,
-        pointer: { counterpartyId: landlordAgain.id, auto: false },
-      },
-    ]);
-
-    const detail = await request(server())
-      .get(`/api/ledgers/${ledgerId}`)
-      .set(auth(me.token))
-      .expect(200);
-    expect(detail.body as LedgerDetail).toMatchObject({
-      name: '花蓮三日',
-      left: true,
-      members: [],
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: ledgerId, userId: me.userId } },
     });
 
-    // 交易列表只回我付的（住宿）與結清有我的（小明→我）；名單只有小明的兩筆看不到。
-    const visible = await request(server())
-      .get(`/api/ledgers/${ledgerId}/transactions`)
-      .query({ limit: 100 })
-      .set(auth(me.token))
-      .expect(200);
-    const visiblePage = visible.body as Paginated<Transaction>;
-    const lodgingId = (lodging.body as Transaction).id;
-    const settlementId = (settled.body as Transaction).id;
-    expect(visiblePage.total).toBe(2);
-    expect(visiblePage.items.map(({ id }) => id).sort()).toEqual([lodgingId, settlementId].sort());
-    expect(visiblePage.items.map(({ id }) => id)).not.toContain((snack.body as Transaction).id);
-    expect(visiblePage.items.map(({ id }) => id)).not.toContain((ticket.body as Transaction).id);
-
-    // 其餘帳本端點照舊 404；設定指向回 409 LEDGER_LEFT。
-    await request(server()).get(`/api/ledgers/${ledgerId}/people`).set(auth(me.token)).expect(404);
+    // 3k 決策 189：退出後不再列入借還或對象彙總。
+    const landlordAfter = await counterpartyRow(me, landlordAgain.id);
+    expect(landlordAfter.ledgerParts).toEqual([]);
+    expect(landlordAfter.totalBalance).toBe(landlordAfter.balance);
+    expect(await groups(me)).toEqual([]);
+    for (const suffix of ['', '/transactions', '/settlement-summary', '/people'])
+      await request(server())
+        .get(`/api/ledgers/${ledgerId}${suffix}`)
+        .set(auth(me.token))
+        .expect(404);
     const leftWrite = await putPointer(me, ledgerId, people.hua.id, landlordAgain.id);
-    expect(leftWrite.status).toBe(409);
-    expect((leftWrite.body as ApiErrorResponse).errorCode).toBe('LEDGER_LEFT');
+    expect(leftWrite.status).toBe(404);
+    expect((leftWrite.body as ApiErrorResponse).errorCode).toBe('NOT_FOUND');
   });
 
   // SC-F8 用一本新的共享帳本做，避免影響上面「花蓮三日」的數字。

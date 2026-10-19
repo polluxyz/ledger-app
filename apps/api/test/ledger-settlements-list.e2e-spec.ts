@@ -242,21 +242,17 @@ describe('Ledger settlements list (e2e)', () => {
     expect(bobAccounts.map((a) => a.id)).toContain(s.bob.cashId);
   });
 
-  it('returns only settlements involving the viewer after they leave', async () => {
+  it('returns 404 for settlements after the viewer leaves', async () => {
     const s = await scene();
-    await request(server())
-      .delete(`/api/ledgers/${s.ledgerId}/members/${s.carol.userId}`)
-      .set(auth(s.carol.token))
-      .expect(204);
-
-    const all = await settlementsAs(s.carol, s.ledgerId, { limit: 100 });
-    expect(all.items.map((t) => t.id)).toEqual([s.bobToCarol.id]);
-    expect(all.total).toBe(1);
-
-    // 分頁不能放寬範圍：每一頁的 total 都還是 1。
-    const paged = await settlementsAs(s.carol, s.ledgerId, { limit: 1, page: 1 });
-    expect(paged).toMatchObject({ page: 1, limit: 1, total: 1 });
-    expect(paged.items.map((t) => t.id)).toEqual([s.bobToCarol.id]);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.carol.userId } },
+    });
+    for (const query of [{ limit: 100 }, { limit: 1, page: 1 }])
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/settlements`)
+        .query(query)
+        .set(auth(s.carol.token))
+        .expect(404);
   });
 
   it('filters ledger-groups by hasSettlements and counts what the viewer can see', async () => {
@@ -278,14 +274,11 @@ describe('Ledger settlements list (e2e)', () => {
     const eveGroups = await groupsAs(s.eve, { hasSettlements: 'true' });
     expect(eveGroups.map((g) => g.ledger.id)).toEqual([]);
 
-    // 退出後：帳本還在清單（不受「已退出只在還有轉帳時列」限制），筆數只算我是任一方的。
-    await request(server())
-      .delete(`/api/ledgers/${s.ledgerId}/members/${s.carol.userId}`)
-      .set(auth(s.carol.token))
-      .expect(204);
+    // 3k：退出後結清歷史也不再出現在帳本群組。
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.carol.userId } },
+    });
     const carolGroups = await groupsAs(s.carol, { hasSettlements: 'true' });
-    expect(carolGroups.map((g) => g.ledger.id)).toEqual([s.ledgerId]);
-    expect(carolGroups[0]!.ledger.left).toBe(true);
-    expect(carolGroups[0]!.settlementCount).toBe(1);
+    expect(carolGroups).toEqual([]);
   });
 });

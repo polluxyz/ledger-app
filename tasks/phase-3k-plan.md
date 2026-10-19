@@ -144,6 +144,42 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - API 端 `merge` 先一律回 `null`，K4 填值。`debt-proposals.service.ts` 加一個型別收窄：Prisma 還沒有 `LEDGER_CARRY_OVER`，K1 之後可以拿掉。
 - 隔離測試 9 條：8 條紅燈（端點不存在、移除與舊退出照舊 204、已退出的付款人仍記到臨時帳戶），1 條綠燈（沒帳的成員可以移除，防止 K2 擋過頭）。SC-K4 用資料庫刪成員模擬退出，K2 單獨就能轉綠。
 
+### K1（`lvm-migrate`，2026-10-19）
+
+- migration `20261019000000_ledger_merge`：照 spec §3 加表、加欄位、加 enum 值、加 2 條 CHECK，另加 `mergeId` 與 `LedgerMerge.targetLedgerId` 的索引。`DebtEntry` 的 CHECK 用 `kind::text` 比較：PostgreSQL 在新增 enum 值的交易提交前不能直接用該常值。
+- 用 SQL 驗證 CHECK：違反的 5 條被擋、合法的 3 條成功，全部 ROLLBACK。
+- 拿掉 K0 在 `debt-proposals.service.ts` 加的型別收窄；`debt-proposal-rules.spec.ts` 的 fixture 補 `mergeId: null`（協調者授權）。
+- **待開發者決定**：spec §3 的 `LedgerMerge.targetLedger` 是 `onDelete: Cascade`，`DebtEntry.mergeId` 是 `Restrict`。協調者實測：目標帳本有帳本轉入時，刪除目標帳本被外鍵擋下（500）；沒有轉入時 `LedgerMerge` 被連帶刪掉，帳本轉入拿不到 W192 要的來源名稱。建議改 `SetNull`，已回報總控。
+
+### K2（`lvm-rules`，2026-10-19）
+
+- `resolvePayerAccount` 輸入加人物狀態；付款人不是現任成員（已退出或虛擬）→ 不記帳戶、不建臨時帳戶，修改時也清掉舊帳戶引用。結清修改時，已退出的一方即使沒換人也清掉帳戶。
+- 拿掉 `LeftMemberAccess`、`LedgerAccessKind`、`LedgerAccess`；已退出者一律 404，API 不再丟 `LEDGER_LEFT`。借還頁、對象頁、結清計數只算現任成員的共享帳本。
+- shared 裡現在 API 一律回 `false` 的欄位：`LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`。型別沒改，要不要拿掉由總控決定（shared 在整合分支改）。
+- `removeMember`：自己 → 409 `LEAVE_REQUIRES_MERGE`（在最後一位擁有者檢查之前）；對方有帳 → 409 `MEMBER_HAS_TRANSACTIONS`。「有帳」＝交易引用對方帳戶（含軟刪除、含臨時帳戶），或對方未撤銷的個人借還、個人分帳（與 3j `removalPlan` 的 active 判斷一致）。
+- `removalPlan`：順序改成封存 → 其他成員（`HAS_OTHER_MEMBERS`）→ 交易引用別人的帳戶 → 別人的未撤銷借還；拿掉 `creatorId` 條件與「共享帳本有借還就擋」。只剩自己的共享帳本，舊的 `DELETE /ledgers/{id}` 比照私人帳本（撤銷自己的借還後刪除）；畫面走 K3 的退出端點。
+- 既有 e2e 照新規則改了 26 條、刪 1 條（`unified-debts-isolation`「退出不影響帳戶餘額」：驗的是已取消的 3f 決策 152）。退出前提一律改用 Prisma 刪成員模擬。
+- 發現：`isAccountPending` 只認臨時帳戶，重新加入後 `accountId` 為 `null` 的交易不會顯示待補，補帳戶端點也只收臨時帳戶。SC-K5「沒合併的可以補」需要它，協調者已把規則補給 K4。
+- K3 回報：`DebtEntriesService`／`SplitsService` 的 `removeInTransaction` 要求寫入權，檢視者退出時撤銷沒勾的借還會 403（決策 206 的主流程就是先降成檢視者再退出）。協調者授權 K3 加一個只給退出流程用的內部選項，跳過寫入角色檢查、保留本人與封存檢查。
+
+### K3（`lvm-leave`，2026-10-19）
+
+- `ledger-leave-plan.ts`（純函式）與 `ledger-leave.service.ts`；預覽與執行都走 `loadPlan` → `planLedgerLeave`。帳戶效果全部用 `AccountsService.calculateBalances` 算；預覽的 `balanceAfter` ＝ 目前 − 這本帳本的影響 ＋ 勾選項目原交易的影響（合併前後帳戶淨效果相同，計畫單元測試逐列驗證）。
+- 預覽：RepeatableRead。執行：Serializable，鎖來源帳本列與自己的成員列（`FOR UPDATE OF l, m`），目標帳本同樣鎖。清帳戶不含 `deletedAt` 條件，兩端分開更新。
+- 協調者授權的偏離：
+  - `DebtEntriesService`／`SplitsService` 的 `removeInTransaction` 加內部選項 `{ purpose: 'ledger-leave' }`：只跳過寫入角色檢查，保留本人、成員、封存檢查。檢視者退出（決策 206 的主流程）才撤銷得了沒勾的借還。
+  - 從 `LedgersService.remove` 抽出 `deleteLedgerRows`，並在刪帳本前先 `transaction.deleteMany`：`LedgerShare`／`LedgerSettlement`／`payerPerson` 對 `LedgerPerson` 是 RESTRICT，靠帳本 cascade 的順序會失敗。這也修到舊的 `DELETE /ledgers/{id}`（K2 讓只剩一人的共享帳本可以走這條），補了回歸 e2e。
+  - 被擋的預覽（`blockedBy` 非 null）略過「有項目卻沒目標」的 400，回 200 `allowed: false`；非 null 目標與不認得的 id 照驗。
+- 自己做的選擇：新對象名稱連「（帳本名）」也重名時依序加 ` 2`、` 3`，超過 100 字截短；全部不勾時 `LedgerMerge.targetLedgerId` 存 `null`。
+- 協調者補的缺口：被加回後再退出，上次已合併過的原交易不再合併（決策 199「不會重複計算」）。補了 e2e。
+
+### K4（`lvm-merged`，2026-10-19）
+
+- 交易列表在 SQL 層排除「有同組份額的代墊／代收」，分頁與 `total` 照合成後算；查代墊的 id 也回份額那一列。非合併者同樣看到合成的一列，但 `merge` 為 `null`。
+- `accountPending`：合併來的、我已合併過的原交易一律 `false`；重新加入後，付款人是我、帳戶是 `null`、沒合併過的收支 → `true`，補帳戶端點也接受 `null`。
+- 合併過的原交易補帳戶 → 409 `TRANSACTION_ALREADY_MERGED`，一般 PATCH 改帳戶也同樣擋。合併來的交易只能改名稱、分類、帳戶（`note` 照字面不開放）；兩筆一起改、一起軟刪除；補帳戶端點（檢視者可用）對合併來的交易回 400，改帳戶要走編輯者的 PATCH。
+- 協調者補的授權修正：目標是共享帳本時，其他編輯者可以改合併交易的名稱與分類，但改帳戶 → 400 `ACCOUNT_NOT_PAYERS`。K4 原本的 e2e 斷言了「其他編輯者把帳戶改成自己的 → 200」，違反 spec §7 Never，已改成紅燈再修綠。
+
 ### K5（lvm-web，2026-10-19）
 
 - 完成退出與合併預覽、交易選擇器、共享帳本刪除、交易合併資訊與成員改檢視者流程；移除帳本歷史頁、路由及相關導覽分支。
@@ -160,3 +196,9 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 偏離／問題：沒有 spec 偏離。K5 記錄的 W192「帳本轉入」來源帳本名契約缺口仍未解，屬往來列資料，不在本次交易編輯範圍；測試中的數字欄位斷言型別與帳戶載入時序已修正。
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、797 個測試）與 `pnpm format:check`。
 - 協調者驗收時修正：帳戶下拉選回空值時不送 `accountId`／`toAccountId`（空字串會被後端 400）。
+
+### 待開發者決定（2026-10-19，已回報總控）
+
+1. `LedgerMerge.targetLedger` 改 `onDelete: SetNull`（見 K1）。
+2. shared `DebtEntry` 加 `merge: { sourceLedgerName } | null`，W192 才有來源帳本名可顯示；核可後由總控改 shared、後端填值。
+3. 被加回後再退出：同一筆沒結清的錢會再轉一次「帳本轉入」。第一次退出時已轉成個人借還，被加回後借還頁的帳本部分又算一次，再退出就重複。spec 沒寫被加回後這筆錢怎麼算。

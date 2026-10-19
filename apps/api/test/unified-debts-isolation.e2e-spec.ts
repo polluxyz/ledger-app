@@ -1,6 +1,5 @@
 import { INestApplication } from '@nestjs/common';
 import type {
-  Account,
   ApiErrorResponse,
   Counterparty,
   CreateSettlementRequest,
@@ -13,16 +12,15 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
 import { auth, createCounterparty, linkPair, person, type Person } from './linking-utils';
 
 /**
  * 3f 的授權與資料隔離（spec `phase-3f-unified-debts.md` 決策 146、151，SC-F9、SC-F10）。
  * 協調者在實作前寫好，先看到紅燈。
  *
- * - SC-F9（退出後唯讀）：離開的成員只能讀帳本名稱與「跟他有關」的交易（他付的、名單有他的、
- *   結清有他的）。查詢參數只能再縮小範圍。其他帳本端點照舊 404，指向回 409 `LEDGER_LEFT`。
- *   從沒加入過的人跟以前一樣全是 404。退出不影響帳戶餘額。
+ * - 3k SC-K3 取代 SC-F9 的唯讀：退出後帳本、交易、結清與指向一律 404。
+ *   從沒加入過的人跟以前一樣全是 404，查詢參數不能恢復存取權。
  * - SC-F10（指向）：指向只有本人讀得到；帶別人的對象、我沒參與過的帳本、別本帳本的人一律 404，
  *   不透露存在。
  *
@@ -173,16 +171,10 @@ describe('Unified debts isolation (e2e)', () => {
       .set(auth(who.token));
   }
 
-  async function balanceOf(who: Person, accountId: string): Promise<number> {
-    const accounts: Account[] = await listAccounts(app, who.token);
-    return accounts.find((account) => account.id === accountId)!.balance;
-  }
-
   async function leave(who: Person, ledgerId: string): Promise<void> {
-    await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${who.userId}`)
-      .set(auth(who.token))
-      .expect(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: ledgerId, userId: who.userId } },
+    });
   }
 
   /**
@@ -241,52 +233,34 @@ describe('Unified debts isolation (e2e)', () => {
     return res.body as Paginated<Transaction>;
   }
 
-  describe('SC-F9：退出後唯讀', () => {
-    it('交易列表只回跟他有關的帳', async () => {
-      const { s, related, unrelated } = await sceneWithHistory();
+  describe('SC-K3：退出後無法存取', () => {
+    it('交易列表回 404', async () => {
+      const { s } = await sceneWithHistory();
       await leave(s.carol, s.ledgerId);
-
-      const page = await listTransactionsAs(s.carol, s.ledgerId);
-      const ids = page.items.map((t) => t.id).sort();
-      expect(ids).toEqual([...related].sort());
-      expect(page.total).toBe(related.length);
-      for (const id of unrelated) expect(ids).not.toContain(id);
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/transactions`)
+        .query({ payerPersonId: s.people.Bob.id, limit: 1, page: 2 })
+        .set(auth(s.carol.token))
+        .expect(404);
     });
 
     it('篩選與分頁不能放寬範圍', async () => {
-      const { s, related, unrelated } = await sceneWithHistory();
-      await leave(s.carol, s.ledgerId);
-
-      const byBob = await listTransactionsAs(s.carol, s.ledgerId, {
-        payerPersonId: s.people.Bob.id,
-      });
-      for (const t of byBob.items) {
-        expect(related).toContain(t.id);
-        expect(unrelated).not.toContain(t.id);
-      }
-
-      const seen: string[] = [];
-      for (let pageNo = 1; pageNo <= related.length + 1; pageNo += 1) {
-        const paged = await listTransactionsAs(s.carol, s.ledgerId, { limit: 1, page: pageNo });
-        expect(paged.total).toBe(related.length);
-        seen.push(...paged.items.map((t) => t.id));
-      }
-      expect(seen.sort()).toEqual([...related].sort());
-    });
-
-    it('帳本明細只給名稱與 left，不給成員', async () => {
       const { s } = await sceneWithHistory();
       await leave(s.carol, s.ledgerId);
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/transactions`)
+        .query({ payerPersonId: s.people.Bob.id, limit: 1, page: 2 })
+        .set(auth(s.carol.token))
+        .expect(404);
+    });
 
-      const res = await request(server())
+    it('帳本明細退出後 404，其他成員仍能讀', async () => {
+      const { s } = await sceneWithHistory();
+      await leave(s.carol, s.ledgerId);
+      await request(server())
         .get(`/api/ledgers/${s.ledgerId}`)
         .set(auth(s.carol.token))
-        .expect(200);
-      const detail = res.body as LedgerDetail;
-      expect(detail.name).toBe('花蓮三日');
-      expect(detail.left).toBe(true);
-      expect(detail.members).toEqual([]);
-
+        .expect(404);
       const ownerView = await request(server())
         .get(`/api/ledgers/${s.ledgerId}`)
         .set(auth(s.alice.token))
@@ -339,22 +313,15 @@ describe('Unified debts isolation (e2e)', () => {
       expect(await prisma.transaction.count()).toBe(before);
     });
 
-    it('設定或清掉指向回 409 LEDGER_LEFT', async () => {
+    it('設定或清掉指向回 404', async () => {
       const { s } = await sceneWithHistory();
       const landlord = await createCounterparty(app, s.carol, '房東');
       await leave(s.carol, s.ledgerId);
 
-      const put = await putPointer(s.carol, s.ledgerId, s.people.Bob.id, landlord.id).expect(409);
-      expect((put.body as ApiErrorResponse).errorCode).toBe('LEDGER_LEFT');
-      const del = await deletePointer(s.carol, s.ledgerId, s.people.Bob.id).expect(409);
-      expect((del.body as ApiErrorResponse).errorCode).toBe('LEDGER_LEFT');
-    });
-
-    it('退出不影響帳戶餘額', async () => {
-      const { s } = await sceneWithHistory();
-      const before = await balanceOf(s.carol, s.carol.cashId);
-      await leave(s.carol, s.ledgerId);
-      expect(await balanceOf(s.carol, s.carol.cashId)).toBe(before);
+      const put = await putPointer(s.carol, s.ledgerId, s.people.Bob.id, landlord.id).expect(404);
+      expect((put.body as ApiErrorResponse).errorCode).toBe('NOT_FOUND');
+      const del = await deletePointer(s.carol, s.ledgerId, s.people.Bob.id).expect(404);
+      expect((del.body as ApiErrorResponse).errorCode).toBe('NOT_FOUND');
     });
 
     it('從沒加入過的人仍然全部 404', async () => {
@@ -482,10 +449,13 @@ describe('Unified debts isolation (e2e)', () => {
     });
 
     it('退出後讀不到別人之間的交易（同 SC-F9，從另一個人的角度）', async () => {
-      const { s, unrelated } = await sceneWithHistory();
+      const { s } = await sceneWithHistory();
       await leave(s.carol, s.ledgerId);
-      const ids = (await listTransactionsAs(s.carol, s.ledgerId)).items.map((t) => t.id);
-      for (const id of unrelated) expect(ids).not.toContain(id);
+      await request(server())
+        .get(`/api/ledgers/${s.ledgerId}/transactions`)
+        .query({ payerPersonId: s.people.Bob.id, limit: 1, page: 2 })
+        .set(auth(s.carol.token))
+        .expect(404);
     });
   });
 });
