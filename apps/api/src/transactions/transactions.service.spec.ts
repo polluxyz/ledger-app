@@ -26,6 +26,7 @@ describe('TransactionsService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
 
@@ -86,6 +87,7 @@ describe('TransactionsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
         update: jest.fn().mockResolvedValue(joined),
+        updateMany: jest.fn().mockResolvedValue({ count: 2 }),
       },
     };
     prisma.$queryRaw.mockImplementation(async () => {
@@ -733,6 +735,199 @@ describe('TransactionsService', () => {
       ).rejects.toMatchObject({ errorCode: 'NOT_FOUND' });
       expect(client.transaction.create).not.toHaveBeenCalled();
     });
+  });
+
+  /** 以 Prisma 替身驗證 3k 合併交易的顯示、有限編輯與來源防重複補帳戶。 */
+  describe('merged transactions (decisions 199 and 202)', () => {
+    const share = {
+      ...joined,
+      ledgerId,
+      mergeId: 'merge-1',
+      mergedFromId: 'original',
+      merge: { userId: creatorId, sourceLedgerName: '花蓮三日' },
+      categoryId: 'cat-1',
+      accountId,
+      toAccountId: null,
+      payerPersonId: null,
+      deletedAt: null,
+    };
+    const advance = {
+      ...share,
+      id: 'advance',
+      type: 'LEND' as const,
+      amount: 880,
+      categoryId: null,
+      category: null,
+    };
+
+    beforeEach(() => {
+      allowEverything();
+      prisma.$queryRaw.mockResolvedValue([{ id: share.id }]);
+      prisma.transaction.findUnique.mockResolvedValue(share);
+      prisma.transaction.findFirst.mockResolvedValue(share);
+      prisma.transaction.findMany.mockResolvedValue([share, advance]);
+      prisma.transaction.update.mockResolvedValue(share);
+    });
+
+    it.each([creatorId, otherUserId])(
+      'combines the list for %s and only exposes own merge',
+      async (viewer) => {
+        prisma.$queryRaw.mockResolvedValue([{ id: share.id, total: 1n }]);
+        prisma.transaction.findMany.mockResolvedValueOnce([share]);
+        const result = await service.list(ledgerId, viewer, {});
+        expect(result.total).toBe(1);
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0]).toMatchObject({
+          id: share.id,
+          amount: 1000,
+          accountPending: false,
+          merge: viewer === creatorId ? { sourceLedgerName: '花蓮三日', share: 120 } : null,
+        });
+        const calls = prisma.$queryRaw.mock.calls as Array<[{ sql: string }]>;
+        expect(calls[0]![0].sql).toContain('share."mergeId" = t."mergeId"');
+        expect(calls[0]![0].sql).toContain('share."ledgerId" = t."ledgerId"');
+      },
+    );
+
+    it('resolves an advance id to the share representative', async () => {
+      prisma.transaction.findFirst.mockResolvedValue(advance);
+      expect(await service.getById(ledgerId, advance.id, creatorId)).toMatchObject({
+        id: share.id,
+        amount: 1000,
+        merge: { share: 120 },
+      });
+    });
+
+    it.each([{ title: '住宿' }, { categoryId: 'cat-1' }, { accountId: 'bank' }])(
+      'allows %j and synchronizes title/accounts without categorizing the advance',
+      async (input) => {
+        await service.update(ledgerId, share.id, creatorId, input);
+        expect(prisma.transaction.updateMany).toHaveBeenCalledWith({
+          where: { ledgerId, id: { in: [share.id, advance.id] }, deletedAt: null },
+          data: 'categoryId' in input ? {} : input,
+        });
+        expect(prisma.transaction.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { ledgerId, id: share.id },
+            data: 'categoryId' in input ? input : {},
+          }),
+        );
+      },
+    );
+
+    it.each([
+      { amount: 2000 },
+      { date: '2026-10-01T00:00:00Z' },
+      { type: 'INCOME' as const },
+      { note: '不能改' },
+      { payerPersonId: 'other' },
+      { ledgerSplit: { method: 'EQUAL' as const, shares: [{ personId: 'other' }] } },
+    ])('rejects changes to immutable fields: %j', async (input) => {
+      await expect(service.update(ledgerId, share.id, creatorId, input)).rejects.toMatchObject({
+        status: 400,
+        errorCode: 'VALIDATION_FAILED',
+      });
+      expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('allows unchanged immutable values using the displayed total', async () => {
+      await service.update(ledgerId, share.id, creatorId, {
+        amount: 1000,
+        date: input.date,
+        type: 'EXPENSE',
+        note: 'Lunch',
+        ledgerSplit: null,
+      });
+      expect(prisma.transaction.updateMany).toHaveBeenCalled();
+    });
+
+    it('deletes both rows even when called with the advance id', async () => {
+      prisma.transaction.findUnique.mockResolvedValue(advance);
+      await service.remove(ledgerId, advance.id);
+      expect(prisma.transaction.updateMany).toHaveBeenCalledWith({
+        where: { ledgerId, mergeId: 'merge-1', mergedFromId: 'original', deletedAt: null },
+        data: { deletedAt: expect.any(Date) as unknown },
+      });
+      expect(prisma.debtEntry.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects an account not owned by the editor', async () => {
+      await expect(
+        service.update(ledgerId, share.id, otherUserId, { accountId }),
+      ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
+      expect(prisma.transaction.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 before setting an original transaction already merged by the caller', async () => {
+      await expect(
+        service.setAccount(ledgerId, 'original', creatorId, accountId),
+      ).rejects.toMatchObject({
+        status: 409,
+        errorCode: 'TRANSACTION_ALREADY_MERGED',
+      });
+      expect(prisma.transaction.findFirst).toHaveBeenCalledWith({
+        where: { mergedFromId: 'original', merge: { sourceLedgerId: ledgerId, userId: creatorId } },
+        select: { id: true },
+      });
+      expect(prisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it.each([null, 'temporary'])(
+      'sets an unmerged original account from %s',
+      async (oldAccount) => {
+        prisma.ledger.findUnique.mockResolvedValue({ kind: 'SHARED' });
+        prisma.transaction.findUnique.mockResolvedValue({
+          ...share,
+          mergeId: null,
+          accountId: oldAccount,
+          creatorId,
+        });
+        prisma.transaction.findFirst.mockResolvedValue(null);
+        prisma.account.findFirst.mockResolvedValue({ id: 'temporary' });
+        service = new TransactionsService(
+          prisma as unknown as PrismaService,
+          {
+            findCallerPerson: jest.fn().mockResolvedValue({ id: 'payer', userId: creatorId }),
+            lockPeople: jest.fn().mockResolvedValue(new Map([['payer', { userId: creatorId }]])),
+          } as unknown as LedgerPeopleService,
+        );
+        jest.spyOn(service, 'getById').mockResolvedValue({ id: 'original' } as never);
+        await service.setAccount(ledgerId, 'original', creatorId, accountId);
+        expect(prisma.transaction.update).toHaveBeenCalledWith({
+          where: { id: 'original' },
+          data: { accountId },
+        });
+      },
+    );
+  });
+
+  /** 以共享帳本資料替身檢查原交易的待補提示只受本人的合併影響。 */
+  describe('merged original accountPending', () => {
+    it.each([true, false])(
+      'suppresses pending only when merged by this viewer (%s)',
+      async (merged) => {
+        const payer = { id: 'payer', userId: creatorId };
+        prisma.ledger.findUnique.mockResolvedValue({ kind: 'SHARED' });
+        prisma.account.findFirst.mockResolvedValue({ id: 'temporary' });
+        prisma.transaction.findFirst.mockResolvedValue({
+          ...joined,
+          payerPersonId: payer.id,
+          account: null,
+        });
+        prisma.transaction.findMany.mockResolvedValue(merged ? [{ mergedFromId: joined.id }] : []);
+        service = new TransactionsService(
+          prisma as unknown as PrismaService,
+          {
+            listPeople: jest.fn().mockResolvedValue([payer]),
+            toView: jest.fn().mockReturnValue(payer),
+          } as unknown as LedgerPeopleService,
+        );
+        expect(await service.getById(ledgerId, joined.id, creatorId)).toMatchObject({
+          accountPending: !merged,
+          merge: null,
+        });
+      },
+    );
   });
 
   describe('updateDebtTransaction', () => {
