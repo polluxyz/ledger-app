@@ -637,4 +637,27 @@ describe('Ledger leave and merge (e2e)', () => {
     await leave(s.me, s.ledgerId, input as LeaveRequest).expect(400);
     expect(await prisma.ledgerMerge.count()).toBe(0);
   });
+
+  // 決策 199「不會重複計算」：被加回後再退出，第一次已合併過的原交易不再列為項目、不再合併，
+  // 目標帳本不會多出第二份份額（統計重複）；帳戶也照樣不變。
+  it('被加回後再退出：已合併過的交易不再合併第二次', async () => {
+    const s = await scene();
+    await leave(s.me, s.ledgerId).expect(204);
+    await request(server())
+      .post(`/api/ledgers/${s.ledgerId}/members`)
+      .set(auth(s.ming.token))
+      .send({ email: s.me.email, role: 'EDITOR' })
+      .expect(201);
+    const before = await listAccounts(app, s.me.token);
+    const mergedIds = [s.ids.hostel, s.ids.dinner, s.ids.settlement];
+    const copies = () => prisma.transaction.count({ where: { mergedFromId: { in: mergedIds } } });
+    const copiesBefore = await copies();
+
+    const p = (await preview(s.me, s.ledgerId).expect(200)).body as LedgerLeavePreview;
+    for (const id of mergedIds) expect(p.items.some((item) => item.id === id)).toBe(false);
+
+    await leave(s.me, s.ledgerId).expect(204);
+    expect(await copies()).toBe(copiesBefore);
+    expect(await listAccounts(app, s.me.token)).toEqual(before);
+  });
 });

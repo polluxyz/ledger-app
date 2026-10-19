@@ -216,7 +216,7 @@ export class LedgerLeaveService {
   ) {
     const ledgerId = member.ledgerId;
     if (member.ledger.kind !== 'SHARED') throw bad('Only shared ledgers support leave and merge.');
-    const [rows, splitRows, accounts, counterparties, summary] = await Promise.all([
+    const [rows, splitRows, accounts, counterparties, summary, mergedBefore] = await Promise.all([
       tx.transaction.findMany({
         where: {
           ledgerId,
@@ -255,7 +255,13 @@ export class LedgerLeaveService {
       }),
       tx.counterparty.findMany({ where: { ownerId: userId }, orderBy: { id: 'asc' } }),
       computeLedgerSummary(tx, ledgerId, this.people),
+      // 決策 199：被加回後再退出，上次已合併過的原交易不再合併（含已在目標刪掉的合併列）。
+      tx.transaction.findMany({
+        where: { mergedFromId: { not: null }, merge: { userId, sourceLedgerId: ledgerId } },
+        select: { mergedFromId: true },
+      }),
     ]);
+    const alreadyMerged = new Set(mergedBefore.map((row) => row.mergedFromId));
     const normalize = (t: TransactionRow): LeaveTransaction => ({
       ...t,
       payer: t.payerPerson
@@ -280,7 +286,7 @@ export class LedgerLeaveService {
         : null,
     });
     const shared = rows
-      .filter((t) => !t.debtEntry && !t.splitId && !t.differenceOfId)
+      .filter((t) => !t.debtEntry && !t.splitId && !t.differenceOfId && !alreadyMerged.has(t.id))
       .map(normalize);
     const personalItems: LeavePersonalItem[] = rows
       .filter(
