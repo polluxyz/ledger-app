@@ -222,7 +222,7 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await expect(row).toContainText('已封存');
 });
 
-test('情境 6：有別人的交易時刪除對話框只提供封存', async ({
+test('情境 6：有其他成員時刪除對話框只提供封存', async ({
   signedInPage: page,
   userA,
   userB,
@@ -252,7 +252,7 @@ test('情境 6：有別人的交易時刪除對話框只提供封存', async ({
   await page.getByRole('button', { name: '刪除帳本' }).click();
 
   const dialog = page.getByRole('dialog', { name: `刪除「${TRIP_LEDGER_NAME}」` });
-  await expect(dialog.getByText('有其他成員的交易，只能封存', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('還有其他成員，只能封存', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /^(取消|封存)$/ })).toHaveCount(2);
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '封存', exact: true })).toBeVisible();

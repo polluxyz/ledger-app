@@ -141,8 +141,8 @@ export type SettlementResponse = Transaction;
 
 /**
  * `GET /ledgers/{ledgerId}/settlements` 的查詢參數（3g §4.2）。回應是 `Paginated<Transaction>`，
- * 每筆都帶 `settlement`，依日期、再依建立時間由新到舊。現任成員看到全部結清；已退出的人只看到
- * 自己是付錢或收錢一方的結清（3f 決策 151）。
+ * 每筆都帶 `settlement`，依日期、再依建立時間由新到舊。只有現任成員能查（已退出的人 404，
+ * 3k 決策 189）。
  */
 export interface ListLedgerSettlementsQuery {
   page?: number;

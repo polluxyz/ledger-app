@@ -43,15 +43,14 @@ export interface LedgerGroupPerson {
 /**
  * `GET /ledger-groups` 的一組：我參與過的一本共享帳本。
  *
- * 列出規則（W130、W133）：我還在的帳本一律列，人包含現任成員與虛擬成員，已離開的成員只在
- * `amount ≠ 0` 時列；我已退出的帳本（`ledger.left`）只在還有 `amount ≠ 0` 的人時列。
+ * 列出規則（W130）：只列我現在是成員的帳本（3k 決策 189），人包含現任成員與虛擬成員，
+ * 已離開的成員只在 `amount ≠ 0` 時列。
  * 我自己那一筆永遠不列。依帳本名稱排序，組內依「帳本裡的人」的建立順序。
  */
 export interface LedgerGroup {
   ledger: {
     id: string;
     name: string;
-    left: boolean;
   };
   people: LedgerGroupPerson[];
   /**

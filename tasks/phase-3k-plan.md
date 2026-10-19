@@ -197,8 +197,19 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm --filter @ledger/web test`（102 個檔案、797 個測試）與 `pnpm format:check`。
 - 協調者驗收時修正：帳戶下拉選回空值時不送 `accountId`／`toAccountId`（空字串會被後端 400）。
 
+### K6（lvm-web-e2e，2026-10-19）
+
+- 新增 `apps/web/e2e/ledger-leave-merge.spec.ts`，以三位真實使用者覆蓋完整合併、取消住宿後的帳戶預覽、最後一人輸入名稱刪除共享帳本，以及 W193 將有帳成員改成檢視者。
+- 更新 `ledger-delete-archive.spec.ts` 與 `ledgers.spec.ts` 的共享帳本刪除阻擋文案與案例名稱：W190 現在只要還有其他成員就只能封存，所以斷言從「有其他成員的交易，只能封存」改成「還有其他成員，只能封存」；封存限制的測試意圖不變。
+- 搜尋既有 e2e 後，沒有找到使用已刪除 `/ledgers/:id/history` 頁面或舊的自己退出端點的測試；借還「歷史」子分頁仍存在，相關測試不需改動。
+- 驗證：新增主線 4/4 通過；完整 `pnpm --filter @ledger/web test:e2e` 共 65/65 通過，0 失敗、0 fixme；`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 全綠。
+
 ### 待開發者決定（2026-10-19，已回報總控）
 
 1. ~~`LedgerMerge.targetLedger` 改 `onDelete: SetNull`~~：開發者 2026-10-19 核可，spec §3、§8 已改。偏離原本的說法：沒有改原 migration，而是新增 `20261019130000_ledger_merge_target_set_null`，只換這條外鍵。原 migration 已套用到好幾個測試資料庫，改原檔的話它們不會更新、會靜悄悄留著 Cascade；新 migration 讓每個資料庫跑 `migrate deploy` 就好。補了 e2e：有帳本轉入時刪除目標帳本 204，合併紀錄留著、目標變 null，往來紀錄仍帶來源帳本名稱。
 2. ~~shared `DebtEntry` 加 `merge: { sourceLedgerName } | null`~~：開發者 2026-10-19 核可，總控已改 shared 與 spec §4.3，後端填值、前端顯示。
 3. ~~被加回後再退出會重複轉入~~：開發者 2026-10-19 選「被加回時撤銷上次的帳本轉入」，spec 新增決策 208。實作在 `addMemberByUserId`（同一個資料庫交易裡軟刪除被加回者自己、來源是這本帳本的帳本轉入），補了單元測試與 e2e（含別人的帳本轉入不動、再退出只有一筆）。注意：退出時照決策 190 刪掉了指向，被加回後那筆錢列在借還頁的帳本區，不掛在原本的對象底下；再退出時若沒重新指向，帳本轉入會照決策 198 新增「小華（花蓮三日）」這類對象。
+
+### 拿掉 `left` 欄位（總控，2026-10-19）
+
+- 開發者同意拿掉 K2 之後恆為 `false` 的 `LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`，連同已不會丟出的 `LEDGER_LEFT`。總控改 shared 與 spec §4.3；後端拿掉 API 回傳與 DTO，前端拿掉「已退出」標籤與唯讀分支。
