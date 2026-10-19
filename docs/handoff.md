@@ -6,29 +6,27 @@
 
 ---
 
-## 最新交接（2026-10-18，3k spec 已核可；plan 與 todo 待核可）
+## 最新交接（2026-10-19，3k 已合併並部署；等開發者操作回饋）
 
 ### 現況
 
-- 3k（退出共享帳本並合併到別的帳本）的 spec 已核可：`docs/specs/phase-3k-leave-and-merge.md`，含 §10 的 5 條。plan `tasks/phase-3k-plan.md` 與 todo `tasks/phase-3k-todo.md` 已寫，**還沒核可**。三份跟本檔在同一個 docs PR。
-- 預覽頁 `docs/artifacts/step-3k-leave-merge-preview.html`（在 `web-redesign` worktree，不進版控）已發布成 artifact `https://claude.ai/artifact/8uXoEdW3PWM1RcAc1QdDm2`（Version 4）。
-- 討論時開發者的取捨（理由都寫進 spec 的決策與 W189）：
-  - 退出＝從我這邊刪除；只有「合併」、沒有「保留」；沒勾的交易對帳戶的影響直接消失。
-  - 我付的代墊整筆合併，別人付的只合併我的份額、沒有帳戶。欠款不逐筆標，只在「帳本轉入」的總數出現一次（3f 決策 142 整群抵銷）。選擇畫面上別人付的列寫「小華付」，不寫「不動帳戶」。
-  - 「選擇交易」另開一個比較大的畫面；下方的帳戶段每勾一次就同步變化。
-- 借還頁紀錄列加了分類圖示與名稱（#135，`92a3293`），已部署到 dev。3i 已知限制「往來紀錄列沒顯示名稱與分類」因此解掉了。
-- dev 上 2 位舊規則下退出的成員已用擁有者身分透過 API 加回：d@d.com 回到花蓮三日、a2@a.com 回到 share，角色都是 EDITOR。3k 上線後要請他們用新流程退出。
-- `web-redesign` detached 在 `92a3293`。資料庫只剩 `ledger_dev`、`ledger_test`。沒有進行中的 Orca Run 或 worker。
-- worktree：`leave-merge-spec`（這個 docs PR 用，合併後可以清）、`ledger-split-web`（協調者寫文件用，`.env` 指向 `ledger_test`）、`web-redesign`（開發者的 dev）。
-- a@a.com 的測試情境見 3h spec §1（房東、阿德、明哥、花蓮三日）。
-- 模型：看 `docs/orca-multi-agent.md` §0。設計取捨多時可以先派 `advisor`（§1.1）。
+- 3k（退出共享帳本並合併到別的帳本）已合併：#137（squash `912e0d9`）。spec `docs/specs/phase-3k-leave-and-merge.md`（決策 189～208），驗證數字與偏離記在 `tasks/phase-3k-plan.md` §6。
+  - 實作時開發者另外核可：`DebtEntry.merge`（W192 顯示來源帳本名）、`LedgerMerge.targetLedgerId` 改 `SET NULL`（多一個 migration）、被加回時撤銷上次的帳本轉入（決策 208）、拿掉恆為 `false` 的 `left` 欄位與 `LEDGER_LEFT`。
+- 已部署到 dev（2026-10-19）：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3k_20261019_2053.dump`，套用 `20261019000000_ledger_merge`、`20261019130000_ledger_merge_target_set_null`，`web-redesign` detached 在 `912e0d9`，shared 與 API 已 build。部署前查「已退出、帳戶還在算」為 0 筆。
+- 部署後用暫時的 3200 埠照 plan §4 走過一次：a@a.com 建暫時共享帳本、加 b@b.com、記住宿／晚餐／結清；b 退出並合併後帳戶餘額不變、合併來的 3 列標來源帳本、借還頁不再出現、打開回 404；a 以最後一人全部不合併刪除，預覽與結果一致；最後刪掉 b 合併來的交易，兩人帳戶都回到原值。軟刪除的交易與 `LedgerMerge` 留在資料庫。
+- **開發者 10-19 晚上在 main worktree（`D:\Projects\ledger-app`）開了 API 與 Vite**：main 的 shared `dist` 與 `src/generated/prisma` 是舊的，API 報 117 個型別錯；Vite 因 5173 被佔用跑到 5174。已請他停掉、改回 `web-redesign` 重開。
+- 分工（2026-10-19 起）：main 的 session 是總控，`backend` worktree（detached，DB `ledger_backend_test`）做後端，前端 session 開在 `web-redesign`。3k 期間兩個 session 各有子分支，只有總控寫整合分支。兩個 session 都已停手待命。
+- worktree：`backend`、`ledger-split-web`（協調者寫文件用，`.env` 指向 `ledger_test`）、`web-redesign`（開發者的 dev），都 detached 在 `912e0d9`。3k 的分支都已刪。
+- **待開發者同意刪除的測試資料庫**：`ledger_lvm_{migrate,rules,leave,merged,web,webe2e}_test`。`ledger_backend_test` 是 backend worktree 長駐用的，保留。
+- Codex 週額度用到約 99%（約 10-25 重置）。開發者 10-19 指示：Codex 用到 worker 真的報額度錯誤才換 `fallback-1`，不看 §4 的 95% 門檻（`docs/orca-multi-agent.md` §4 還沒改）。
 
 ### 下一步
 
-1. 請開發者核可 3k plan 與 todo（docs PR 合併不等於 plan 核可，先問）。
-2. 核可後照 plan §2：從 `main` 開整合分支 `feature/ledger-leave-merge`，協調者做 K0（shared 契約、隔離測試先紅），再派第 1 波 K1、K2、K5。
-3. K7 部署前跑 spec §8 的查詢，備份 `ledger_dev` 再 `migrate deploy`。
-4. 3k 完成後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
+1. 請開發者在 `web-redesign` 重開 API 與 Vite、按 `Ctrl + Shift + R`，操作 3k。
+2. 請 d@d.com（花蓮三日）、a2@a.com（share）用新流程退出。
+3. 刪除上面列的 6 個測試資料庫（等開發者同意）。
+4. 依回饋開修訂（先改 spec 再改程式）。
+5. 3k 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限；並決定前端、後端 session 怎麼分工。
 
 ### 開發者的偏好（不在 spec 裡的）
 

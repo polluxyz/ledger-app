@@ -213,3 +213,10 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 ### 拿掉 `left` 欄位（總控，2026-10-19）
 
 - 開發者同意拿掉 K2 之後恆為 `false` 的 `LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`，連同已不會丟出的 `LEDGER_LEFT`。總控改 shared 與 spec §4.3；後端拿掉 API 回傳與 DTO，前端拿掉「已退出」標籤與唯讀分支。
+
+### K7（總控，2026-10-19）
+
+- 整合分支最後一輪：單元 shared 116、API 582、Web 794；API e2e 43 檔 382 條；Web e2e 65 條；lint、typecheck、format、build 全過。PR #137 CI 全綠，squash merge（`912e0d9`）。
+- spec §8 要求的部署前查詢 spec 沒附 SQL，總控自己寫：交易記到某人的帳戶、而他已不是那本帳本的成員。dev 上 0 筆。
+- 部署：備份 `ledger_dev_before_3k_20261019_2053.dump`，`migrate deploy` 套用 2 個 migration，build。照 §4 在 dev 走過一次（見 `docs/handoff.md`），結果都符合；暫時帳本已刪、合併來的交易已刪。
+- 分工偏離：plan 原本由一個協調者全包；開發者 10-19 改成總控＋後端 session（K1～K4，子分支 `feature/lvm-api`）＋前端 session（K5、K5b、K6）。只有總控寫整合分支。
