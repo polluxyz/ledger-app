@@ -199,6 +199,6 @@ spec：`docs/specs/phase-3k-leave-and-merge.md`（決策 189～207、W188～W193
 
 ### 待開發者決定（2026-10-19，已回報總控）
 
-1. `LedgerMerge.targetLedger` 改 `onDelete: SetNull`（見 K1）。
+1. ~~`LedgerMerge.targetLedger` 改 `onDelete: SetNull`~~：開發者 2026-10-19 核可，spec §3、§8 已改。偏離原本的說法：沒有改原 migration，而是新增 `20261019130000_ledger_merge_target_set_null`，只換這條外鍵。原 migration 已套用到好幾個測試資料庫，改原檔的話它們不會更新、會靜悄悄留著 Cascade；新 migration 讓每個資料庫跑 `migrate deploy` 就好。補了 e2e：有帳本轉入時刪除目標帳本 204，合併紀錄留著、目標變 null，往來紀錄仍帶來源帳本名稱。
 2. ~~shared `DebtEntry` 加 `merge: { sourceLedgerName } | null`~~：開發者 2026-10-19 核可，總控已改 shared 與 spec §4.3，後端填值、前端顯示。
 3. ~~被加回後再退出會重複轉入~~：開發者 2026-10-19 選「被加回時撤銷上次的帳本轉入」，spec 新增決策 208。實作在 `addMemberByUserId`（同一個資料庫交易裡軟刪除被加回者自己、來源是這本帳本的帳本轉入），補了單元測試與 e2e（含別人的帳本轉入不動、再退出只有一筆）。注意：退出時照決策 190 刪掉了指向，被加回後那筆錢列在借還頁的帳本區，不掛在原本的對象底下；再退出時若沒重新指向，帳本轉入會照決策 198 新增「小華（花蓮三日）」這類對象。
