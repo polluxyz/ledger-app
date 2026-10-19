@@ -650,6 +650,28 @@ describe('TransactionList', () => {
       await user.click(screen.getByText('借出'));
     });
 
+    it('shows a merged source, a transfer icon, and my-share and advance details', async () => {
+      const user = userEvent.setup();
+      const merged = makeTransaction({
+        id: 'merged-advance',
+        type: 'LEND',
+        amount: 3000,
+        title: '押金',
+        category: { id: 'cat-home', name: '居住', icon: 'home' },
+        merge: { sourceLedgerName: '花蓮三日', share: 1000 },
+      });
+      renderList({ transactions: [merged] });
+
+      const listRow = row(0);
+      expect(within(listRow).getByText('花蓮三日')).toBeInTheDocument();
+      expect(listRow.querySelector('[data-category-icon="transfer"]')).toBeInTheDocument();
+      await user.click(within(listRow).getByRole('button', { name: '展開細項' }));
+      expect(within(listRow).getByText('我的份額')).toBeInTheDocument();
+      expect(within(listRow).getByText('$10')).toBeInTheDocument();
+      expect(within(listRow).getByText('代墊')).toBeInTheDocument();
+      expect(within(listRow).getByText('$20')).toBeInTheDocument();
+    });
+
     it('is not clickable without a debt editor even when debt is present', async () => {
       const onEdit = vi.fn();
       renderList({

@@ -32,11 +32,6 @@ interface TransactionListProps {
   emptyMessage?: string;
   /** 正在編輯的那一筆的 id，該列會標成選取中。沒有就傳 null 或不傳。 */
   selectedId?: string | null;
-  /**
-   * 唯讀（3f W147，已退出帳本的歷史頁）：每一列都不可點、不顯示「待補」。
-   * 寫入權限仍由後端把關，這裡只是不給入口。
-   */
-  readOnly?: boolean;
   onEdit: (transaction: Transaction) => void;
   /** 點選自己有關聯對象的借還或代付交易時，編輯那筆往來紀錄。 */
   onEditDebtTransaction?: (transaction: Transaction) => void;
@@ -137,7 +132,6 @@ export function TransactionList({
   variant = 'grouped',
   emptyMessage,
   selectedId = null,
-  readOnly = false,
   onEdit,
   onEditDebtTransaction,
   onFillAccount,
@@ -177,9 +171,6 @@ export function TransactionList({
 
   /** 點一列（或它的第一格按鈕）要做的事：一般交易或自己的往來紀錄進入編輯。 */
   function openRow(transaction: Transaction) {
-    if (readOnly) {
-      return;
-    }
     if (transaction.debt) {
       onEditDebtTransaction?.(transaction);
       return;
@@ -207,9 +198,16 @@ export function TransactionList({
               const ledgerSplit = transaction.ledgerSplit;
               const settlement = transaction.settlement;
               const hasSplit = Boolean(split || ledgerSplit);
+              const hasMergeDetails = transaction.merge != null && transaction.merge.share !== null;
+              // 合併來的代墊與結清（帳本往來）沿用借還型別，畫面用轉帳圖示（W191）。
+              const isMergedLedgerTransfer =
+                transaction.merge != null &&
+                (transaction.type === 'LEND' ||
+                  transaction.type === 'COLLECT' ||
+                  transaction.type === 'BORROW');
+              const hasExpandableDetails = hasSplit || hasMergeDetails;
               const expanded = expandedId === transaction.id;
-              const isClickable =
-                !readOnly && (transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt);
+              const isClickable = transaction.debt ? Boolean(onEditDebtTransaction) : !isDebt;
               const repaymentType =
                 transaction.type === 'COLLECT' || transaction.type === 'REPAY'
                   ? transaction.type
@@ -257,7 +255,9 @@ export function TransactionList({
                     <span className={styles.titleText}>
                       {settlement ? '結清' : rowLabel(transaction)}
                     </span>
-                    {hasSplit && <span className={styles.splitBadge}>分帳</span>}
+                    {(hasSplit || hasMergeDetails) && (
+                      <span className={styles.splitBadge}>分帳</span>
+                    )}
                     {differenceLabel !== null && <span className={styles.clearedBadge}>還清</span>}
                   </span>
                   <span className={styles.subtitle}>
@@ -271,6 +271,11 @@ export function TransactionList({
                       />
                     ) : (
                       <span className={styles.name}>{rowName(transaction)}</span>
+                    )}
+                    {transaction.merge && (
+                      <span className={styles.mergeSource}>
+                        {transaction.merge.sourceLedgerName}
+                      </span>
                     )}
                     {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
                   </span>
@@ -295,8 +300,14 @@ export function TransactionList({
                     <span className={styles.iconBadge} aria-hidden="true">
                       <CategoryIcon
                         className={styles.categoryIcon}
-                        icon={transaction.category?.icon}
-                        transactionType={transaction.category ? undefined : transaction.type}
+                        icon={isMergedLedgerTransfer ? null : transaction.category?.icon}
+                        transactionType={
+                          isMergedLedgerTransfer
+                            ? 'TRANSFER'
+                            : transaction.category
+                              ? undefined
+                              : transaction.type
+                        }
                       />
                     </span>
                     {/*
@@ -322,7 +333,7 @@ export function TransactionList({
                         : formatTransactionAmount(transaction.type, amount)}
                     </span>
                     <span className={styles.actions}>
-                      {transaction.accountPending && !readOnly && (
+                      {transaction.accountPending && (
                         <button
                           type="button"
                           className={styles.pendingButton}
@@ -332,14 +343,16 @@ export function TransactionList({
                           臨時帳戶
                         </button>
                       )}
-                      {(hasSplit || hasDifferenceDetails) && (
+                      {(hasExpandableDetails || hasDifferenceDetails) && (
                         <button
                           type="button"
                           className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
                           aria-label={
                             hasDifferenceDetails
                               ? `${expanded ? '收合' : '展開'}細項`
-                              : `${expanded ? '收合' : '展開'}分帳明細`
+                              : hasMergeDetails
+                                ? `${expanded ? '收合' : '展開'}細項`
+                                : `${expanded ? '收合' : '展開'}分帳明細`
                           }
                           aria-expanded={expanded}
                           onClick={() => setExpandedId(expanded ? null : transaction.id)}
@@ -348,9 +361,11 @@ export function TransactionList({
                         </button>
                       )}
                     </span>
-                    {expanded && (hasSplit || hasDifferenceDetails) && (
+                    {expanded && (hasExpandableDetails || hasDifferenceDetails) && (
                       <div
-                        className={`${styles.details} ${hasDifferenceDetails ? styles.differenceDetails : ''}`}
+                        className={`${styles.details} ${
+                          hasDifferenceDetails || hasMergeDetails ? styles.differenceDetails : ''
+                        }`}
                       >
                         {hasDifferenceDetails && differenceAmount !== null ? (
                           <>
@@ -364,6 +379,21 @@ export function TransactionList({
                               </span>
                               <span className={styles.differenceDetailAmount}>
                                 {differenceAmount}
+                              </span>
+                            </div>
+                          </>
+                        ) : transaction.merge != null && transaction.merge.share !== null ? (
+                          <>
+                            <div className={styles.differenceLine}>
+                              <span className={styles.differenceDetailLabel}>我的份額</span>
+                              <span className={styles.differenceDetailAmount}>
+                                {formatMoney(transaction.merge.share)}
+                              </span>
+                            </div>
+                            <div className={styles.differenceLine}>
+                              <span className={styles.differenceDetailLabel}>代墊</span>
+                              <span className={styles.differenceDetailAmount}>
+                                {formatMoney(transaction.amount - transaction.merge.share)}
                               </span>
                             </div>
                           </>
