@@ -638,6 +638,44 @@ describe('Ledger leave and merge (e2e)', () => {
     expect(await prisma.ledgerMerge.count()).toBe(0);
   });
 
+  // W192：帳本轉入的往來紀錄帶出來源帳本名稱（退出當下的快照，之後改名也不變）；
+  // 同一個對象的一般往來紀錄沒有合併紀錄，merge 為 null。
+  it('W192：往來紀錄的帳本轉入帶來源帳本名稱，其他紀錄 merge 為 null', async () => {
+    const s = await scene();
+    const cp = await createCounterparty(app, s.me, '小華');
+    await prisma.ledgerPersonPointer.create({
+      data: { userId: s.me.userId, ledgerPersonId: s.huaId, counterpartyId: cp.id },
+    });
+    await request(server())
+      .post('/api/debt-entries')
+      .set(auth(s.me.token))
+      .send({
+        counterparty: { id: cp.id },
+        kind: 'LEND',
+        amount: 20000,
+        date: DAY,
+        record: { ledgerId: s.me.ledgerId, accountId: s.me.cashId },
+      })
+      .expect(201);
+    await leave(s.me, s.ledgerId).expect(204);
+    await request(server())
+      .patch(`/api/ledgers/${s.ledgerId}`)
+      .set(auth(s.ming.token))
+      .send({ name: '花蓮四日' })
+      .expect(200);
+
+    const res = await request(server())
+      .get(`/api/counterparties/${cp.id}/entries`)
+      .set(auth(s.me.token))
+      .expect(200);
+    const entries = (res.body as { items: Array<{ kind: string; merge: unknown }> }).items;
+    expect(entries).toHaveLength(2);
+    expect(entries.find((entry) => entry.kind === 'LEDGER_CARRY_OVER')!.merge).toEqual({
+      sourceLedgerName: '花蓮三日',
+    });
+    expect(entries.find((entry) => entry.kind === 'LEND')!.merge).toBeNull();
+  });
+
   // 決策 199「不會重複計算」：被加回後再退出，第一次已合併過的原交易不再列為項目、不再合併，
   // 目標帳本不會多出第二份份額（統計重複）；帳戶也照樣不變。
   it('被加回後再退出：已合併過的交易不再合併第二次', async () => {
