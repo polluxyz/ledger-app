@@ -1,0 +1,41 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.status,
+.reason {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.pickerLink {
+  width: 100%;
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerLink:hover {
+  color: var(--color-accent);
+}
+
+.pickerLink:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}

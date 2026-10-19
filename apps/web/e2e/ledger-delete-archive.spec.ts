@@ -186,12 +186,7 @@ test('封存不用輸入名稱；取消封存後帳本回到切換器並可再�
     .toBe(cashBefore - 2_500);
 });
 
-test('共享帳本有其他成員記的交易時只能封存', async ({
-  signedInPage: page,
-  userA,
-  userB,
-  request,
-}) => {
+test('共享帳本還有其他成員時只能封存', async ({ signedInPage: page, userA, userB, request }) => {
   const ledger = await createLedger(request, userA.token, {
     name: '不能刪除的共享帳本',
     kind: 'SHARED',
@@ -221,7 +216,7 @@ test('共享帳本有其他成員記的交易時只能封存', async ({
   await page.goto(`/ledgers/${ledger.id}`);
   await page.getByRole('button', { name: '刪除帳本' }).click();
   const dialog = page.getByRole('dialog', { name: `刪除「${ledger.name}」` });
-  await expect(dialog.getByText('有其他成員的交易，只能封存', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('還有其他成員，只能封存', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /^(取消|封存)$/ })).toHaveCount(2);
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '封存', exact: true })).toBeVisible();

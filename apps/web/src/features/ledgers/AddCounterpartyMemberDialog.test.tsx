@@ -44,7 +44,7 @@ describe('AddCounterpartyMemberDialog', () => {
         return Promise.resolve(
           jsonResponse(200, [
             {
-              ledger: { id: 'ledger-1', name: '花蓮三日', left: false },
+              ledger: { id: 'ledger-1', name: '花蓮三日' },
               people: [
                 {
                   person: memberPerson,
@@ -218,7 +218,7 @@ describe('AddCounterpartyMemberDialog', () => {
         return Promise.resolve(
           jsonResponse(200, [
             {
-              ledger: { id: 'ledger-1', name: '花蓮三日', left: false },
+              ledger: { id: 'ledger-1', name: '花蓮三日' },
               people: [
                 {
                   person: pointedPerson,

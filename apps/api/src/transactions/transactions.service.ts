@@ -23,7 +23,6 @@ import { deriveSync } from '../debts/debt-proposal-rules';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
 import { assertSelectableAccount, temporaryAccountIdOf } from '../accounts/account-selection';
-import { LedgerAccess } from '../common/decorators/ledger-access-kind.decorator';
 
 /**
  * 交易的業務邏輯——整個記帳系統的核心。呼叫進來之前，controller 已完成身分驗證
@@ -66,6 +65,9 @@ interface AccountRef {
 /** 一筆交易資料列，已 join 其分類、帳戶與建立者。 */
 interface TransactionRow {
   id: string;
+  mergeId?: string | null;
+  mergedFromId?: string | null;
+  merge?: { userId: string; sourceLedgerName: string } | null;
   differenceOfId?: string | null;
   difference?: { id: string; type: TransactionType; amount: number; deletedAt: Date | null } | null;
   type: TransactionType;
@@ -134,6 +136,7 @@ interface TransactionRow {
 // 共用的 Prisma `include`，讓每個讀取都回傳相同的 join 形狀。帳戶多選一個
 // `userId`——遮蔽他人帳戶時需要它來比對檢視者，其他欄位一概不取。
 const TRANSACTION_INCLUDE = {
+  merge: { select: { userId: true, sourceLedgerName: true } },
   difference: { select: { id: true, type: true, amount: true, deletedAt: true } },
   ledgerSplit: { include: { shares: { orderBy: { sortOrder: 'asc' } } } },
   settlement: true,
@@ -222,6 +225,8 @@ interface UpdateTransactionInput {
 }
 
 interface ViewContext {
+  mergeRows?: Map<string, TransactionRow[]>;
+  mergedOriginalIds?: Set<string>;
   shared: boolean;
   viewerTemporaryAccountId: string | null;
   people: Map<string, LedgerPersonView>;
@@ -329,52 +334,31 @@ export class TransactionsService {
     ledgerId: string,
     viewerUserId: string,
     query: ListTransactionsQuery,
-    access: LedgerAccess = 'MEMBER',
     options: ListTransactionsInternalOptions = {},
   ): Promise<Paginated<Transaction>> {
     const page = query.page ?? DEFAULT_PAGE;
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const settlementsOnly = options.settlementsOnly === true;
-    let leftScope = Prisma.empty;
-    if (access === 'LEFT') {
-      const person = await this.prisma.ledgerPerson.findUnique({
-        where: { ledgerId_userId: { ledgerId, userId: viewerUserId } },
-        select: { id: true },
-      });
-      if (!person) {
-        throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
-      }
-      // 與既有條件以 AND 合併，且同時用於分頁及 total；查詢參數不能擴大退出者的範圍。
-      // 結清清單的範圍更窄：退出者只看得到自己是付錢或收錢一方的結清（3g §4.2），連他
-      // 退出前代替別人記的都不算——一般交易的退出範圍（payer／creator 條款）這裡刻意不打開。
-      leftScope = settlementsOnly
-        ? Prisma.sql`AND EXISTS (
-          SELECT 1 FROM "LedgerSettlement" st
-          WHERE st."transactionId" = t."id"
-            AND (st."fromPersonId" = ${person.id} OR st."toPersonId" = ${person.id})
-        )`
-        : Prisma.sql`AND (
-        t."payerPersonId" = ${person.id}
-        OR (t."payerPersonId" IS NULL AND t."creatorId" = ${viewerUserId})
-        OR EXISTS (
-          SELECT 1 FROM "LedgerSplit" ls
-          JOIN "LedgerShare" sh ON sh."ledgerSplitId" = ls."id"
-          WHERE ls."transactionId" = t."id" AND sh."personId" = ${person.id}
-        )
-        OR EXISTS (
-          SELECT 1 FROM "LedgerSettlement" st
-          WHERE st."transactionId" = t."id"
-            AND (st."fromPersonId" = ${person.id} OR st."toPersonId" = ${person.id})
-        )
-      )`;
-    }
-    // 結清清單只取有 LedgerSettlement 的交易；同樣以 AND 合併，與 leftScope（若有）重疊無妨。
+    // 結清清單與交易清單共用現任成員的存取規則。
     const settlementOnly = settlementsOnly
       ? Prisma.sql`AND EXISTS (
           SELECT 1 FROM "LedgerSettlement" st
           WHERE st."transactionId" = t."id"
         )`
       : Prisma.empty;
+
+    // 份額與代墊是一件事：所有成員都只看一列，來源資訊另在回應時遮蔽。
+    // 在篩選及分頁之前排除代墊，避免分類篩選時只剩半筆或 total 重複計數。
+    const mergedAdvanceExcluded = Prisma.sql`AND NOT (
+      t."mergeId" IS NOT NULL AND t."type"::text IN ('LEND', 'BORROW')
+      AND EXISTS (
+        SELECT 1 FROM "Transaction" share
+        WHERE share."ledgerId" = t."ledgerId" AND share."mergeId" = t."mergeId"
+          AND share."mergedFromId" = t."mergedFromId" AND share."deletedAt" IS NULL
+          AND ((share."type"::text = 'EXPENSE' AND t."type"::text = 'LEND')
+            OR (share."type"::text = 'INCOME' AND t."type"::text = 'BORROW'))
+      )
+    )`;
 
     // SQL 先依分帳擁有者合併，再篩選、分頁與計數；先取交易再在記憶體合併會讓
     // 第 2 頁筆數和 total 都錯。其他帳本成員的 s 為 null，因此逐筆看見原交易。
@@ -388,8 +372,8 @@ export class TransactionsService {
         FROM "Transaction" t
         LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
         WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
-          ${leftScope}
           ${settlementOnly}
+          ${mergedAdvanceExcluded}
           ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
           ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
           ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
@@ -404,7 +388,7 @@ export class TransactionsService {
     `);
     const rows = selected.length
       ? await this.prisma.transaction.findMany({
-          where: { id: { in: selected.map((item) => item.id) } },
+          where: { ledgerId, deletedAt: null, id: { in: selected.map((item) => item.id) } },
           include: TRANSACTION_INCLUDE,
         })
       : [];
@@ -417,8 +401,8 @@ export class TransactionsService {
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
       WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
-        ${leftScope}
         ${settlementOnly}
+        ${mergedAdvanceExcluded}
         ${query.payerPersonId ? Prisma.sql`AND t."type"::text IN ('EXPENSE', 'INCOME') AND COALESCE(t."payerPersonId", (SELECT lp."id" FROM "LedgerPerson" lp WHERE lp."ledgerId" = t."ledgerId" AND lp."userId" = t."creatorId")) = ${query.payerPersonId}` : Prisma.empty}
         ${query.type ? Prisma.sql`AND COALESCE(s."type"::text, t."type"::text) = ${query.type}` : Prisma.empty}
         ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
@@ -429,10 +413,9 @@ export class TransactionsService {
         );
 
     const context = await this.viewContext(ledgerId, viewerUserId);
+    await this.loadMergeContext(ledgerId, viewerUserId, rows, context);
     return {
-      items: selected.map((item) =>
-        this.toTransaction(byId.get(item.id)!, viewerUserId, context, access),
-      ),
+      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
       page,
       limit,
       total,
@@ -458,9 +441,12 @@ export class TransactionsService {
     if (ledger.kind === 'SHARED') {
       return this.updateShared(ledgerId, transactionId, viewerUserId, input);
     }
-    this.assertSplitAllowed(input, ledger.kind, input.type ?? 'EXPENSE');
     const updated = await this.prisma.$transaction(async (tx) => {
       const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      if (existing.mergeId) {
+        return this.updateMerged(tx, ledgerId, existing, viewerUserId, input);
+      }
+      this.assertSplitAllowed(input, ledger.kind, input.type ?? 'EXPENSE');
       await this.assertNotSettlement(existing.id, tx);
       if (existing.splitId != null)
         throw new AppException(
@@ -508,6 +494,7 @@ export class TransactionsService {
         include: TRANSACTION_INCLUDE,
       });
     });
+    if (updated.mergeId) return this.getById(ledgerId, updated.id, viewerUserId);
     return this.toTransaction(updated, viewerUserId);
   }
 
@@ -515,6 +502,18 @@ export class TransactionsService {
   async remove(ledgerId: string, transactionId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      if (existing.mergeId) {
+        await tx.transaction.updateMany({
+          where: {
+            ledgerId,
+            mergeId: existing.mergeId,
+            mergedFromId: existing.mergedFromId,
+            deletedAt: null,
+          },
+          data: { deletedAt: new Date() },
+        });
+        return;
+      }
       await this.assertNotSettlement(existing.id, tx);
       if (existing.splitId != null)
         throw new AppException(
@@ -538,6 +537,11 @@ export class TransactionsService {
   ): Promise<Transaction> {
     await this.prisma.$transaction(async (tx) => {
       const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      if (existing.mergeId) {
+        await this.updateMerged(tx, ledgerId, existing, callerUserId, input);
+        return;
+      }
+      await this.assertNotMergedAccountChange(tx, ledgerId, transactionId, callerUserId, input);
       const finalType = input.type ?? existing.type;
       await this.assertNotSettlement(existing.id, tx);
       const debt = await tx.debtEntry.findUnique({
@@ -686,6 +690,100 @@ export class TransactionsService {
     }
   }
 
+  /** 合併交易只開放顯示名稱、目標帳本分類與呼叫者帳戶；兩個內部紀錄同步寫入。 */
+  private async updateMerged(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    existing: Prisma.TransactionGetPayload<object>,
+    callerUserId: string,
+    input: UpdateTransactionInput,
+  ) {
+    const group = await tx.transaction.findMany({
+      where: {
+        ledgerId,
+        mergeId: existing.mergeId,
+        mergedFromId: existing.mergedFromId,
+        deletedAt: null,
+      },
+    });
+    const primary = group.find((row) => this.isIncomeExpense(row.type)) ?? existing;
+    const amount = group.reduce((total, row) => total + row.amount, 0);
+    const changed =
+      (input.type !== undefined && input.type !== primary.type) ||
+      (input.amount !== undefined && input.amount !== amount) ||
+      (input.date !== undefined && new Date(input.date).getTime() !== primary.date.getTime()) ||
+      (input.note !== undefined && input.note !== primary.note) ||
+      (input.payerPersonId !== undefined && input.payerPersonId !== primary.payerPersonId) ||
+      (input.ledgerSplit !== undefined && input.ledgerSplit !== null);
+    if (changed) throw this.invalidMergedChange();
+    for (const value of [input.title, input.categoryId, input.accountId, input.toAccountId]) {
+      if (value !== undefined && typeof value !== 'string') throw this.invalidMergedChange();
+    }
+
+    if (input.categoryId !== undefined) {
+      if (!this.isIncomeExpense(primary.type)) throw this.invalidMergedChange();
+      await this.assertCategoryRules(ledgerId, primary.type, input.categoryId);
+    }
+    if (input.toAccountId !== undefined && primary.type !== 'TRANSFER') {
+      throw this.invalidMergedChange();
+    }
+    // 合併交易的帳戶只屬於合併者（spec §7 Never）。目標是共享帳本時其他編輯者可以改名稱與
+    // 分類，但改帳戶會把他自己的帳戶寫進別人的合併帳。
+    if (
+      (input.accountId !== undefined || input.toAccountId !== undefined) &&
+      (await tx.ledgerMerge.findUnique({
+        where: { id: existing.mergeId! },
+        select: { userId: true },
+      }))!.userId !== callerUserId
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.ACCOUNT_NOT_PAYERS,
+        'Only the person who merged this transaction can change its account.',
+      );
+    }
+    for (const accountId of [input.accountId, input.toAccountId]) {
+      if (accountId !== undefined) await assertSelectableAccount(tx, callerUserId, accountId);
+    }
+    if (
+      primary.type === 'TRANSFER' &&
+      (input.accountId !== undefined || input.toAccountId !== undefined)
+    ) {
+      await this.assertAccountRules(
+        ledgerId,
+        callerUserId,
+        primary.type,
+        {
+          accountId: input.accountId ?? primary.accountId ?? undefined,
+          toAccountId: input.toAccountId ?? primary.toAccountId ?? undefined,
+        },
+        {},
+        tx,
+      );
+    }
+    await tx.transaction.updateMany({
+      where: { ledgerId, id: { in: group.map((row) => row.id) }, deletedAt: null },
+      data: {
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+        ...(input.toAccountId !== undefined ? { toAccountId: input.toAccountId } : {}),
+      },
+    });
+    return tx.transaction.update({
+      where: { ledgerId, id: primary.id },
+      data: input.categoryId !== undefined ? { categoryId: input.categoryId } : {},
+      include: TRANSACTION_INCLUDE,
+    });
+  }
+
+  private invalidMergedChange(): AppException {
+    return new AppException(
+      HttpStatus.BAD_REQUEST,
+      ErrorCode.VALIDATION_FAILED,
+      'Merged transactions only allow changes to title, category and accounts.',
+    );
+  }
+
   private async getLedger(ledgerId: string) {
     const ledger = await this.prisma.ledger.findUnique({
       where: { id: ledgerId },
@@ -808,11 +906,18 @@ export class TransactionsService {
     transactionId: string,
   ) {
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT "id" FROM "Transaction"
-      WHERE "id" = ${transactionId} AND "ledgerId" = ${ledgerId} AND "deletedAt" IS NULL
+      SELECT t."id" FROM "Transaction" t
+      WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL
+        AND (t."id" = ${transactionId} OR EXISTS (
+          SELECT 1 FROM "Transaction" seed
+          WHERE seed."id" = ${transactionId} AND seed."ledgerId" = ${ledgerId}
+            AND seed."deletedAt" IS NULL AND seed."mergeId" IS NOT NULL
+            AND t."mergeId" = seed."mergeId" AND t."mergedFromId" = seed."mergedFromId"
+        ))
+      ORDER BY t."id"
       FOR UPDATE
     `;
-    if (rows.length !== 1) throw this.notFound('Transaction');
+    if (rows.length === 0) throw this.notFound('Transaction');
     const existing = await tx.transaction.findUnique({ where: { id: transactionId } });
     return existing!;
   }
@@ -849,6 +954,17 @@ export class TransactionsService {
     const ledger = await this.getLedger(ledgerId);
     await this.prisma.$transaction(async (tx) => {
       const existing = await this.findActiveForUpdate(tx, ledgerId, transactionId);
+      if (await this.wasMerged(tx, ledgerId, transactionId, callerUserId)) {
+        throw this.readOnly(ErrorCode.TRANSACTION_ALREADY_MERGED);
+      }
+      // 待補端點對 viewer 開放；合併交易須走 editor 的 PATCH，才能同步兩筆內部紀錄。
+      if (existing.mergeId) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          'Change merged accounts through the transaction editor.',
+        );
+      }
       await this.assertNotSettlement(transactionId, tx);
       const debt = await tx.debtEntry.findUnique({
         where: { transactionId },
@@ -877,7 +993,10 @@ export class TransactionsService {
           'Only the payer can set this account.',
         );
       }
-      if (existing.accountId !== (await temporaryAccountIdOf(tx, callerUserId))) {
+      if (
+        existing.accountId !== null &&
+        existing.accountId !== (await temporaryAccountIdOf(tx, callerUserId))
+      ) {
         throw new AppException(
           HttpStatus.BAD_REQUEST,
           ErrorCode.ACCOUNT_NOT_PAYERS,
@@ -1304,7 +1423,81 @@ export class TransactionsService {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
     }
     const context = await this.viewContext(ledgerId, viewerUserId);
+    await this.loadMergeContext(ledgerId, viewerUserId, [transaction], context);
     return this.toTransaction(transaction, viewerUserId, context);
+  }
+
+  /** 原交易的防重複補帳戶判斷限縮在來源帳本與本人；軟刪除的合併紀錄也仍算合併過。 */
+  private async wasMerged(
+    client: Prisma.TransactionClient,
+    sourceLedgerId: string,
+    transactionId: string,
+    userId: string,
+  ): Promise<boolean> {
+    return (
+      (await client.transaction.findFirst({
+        where: { mergedFromId: transactionId, merge: { sourceLedgerId, userId } },
+        select: { id: true },
+      })) !== null
+    );
+  }
+
+  /** 一般 PATCH 也能指定帳戶，不能繞過專用補帳戶端點的防重複限制。 */
+  private async assertNotMergedAccountChange(
+    client: Prisma.TransactionClient,
+    ledgerId: string,
+    transactionId: string,
+    callerUserId: string,
+    input: UpdateTransactionInput,
+  ): Promise<void> {
+    if (
+      (input.accountId !== undefined || input.toAccountId !== undefined) &&
+      (await this.wasMerged(client, ledgerId, transactionId, callerUserId))
+    ) {
+      throw this.readOnly(ErrorCode.TRANSACTION_ALREADY_MERGED);
+    }
+  }
+
+  /** 批次補上當頁的合併配對與本人合併紀錄，不逐列查詢，也不改動分頁選出的 id。 */
+  private async loadMergeContext(
+    ledgerId: string,
+    viewerUserId: string,
+    rows: TransactionRow[],
+    context: ViewContext,
+  ): Promise<void> {
+    const groups = rows
+      .filter((row) => row.mergeId && row.mergedFromId)
+      .map((row) => ({ mergeId: row.mergeId!, mergedFromId: row.mergedFromId! }));
+    context.mergeRows = new Map();
+    if (groups.length) {
+      const companions = await this.prisma.transaction.findMany({
+        where: { ledgerId, deletedAt: null, OR: groups },
+        include: TRANSACTION_INCLUDE,
+      });
+      for (const row of companions) {
+        const key = this.mergeKey(row);
+        const group = context.mergeRows.get(key) ?? [];
+        group.push(row);
+        context.mergeRows.set(key, group);
+      }
+    }
+    context.mergedOriginalIds = new Set();
+    if (rows.length && context.shared) {
+      const merged = await this.prisma.transaction.findMany({
+        where: {
+          mergedFromId: { in: rows.map((row) => row.id) },
+          merge: { sourceLedgerId: ledgerId, userId: viewerUserId },
+        },
+        select: { mergedFromId: true },
+      });
+      for (const row of merged) {
+        if (row.mergedFromId) context.mergedOriginalIds.add(row.mergedFromId);
+      }
+    }
+  }
+
+  private mergeKey(row: TransactionRow): string {
+    return JSON.stringify([row.mergeId, row.mergedFromId]);
   }
 
   private async viewContext(ledgerId: string, viewerUserId: string): Promise<ViewContext> {
@@ -1338,8 +1531,16 @@ export class TransactionsService {
     row: TransactionRow,
     viewerUserId: string,
     context?: ViewContext,
-    access: LedgerAccess = 'MEMBER',
   ): Transaction {
+    const group = row.mergeId ? context?.mergeRows?.get(this.mergeKey(row)) : undefined;
+    const share = group?.find((item) => this.isIncomeExpense(item.type));
+    const advance = group?.find(
+      (item) =>
+        (share?.type === 'EXPENSE' && item.type === 'LEND') ||
+        (share?.type === 'INCOME' && item.type === 'BORROW'),
+    );
+    // 查代墊 id 也回同一個代表列，讓明細、編輯與列表具有相同的識別與金額。
+    if (share && advance) row = share;
     const payer =
       context?.shared && this.isIncomeExpense(row.type) && !row.splitId && !row.debtEntry
         ? (context.people.get(row.payerPersonId ?? '') ??
@@ -1391,7 +1592,7 @@ export class TransactionsService {
     return {
       id: row.id,
       type: row.type,
-      amount: row.amount,
+      amount: row.amount + (share && advance ? advance.amount : 0),
       date: row.date.toISOString(),
       note: row.note,
       title: row.title,
@@ -1410,8 +1611,11 @@ export class TransactionsService {
       payer,
       ledgerSplit,
       settlement,
-      // 退出者不能補帳戶，不能在唯讀回應裡提示可寫入的待補狀態。
-      accountPending: access === 'LEFT' ? false : accountPending,
+      // 合併來的、或我已合併過的原交易不再待補（3k 決策 199）；重新加入後沒帳戶的照決策 191 待補。
+      accountPending:
+        row.mergeId || context?.mergedOriginalIds?.has(row.id)
+          ? false
+          : accountPending || Boolean(payer?.userId === viewerUserId && !row.account),
       differenceOfId: row.differenceOfId ?? null,
       difference:
         row.difference && row.difference.deletedAt === null
@@ -1419,6 +1623,13 @@ export class TransactionsService {
               id: row.difference.id,
               type: row.difference.type as 'EXPENSE' | 'INCOME',
               amount: row.difference.amount,
+            }
+          : null,
+      merge:
+        row.mergeId && row.merge?.userId === viewerUserId
+          ? {
+              sourceLedgerName: row.merge.sourceLedgerName,
+              share: share && advance ? share.amount : null,
             }
           : null,
       createdAt: row.createdAt.toISOString(),

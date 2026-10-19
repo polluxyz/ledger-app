@@ -19,7 +19,7 @@ describe('LedgerDebtsService.groups', () => {
   });
   const debts: MyLedgerDebt[] = [
     {
-      ledger: { id: 'z', name: '乙帳本', left: false },
+      ledger: { id: 'z', name: '乙帳本' },
       people: [
         person('member', 'MEMBER', 0),
         person('guest', 'GUEST', 200, true),
@@ -27,11 +27,11 @@ describe('LedgerDebtsService.groups', () => {
       ],
     },
     {
-      ledger: { id: 'a', name: '甲帳本', left: true },
+      ledger: { id: 'a', name: '甲帳本' },
       people: [person('stillOwed', 'MEMBER', -100), person('zero', 'GUEST', 0)],
     },
     {
-      ledger: { id: 'empty', name: '丙帳本', left: true },
+      ledger: { id: 'empty', name: '丙帳本' },
       people: [person('zeroLeft', 'MEMBER', 0)],
     },
   ];
@@ -40,9 +40,9 @@ describe('LedgerDebtsService.groups', () => {
 
   it('sorts groups and retains current people plus nonzero left people', async () => {
     const groups = await service.groups('owner');
-    expect(groups.map(({ ledger }) => ledger.id)).toEqual(['z', 'a']);
+    expect(groups.map(({ ledger }) => ledger.id)).toEqual(['z', 'empty', 'a']);
     expect(groups[0]!.people.map(({ person }) => person.id)).toEqual(['member', 'guest']);
-    expect(groups[1]!.people.map(({ person }) => person.id)).toEqual(['stillOwed']);
+    expect(groups[2]!.people.map(({ person }) => person.id)).toEqual(['stillOwed', 'zero']);
   });
 
   it('keeps only nonzero unpointed people and omits empty groups', async () => {
@@ -58,18 +58,18 @@ describe('LedgerDebtsService.groups with hasSettlements', () => {
     amount,
     pointer: { counterpartyId: null, auto: true },
   });
-  // 現任的「乙帳本」（還有轉帳）、已退出且沒有轉帳的「甲帳本」、沒有結清的「丙帳本」。
+  // 三本都是現任成員的帳本；甲沒有未結清金額，丙沒有結清歷史。
   const debts: MyLedgerDebt[] = [
     {
-      ledger: { id: 'z', name: '乙帳本', left: false },
+      ledger: { id: 'z', name: '乙帳本' },
       people: [person('member', 'MEMBER', 0), person('gone', 'LEFT', 0)],
     },
     {
-      ledger: { id: 'a', name: '甲帳本', left: true },
+      ledger: { id: 'a', name: '甲帳本' },
       people: [],
     },
     {
-      ledger: { id: 'empty', name: '丙帳本', left: false },
+      ledger: { id: 'empty', name: '丙帳本' },
       people: [person('zero', 'GUEST', 0)],
     },
   ];
@@ -94,19 +94,23 @@ describe('LedgerDebtsService.groups with hasSettlements', () => {
 
     // 排序照現行規則（依帳本名稱的 zh-Hant 定序）：乙（1 劃）在甲（5 劃）前面。
     expect(groups.map(({ ledger }) => ledger.id)).toEqual(['z', 'a']);
-    // 已退出且沒有轉帳的帳本也列出（不受「已退出只在還有轉帳時列」的限制），
-    // people 照現行規則——沒有轉帳就是空的。
+    // 沒有未結清金額的現任帳本仍可列出結清歷史。
     expect(groups[0]).toMatchObject({
       ledger: { id: 'z' },
       settlementCount: 3,
     });
     expect(groups[1]).toMatchObject({
-      ledger: { id: 'a', left: true },
+      ledger: { id: 'a' },
       people: [],
       settlementCount: 1,
     });
     // 筆數是一次查詢取回，不是逐本帳本查。
     expect(queryRaw).toHaveBeenCalledTimes(1);
+    const sql = (queryRaw.mock.calls as Array<[{ sql: string; values: unknown[] }]>)[0]![0];
+    expect(sql.sql).toContain('JOIN "LedgerMember" mem');
+    expect(sql.sql).not.toContain('LEFT JOIN "LedgerMember"');
+    expect(sql.sql).not.toContain('JOIN "LedgerPerson"');
+    expect(sql.values).toEqual(['owner']);
   });
 
   it('omits ledgers without visible settlements', async () => {
@@ -128,5 +132,20 @@ describe('LedgerDebtsService.groups with hasSettlements', () => {
     for (const group of groups) {
       expect('settlementCount' in group).toBe(false);
     }
+  });
+});
+
+/** 查詢必須先限定目前仍有成員資格的共享帳本，不能靠人物列判定存取。 */
+describe('LedgerDebtsService.loadMyLedgerDebts', () => {
+  it('queries only shared ledgers with a current membership', async () => {
+    const ledger = { findMany: jest.fn().mockResolvedValue([]) };
+    const service = new LedgerDebtsService(
+      { ledger } as unknown as PrismaService,
+      {} as LedgerPeopleService,
+    );
+    expect(await service.loadMyLedgerDebts('me')).toEqual([]);
+    expect(ledger.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { kind: 'SHARED', members: { some: { userId: 'me' } } } }),
+    );
   });
 });

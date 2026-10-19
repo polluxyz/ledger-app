@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Counterparty, LedgerGroup } from '@ledger/shared';
 import { LedgerGroupSection } from './LedgerGroupSection';
@@ -17,7 +17,7 @@ const counterparty: Counterparty = {
 };
 
 const group: LedgerGroup = {
-  ledger: { id: 'ledger-1', name: '家用帳本', left: false },
+  ledger: { id: 'ledger-1', name: '家用帳本' },
   people: [
     {
       person: { id: 'person-1', name: '小安', userId: 'user-2', status: 'MEMBER' },
@@ -32,7 +32,7 @@ const group: LedgerGroup = {
   ],
 };
 
-// 以 mock API 型別驗證帳本群組照回應順序呈現標籤、人名、指向，並覆蓋已退出時的唯讀狀態。
+// 以 mock API 型別驗證帳本群組照回應順序呈現標籤、人名與指向。
 describe('LedgerGroupSection', () => {
   it('shows the ledger labels, API-ordered people, pointer name, and guest badge', () => {
     render(
@@ -45,22 +45,5 @@ describe('LedgerGroupSection', () => {
     expect(screen.getByText('虛擬成員')).toBeInTheDocument();
     const names = screen.getAllByText(/^(小安|室友)$/);
     expect(names.map((name) => name.textContent)).toEqual(['小安', '室友']);
-  });
-
-  it('marks an exited ledger and does not offer pointer buttons or open people details', () => {
-    const onSetPointer = vi.fn();
-    render(
-      <LedgerGroupSection
-        group={{ ...group, ledger: { ...group.ledger, left: true } }}
-        counterparties={[counterparty]}
-        onSetPointer={onSetPointer}
-      />,
-    );
-
-    expect(screen.getByText('已退出')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '指向' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '小安' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('小安'));
-    expect(onSetPointer).not.toHaveBeenCalled();
   });
 });

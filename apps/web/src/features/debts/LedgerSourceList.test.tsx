@@ -14,7 +14,6 @@ describe('LedgerSourceList', () => {
       personId: 'person-ming',
       personName: '明哥',
       amount: 51200,
-      left: false,
     },
     {
       ledgerId: 'ledger-old-home',
@@ -22,7 +21,6 @@ describe('LedgerSourceList', () => {
       personId: 'person-xiao',
       personName: '小明',
       amount: -2500,
-      left: true,
     },
   ];
 
@@ -40,7 +38,6 @@ describe('LedgerSourceList', () => {
     expect(screen.queryByText('-$25')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '明哥欠你 $512' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '你欠小明 $25' })).toBeInTheDocument();
-    expect(screen.getByText('已退出')).toBeInTheDocument();
 
     const sourceButton = screen.getByRole('button', { name: '明哥欠你 $512' });
     expect(sourceButton.classList.contains(rowStyles.row!)).toBe(true);

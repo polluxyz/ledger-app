@@ -128,8 +128,7 @@ export class SettlementTransactionDto implements Transaction {
 
   @ApiProperty({
     type: Boolean,
-    description:
-      '這一邊在檢視者本人的臨時帳戶（付錢或收錢的那位，3h 決策 168）；已退出者恆為 false。',
+    description: '這一邊在檢視者本人的臨時帳戶（付錢或收錢的那位，3h 決策 168）。',
   })
   accountPending!: boolean;
 
@@ -138,6 +137,9 @@ export class SettlementTransactionDto implements Transaction {
 
   @ApiProperty({ type: Object, nullable: true, description: '結清沒有分支，恆為 null。' })
   difference!: null;
+
+  @ApiProperty({ type: Object, nullable: true, description: '結清不是合併來的，恆為 null（3k）。' })
+  merge!: null;
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;

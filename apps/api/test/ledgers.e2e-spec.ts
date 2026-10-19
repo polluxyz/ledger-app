@@ -234,9 +234,7 @@ describe('Ledgers & members (e2e)', () => {
       .delete(`/api/ledgers/${ledgerId}?confirm=Family`)
       .set(auth(alice.token));
     expect(blocked.status).toBe(409);
-    expect((blocked.body as { errorCode: string }).errorCode).toBe(
-      'LEDGER_HAS_OTHERS_TRANSACTIONS',
-    );
+    expect((blocked.body as { errorCode: string }).errorCode).toBe('LEDGER_HAS_OTHER_MEMBERS');
   });
 
   // ── 帳本類型（2d） ────────────────────────────────────────────────────────
@@ -324,10 +322,9 @@ describe('Ledgers & members (e2e)', () => {
       .send({ email: 'bob@example.com', role: 'EDITOR' });
 
     // Bob 自行退出，帳本只剩 Alice 一個人。
-    const left = await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${bob.userId}`)
-      .set(auth(bob.token));
-    expect(left.status).toBe(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId, userId: bob.userId } },
+    });
 
     const detail = await request(server()).get(`/api/ledgers/${ledgerId}`).set(auth(alice.token));
     expect((detail.body as LedgerSummary).kind).toBe('SHARED');

@@ -132,12 +132,12 @@ describe('PointerDialog', () => {
     const user = userEvent.setup();
     renderDialog();
     fetchMock.mockImplementation(() =>
-      jsonResponse({ statusCode: 409, message: '帳本已退出', error: 'Conflict' }, 409),
+      jsonResponse({ statusCode: 409, message: '帳本已封存', error: 'Conflict' }, 409),
     );
 
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('帳本已退出');
+    expect(await screen.findByRole('alert')).toHaveTextContent('帳本已封存');
     expect(screen.getByRole('dialog', { name: '小安' })).toBeInTheDocument();
   });
 });

@@ -5,10 +5,6 @@ import { AppException } from '../../common/exceptions/app.exception';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LedgerAccessGuard } from './ledger-access.guard';
 import { REQUIRE_LEDGER_ROLE_KEY } from '../../common/decorators/require-ledger-role.decorator';
-import {
-  LEFT_MEMBER_ACCESS_KEY,
-  LeftMemberPolicy,
-} from '../../common/decorators/left-member-access.decorator';
 import { ALLOW_ON_ARCHIVED_KEY } from '../../common/decorators/allow-on-archived.decorator';
 
 function contextFor(ledgerId: string | undefined, method = 'GET'): ExecutionContext {
@@ -34,17 +30,14 @@ describe('LedgerAccessGuard', () => {
     ledger: { findUnique: jest.Mock };
   };
   let requiredRole: LedgerRole | undefined;
-  let leftPolicy: LeftMemberPolicy | undefined;
   let allowOnArchived: boolean;
 
   beforeEach(() => {
     requiredRole = undefined;
-    leftPolicy = undefined;
     allowOnArchived = false;
     reflector = {
       getAllAndOverride: jest.fn((key: string) => {
         if (key === REQUIRE_LEDGER_ROLE_KEY) return requiredRole;
-        if (key === LEFT_MEMBER_ACCESS_KEY) return leftPolicy;
         if (key === ALLOW_ON_ARCHIVED_KEY) return allowOnArchived;
         return undefined;
       }),
@@ -122,72 +115,28 @@ describe('LedgerAccessGuard', () => {
     });
   });
 
-  it('keeps a current member as MEMBER on a read-marked route', async () => {
+  it('allows a current member to read', async () => {
     requiredRole = 'VIEWER';
-    leftPolicy = 'read';
     prisma.ledgerMember.findUnique.mockResolvedValue({ role: 'EDITOR' });
     const context = contextFor('ledger-1');
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(context.switchToHttp().getRequest<{ ledgerAccess: string }>().ledgerAccess).toBe(
-      'MEMBER',
-    );
     expect(prisma.ledgerPerson.findUnique).not.toHaveBeenCalled();
   });
 
-  describe('left member opt-in', () => {
-    beforeEach(() => {
+  it.each(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])(
+    'rejects former members on %s without querying their person',
+    async (method) => {
       requiredRole = 'VIEWER';
       prisma.ledgerMember.findUnique.mockResolvedValue(null);
-      prisma.ledgerPerson.findUnique.mockResolvedValue({ id: 'person-1' });
-    });
-
-    it('keeps an unmarked route at 404 without a person lookup', async () => {
-      await expect(guard.canActivate(contextFor('ledger-1'))).rejects.toMatchObject({
+      prisma.ledgerPerson.findUnique.mockResolvedValue({ id: 'former-person' });
+      await expect(guard.canActivate(contextFor('ledger-1', method))).rejects.toMatchObject({
+        status: 404,
         errorCode: 'NOT_FOUND',
       });
       expect(prisma.ledgerPerson.findUnique).not.toHaveBeenCalled();
-    });
-
-    it('allows a read-marked GET and records LEFT access', async () => {
-      leftPolicy = 'read';
-      const context = contextFor('ledger-1');
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(context.switchToHttp().getRequest<{ ledgerAccess: string }>().ledgerAccess).toBe(
-        'LEFT',
-      );
-      expect(prisma.ledgerPerson.findUnique).toHaveBeenCalledWith({
-        where: { ledgerId_userId: { ledgerId: 'ledger-1', userId: 'user-1' } },
-        select: { id: true },
-      });
-    });
-
-    it('returns 404 for a read-marked write', async () => {
-      leftPolicy = 'read';
-      await expect(guard.canActivate(contextFor('ledger-1', 'POST'))).rejects.toMatchObject({
-        errorCode: 'NOT_FOUND',
-      });
-    });
-
-    it('returns LEDGER_LEFT for a reject-marked route', async () => {
-      leftPolicy = 'reject';
-      await expect(guard.canActivate(contextFor('ledger-1', 'PUT'))).rejects.toMatchObject({
-        status: 409,
-        errorCode: 'LEDGER_LEFT',
-      });
-    });
-
-    it.each([undefined, 'read', 'reject'] as const)(
-      'keeps never-members at 404 with policy %s',
-      async (policy) => {
-        leftPolicy = policy;
-        prisma.ledgerPerson.findUnique.mockResolvedValue(null);
-        await expect(guard.canActivate(contextFor('ledger-1'))).rejects.toMatchObject({
-          errorCode: 'NOT_FOUND',
-        });
-      },
-    );
-  });
+    },
+  );
 
   describe('archived ledgers are read-only', () => {
     beforeEach(() => {
@@ -222,9 +171,6 @@ describe('LedgerAccessGuard', () => {
       const context = contextFor('ledger-1', 'PUT');
       await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(prisma.ledger.findUnique).not.toHaveBeenCalled();
-      expect(context.switchToHttp().getRequest<{ ledgerAccess: string }>().ledgerAccess).toBe(
-        'MEMBER',
-      );
       expect(prisma.ledgerPerson.findUnique).not.toHaveBeenCalled();
     });
   });

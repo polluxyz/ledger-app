@@ -23,5 +23,6 @@ export * from './split-shares';
 export * from './types/ledger-split';
 export * from './ledger-settlement';
 export * from './types/ledger-pointer';
+export * from './types/ledger-leave';
 export * from './ledger-debts';
 export * from './entry-labels';

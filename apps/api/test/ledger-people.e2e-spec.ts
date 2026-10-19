@@ -65,10 +65,9 @@ describe('Ledger people (e2e)', () => {
     const bobPerson = initial.find((person) => person.userId === bob.userId)!;
     expect(bobPerson.status).toBe('MEMBER');
 
-    await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${bob.userId}`)
-      .set(auth(bob.token))
-      .expect(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: ledgerId, userId: bob.userId } },
+    });
     const afterLeave = await listPeople(ledgerId, alice.token);
     expect(afterLeave).toHaveLength(3);
     expect(afterLeave.find((person) => person.id === bobPerson.id)?.status).toBe('LEFT');

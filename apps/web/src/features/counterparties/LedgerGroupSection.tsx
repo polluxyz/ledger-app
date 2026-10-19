@@ -25,7 +25,6 @@ export function LedgerGroupSection({
           {group.ledger.name}
         </h3>
         <span className={styles.badge}>共享帳本</span>
-        {group.ledger.left && <span className={styles.badge}>已退出</span>}
       </div>
 
       <ul className={styles.list}>
@@ -44,16 +43,14 @@ export function LedgerGroupSection({
                 )}
                 {entry.person.status === 'GUEST' && <span className={styles.badge}>虛擬成員</span>}
               </div>
-              {!group.ledger.left && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className={styles.pointerButton}
-                  onClick={() => onSetPointer(entry)}
-                >
-                  指向
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="secondary"
+                className={styles.pointerButton}
+                onClick={() => onSetPointer(entry)}
+              >
+                指向
+              </Button>
             </li>
           );
         })}

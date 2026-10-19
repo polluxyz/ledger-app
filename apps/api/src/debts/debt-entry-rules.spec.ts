@@ -136,13 +136,14 @@ describe('debt-entry-rules', () => {
               category: { select: { icon: true } },
             },
           },
+          merge: { select: { sourceLedgerName: true } },
         },
       });
     });
   });
 
   describe('toDebtEntry', () => {
-    const row = (transaction: unknown) =>
+    const row = (transaction: unknown, merge: unknown = null) =>
       ({
         id: 'e-1',
         counterpartyId: 'cp-1',
@@ -157,6 +158,7 @@ describe('debt-entry-rules', () => {
         createdAt: new Date('2026-10-18T00:00:00.000Z'),
         updatedAt: new Date('2026-10-18T00:00:00.000Z'),
         transaction,
+        merge,
       }) as never;
 
     // 分類圖示攤平成 categoryIcon，借還頁的紀錄列不必另外查分類。
@@ -172,6 +174,14 @@ describe('debt-entry-rules', () => {
         categoryIcon: null,
       });
       expect(toDebtEntry(row(null)).recorded).toBeNull();
+    });
+
+    // 帳本轉入帶出合併紀錄裡的來源帳本名稱（W192）；其他種類沒有合併紀錄，回 null。
+    it('exposes the source ledger name only when the entry has a merge', () => {
+      expect(toDebtEntry(row(null, { sourceLedgerName: '花蓮三日' })).merge).toEqual({
+        sourceLedgerName: '花蓮三日',
+      });
+      expect(toDebtEntry(row(null)).merge).toBeNull();
     });
   });
 });

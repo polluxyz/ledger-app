@@ -228,10 +228,9 @@ describe('Split isolation (e2e)', () => {
         })
         .expect(201);
       const originalId = (original.body as Transaction).id;
-      await request(server())
-        .delete(`/api/ledgers/${shared}/members/${alice.userId}`)
-        .set(auth(bob.token))
-        .expect((res) => expect([200, 204]).toContain(res.status));
+      await prisma.ledgerMember.delete({
+        where: { ledgerId_userId: { ledgerId: shared, userId: alice.userId } },
+      });
 
       await postSplit(
         alice,

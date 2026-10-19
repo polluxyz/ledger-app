@@ -9,29 +9,49 @@ import { useArchiveLedger, useDeleteLedger, useRemovalPreview } from './use-ledg
 import confirmStyles from '../../components/ConfirmDialog.module.css';
 import { Button } from '../../components/Button';
 import styles from './DeleteLedgerDialog.module.css';
+import type { LedgerKind } from '@ledger/shared';
+import { LeaveLedgerDialog } from './LeaveLedgerDialog';
 
 interface DeleteLedgerDialogProps {
   ledgerId: string;
   ledgerName: string;
+  ledgerKind?: LedgerKind;
   onCancel: () => void;
   onDeleted: () => void;
   onArchived: () => void;
 }
 
 const BLOCKED_REASON = {
+  HAS_OTHER_MEMBERS: '還有其他成員，只能封存',
   HAS_OTHERS_TRANSACTIONS: '有其他成員的交易，只能封存',
   SHARED_HAS_DEBTS: '有借還或分帳，只能封存',
   LEDGER_ARCHIVED: '帳本已封存',
 } as const;
 
 /** 刪除帳本前的伺服器預覽與確認。金額、方向與可刪條件全由 API 提供。 */
-export function DeleteLedgerDialog({
+export function DeleteLedgerDialog({ ledgerKind = 'PERSONAL', ...props }: DeleteLedgerDialogProps) {
+  if (ledgerKind === 'SHARED') {
+    return (
+      <LeaveLedgerDialog
+        ledgerId={props.ledgerId}
+        ledgerName={props.ledgerName}
+        mode="delete"
+        onCancel={props.onCancel}
+        onCompleted={props.onDeleted}
+        onArchived={props.onArchived}
+      />
+    );
+  }
+  return <PrivateDeleteLedgerDialog {...props} />;
+}
+
+function PrivateDeleteLedgerDialog({
   ledgerId,
   ledgerName,
   onCancel,
   onDeleted,
   onArchived,
-}: DeleteLedgerDialogProps) {
+}: Omit<DeleteLedgerDialogProps, 'ledgerKind'>) {
   const preview = useRemovalPreview(ledgerId);
   const archive = useArchiveLedger();
   const remove = useDeleteLedger();

@@ -106,12 +106,13 @@
 
 ### 2.4 最後一個人、移除成員
 
-| #   | 決策                                                                                                                                                                                                                                                                                                                                          | 來源    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 204 | **放寬 3j 決策 187**：共享帳本只剩我一個成員時可以刪除。刪除也提供合併（同一個對話框，多帳本名稱欄）。擋下的條件改成：還有其他成員 → 409 `LEDGER_HAS_OTHER_MEMBERS`；有交易記到別人的帳戶 → 409 `LEDGER_HAS_OTHERS_TRANSACTIONS`（照舊）。拿掉「有別人記的交易」（`creatorId`）這一條：別人退出時帳戶已經清掉，留下的交易不會改到任何人的餘額 | 開發者  |
-| 205 | 3j 決策 186 的「共享帳本照舊」拿掉：只剩我一個成員時，我在這本帳本的個人借還比照合併（勾選的搬走、沒勾的撤銷）                                                                                                                                                                                                                                | advisor |
-| 206 | **擁有者不能移除還有帳的成員**：對方在這本帳本有記到他帳戶的交易，或有他的個人借還、個人分帳 → 409 `MEMBER_HAS_TRANSACTIONS`。擁有者只能把他改成檢視者，由他自己退出、自己決定合併。沒有帳的成員照舊可以移除                                                                                                                                  | advisor |
-| 207 | 自己退出一律走新的退出端點。舊的 `DELETE /ledgers/{id}/members/{自己}` → 409 `LEAVE_REQUIRES_MERGE`，避免舊畫面在使用者不知情時清掉帳戶。最後一位擁有者不能退出（`LAST_OWNER_CANNOT_LEAVE`）照舊                                                                                                                                              | 設計    |
+| #   | 決策                                                                                                                                                                                                                                                                                                                                                                | 來源    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 204 | **放寬 3j 決策 187**：共享帳本只剩我一個成員時可以刪除。刪除也提供合併（同一個對話框，多帳本名稱欄）。擋下的條件改成：還有其他成員 → 409 `LEDGER_HAS_OTHER_MEMBERS`；有交易記到別人的帳戶 → 409 `LEDGER_HAS_OTHERS_TRANSACTIONS`（照舊）。拿掉「有別人記的交易」（`creatorId`）這一條：別人退出時帳戶已經清掉，留下的交易不會改到任何人的餘額                       | 開發者  |
+| 205 | 3j 決策 186 的「共享帳本照舊」拿掉：只剩我一個成員時，我在這本帳本的個人借還比照合併（勾選的搬走、沒勾的撤銷）                                                                                                                                                                                                                                                      | advisor |
+| 206 | **擁有者不能移除還有帳的成員**：對方在這本帳本有記到他帳戶的交易，或有他的個人借還、個人分帳 → 409 `MEMBER_HAS_TRANSACTIONS`。擁有者只能把他改成檢視者，由他自己退出、自己決定合併。沒有帳的成員照舊可以移除                                                                                                                                                        | advisor |
+| 207 | 自己退出一律走新的退出端點。舊的 `DELETE /ledgers/{id}/members/{自己}` → 409 `LEAVE_REQUIRES_MERGE`，避免舊畫面在使用者不知情時清掉帳戶。最後一位擁有者不能退出（`LAST_OWNER_CANNOT_LEAVE`）照舊                                                                                                                                                                    | 設計    |
+| 208 | **被加回時撤銷上次的帳本轉入**：重新加入同一本帳本時，我上次退出這本帳本留下的帳本轉入（`LEDGER_CARRY_OVER`，`merge` 的來源是這本帳本、合併者是我）一律撤銷（軟刪除）。這筆錢回到帳本裡算，借還頁的總額不會重複；再退出時照決策 198 依當下金額重新轉入。只撤銷被加回者自己的帳本轉入，其他人的不動；帳本轉入不送提議，撤銷也不送。已合併過的交易照決策 199 不再合併 | 開發者  |
 
 ### 2.5 畫面
 
@@ -137,11 +138,11 @@ model LedgerMerge {
   userId           String
   sourceLedgerId   String   // 不設外鍵：來源帳本刪掉後合併的帳要留著
   sourceLedgerName String   // 當下的名稱，畫面標來源用
-  targetLedgerId   String?  // 全部取消勾選時為 null
+  targetLedgerId   String?  // 全部取消勾選、或目標帳本之後被刪掉時為 null
   createdAt        DateTime @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: Cascade)
+  targetLedger Ledger?       @relation(fields: [targetLedgerId], references: [id], onDelete: SetNull)
   transactions Transaction[]
   debtEntries  DebtEntry[]
 
@@ -172,6 +173,8 @@ model DebtEntry {
 }
 ```
 
+刪除目標帳本時，合併來的交易跟著帳本刪掉，`LedgerMerge` 留著、`targetLedgerId` 變 `null`（開發者 2026-10-19 核可，原本是 `Cascade`）。帳本轉入的往來紀錄仍指向它，W192 的來源帳本名稱才不會消失；若是 `Cascade`，有帳本轉入時刪除目標帳本會被 `DebtEntry.mergeId` 的 `Restrict` 擋下。
+
 CHECK：
 
 - `Transaction`：`mergedFromId` 有值 ⇔ `mergeId` 有值。
@@ -184,7 +187,7 @@ CHECK：
 
 不改餘額公式。退出時清帳戶（決策 190）、合併寫入、撤銷沒勾的借還，都在同一個資料庫交易。
 
-部署：migration 只加表、加欄位、加 enum 值、加 CHECK，不動既有資料。部署前備份 `ledger_dev`。
+部署：2 個 migration。第一個加表、加欄位、加 enum 值、加 CHECK；第二個把 `LedgerMerge.targetLedgerId` 的外鍵改成 `SET NULL`。都不動既有資料。部署前備份 `ledger_dev`。
 
 ---
 
@@ -255,6 +258,7 @@ body 同 `LeaveRequest`。成功 204。
 
 ### 4.3 既有端點的改變
 
+- `POST /ledgers/{id}/members`：加回曾退出的人時，撤銷他上次退出這本帳本留下的帳本轉入（決策 208）。回應不變。
 - `DELETE /ledgers/{id}/members/{自己}` → 409 `LEAVE_REQUIRES_MERGE`（決策 207）。
 - `DELETE /ledgers/{id}/members/{別人}`：對方有帳 → 409 `MEMBER_HAS_TRANSACTIONS`（決策 206）。
 - `DELETE /ledgers/{id}`、`GET /ledgers/{id}/removal-preview`：共享帳本改照決策 204 判斷；只剩我一個時預覽回 `blockedBy: null`，畫面改用 §4.1、§4.2。
@@ -262,7 +266,9 @@ body 同 `LeaveRequest`。成功 204。
 - `PATCH /ledgers/{id}/transactions/{tid}` 補帳戶：這筆我合併過 → 409 `TRANSACTION_ALREADY_MERGED`（決策 199）；回應的 `accountPending` 對合併過的為 `false`。
 - 合併來的交易：可以改名稱、分類、帳戶與刪除，其他欄位 → 400（決策 202）。兩筆內部紀錄一起改、一起刪。
 - `Transaction` 回應多 `merge: { sourceLedgerName: string; share: Cents | null } | null`。
+- `DebtEntry` 回應多 `merge: { sourceLedgerName: string } | null`：帳本轉入才有值，往來紀錄列用它顯示帳本名（W192；開發者 2026-10-19 核可補進契約）。
 - 借還頁、對象頁、統計的共享帳本部分：只算我現在是成員的帳本（決策 189）。
+- 拿掉 3f 的「已退出」欄位：`LedgerDetail.left`、`LedgerGroup.ledger.left`、`CounterpartyLedgerPart.left`，以及錯誤碼 `LEDGER_LEFT`。決策 189 之後已退出的帳本一律 404，這些欄位恆為 `false`（開發者 2026-10-19 同意拿掉）。畫面上的「已退出」標籤與唯讀分支一併拿掉。
 
 ### 4.4 shared
 
@@ -278,7 +284,7 @@ body 同 `LeaveRequest`。成功 204。
 - **SC-K2**（取消勾選）：取消勾選住宿 → 預覽信用卡的 `balanceAfter` 比 `balance` 多 300000（分），執行後 `GET /accounts` 等於預覽；小華的帳本轉入照樣有。
 - **SC-K3**（退出後不再算）：退出後 `GET /accounts`、借還頁、對象頁、統計都不含花蓮三日；`GET /ledgers/{花蓮三日}` → 404。
 - **SC-K4**（已退出的人當付款人）：我退出後小明記「我付的」→ 交易 `accountId` 為 `null`；我的帳戶餘額不變。結清同理。
-- **SC-K5**（重新加入）：退出並合併後被加回 → 帳戶餘額不變；合併過的交易沒有「帳戶待補」、補帳戶 → 409 `TRANSACTION_ALREADY_MERGED`；沒合併的可以補。
+- **SC-K5**（重新加入）：退出並合併後被加回 → 帳戶餘額不變；合併過的交易沒有「帳戶待補」、補帳戶 → 409 `TRANSACTION_ALREADY_MERGED`；沒合併的可以補。上次的帳本轉入已撤銷，借還頁對那個人的總額跟退出前一樣；再退出只有一筆帳本轉入、已合併過的交易不再合併（決策 208）。
 - **SC-K6**（個人借還搬家）：我在花蓮三日記的借明哥 $500（連動）→ 勾選：交易改到目標帳本，配對與往來餘額不變，明哥沒收到提議；不勾：照 3j 撤銷，明哥收到撤銷提議。
 - **SC-K7**（分類）：目標帳本有「住宿」就用它；沒有就建一個同名同圖示的；合併來的交易不會指到來源帳本的分類。
 - **SC-K8**（最後一個人刪除）：其他人都退出後，擁有者帶 `deleteLedger` → 204，帳本消失，合併的帳在目標帳本。還有其他成員 → 409 `LEDGER_HAS_OTHER_MEMBERS`。
@@ -302,7 +308,7 @@ body 同 `LeaveRequest`。成功 204。
 
 ## 8. 部署與資料
 
-- 1 個 migration：加表、加欄位、加 enum 值、加 CHECK，不動既有資料。部署前備份 `ledger_dev`，`migrate deploy`，build，重開 API。
+- 2 個 migration：加表、加欄位、加 enum 值、加 CHECK；再把 `LedgerMerge.targetLedgerId` 的外鍵改成 `SET NULL`。都不動既有資料。部署前備份 `ledger_dev`，`migrate deploy`，build，重開 API。
 - 部署前查一次「已退出、帳戶還在算」的成員（§1 的查詢），應為 0。不是 0 → 照 2026-10-18 的作法先加回，不寫特別的程式。
 - 上線後請 d@d.com、a2@a.com 用新流程退出（開發者 2026-10-18 同意）。
 

@@ -7,7 +7,7 @@ import { UnpointedLedgerGroups } from './UnpointedLedgerGroups';
 describe('UnpointedLedgerGroups', () => {
   const groups: LedgerGroup[] = [
     {
-      ledger: { id: 'ledger-hualien', name: '花蓮三日', left: true },
+      ledger: { id: 'ledger-hualien', name: '花蓮三日' },
       people: [
         {
           person: { id: 'person-xiao', name: '小明', userId: null, status: 'GUEST' },
@@ -24,11 +24,10 @@ describe('UnpointedLedgerGroups', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('labels exited ledgers and keeps source rows read-only', () => {
+  it('shows each ledger with read-only source rows', () => {
     render(<UnpointedLedgerGroups groups={groups} />);
 
     expect(screen.getByText('花蓮三日')).toBeInTheDocument();
-    expect(screen.getByText('已退出')).toBeInTheDocument();
     expect(screen.getByText('你欠小明 $512')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });

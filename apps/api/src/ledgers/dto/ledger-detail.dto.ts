@@ -18,5 +18,4 @@ export class LedgerDetailDto implements LedgerDetail {
   @ApiProperty({ type: String, format: 'date-time', nullable: true }) archivedAt!: string | null;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
   @ApiProperty({ type: [LedgerMemberDto] }) members!: LedgerMemberDto[];
-  @ApiProperty() left!: boolean;
 }

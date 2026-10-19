@@ -35,6 +35,7 @@ describe('DebtEntriesList', () => {
     splitId: null,
     settlesEntryId: null,
     difference: null,
+    merge: null,
     sync: 'NONE',
     paired: false,
     createdAt: '2026-09-01T04:00:00.000Z',
@@ -142,6 +143,38 @@ describe('DebtEntriesList', () => {
     // 沒名稱、沒分類的紀錄不多出空的名稱格。
     expect(plain!.querySelector(`.${styles.title}`)).toBeNull();
     expect(unrecorded!.querySelector(`.${styles.title}`)).toBeNull();
+  });
+
+  it('uses the existing carry-over label when the debt entry has no source ledger name', () => {
+    renderList([
+      entry({
+        kind: 'LEDGER_CARRY_OVER',
+        delta: 5000,
+        transactionId: null,
+        recorded: null,
+      }),
+    ]);
+
+    const row = screen.getByRole('listitem');
+    expect(within(row).getByText('帳本轉入')).toBeInTheDocument();
+    expect(within(row).queryByText('未記帳')).not.toBeInTheDocument();
+  });
+
+  it('names a carry-over row after its source ledger (W192)', () => {
+    renderList([
+      entry({
+        kind: 'LEDGER_CARRY_OVER',
+        delta: 50_000,
+        transactionId: null,
+        recorded: null,
+        merge: { sourceLedgerName: '花蓮三日' },
+      }),
+    ]);
+
+    const row = screen.getByRole('listitem');
+    expect(within(row).getByText('花蓮三日')).toBeInTheDocument();
+    expect(within(row).queryByText('帳本轉入')).not.toBeInTheDocument();
+    expect(within(row).queryByText('未記帳')).not.toBeInTheDocument();
   });
 
   it('omits the more-actions menu in read-only mode but keeps the split badge', () => {

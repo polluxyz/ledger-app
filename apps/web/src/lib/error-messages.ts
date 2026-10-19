@@ -38,6 +38,10 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   LEDGER_ARCHIVED: '這本帳本已封存，只能查看，不能再修改。',
   LEDGER_NOT_ARCHIVED: '這本帳本目前沒有封存。',
   LEDGER_HAS_OTHERS_TRANSACTIONS: '這本帳本還有其他成員記的交易，不能刪除。請改用封存。',
+  LEDGER_HAS_OTHER_MEMBERS: '這本帳本還有其他成員，只能封存。',
+  MEMBER_HAS_TRANSACTIONS: '這位成員在帳本裡有交易，只能改成檢視者。',
+  LEAVE_REQUIRES_MERGE: '退出前請先預覽並合併帳本資料。',
+  TRANSACTION_ALREADY_MERGED: '這筆交易已合併，不能再補帳戶。',
 
   // ── 共享帳本分帳與結清 ────────────────────────────────────────────────────
   LEDGER_SPLIT_NOT_ALLOWED: '這筆交易不能分帳。',

@@ -19,10 +19,7 @@ export function UnpointedLedgerGroups({ groups }: UnpointedLedgerGroupsProps) {
     <section className={styles.groups} aria-label="沒指向的共享帳本">
       {groups.map(({ ledger, people }) => (
         <section key={ledger.id} className={styles.group}>
-          <h3 className={styles.heading}>
-            {ledger.name}
-            {ledger.left && <span className={styles.left}>已退出</span>}
-          </h3>
+          <h3 className={styles.heading}>{ledger.name}</h3>
           <ul className={styles.people}>
             {people.map(({ person, amount }) => (
               <li key={person.id} className={styles.item}>

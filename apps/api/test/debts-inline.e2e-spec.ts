@@ -418,31 +418,23 @@ describe('Debts inline scenario (e2e)', () => {
       .expect(200)
       .then((res) => res.body as LedgerGroup[]);
     const groupBefore = groupsBefore.find((group) => group.ledger.id === hualienId)!;
-    expect(groupBefore.ledger.left).toBe(false);
     expect(groupBefore.settlementCount).toBe(4);
 
-    // 退出花蓮三日：清單只剩我是任一方的結清，計數跟著縮。
+    // 3k：退出花蓮三日後不能打開結清清單，也不列入群組。
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: hualienId, userId: me.userId } },
+    });
     await request(server())
-      .delete(`/api/ledgers/${hualienId}/members/${me.userId}`)
-      .set(auth(me.token))
-      .expect(204);
-    const afterLeave = await request(server())
       .get(`/api/ledgers/${hualienId}/settlements`)
       .set(auth(me.token))
-      .expect(200)
-      .then((res) => res.body as Paginated<Transaction>);
-    expect(afterLeave.total).toBe(2);
-    expect(afterLeave.items.map((row) => row.id)).toEqual([mingToMe.id, huaToMe.id]);
-
+      .expect(404);
     const groupsAfter = await request(server())
       .get('/api/ledger-groups')
       .query({ hasSettlements: 'true' })
       .set(auth(me.token))
       .expect(200)
       .then((res) => res.body as LedgerGroup[]);
-    const groupAfter = groupsAfter.find((group) => group.ledger.id === hualienId)!;
-    expect(groupAfter.ledger.left).toBe(true);
-    expect(groupAfter.settlementCount).toBe(2);
+    expect(groupsAfter.map((group) => group.ledger.id)).not.toContain(hualienId);
 
     // ── spec §1 第 6 點：撤銷房東 3/6 的還款 ───────────────────────
     // SC-G4 把還款改成 93 時差額已經撤銷（之後是一般還款）。先把 3/6 還原成「還 90 以此

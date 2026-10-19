@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LedgerGroup, LedgerSummary, SettlementSummary } from '@ledger/shared';
+import type { LedgerSummary, SettlementSummary } from '@ledger/shared';
 import { SharedSettlementsView } from './SharedSettlementsView';
 
 vi.mock('../auth/use-current-user', () => ({
@@ -42,7 +42,6 @@ describe('SharedSettlementsView', () => {
   };
 
   let ledgersList: LedgerSummary[] = [sharedLedger];
-  let ledgerGroupsList: LedgerGroup[] = [];
 
   function renderView() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -57,7 +56,6 @@ describe('SharedSettlementsView', () => {
 
   beforeEach(() => {
     ledgersList = [sharedLedger];
-    ledgerGroupsList = [];
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     vi.stubGlobal('fetch', fetchMock);
@@ -67,14 +65,6 @@ describe('SharedSettlementsView', () => {
       if (urlStr.endsWith('/ledgers?includeArchived=true') || urlStr.endsWith('/ledgers')) {
         return Promise.resolve(
           new Response(JSON.stringify(ledgersList), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-      }
-      if (urlStr.endsWith('/ledger-groups')) {
-        return Promise.resolve(
-          new Response(JSON.stringify(ledgerGroupsList), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -133,46 +123,5 @@ describe('SharedSettlementsView', () => {
     renderView();
 
     expect(await screen.findByText('目前沒有共享帳本。')).toBeInTheDocument();
-  });
-
-  it('shows exited ledgers as read-only transfer tiles using each signed amount', async () => {
-    const user = userEvent.setup();
-    ledgerGroupsList = [
-      {
-        ledger: { id: 'ledger-left', name: '已退出的旅行', left: true },
-        people: [
-          {
-            person: { id: 'person-min', name: '小明', userId: 'user-min', status: 'LEFT' },
-            amount: 125000,
-            pointer: { counterpartyId: null, auto: true },
-          },
-          {
-            person: { id: 'person-mei', name: '阿美', userId: 'user-mei', status: 'LEFT' },
-            amount: -50000,
-            pointer: { counterpartyId: null, auto: true },
-          },
-        ],
-      },
-    ];
-
-    renderView();
-
-    expect(await screen.findByRole('heading', { name: '已退出的旅行 已退出' })).toBeInTheDocument();
-    const personToMe = await screen.findByText('小明欠我 $1,250');
-    const meToPerson = screen.getByText('我欠阿美 $500');
-    expect(personToMe.closest('button')).toBeNull();
-    expect(meToPerson.closest('button')).toBeNull();
-
-    await user.click(personToMe);
-    expect(screen.queryByLabelText('金額')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '已退出的旅行 已退出' })).toBeInTheDocument();
-  });
-
-  it('does not render an exited ledger that is absent from the ledger-groups response', async () => {
-    ledgerGroupsList = [];
-    renderView();
-
-    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
-    expect(screen.queryByText('已退出的旅行')).not.toBeInTheDocument();
   });
 });

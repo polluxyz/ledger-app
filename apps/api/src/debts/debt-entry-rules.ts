@@ -147,6 +147,8 @@ export const DEBT_ENTRY_INCLUDE = {
       category: { select: { icon: true } },
     },
   },
+  // 帳本轉入（3k W192）的來源帳本名稱；其他種類沒有合併紀錄，查出來是 null。
+  merge: { select: { sourceLedgerName: true } },
 } satisfies Prisma.DebtEntryInclude;
 
 type DebtEntryRow = Prisma.DebtEntryGetPayload<{ include: typeof DEBT_ENTRY_INCLUDE }>;
@@ -208,6 +210,7 @@ export function toDebtEntry(
     splitId: row.splitId,
     settlesEntryId: row.settlesEntryId,
     difference: extra.difference ?? null,
+    merge: row.merge ? { sourceLedgerName: row.merge.sourceLedgerName } : null,
     ...(balanceAfter !== undefined ? { balanceAfter } : {}),
     sync: sync ?? (row.pairedEntryId === null ? 'NONE' : 'SYNCED'),
     paired: row.pairedEntryId !== null,

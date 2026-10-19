@@ -136,10 +136,16 @@ export const ErrorCode = {
   SETTLEMENT_SAME_PERSON: 'SETTLEMENT_SAME_PERSON',
   /** 結清產生的交易只能從結清端點修改或刪除（3e 決策 132）。409。 */
   SETTLEMENT_TRANSACTION_READ_ONLY: 'SETTLEMENT_TRANSACTION_READ_ONLY',
-  /** 已退出帳本的人對那本帳本做寫入，含設定指向（3f §4.5）。409。 */
-  LEDGER_LEFT: 'LEDGER_LEFT',
   /** 單獨撤銷綁定在還款上的結清差額；要撤銷就撤銷那筆還款（3g 決策 157）。409。 */
   SETTLEMENT_BOUND_TO_REPAYMENT: 'SETTLEMENT_BOUND_TO_REPAYMENT',
+  /** 刪除共享帳本時還有其他成員（3k 決策 204）。409。 */
+  LEDGER_HAS_OTHER_MEMBERS: 'LEDGER_HAS_OTHER_MEMBERS',
+  /** 移除的成員在這本帳本還有帳，只能改成檢視者、由他自己退出（3k 決策 206）。409。 */
+  MEMBER_HAS_TRANSACTIONS: 'MEMBER_HAS_TRANSACTIONS',
+  /** 用舊的移除成員端點退出自己；退出一律走 `POST /ledgers/{id}/leave`（3k 決策 207）。409。 */
+  LEAVE_REQUIRES_MERGE: 'LEAVE_REQUIRES_MERGE',
+  /** 替合併過的交易補帳戶；它的帳已經在目標帳本（3k 決策 199）。409。 */
+  TRANSACTION_ALREADY_MERGED: 'TRANSACTION_ALREADY_MERGED',
   /** 用沒連動的對象加入帳本成員（3f §4.3）。400。 */
   COUNTERPARTY_NOT_LINKED: 'COUNTERPARTY_NOT_LINKED',
   /** 請求過於頻繁（被限流）。 */

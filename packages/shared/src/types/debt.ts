@@ -20,6 +20,9 @@ import type { Cents } from '../money';
  * `PAID_FOR_ME` 對方幫我付（delta < 0，沒有帳戶的支出）、`RECEIVED_FOR_THEM` 我幫對方收
  * （delta < 0，交易型別 `BORROW`）、`RECEIVED_FOR_ME` 對方幫我收（delta > 0，沒有帳戶的收入）。
  * 它們只能從分帳端點產生，或由接受對方的提議產生；連動的鏡像兩兩相對。
+ *
+ * `LEDGER_CARRY_OVER` 帳本轉入（3k 決策 198）：退出共享帳本時沒結清的錢。不產生交易、不動帳戶、
+ * 不送給對方確認；只能由退出端點產生。
  */
 export const DEBT_ENTRY_KINDS = [
   'LEND',
@@ -33,6 +36,7 @@ export const DEBT_ENTRY_KINDS = [
   'PAID_FOR_THEM',
   'RECEIVED_FOR_THEM',
   'RECEIVED_FOR_ME',
+  'LEDGER_CARRY_OVER',
 ] as const;
 export type DebtEntryKind = (typeof DEBT_ENTRY_KINDS)[number];
 
@@ -100,7 +104,7 @@ export interface Counterparty {
 
 /**
  * 對象總額的一個帳本來源（3f §4.2）。`amount` 正數＝對方欠我、負數＝我欠對方，不為 0。
- * `left` 為 `true` 代表我已退出那本帳本：只能打開唯讀畫面，不能記結清（W139）。
+ * 只列我現在是成員的帳本（3k 決策 189）。
  */
 export interface CounterpartyLedgerPart {
   ledgerId: string;
@@ -108,7 +112,6 @@ export interface CounterpartyLedgerPart {
   personId: string;
   personName: string;
   amount: Cents;
-  left: boolean;
 }
 
 /** 一筆往來紀錄。 */
@@ -153,6 +156,11 @@ export interface DebtEntry {
    * `accountId` 一定是我自己的帳戶；呆帳、債務免除沒有帳戶，為 `null`。沒有交易的舊資料整個為 `null`。
    */
   recorded: DebtEntryRecorded | null;
+  /**
+   * 帳本轉入（`LEDGER_CARRY_OVER`，3k 決策 198）的來源：往來紀錄列用它顯示帳本名（W192）。
+   * 其他種類為 `null`。
+   */
+  merge: DebtEntryMerge | null;
   /** 與對方的同步狀態（3b-2 §3.4），由後端算出。 */
   sync: DebtEntrySyncStatus;
   /** 是否與對方那邊的一筆紀錄配對。畫面用它決定改或刪之前要不要警告（決策 67）。 */
@@ -181,6 +189,11 @@ export interface DebtEntryRecorded {
   categoryId: string | null;
   /** 分類的圖示代號（借還頁紀錄列顯示用）；沒有分類或分類用通用圖示時為 null。 */
   categoryIcon: string | null;
+}
+
+/** 帳本轉入的來源（3k W192）。名稱是退出當下的快照，來源帳本之後可能被刪掉。 */
+export interface DebtEntryMerge {
+  sourceLedgerName: string;
 }
 
 /** 還款底下的結清分支（3h 決策 170）。名稱用 `differenceLabelOf` 由還款與分支的型別決定。 */

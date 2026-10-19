@@ -35,7 +35,7 @@ describe('CounterpartyDirectory', () => {
     respondedAt: null,
   };
   const ledgerGroup: LedgerGroup = {
-    ledger: { id: 'ledger-1', name: '家用帳本', left: false },
+    ledger: { id: 'ledger-1', name: '家用帳本' },
     people: [
       {
         person: { id: 'person-1', name: '小安', userId: 'user-2', status: 'MEMBER' },

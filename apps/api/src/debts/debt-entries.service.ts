@@ -278,10 +278,25 @@ export class DebtEntriesService {
     tx: Prisma.TransactionClient,
     userId: string,
     entryId: string,
+    options?: { purpose: 'ledger-leave' },
   ): Promise<void> {
     const existing = await loadOwnedEntry(tx, userId, entryId);
     if (existing.transaction !== null) {
-      await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
+      if (options?.purpose === 'ledger-leave') {
+        // 退出只撤銷本人紀錄，檢視者也可以；這個選項不接受 HTTP 輸入。
+        const member = await tx.ledgerMember.findUnique({
+          where: { ledgerId_userId: { ledgerId: existing.transaction.ledgerId, userId } },
+          include: { ledger: true },
+        });
+        if (!member)
+          throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Ledger not found.');
+        if (member.ledger.archivedAt)
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            ErrorCode.LEDGER_ARCHIVED,
+            'This ledger is archived.',
+          );
+      } else await assertLedgerWritable(tx, userId, existing.transaction.ledgerId);
     }
     if (existing.splitId != null)
       throw new AppException(

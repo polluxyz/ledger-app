@@ -62,6 +62,10 @@ describe('Ledger members', () => {
     onPatchRole?: () => Response;
     /** `DELETE .../members/:id` 的回應。 */
     onRemove?: () => Response;
+    /** `POST .../leave-preview` 的回應。 */
+    leavePreview?: Record<string, unknown>;
+    /** `POST .../leave` 的回應。 */
+    onLeave?: () => Response;
   }
 
   function routeFetch(options: Options = {}) {
@@ -71,6 +75,23 @@ describe('Ledger members', () => {
 
       if (target.includes('/users/me')) {
         return Promise.resolve(jsonResponse(200, options.me ?? alice));
+      }
+      if (target.endsWith('/ledgers/led-2/leave-preview')) {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            options.leavePreview ?? {
+              items: [],
+              accounts: [],
+              carryOvers: [],
+              withdrawals: [],
+              leave: { allowed: true, blockedBy: null },
+            },
+          ),
+        );
+      }
+      if (target.endsWith('/ledgers/led-2/leave') && method === 'POST') {
+        return Promise.resolve(options.onLeave?.() ?? new Response(null, { status: 204 }));
       }
       if (target.includes('/members')) {
         if (method === 'POST') {
@@ -117,15 +138,15 @@ describe('Ledger members', () => {
     });
   }
 
-  const requests = () =>
-    fetchMock.mock.calls.map((call) => ({
-      url: String(call[0]),
-      method: (call[1] as RequestInit | undefined)?.method ?? 'GET',
-      body: (() => {
-        const raw = (call[1] as RequestInit | undefined)?.body;
-        return typeof raw === 'string' ? raw : '';
-      })(),
+  const requests = (): Array<{ url: string; method: string; body: string }> => {
+    const calls = fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>;
+    return calls.map((call) => ({
+      url:
+        typeof call[0] === 'string' ? call[0] : call[0] instanceof URL ? call[0].href : call[0].url,
+      method: call[1]?.method ?? 'GET',
+      body: typeof call[1]?.body === 'string' ? call[1].body : '',
     }));
+  };
 
   // ── 誰看得到什麼 ──────────────────────────────────────────────────────────
 
@@ -357,16 +378,25 @@ describe('Ledger members', () => {
     });
   });
 
-  it('sends the user back to the ledger list after they leave', async () => {
-    routeFetch();
+  it('sends a leave request and returns the user to the ledger list', async () => {
+    routeFetch({ onLeave: () => new Response(null, { status: 204 }) });
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: '退出帳本' }));
-    expect(screen.getByText(/你將無法再看到裡面的交易/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '退出「家庭帳本」' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '退出' }));
+
+    await waitFor(() => {
+      const leaveRequest = requests().find((request) => request.url.endsWith('/leave'));
+      expect(leaveRequest?.method).toBe('POST');
+      expect(JSON.parse(leaveRequest?.body ?? '{}')).toEqual({
+        targetLedgerId: null,
+        excludedItemIds: [],
+      });
+    });
 
     // 留在明細頁的話，下一次重取會拿到 404——那本帳本已經不屬於自己了。
     await waitFor(() => {
@@ -374,19 +404,52 @@ describe('Ledger members', () => {
     });
   });
 
-  it('keeps the dialog open when the last owner tries to leave', async () => {
+  it('shows the leave blocker and only offers cancel', async () => {
     routeFetch({
-      onRemove: () => apiError(409, 'LAST_OWNER_CANNOT_LEAVE', '帳本至少要有一位擁有者。'),
+      leavePreview: {
+        items: [],
+        accounts: [],
+        carryOvers: [],
+        withdrawals: [],
+        leave: { allowed: false, blockedBy: 'LAST_OWNER' },
+      },
     });
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: '退出帳本' }));
-    await user.click(screen.getByRole('button', { name: '退出' }));
 
-    // 409 是按下確認之後才發生的。彈窗關掉的話，使用者只會看到「什麼都沒發生」。
-    expect(await screen.findByRole('alert')).toHaveTextContent('唯一的擁有者');
+    expect(await screen.findByText('你是最後一位擁有者，不能退出')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
     expect(window.location.pathname).toBe('/ledgers/led-2');
+  });
+
+  it('offers to change a member with transactions to viewer after the 409 response', async () => {
+    routeFetch({
+      onRemove: () =>
+        apiError(409, 'MEMBER_HAS_TRANSACTIONS', '成員有交易，請先將角色改為檢視者。'),
+    });
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const roleSelect = await screen.findByLabelText('Bob的角色');
+    await user.selectOptions(
+      roleSelect,
+      screen.getByRole('option', { name: '移除' }).getAttribute('value') ?? '',
+    );
+    await user.click(screen.getByRole('button', { name: '移除' }));
+
+    expect(await screen.findByText('Bob在這本帳本有帳，只能改成檢視者')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '改成檢視者' }));
+
+    await waitFor(() => {
+      const patch = requests().find((request) => request.method === 'PATCH');
+      expect(patch?.url).toContain('/members/u2');
+      expect(JSON.parse(patch?.body ?? '{}')).toEqual({ role: 'VIEWER' });
+    });
+    expect(screen.queryByRole('dialog', { name: '移除成員' })).not.toBeInTheDocument();
   });
 });
