@@ -12,7 +12,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { JwtPayload, LedgerDetail, LedgerSummary, LedgerRemovalPreview } from '@ledger/shared';
+import type {
+  JwtPayload,
+  LedgerDetail,
+  LedgerSummary,
+  LedgerRemovalPreview,
+  LedgerLeavePreview,
+} from '@ledger/shared';
+import { LeaveLedgerDto } from './dto/leave-ledger.dto';
+import { LedgerLeavePreviewDto } from './dto/ledger-leave-preview.dto';
+import { LedgerLeaveService } from './ledger-leave.service';
 import { AllowOnArchived } from '../common/decorators/allow-on-archived.decorator';
 import { RemoveLedgerQueryDto } from './dto/remove-ledger-query.dto';
 import { LedgerRemovalPreviewDto } from './dto/ledger-removal-preview.dto';
@@ -37,7 +46,57 @@ import { LedgersService } from './ledgers.service';
 @UseGuards(LedgerAccessGuard)
 @Controller('ledgers')
 export class LedgersController {
-  constructor(private readonly ledgers: LedgersService) {}
+  constructor(
+    private readonly ledgers: LedgersService,
+    private readonly ledgerLeave: LedgerLeaveService,
+  ) {}
+
+  @Post(':ledgerId/leave-preview')
+  @RequireLedgerRole('VIEWER')
+  @AllowOnArchived()
+  @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 200, type: LedgerLeavePreviewDto })
+  @ApiResponse({ status: 400, description: 'Invalid target or excluded items.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Insufficient target ledger role or deletion permission.',
+  })
+  @ApiResponse({ status: 404, description: 'Source or target ledger not found.' })
+  @ApiResponse({ status: 409, description: 'Target ledger is archived.' })
+  leavePreview(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: LeaveLedgerDto,
+  ): Promise<LedgerLeavePreview> {
+    return this.ledgerLeave.preview(ledgerId, user.sub, dto);
+  }
+
+  @Post(':ledgerId/leave')
+  @RequireLedgerRole('VIEWER')
+  @AllowOnArchived()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiResponse({ status: 204, description: 'Own records merged or withdrawn, membership removed.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid target, excluded items or ledger name confirmation.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Insufficient target ledger role or deletion permission.',
+  })
+  @ApiResponse({ status: 404, description: 'Source or target ledger not found.' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'LEDGER_ARCHIVED, LEDGER_HAS_OTHER_MEMBERS, LEDGER_HAS_OTHERS_TRANSACTIONS or LAST_OWNER_CANNOT_LEAVE.',
+  })
+  leave(
+    @Param('ledgerId') ledgerId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: LeaveLedgerDto,
+  ): Promise<void> {
+    return this.ledgerLeave.leave(ledgerId, user.sub, dto);
+  }
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateLedgerDto): Promise<LedgerSummary> {

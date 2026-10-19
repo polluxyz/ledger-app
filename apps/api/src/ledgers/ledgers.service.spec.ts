@@ -27,7 +27,7 @@ describe('LedgersService (members)', () => {
       delete: jest.Mock;
       count: jest.Mock;
     };
-    transaction: { count: jest.Mock; updateMany: jest.Mock };
+    transaction: { count: jest.Mock; updateMany: jest.Mock; deleteMany: jest.Mock };
     debtEntry: { count: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     split: { count: jest.Mock; findMany: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
@@ -67,7 +67,11 @@ describe('LedgersService (members)', () => {
         delete: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
       },
-      transaction: { count: jest.fn().mockResolvedValue(0), updateMany: jest.fn() },
+      transaction: {
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
       debtEntry: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),

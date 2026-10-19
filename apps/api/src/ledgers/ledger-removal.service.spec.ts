@@ -41,6 +41,7 @@ describe('Ledger removal', () => {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       debtEntry: {
         findMany: jest.fn().mockResolvedValue([]),
