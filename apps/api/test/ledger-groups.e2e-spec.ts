@@ -178,7 +178,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
     );
   });
 
-  it('keeps an outstanding amount after the caller leaves and excludes settled counterparties', async () => {
+  it('excludes the ledger and its outstanding parts after the caller leaves', async () => {
     const alice = await person(app, 'alice@example.com', 'Alice');
     const bob = await person(app, 'bob@example.com', 'Bob');
     const ledgerId = await createSharedLedger(app, bob.token, '旅行');
@@ -229,20 +229,15 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
       .set(auth(alice.token))
       .send({ counterpartyId: replacement.id })
       .expect(200);
-    await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${alice.userId}`)
-      .set(auth(alice.token))
-      .expect(204);
-    expect((await counterparty(alice, replacement.id)).ledgerParts[0]).toMatchObject({
-      amount: 51200,
-      left: true,
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: ledgerId, userId: alice.userId } },
     });
-    expect((await groups(alice))[0]!.ledger).toMatchObject({ id: ledgerId, left: true });
-    expect((await groups(alice))[0]!.people[0]!.amount).toBe(51200);
+    expect((await counterparty(alice, replacement.id)).ledgerParts).toEqual([]);
+    expect(await groups(alice)).toEqual([]);
     const list = await counterparties(alice, true);
-    expect(list.items.map(({ id }) => id)).toContain(replacement.id);
+    expect(list.items.map(({ id }) => id)).not.toContain(replacement.id);
     expect(list.items.map(({ id }) => id)).not.toContain(zero.id);
-    expect(list.total).toBe(1);
+    expect(list.total).toBe(0);
   });
 
   it('records a one-shot response time for ten shared ledgers with twenty transactions each', async () => {

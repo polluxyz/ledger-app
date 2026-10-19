@@ -256,7 +256,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
       const res = await preview(s.carol, s.sharedLedgerId);
       expect(res.status).toBe(200);
       const body = res.body as LedgerRemovalPreview;
-      expect(body.delete).toEqual({ allowed: false, blockedBy: 'HAS_OTHERS_TRANSACTIONS' });
+      expect(body.delete).toEqual({ allowed: false, blockedBy: 'HAS_OTHER_MEMBERS' });
       expect(body.accounts).toEqual([]);
       expect(body.counterparties).toEqual([]);
     });
@@ -350,6 +350,10 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
           payerPersonId: bobPerson.id,
         })
         .expect(201);
+      // 只移除資格以驗證殘留的帳戶引用仍擋刪除，避免被其他成員的優先檢查遮住。
+      await prisma.ledgerMember.delete({
+        where: { ledgerId_userId: { ledgerId: s.sharedLedgerId, userId: s.bob.userId } },
+      });
       const bobBefore = await listAccounts(app, s.bob.token);
 
       const res = await request(server())

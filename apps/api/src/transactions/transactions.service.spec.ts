@@ -330,50 +330,20 @@ describe('TransactionsService', () => {
       }
 
       it('restricts the query to transactions with a LedgerSettlement row', async () => {
-        await service.list(ledgerId, creatorId, { page: 1 }, 'MEMBER', {
-          settlementsOnly: true,
-        });
+        await service.list(
+          ledgerId,
+          creatorId,
+          { page: 1 },
+          {
+            settlementsOnly: true,
+          },
+        );
 
         expect(rawSql()).toContain('FROM "LedgerSettlement" st');
         // 沒帶內部選項時，同一條 SQL 不應出現結清過濾——證明它是內部選項而非預設行為。
         prisma.$queryRaw.mockClear();
         await service.list(ledgerId, creatorId, { page: 1 });
         expect(rawSql()).not.toContain('FROM "LedgerSettlement" st');
-      });
-
-      it('narrows the LEFT scope to settlements where the viewer is either side', async () => {
-        await service.list(ledgerId, creatorId, { page: 1 }, 'LEFT', {
-          settlementsOnly: true,
-        });
-
-        expect(prisma.ledgerPerson.findUnique).toHaveBeenCalledWith({
-          where: { ledgerId_userId: { ledgerId, userId: creatorId } },
-          select: { id: true },
-        });
-        const sql = rawSql();
-        expect(sql).toContain('st."fromPersonId" = ? OR st."toPersonId" = ?');
-        // 一般交易的退出範圍（payer／creator 條款）對結清清單刻意不打開：
-        // 退出者以前代替別人記的結清，不能因為他是 creator 就看得到。
-        expect(sql).not.toContain('t."payerPersonId" = ?');
-        expect(sql).not.toContain('t."creatorId" = ?');
-        expect(sql).not.toContain('FROM "LedgerSplit" ls');
-      });
-
-      it('keeps the broad LEFT scope for the ordinary transaction list', async () => {
-        await service.list(ledgerId, creatorId, { page: 1 }, 'LEFT');
-
-        const sql = rawSql();
-        expect(sql).toContain('t."payerPersonId" = ?');
-        expect(sql).toContain('t."creatorId" = ?');
-        expect(sql).toContain('FROM "LedgerSplit" ls');
-      });
-
-      it('404s for a LEFT access without a ledger person row', async () => {
-        prisma.ledgerPerson.findUnique.mockResolvedValueOnce(null);
-
-        await expect(
-          service.list(ledgerId, creatorId, { page: 1 }, 'LEFT', { settlementsOnly: true }),
-        ).rejects.toMatchObject({ constructor: AppException, errorCode: 'NOT_FOUND' });
       });
     });
   });

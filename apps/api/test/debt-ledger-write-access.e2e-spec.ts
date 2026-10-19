@@ -95,10 +95,9 @@ describe('Debt ledger write access (e2e)', () => {
     async (restriction, status, errorCode) => {
       const s = await scene();
       if (restriction === 'non-member') {
-        await request(server())
-          .delete(`/api/ledgers/${s.ledgerId}/members/${s.bob.userId}`)
-          .set(auth(s.carol.token))
-          .expect(204);
+        await prisma.ledgerMember.delete({
+          where: { ledgerId_userId: { ledgerId: s.ledgerId, userId: s.bob.userId } },
+        });
       } else if (restriction === 'viewer') {
         await request(server())
           .patch(`/api/ledgers/${s.ledgerId}/members/${s.bob.userId}`)

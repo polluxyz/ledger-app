@@ -19,9 +19,8 @@ import { auth, person, type Person } from './linking-utils';
  *
  * 新增的查詢參數與端點只能縮小範圍，不能讓人讀到原本讀不到的東西；借還資料都記進建立者自己的現金：
  * - 往來紀錄：別人的對象帶 `section` 一律 404；`personalNonZero`、`hasHistory` 只在自己的對象裡篩。
- * - 結清清單 `GET /ledgers/{id}/settlements`：從沒加入過的人 404；已退出的人只看到自己是任一方
- *   的結清，分頁也放寬不了；退出的人改或撤銷結清一律被擋，資料不變。
- * - `GET /ledger-groups?hasSettlements=true`：不帶出我沒參與過的帳本；已退出的帳本只算跟我有關的。
+ * - 結清清單 `GET /ledgers/{id}/settlements`：非成員（含已退出）一律 404；改或撤銷也不寫入。
+ * - `GET /ledger-groups?hasSettlements=true`：只帶出目前仍有成員資格的帳本。
  *
  * 場景：Alice（OWNER）建共享帳本「花蓮三日」，Bob、Carol 是 EDITOR。Eve 不在帳本裡，有一本自己的
  * 共享帳本。帳本裡記兩筆結清：Bob → Carol、Bob → Alice。退出的是 Carol。
@@ -199,10 +198,9 @@ describe('Debts inline isolation (e2e)', () => {
   }
 
   async function leave(who: Person, ledgerId: string): Promise<void> {
-    await request(server())
-      .delete(`/api/ledgers/${ledgerId}/members/${who.userId}`)
-      .set(auth(who.token))
-      .expect(204);
+    await prisma.ledgerMember.delete({
+      where: { ledgerId_userId: { ledgerId: ledgerId, userId: who.userId } },
+    });
   }
 
   async function settlementsAs(
@@ -247,21 +245,15 @@ describe('Debts inline isolation (e2e)', () => {
         .expect(404);
     });
 
-    it('退出後只回我是任一方的結清，分頁放寬不了', async () => {
+    it('退出後結清清單一律 404，分頁不能恢復存取', async () => {
       const s = await ledgerScene();
       await leave(s.carol, s.ledgerId);
-
-      const all = await settlementsAs(s.carol, s.ledgerId, { limit: 100 });
-      expect(all.items.map((t) => t.id)).toEqual([s.bobToCarol.id]);
-      expect(all.total).toBe(1);
-
-      const seen: string[] = [];
-      for (let page = 1; page <= 3; page += 1) {
-        const paged = await settlementsAs(s.carol, s.ledgerId, { limit: 1, page });
-        expect(paged.total).toBe(1);
-        seen.push(...paged.items.map((t) => t.id));
-      }
-      expect(seen).toEqual([s.bobToCarol.id]);
+      for (const query of [{ limit: 100 }, { limit: 1, page: 2 }])
+        await request(server())
+          .get(`/api/ledgers/${s.ledgerId}/settlements`)
+          .query(query)
+          .set(auth(s.carol.token))
+          .expect(404);
     });
 
     it('退出後改或撤銷結清一律被擋，資料不變', async () => {
@@ -278,9 +270,9 @@ describe('Debts inline isolation (e2e)', () => {
           .patch(path)
           .set(auth(s.carol.token))
           .send({ amount: 1 });
-        expect([404, 409]).toContain(patch.status);
+        expect(patch.status).toBe(404);
         const del = await request(server()).delete(path).set(auth(s.carol.token));
-        expect([404, 409]).toContain(del.status);
+        expect(del.status).toBe(404);
       }
 
       const after = await prisma.transaction.findMany({
@@ -298,7 +290,7 @@ describe('Debts inline isolation (e2e)', () => {
       expect(eveGroups.map((g) => g.ledger.id)).not.toContain(s.ledgerId);
     });
 
-    it('現任成員算全部；已退出只算跟我有關的', async () => {
+    it('現任成員算全部；已退出帳本不出現', async () => {
       const s = await ledgerScene();
       const aliceGroup = (await groupsWithSettlements(s.alice)).find(
         (g) => g.ledger.id === s.ledgerId,
@@ -309,8 +301,7 @@ describe('Debts inline isolation (e2e)', () => {
       const carolGroup = (await groupsWithSettlements(s.carol)).find(
         (g) => g.ledger.id === s.ledgerId,
       );
-      expect(carolGroup?.ledger.left).toBe(true);
-      expect(carolGroup?.settlementCount).toBe(1);
+      expect(carolGroup).toBeUndefined();
     });
   });
 });
