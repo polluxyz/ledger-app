@@ -252,20 +252,27 @@ export class LedgersService {
             await this.debtEntries.removeInTransaction(tx, actingUserId, entry.id);
           }
         }
-        // 3j spec §3：先解除 Restrict 外鍵，再刪分帳，最後 cascade 刪帳本內的交易。
-        await tx.debtEntry.updateMany({
-          where: { OR: [{ transaction: { ledgerId } }, { split: { ledgerId } }] },
-          data: { transactionId: null, splitId: null },
-        });
-        await tx.transaction.updateMany({
-          where: { ledgerId, splitId: { not: null } },
-          data: { splitId: null },
-        });
-        await tx.split.deleteMany({ where: { ledgerId } });
-        await tx.ledger.delete({ where: { id: ledgerId } });
+        await this.deleteLedgerRows(tx, ledgerId);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  /** 3j §3：授權與撤銷由呼叫端完成，再依序解除外鍵、刪分帳、刪帳本。 */
+  async deleteLedgerRows(tx: Prisma.TransactionClient, ledgerId: string): Promise<void> {
+    await tx.debtEntry.updateMany({
+      where: { OR: [{ transaction: { ledgerId } }, { split: { ledgerId } }] },
+      data: { transactionId: null, splitId: null },
+    });
+    await tx.transaction.updateMany({
+      where: { ledgerId, splitId: { not: null } },
+      data: { splitId: null },
+    });
+    await tx.split.deleteMany({ where: { ledgerId } });
+    // LedgerShare / LedgerSettlement / payerPerson 對 LedgerPerson 是 RESTRICT。
+    // 先刪交易，讓共享分帳與結清 cascade 清除，再刪帳本，不能依賴同時 cascade 的順序。
+    await tx.transaction.deleteMany({ where: { ledgerId } });
+    await tx.ledger.delete({ where: { id: ledgerId } });
   }
 
   /** 只讀自己的帳戶與對象；不能刪時不回任何餘額。 */

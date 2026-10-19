@@ -247,8 +247,8 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
 
       const bobCounterparties = (
         (await request(server()).get('/api/counterparties').set(auth(s.bob.token)).expect(200))
-          .body as Counterparty[]
-      ).map((counterparty) => counterparty.id);
+          .body as Paginated<Counterparty>
+      ).items.map((counterparty) => counterparty.id);
       for (const carryOver of body.carryOvers) {
         if (carryOver.counterpartyId !== null) {
           expect(bobCounterparties).toContain(carryOver.counterpartyId);

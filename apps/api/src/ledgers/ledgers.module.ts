@@ -5,6 +5,7 @@ import { SplitsModule } from '../splits/splits.module';
 import { LedgersController } from './ledgers.controller';
 import { MembersController } from './members.controller';
 import { LedgersService } from './ledgers.service';
+import { LedgerLeaveService } from './ledger-leave.service';
 import { LedgerAccessGuard } from './guards/ledger-access.guard';
 import { LedgerPeopleModule } from '../ledger-people/ledger-people.module';
 
@@ -20,7 +21,7 @@ import { LedgerPeopleModule } from '../ledger-people/ledger-people.module';
     forwardRef(() => SplitsModule),
   ],
   controllers: [LedgersController, MembersController],
-  providers: [LedgersService, LedgerAccessGuard],
+  providers: [LedgersService, LedgerLeaveService, LedgerAccessGuard],
   // 匯出 LedgerAccessGuard，讓帳本範圍的模組（categories、transactions）
   // 重用同一個授權 guard。
   exports: [LedgersService, LedgerAccessGuard],
