@@ -251,7 +251,6 @@ describe('CounterpartyDetail', () => {
       personId: 'person-ming',
       personName: '明哥',
       amount: 51200,
-      left: false,
     };
     renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
@@ -271,7 +270,6 @@ describe('CounterpartyDetail', () => {
       personId: 'person-ming',
       personName: '明哥',
       amount: 51200,
-      left: false,
     };
     renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
 
@@ -282,21 +280,6 @@ describe('CounterpartyDetail', () => {
     ).toBeTruthy();
   });
 
-  it('keeps an exited shared source read-only in the overview', async () => {
-    const source = {
-      ledgerId: 'ledger-old-home',
-      ledgerName: '老家',
-      personId: 'person-old-home',
-      personName: '小明',
-      amount: -2500,
-      left: true,
-    };
-    renderDetail(900, [baseEntry], 1, { ledgerParts: [source] }, 'overview');
-
-    expect(await screen.findByText('已退出')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /老家/ })).not.toBeInTheDocument();
-  });
-
   it('shares avatar labels across the counterparty, ledger people, and entries in the expanded block', async () => {
     const source = {
       ledgerId: 'ledger-hualien',
@@ -304,7 +287,6 @@ describe('CounterpartyDetail', () => {
       personId: 'person-hua',
       personName: '小華',
       amount: 51200,
-      left: false,
     };
     renderDetail(900, [baseEntry], 1, { displayName: '小明', ledgerParts: [source] }, 'overview');
 

@@ -21,11 +21,6 @@
   font-weight: 600;
 }
 
-.left {
-  font-size: var(--text-xs);
-  font-weight: 400;
-}
-
 .people {
   margin: 0;
   padding: 0;

@@ -52,7 +52,6 @@ export function LedgerSourceList({
 
               const content = (
                 <SourceRowContents
-                  source={source}
                   from={from}
                   to={to}
                   amountText={amountText}
@@ -88,14 +87,12 @@ export function LedgerSourceList({
 }
 
 function SourceRowContents({
-  source,
   from,
   to,
   amountText,
   avatarLabels,
   reserveActionColumn,
 }: {
-  source: CounterpartyLedgerPart;
   from: string;
   to: string;
   amountText: string;
@@ -114,9 +111,7 @@ function SourceRowContents({
         />
       </span>
       <span className={rowStyles.spacer} />
-      <span className={rowStyles.label}>
-        {source.left && <span className={styles.left}>已退出</span>}
-      </span>
+      <span className={rowStyles.label} />
       <span className={rowStyles.amount}>
         <span className={rowStyles.amountText}>{amountText}</span>
       </span>

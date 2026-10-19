@@ -28,15 +28,13 @@ describe('CounterpartyList', () => {
     personId: 'person-ming',
     personName: '明哥',
     amount: 300,
-    left: false,
   };
-  const leftSource: CounterpartyLedgerPart = {
+  const secondSource: CounterpartyLedgerPart = {
     ledgerId: 'ledger-old-home',
     ledgerName: '老家',
     personId: 'person-old-home',
     personName: '小明',
     amount: -1500,
-    left: true,
   };
 
   beforeEach(() => {
@@ -82,7 +80,7 @@ describe('CounterpartyList', () => {
           askMerge: false,
           balance,
           totalBalance: balance,
-          ledgerParts: detailId === 'cp-1' ? [firstSource, leftSource] : [],
+          ledgerParts: detailId === 'cp-1' ? [firstSource, secondSource] : [],
           link: null,
           createdAt: '2026-09-01T00:00:00.000Z',
           updatedAt: '2026-09-01T00:00:00.000Z',
@@ -103,7 +101,7 @@ describe('CounterpartyList', () => {
                 askMerge: false,
                 balance: 900,
                 totalBalance: 4200,
-                ledgerParts: [firstSource, leftSource],
+                ledgerParts: [firstSource, secondSource],
                 link: { userId: 'user-ming', userName: '王小明', theirBalance: -900 },
               },
               {
@@ -232,7 +230,6 @@ describe('CounterpartyList', () => {
     expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '明哥欠你 $3' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '老家' })).toBeInTheDocument();
-    expect(screen.getByText('已退出')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '你欠小明 $15' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /老家|花蓮三日/ })).not.toBeInTheDocument();
 
@@ -247,7 +244,7 @@ describe('CounterpartyList', () => {
   it('shows unpointed people under each API ledger group and preserves the source values', async () => {
     ledgerGroups = [
       {
-        ledger: { id: 'ledger-unpointed', name: '花蓮三日', left: true },
+        ledger: { id: 'ledger-unpointed', name: '花蓮三日' },
         people: [
           {
             person: { id: 'person-hua', name: '小華', userId: null, status: 'GUEST' },
@@ -259,7 +256,7 @@ describe('CounterpartyList', () => {
     ];
     renderList();
 
-    expect(await screen.findByRole('heading', { name: /花蓮三日.*已退出/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '花蓮三日' })).toBeInTheDocument();
     expect(screen.getByText('小華欠你 $1,394')).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledger-groups?unpointed=true')),

@@ -166,7 +166,7 @@ describe('DebtsView', () => {
   it('shows the overview without the personal add action and keeps source rows read-only', async () => {
     ledgerGroups = [
       {
-        ledger: { id: 'ledger-old-home', name: '老家', left: true },
+        ledger: { id: 'ledger-old-home', name: '老家' },
         people: [
           {
             person: { id: 'person-ming', name: '明哥', userId: null, status: 'GUEST' },
@@ -178,7 +178,7 @@ describe('DebtsView', () => {
     ];
     renderView(undefined, 'overview');
 
-    expect(await screen.findByRole('heading', { name: /老家.*已退出/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '老家' })).toBeInTheDocument();
     expect(screen.getByText('明哥欠你 $512')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '＋ 新增' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /老家|明哥/ })).not.toBeInTheDocument();

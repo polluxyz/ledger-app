@@ -127,9 +127,9 @@ describe('DebtHistoryView', () => {
     };
   }
 
-  function makeLedgerGroup(id = 'ledger-shared-1', name = '旅行帳本', left = false): LedgerGroup {
+  function makeLedgerGroup(id = 'ledger-shared-1', name = '旅行帳本'): LedgerGroup {
     return {
-      ledger: { id, name, left },
+      ledger: { id, name },
       people: [],
       settlementCount: 1,
     };
@@ -331,7 +331,7 @@ describe('DebtHistoryView', () => {
     });
   });
 
-  it('hides settlement actions for exited ledgers and VIEWER ledgers', async () => {
+  it('hides settlement actions for VIEWER ledgers', async () => {
     const user = userEvent.setup();
     const viewerLedger = {
       ...sharedLedger,
@@ -339,20 +339,12 @@ describe('DebtHistoryView', () => {
       name: '唯讀旅行',
       role: 'VIEWER' as const,
     };
-    ledgerGroupsList = [
-      makeLedgerGroup('ledger-left', '已退出帳本', true),
-      makeLedgerGroup(viewerLedger.id, viewerLedger.name),
-    ];
+    ledgerGroupsList = [makeLedgerGroup(viewerLedger.id, viewerLedger.name)];
     ledgersList = [currentLedger, viewerLedger];
     counterpartiesList = [];
     renderHistory();
 
-    const exitedRow = await screen.findByRole('button', { name: '已退出帳本' });
-    await user.click(exitedRow);
-    expect(await screen.findByText('$100')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '更多操作' })).not.toBeInTheDocument();
-
-    const viewerRow = screen.getByRole('button', { name: '唯讀旅行' });
+    const viewerRow = await screen.findByRole('button', { name: '唯讀旅行' });
     await user.click(viewerRow);
     expect(await screen.findByText('$100')).toBeInTheDocument();
     expect(screen.getAllByText('$100')).toHaveLength(1);

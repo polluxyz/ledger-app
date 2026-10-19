@@ -58,7 +58,7 @@ interface PointerTarget {
   personId: string;
 }
 
-/** 設定指向。`counterpartyId: null`＝明確「不指向」。已退出的帳本回 409 `LEDGER_LEFT`。 */
+/** 設定指向。`counterpartyId: null`＝明確「不指向」。不是成員的帳本回 404。 */
 export function useSetLedgerPointer() {
   const invalidate = useInvalidatePointers();
   return useMutation({

@@ -64,8 +64,7 @@ export function useSettlementSummary(ledgerId: string | null, enabled = true) {
 }
 
 /**
- * 某本帳本已記的結清，新到舊，一頁一頁載入（借還 › 歷史，3g W161）。已退出的帳本後端只回
- * 我是任一方的結清。畫面把 `data.pages` 依序攤平，`hasNextPage` 時顯示「載入更多」。
+ * 某本帳本已記的結清，新到舊，一頁一頁載入（借還 › 歷史，3g W161）。畫面把 `data.pages` 依序攤平，`hasNextPage` 時顯示「載入更多」。
  */
 export function useLedgerSettlementPages(ledgerId: string | null) {
   return useInfiniteQuery({

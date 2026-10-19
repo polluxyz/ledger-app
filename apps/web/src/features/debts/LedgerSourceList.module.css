@@ -23,12 +23,6 @@
   list-style: none;
 }
 
-.left {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
 .visual {
   display: flex;
   flex: 1 1 auto;
