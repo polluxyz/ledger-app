@@ -2,7 +2,7 @@
 
 spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200、SC-N1～SC-N14）。後端、畫面、e2e 合成一個 PR。
 
-> 核可：待開發者核可。
+> 核可：開發者 2026-10-21 核可。
 
 ## 0. 起點
 
