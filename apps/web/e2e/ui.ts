@@ -23,9 +23,8 @@ export async function expectBalanceTransition(
   current: Cents,
   after: Cents,
 ): Promise<void> {
-  const actual = (await row.innerText()).replace(/\s+/g, '');
   const expected = `${formatMoney(current)}→${formatMoney(after)}`.replace(/\s+/g, '');
-  expect(actual).toContain(expected);
+  await expect.poll(async () => (await row.innerText()).replace(/\s+/g, '')).toContain(expected);
 }
 
 /**
