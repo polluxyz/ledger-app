@@ -6,25 +6,40 @@
 
 ---
 
-## 最新交接（2026-10-21，3l 已合併並部署；等開發者操作回饋）
+## 最新交接（2026-10-21，2j 統計與 4a AI 兩條分支平行開工）
 
-### 現況
+### 分工
 
-- 3l（刪除私人帳本時分組搬走交易、複製交易、標註交易）已合併：#140（squash `d29d454`）。spec `docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200），驗證數字、偏離與驗收退回記在 `tasks/phase-3l-plan.md` §6。
-  - 實作時開發者另外決定：搬進共享帳本的個人借還照 3b 決策 13（別人看得到交易、看不到往來）；帳本頁按鈕寫「刪除帳本」；刪除後數字依增減上色，3k 退出對話框一起改。
-  - 後端 L3 自訂的規則 C：列表不單獨顯示的交易被標註時，存到列表上看得到的代表列（結清分支→還款、個人分帳→擁有者的合成列、合併來的→份額）。已向開發者報告。
-- 已部署到 dev（2026-10-21）：備份 `D:Projectsledger-app-backupsledger_dev_before_3l_20261021_1247.dump`，套用 `20261021000000_transaction_mark`，main worktree 已 pull 到 `d29d454`、shared 與 API 已 build。用暫時的 3200 埠照 plan §4 走過一次，結果都符合，暫時資料已清。
-- **開發者的 dev 伺服器現在從 main worktree（`D:Projectsledger-app`）跑**：API 是 `node dist/main`、Vite 在 `apps/web`。部署要做在 main，不是 `web-redesign`。
-- 分工（2026-10-21 起）：**網頁實作只交給 Codex**，Claude Code 只做規劃、派工、驗收，驗收不過退回 Codex，不自己改網頁程式；Codex 用完就停下來問，不換層。**總控不跟其他 session 互傳訊息**，讀分支掌握進度；要決定的事開發者會親自到各 session 回答。後端仍照角色表。
-- worktree：`backend`（DB `ledger_backend_test`）、`ledger-split-web`（總控寫文件用，`.env` 指向 `ledger_test`）都 detached 在 `main`；`web-redesign` 還停在 `912e0d9`，目前沒在用。3l 的本機分支都已刪。
-- 3l 的測試資料庫 `ledger_ldm_*_test` 與遠端分支 `feature/ldm-api` 已經開發者同意刪除。剩 `ledger_dev`、`ledger_test`、`ledger_backend_test`（backend worktree 長駐，保留）。
-- Codex 週額度 10-21 已重置，3l 用到約 8%。
+開發者 2026-10-21 決定：2j 統計與 4a AI 文字記帳**各開一條分支、各由一個 session 負責**，開發者分別到各分支對話；需要管理時才回 main。
 
-### 下一步
+| 分支                     | worktree   | 測試資料庫          | spec                             | 狀態                                |
+| ------------------------ | ---------- | ------------------- | -------------------------------- | ----------------------------------- |
+| `feature/phase-2j-stats` | `stats-2j` | `ledger_stats_test` | `docs/specs/phase-2j-stats.md`   | 核可中：§10 的 10 項要跟開發者確認  |
+| `feature/phase-4a-ai`    | `ai-4a`    | `ledger_ai_test`    | `docs/specs/phase-4a-ai-text.md` | 已核可（「AI 先這樣試試」）         |
+| `main`                   | 主工作區   | —                   | —                                | 管理：handoff、部署 dev、跨分支協調 |
 
-1. 請開發者重開 API 與 Vite、按 `Ctrl + Shift + R`，操作 3l。
-2. 依回饋開修訂（先改 spec 再改程式）。
-3. 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
+- 兩條分支的 spec 只在各自的分支上，還沒進 main。各分支照 CLAUDE.md §5 寫 plan、todo，送開發者核可，再派工、開 PR、合併。
+- 預覽頁（不進版控）：`docs/artifacts/step-2j-stats-preview.html`（v2，首頁加資產趨勢圖）、`docs/artifacts/step-4a-ai-draft-preview.html`。
+- 分期與口徑的研究：advisor（Codex gpt-6-astra high，開發者指定）的報告結論已寫進 2j spec。
+
+### 平行時的規則
+
+- **編號分段，避免撞號**：2j 已用決策 227～236、254～257、W201～W207、W215～W216，之後用 260～279、W220～W239；4a 已用 237～253、W208～W214，之後用 280～299、W240～W259。成功條件 2j 用 `SC-R`、4a 用 `SC-P`。
+- **兩邊都會改的檔案**：`apps/api/src/app.module.ts`（註冊模組）、`packages/shared/src/index.ts`（匯出）、側欄、`docs/README.md`、`CLAUDE.md` §4。每處只多幾行；後合併的一方用 `gh pr update-branch` 併進 main 再解。
+- **Web e2e 一次只能一個 worktree 跑**（固定埠 3100／5273）。跑之前先看埠有沒有被占。API e2e 各用各的資料庫，可以同時跑。
+- **Codex 週額度兩邊共用**（10-21 晚上約 72%，週三 09:43 重置）。網頁實作只交給 Codex，用完就停下來問開發者。
+- **部署到 dev** 都在 main 主工作區做（開發者的 dev 伺服器從這裡跑）。哪條先合併就先部署那條，另一條合併後再部署一次。
+
+### 各分支的下一步
+
+- **2j**：跟開發者確認 spec §10（API、歸屬規則、固定分組、明細、期間上限、效能量法、資產定義、初始餘額、資產 API）→ 寫 `tasks/phase-2j-plan.md`、`-todo.md` → 核可 → docs PR → 實作。
+- **4a**：寫 `tasks/phase-4a-plan.md`、`-todo.md` → 核可 → docs PR → 實作，先用假 provider。開發者確認 GLM 方案能給 App 使用後提供金鑰，金鑰只放 `apps/api/.env`；接上後跑 SC-P10。費用控管之後再設。
+
+### 其他現況
+
+- 3l 已合併並部署（#140，`d29d454`）；之後 #142 修了搬移對話框的橫向捲動。開發者沒有再回報 3l 的問題。
+- worktree：`backend`（DB `ledger_backend_test`）、`ledger-split-web`（main 寫文件用）、`web-redesign`（停在 `912e0d9`，沒在用）。
+- 分工照舊：網頁實作只交給 Codex；Claude Code 規劃、派工、驗收。各 session 不互傳訊息，讀分支掌握進度。
 
 ### 開發者的偏好（不在 spec 裡的）
 
