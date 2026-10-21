@@ -18,6 +18,8 @@ describe('TransactionsService', () => {
     ledgerSettlement: { findUnique: jest.Mock };
     ledgerPerson: { findUnique: jest.Mock };
     ledgerMerge: { findUnique: jest.Mock };
+    ledgerMember: { findUnique: jest.Mock };
+    transactionMark: { upsert: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
     transaction: {
@@ -80,6 +82,8 @@ describe('TransactionsService', () => {
       ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerPerson: { findUnique: jest.fn().mockResolvedValue({ id: 'person-1' }) },
       ledgerMerge: { findUnique: jest.fn().mockResolvedValue({ userId: creatorId }) },
+      ledgerMember: { findUnique: jest.fn().mockResolvedValue({ role: 'VIEWER' }) },
+      transactionMark: { upsert: jest.fn(), deleteMany: jest.fn() },
       $transaction: jest.fn((callback: (client: unknown) => unknown) => callback(prisma)),
       $queryRaw: jest.fn().mockResolvedValue([]),
       transaction: {
@@ -131,6 +135,132 @@ describe('TransactionsService', () => {
       marked: false,
       createdAt: joined.createdAt.toISOString(),
     });
+  });
+
+  /** 本人標註由批次 include 帶入，跨帳本列表的排序與分頁必須在 SQL 完成。 */
+  describe('transaction marks', () => {
+    it.each([
+      { transactionMarks: [] },
+      { transactionMarks: [{ userId: otherUserId }] },
+      { transactionMarks: [{ userId: creatorId }] },
+    ])('only counts the current viewer mark: %j', async ({ transactionMarks }) => {
+      prisma.transaction.findFirst.mockResolvedValue({ ...joined, transactionMarks });
+      const result = await service.getById(ledgerId, joined.id, creatorId);
+      expect(result.marked).toBe(transactionMarks.some((mark) => mark.userId === creatorId));
+      const calls = prisma.transaction.findFirst.mock.calls as Array<
+        [{ include: { transactionMarks: unknown } }]
+      >;
+      expect(calls[0]![0].include.transactionMarks).toEqual({
+        where: { userId: creatorId },
+        select: { userId: true },
+      });
+    });
+
+    it.each([
+      { query: {}, page: 1, limit: 10, offset: 0 },
+      { query: { page: 3, limit: 2 }, page: 3, limit: 2, offset: 4 },
+    ])(
+      'applies marked-list defaults and pagination: %j',
+      async ({ query, page, limit, offset }) => {
+        prisma.$queryRaw.mockResolvedValue([{ id: joined.id, total: 7n }]);
+        prisma.transaction.findMany.mockResolvedValue([
+          {
+            ...joined,
+            ledgerId,
+            ledger: { id: ledgerId, name: '私人' },
+            transactionMarks: [{ userId: creatorId }],
+          },
+        ]);
+        expect(await service.listMarked(creatorId, query)).toMatchObject({
+          page,
+          limit,
+          total: 7,
+          items: [{ id: joined.id, marked: true, ledger: { id: ledgerId, name: '私人' } }],
+        });
+        const calls = prisma.$queryRaw.mock.calls as Array<[{ sql: string; values: unknown[] }]>;
+        const sql = calls[0]![0];
+        expect(sql.sql).toContain('ORDER BY "sortDate" DESC, "createdAt" DESC, "id" DESC');
+        expect(sql.sql).toContain('"TransactionMark"');
+        expect(sql.sql).toContain('"LedgerMember"');
+        expect(sql.values.slice(-2)).toEqual([offset, limit]);
+      },
+    );
+
+    it('preserves total for a page beyond the last mark', async () => {
+      prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: 7n }]);
+      expect(await service.listMarked(creatorId, { page: 99, limit: 10 })).toEqual({
+        items: [],
+        page: 99,
+        limit: 10,
+        total: 7,
+      });
+    });
+
+    it('normalizes a settlement branch to its repayment for PUT, DELETE and marked responses', async () => {
+      const parent = {
+        ...joined,
+        id: 'repayment',
+        type: 'COLLECT' as const,
+        transactionMarks: [{ userId: creatorId }],
+      };
+      const branch = { ...joined, differenceOfId: parent.id, transactionMarks: [] };
+      prisma.transaction.findFirst.mockResolvedValue(branch);
+      prisma.transaction.findMany.mockResolvedValue([parent]);
+      expect(await service.getById(ledgerId, branch.id, creatorId)).toMatchObject({
+        id: branch.id,
+        marked: true,
+      });
+      await service.setMarked(ledgerId, branch.id, creatorId, true);
+      expect(prisma.transactionMark.upsert).toHaveBeenCalledWith({
+        where: { userId_transactionId: { userId: creatorId, transactionId: parent.id } },
+        create: { userId: creatorId, transactionId: parent.id },
+        update: { userId: creatorId },
+      });
+      await service.setMarked(ledgerId, branch.id, creatorId, false);
+      expect(prisma.transactionMark.deleteMany).toHaveBeenCalledWith({
+        where: { userId: creatorId, transactionId: parent.id },
+      });
+    });
+
+    it.each([creatorId, otherUserId])(
+      'normalizes a personal split only for its owner: %s',
+      async (viewer) => {
+        const split = {
+          id: 'split',
+          ownerId: creatorId,
+          type: 'EXPENSE' as const,
+          total: 1000,
+          payerCounterpartyId: null,
+          payer: null,
+          participants: [{ counterpartyId: null, share: 120 }],
+          entries: [],
+        };
+        const share = {
+          ...joined,
+          splitId: split.id,
+          split,
+          transactionMarks: [{ userId: viewer }],
+        };
+        const advance = { ...share, id: 'advance', type: 'LEND' as const, transactionMarks: [] };
+        prisma.transaction.findFirst.mockResolvedValue(advance);
+        prisma.transaction.findMany.mockResolvedValue([share, advance]);
+        expect(await service.getById(ledgerId, advance.id, viewer)).toMatchObject({
+          id: advance.id,
+          marked: viewer === creatorId,
+        });
+        await service.setMarked(ledgerId, advance.id, viewer, true);
+        expect(prisma.transactionMark.upsert).toHaveBeenCalledWith({
+          where: {
+            userId_transactionId: {
+              userId: viewer,
+              transactionId: viewer === creatorId ? share.id : advance.id,
+            },
+          },
+          create: { userId: viewer, transactionId: viewer === creatorId ? share.id : advance.id },
+          update: { userId: viewer },
+        });
+      },
+    );
   });
 
   it('404s when the category belongs to another ledger', async () => {
@@ -798,6 +928,18 @@ describe('TransactionsService', () => {
         id: share.id,
         amount: 1000,
         merge: { share: 120 },
+      });
+    });
+
+    it.each([true, false])('uses only the share mark for a merged row: %s', async (marked) => {
+      prisma.transaction.findFirst.mockResolvedValue(advance);
+      prisma.transaction.findMany.mockResolvedValue([
+        { ...share, transactionMarks: marked ? [{ userId: creatorId }] : [] },
+        { ...advance, transactionMarks: marked ? [] : [{ userId: creatorId }] },
+      ]);
+      expect(await service.getById(ledgerId, advance.id, creatorId)).toMatchObject({
+        id: share.id,
+        marked,
       });
     });
 
