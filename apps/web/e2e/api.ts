@@ -225,6 +225,19 @@ export async function createTransaction(
   return readJson<Transaction>(response, '記一筆交易');
 }
 
+/** 讀取單本帳本的第一頁交易，供 e2e 核對建立、搬移與複製後的資料。 */
+export async function listLedgerTransactions(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+): Promise<Paginated<Transaction>> {
+  const response = await request.get(`${API_BASE_URL}/ledgers/${ledgerId}/transactions`, {
+    headers: authHeaders(token),
+    params: { page: '1', limit: '100' },
+  });
+  return readJson<Paginated<Transaction>>(response, '列出帳本交易');
+}
+
 /** 建立一筆分帳供版面測試當前置資料；被測操作仍透過畫面完成。 */
 export async function createSplit(
   request: APIRequestContext,

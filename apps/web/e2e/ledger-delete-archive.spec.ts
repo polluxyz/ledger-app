@@ -15,6 +15,7 @@ import {
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   expandDebtRow,
+  expectBalanceTransition,
   newTransactionForm,
   openDashboard,
   openDebtsTab,
@@ -91,9 +92,7 @@ test('刪除私人帳本會先顯示 API 餘額預覽，刪除後還原現金並
   const dialog = page.getByRole('dialog', { name: `刪除「${ledger.name}」` });
   const accountSection = dialog.getByRole('region', { name: '帳戶' });
   const accountRow = accountSection.getByRole('listitem').filter({ hasText: cash.name });
-  await expect(accountRow).toContainText(
-    `${formatMoney(cashImpact!.balance)} → ${formatMoney(cashImpact!.balanceAfter)}`,
-  );
+  await expectBalanceTransition(accountRow, cashImpact!.balance, cashImpact!.balanceAfter);
 
   const counterpartySection = dialog.getByRole('region', { name: '往來' });
   const impactRow = counterpartySection
@@ -142,8 +141,8 @@ test('封存不用輸入名稱；取消封存後帳本回到切換器並可再�
   await createLedger(request, userA.token, { name: OTHER_LEDGER_NAME, kind: 'SHARED' });
 
   await page.goto(`/ledgers/${ledger.id}`);
-  await page.getByRole('button', { name: '封存帳本' }).click();
-  const archiveDialog = page.getByRole('dialog', { name: `封存「${ledger.name}」` });
+  await page.getByRole('button', { name: '刪除帳本', exact: true }).click();
+  const archiveDialog = page.getByRole('dialog', { name: `刪除「${ledger.name}」` });
   await expect(archiveDialog.getByLabel('請輸入')).toHaveCount(0);
   await archiveDialog.getByRole('button', { name: '封存', exact: true }).click();
   await expect(archiveDialog).toBeHidden();
