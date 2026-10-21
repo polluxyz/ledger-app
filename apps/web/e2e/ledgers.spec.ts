@@ -181,8 +181,7 @@ test('情境 4：非 owner 看不到成員管理的操作', async ({ userA, user
   await expect(pageB.getByRole('button', { name: '新增成員' })).toHaveCount(0);
   // 3f W141：非 owner 看到的是角色標籤，不是帶「移除」選項的角色下拉。
   await expect(pageB.getByLabel(`${userA.name}的角色`)).toHaveCount(0);
-  await expect(pageB.getByRole('button', { name: '刪除帳本' })).toHaveCount(0);
-  await expect(pageB.getByRole('button', { name: '封存帳本' })).toHaveCount(0);
+  await expect(pageB.getByRole('button', { name: /^(刪除帳本|封存帳本)$/ })).toHaveCount(0);
 
   // ⚠️ 這一條驗的是**體驗**，不是授權。真正的防線在後端的 @RequireLedgerRole
   // （Slice 2 的 D7）；按鈕畫不畫從來不是安全機制。
@@ -201,9 +200,9 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await createLedger(request, userA.token, { name: '社團公款', kind: 'SHARED' });
 
   await page.goto(`/ledgers/${ledger.id}`);
-  await page.getByRole('button', { name: '封存帳本' }).click();
+  await page.getByRole('button', { name: '刪除帳本', exact: true }).click();
 
-  const dialog = page.getByRole('dialog', { name: `封存「${TRIP_LEDGER_NAME}」` });
+  const dialog = page.getByRole('dialog', { name: `刪除「${TRIP_LEDGER_NAME}」` });
   await expect(dialog.getByLabel('請輸入')).toHaveCount(0);
   await dialog.getByRole('button', { name: '封存', exact: true }).click();
 

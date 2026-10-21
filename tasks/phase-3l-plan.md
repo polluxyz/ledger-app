@@ -201,3 +201,12 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - 偏離：無；標註 API 尚未合併，元件測試以 `vi.mock` 替代，未執行 e2e。
 - 驗證：shared 116、API 582、Web 805 項測試通過；`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通過。
 - 總控驗收退回 2 處：「⋯」選單點外面與按 Esc 要收起（Esc 後焦點回到按鈕）；`useSetTransactionMark` 的參數 `marked` 實為目前狀態，改名。修正 b767154，Web 807 條。
+
+### L6（ldm-web-e2e，2026-10-21）
+
+- 新增 `apps/web/e2e/ledger-delete-move.spec.ts` 三條主線：SC-N2 分組搬移（含取消一組、修改一組、家用已選鎖定、小美可見交易及雙方帳戶餘額不變）、SC-N8 複製早餐到今天與家用同名分類、W199～W200 標註色條／首頁卡片／取消標註及小美看不到色條。
+- 修改既有 `ledger-delete-archive.spec.ts`、`ledgers.spec.ts`：封存測試改從「刪除帳本」進入刪除對話框後按「封存」，非擁有者斷言改查合併後的單一入口。
+- 修改既有 `ledger-delete-archive.spec.ts`、`ledger-leave-merge.spec.ts`：預覽餘額改用共用斷言忽略 JSX 節點間空白，仍逐一比對現在金額、箭頭與刪除後金額；原文字斷言因 W194 共用預覽列調整而失敗。
+- e2e helper：`api.ts` 新增第一頁交易查詢；`ui.ts` 新增餘額轉換斷言。
+- 偏離：無；僅修改 `apps/web/e2e/` 與本節紀錄，未改產品程式、Prisma、API 或 shared。
+- 驗證：`pnpm --filter @ledger/web test:e2e` 68 passed、0 failed、0 skip/fixme；新增三條主線全通過。`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 全通過。

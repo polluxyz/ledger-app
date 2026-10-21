@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { parseMoneyInput, type Cents } from '@ledger/shared';
+import { formatMoney, parseMoneyInput, type Cents } from '@ledger/shared';
 
 /**
  * 畫面操作的共用輔助函式。
@@ -15,6 +15,17 @@ export function parseAmount(text: string | null): Cents {
     throw new Error(`畫面金額格式無效：${text ?? ''}`);
   }
   return amount;
+}
+
+/** 比對預覽列的現在與之後餘額，忽略 JSX 節點之間不影響閱讀的空白。 */
+export async function expectBalanceTransition(
+  row: Locator,
+  current: Cents,
+  after: Cents,
+): Promise<void> {
+  const actual = (await row.innerText()).replace(/\s+/g, '');
+  const expected = `${formatMoney(current)}→${formatMoney(after)}`.replace(/\s+/g, '');
+  expect(actual).toContain(expected);
 }
 
 /**
