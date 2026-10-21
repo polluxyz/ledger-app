@@ -158,3 +158,20 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - API 端 `marked` 先一律回 `false`（`toTransaction`、結清的 Swagger DTO）；Web `useLeavePreview` 的參數改成 3k 兩個欄位必帶；測試 fixture 補 `marked: false`。
 - 隔離測試 `ledger-delete-move-isolation.e2e-spec.ts` 9 條全紅：SC-N7 的 5 條是私人帳本預覽被 DTO 擋成 400；SC-N12 的 4 條是路由不存在、`TransactionMark` 表不存在。404 類的斷言都配了正向對照，實作前不會假綠。表還沒有 Prisma model，測試用 raw SQL 數標註，L1 之後可以換成 model。
 - 驗證：shared 116、API 582、Web 102 檔全綠；API e2e 44 檔 391 條，只有新的 9 條紅；lint、typecheck、format 通過。整合分支的 worktree 用 `ledger_ldm_int_test`。
+
+### L1（`ldm-migrate`，2026-10-21）
+
+- migration `20261021000000_transaction_mark`：只建 `TransactionMark` 表（複合主鍵、`transactionId` 索引、兩條 `ON DELETE CASCADE` 外鍵），用 `prisma migrate diff` 產生。`User.transactionMarks`、`Transaction.transactionMarks` 反向關聯。
+- SQL 驗證（`BEGIN … ROLLBACK`）：重複標註被主鍵擋（23505）；刪交易時標註跟著刪。
+- 隔離測試的 `markCount()` 改用 `prisma.transactionMark.count()`，斷言沒動。
+
+### L2（`ldm-move`，2026-10-21）
+
+- `ledger-delete-move-plan.ts`：`groupLedgerDeleteItems`（一般收支、互轉一筆一項；合併來的「我付、有分帳」以 `mergeId`＋`mergedFromId` 配對、id 用份額那一筆）與 `planLedgerDeleteMove`（分類對應、各組要改的交易與 `Split`、`retainedTransactionIds`、撤銷、5 種 `moves` 錯誤）。
+- 3k、3l 共用的分組抽成 `ledger-leave-plan.ts` 的 `groupPersonalLeaveItems`（個人借還＋結清分支、個人分帳），3k 行為不變。結清的 `settlesEntryId` 紀錄沒有交易，所以分組不需要另外帶。
+- `ledger-leave.service.ts` 依 `ledger.kind` 分流；兩種帳本的欄位規則在 `validateRequest`（DTO 的 `targetLedgerId`、`excludedItemIds` 改成可省略，共享帳本仍由 service 擋成 400）。
+- 偏離 plan 的寫法：plan 寫「依 id 排序逐一鎖目標帳本」，實作把**來源也一起排序**再逐一鎖（`lockMember`）。A 刪 P1 搬到 P2、B 刪 P2 搬到 P1 時，先鎖來源會互相等待。目標的成員、角色、封存在鎖之後重查。
+- 不做 3k 的「清自己帳戶的引用」與 `ledgerPersonPointer.deleteMany`：私人帳本的交易不是搬走就是刪掉。
+- 回滾測試放在 API e2e：`jest.spyOn(LedgersService.deleteLedgerRows)` 在分類、搬移、撤銷之後丟錯，斷言帳本、交易歸屬、分類、分帳、往來全部不變。
+- **spec 衝突（開發者 2026-10-21 決定）**：隔離測試 SC-N7 原本斷言其他成員看不到搬進共享帳本的個人借還，跟 3b 決策 13（看得到交易、看不到背後的往來）衝突。開發者選照 3b；總控在整合分支 4c6e085 改 spec 決策 214、§1 第 4 步、SC-N2 與那條斷言。`transactions.service.ts` 的可見度沒改。
+- 驗證（worker）：新 e2e 10 條、隔離 SC-N7 5 條轉綠；API e2e 45 檔 401 條，只有 SC-N12 4 條紅（等 L3）；3k 的 e2e 檔全綠、沒改斷言。
