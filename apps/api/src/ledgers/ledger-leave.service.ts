@@ -18,9 +18,13 @@ import { computeLedgerSummary } from '../settlements/ledger-summary';
 import { SplitsService } from '../splits/splits.service';
 import { LedgersService } from './ledgers.service';
 import {
+  groupLedgerDeleteItems,
+  planLedgerDeleteMove,
+  type LedgerDeleteMovePlan,
+} from './ledger-delete-move-plan';
+import {
   planLedgerLeave,
-  type LeavePersonalItem,
-  type LeaveTransaction,
+  groupPersonalLeaveItems,
   type LedgerLeavePlan,
 } from './ledger-leave-plan';
 
@@ -63,8 +67,18 @@ export class LedgerLeaveService {
     return this.prisma.$transaction(
       async (tx) => {
         const member = await this.loadMember(tx, ledgerId, userId);
-        const blockedBy = await this.blocker(tx, member, request);
-        const loaded = await this.loadPlan(tx, member, userId, request, false, blockedBy === null);
+        this.validateRequest(member, request);
+        if (member.ledger.kind === 'PERSONAL' && member.role !== 'OWNER') throw forbidden();
+        const blockedBy =
+          member.ledger.kind === 'PERSONAL'
+            ? member.ledger.archivedAt
+              ? 'LEDGER_ARCHIVED'
+              : null
+            : await this.blocker(tx, member, request);
+        const loaded =
+          member.ledger.kind === 'PERSONAL'
+            ? await this.loadDeleteMovePlan(tx, member, userId, request)
+            : await this.loadPlan(tx, member, userId, request, false, blockedBy === null);
         const zeroed = loaded.accounts.map((a) => ({ ...a, initialBalance: 0 }));
         const [{ balances }, { balances: source }, { balances: retained }] = await Promise.all([
           this.accounts.calculateBalances(loaded.accounts, tx),
@@ -103,7 +117,25 @@ export class LedgerLeaveService {
   async leave(ledgerId: string, userId: string, request: LeaveRequest): Promise<void> {
     await this.prisma.$transaction(
       async (tx) => {
-        const member = await this.loadMember(tx, ledgerId, userId, true);
+        let member = await this.loadMember(tx, ledgerId, userId);
+        this.validateRequest(member, request);
+        if (member.ledger.kind === 'PERSONAL') {
+          // 來源也參與排序：兩人把 P1、P2 互搬時，不會各自先持有來源而互等。
+          const ledgerIds = [
+            ...new Set([ledgerId, ...request.moves!.map((m) => m.targetLedgerId)]),
+          ].sort();
+          for (const id of ledgerIds) await this.lockMember(tx, id, userId);
+          member = await this.loadMember(tx, ledgerId, userId);
+          if (member.role !== 'OWNER') throw forbidden();
+          if (member.ledger.archivedAt) throw conflict(ErrorCode.LEDGER_ARCHIVED);
+          if (request.confirm !== member.ledger.name)
+            throw bad('confirm must exactly match the ledger name.');
+          const { plan } = await this.loadDeleteMovePlan(tx, member, userId, request);
+          await this.applyDeleteMovePlan(tx, userId, plan);
+          await this.ledgers.deleteLedgerRows(tx, ledgerId);
+          return;
+        }
+        member = await this.loadMember(tx, ledgerId, userId, true);
         if (member.ledger.archivedAt) throw conflict(ErrorCode.LEDGER_ARCHIVED);
         if (request.deleteLedger) {
           if (member.role !== 'OWNER') throw forbidden();
@@ -142,6 +174,154 @@ export class LedgerLeaveService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 },
     );
+  }
+
+  private validateRequest(member: Membership, request: LeaveRequest) {
+    // DTO 經 class-transformer 後會有值為 undefined 的選用屬性；null 仍是明確帶入。
+    if (member.ledger.kind === 'PERSONAL') {
+      if (
+        request.deleteLedger !== true ||
+        !Array.isArray(request.moves) ||
+        request.targetLedgerId !== undefined ||
+        request.excludedItemIds !== undefined
+      )
+        throw bad('Personal ledger deletion requires deleteLedger and moves only.');
+    } else if (
+      request.moves !== undefined ||
+      request.targetLedgerId === undefined ||
+      !Array.isArray(request.excludedItemIds)
+    ) {
+      throw bad('Shared ledger leave requires targetLedgerId and excludedItemIds, without moves.');
+    }
+  }
+
+  private async loadDeleteMovePlan(
+    tx: Prisma.TransactionClient,
+    member: Membership,
+    userId: string,
+    request: LeaveRequest,
+  ) {
+    const ledgerId = member.ledgerId;
+    const [rows, splitRows, accounts, counterparties, sums] = await Promise.all([
+      tx.transaction.findMany({
+        where: { ledgerId, deletedAt: null },
+        include: transactionInclude,
+        orderBy: { id: 'asc' },
+      }),
+      tx.split.findMany({
+        where: { ledgerId, ownerId: userId, deletedAt: null },
+        include: { category: true, participants: true, entries: { where: { deletedAt: null } } },
+        orderBy: { id: 'asc' },
+      }),
+      tx.account.findMany({
+        where: { userId },
+        orderBy: [{ isTemporary: 'asc' }, { createdAt: 'asc' }],
+      }),
+      tx.counterparty.findMany({ where: { ownerId: userId }, orderBy: { id: 'asc' } }),
+      tx.debtEntry.groupBy({
+        by: ['counterpartyId'],
+        where: { deletedAt: null, counterparty: { ownerId: userId } },
+        _sum: { delta: true },
+      }),
+    ]);
+    const personal = groupPersonalLeaveItems(rows, splitRows, userId, normalizeTransaction);
+    const items = groupLedgerDeleteItems(
+      rows.filter((t) => !t.debtEntry && !t.splitId && !t.differenceOfId).map(normalizeTransaction),
+      personal,
+    );
+    const effects = new Map<string, LedgerLeavePreview['items'][number]['accountEffects']>();
+    const zeroed = accounts.map((a) => ({ ...a, initialBalance: 0 }));
+    for (const item of items) {
+      const { balances } = await this.accounts.calculateBalances(zeroed, tx, {
+        ledgerId,
+        id: { in: item.transactions.map((t) => t.id) },
+      });
+      effects.set(
+        item.id,
+        accounts
+          .filter((a) => balances.get(a.id) !== 0)
+          .map((a) => ({ accountId: a.id, name: a.name, delta: balances.get(a.id)! })),
+      );
+    }
+    const links = await linkInfoFor(
+      tx,
+      counterparties.map((c) => c.id),
+    );
+    const targetCategories = new Map<string, Awaited<ReturnType<typeof tx.category.findMany>>>();
+    const input = {
+      sourceLedgerId: ledgerId,
+      items,
+      moves: request.moves!,
+      targetCategories,
+      effects,
+      counterparties: counterparties.map((c) => ({
+        id: c.id,
+        displayName: c.name ?? links.get(c.id)?.userName ?? '',
+        linked: links.has(c.id),
+        balance: sums.find((s) => s.counterpartyId === c.id)?._sum.delta ?? 0,
+      })),
+    };
+    const preliminary = planLedgerDeleteMove(input);
+    if (preliminary.errors.length) throw bad(preliminary.errors[0]!);
+    // 即使來源封存仍驗目標；執行呼叫端已按固定順序鎖定全部帳本與成員。
+    for (const move of request.moves!) {
+      const target = await this.loadMember(tx, move.targetLedgerId, userId);
+      if (target.role === 'VIEWER') throw forbidden();
+      if (target.ledger.archivedAt) throw conflict(ErrorCode.LEDGER_ARCHIVED);
+      targetCategories.set(
+        move.targetLedgerId,
+        await tx.category.findMany({ where: { ledgerId: move.targetLedgerId } }),
+      );
+    }
+    return { plan: { ...planLedgerDeleteMove(input), carryOvers: [] }, accounts };
+  }
+
+  private async applyDeleteMovePlan(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    plan: LedgerDeleteMovePlan,
+  ) {
+    for (const group of plan.groups) {
+      const categoryIds = new Map<string, string>();
+      for (const category of group.categories) {
+        const created = await tx.category.upsert({
+          where: {
+            ledgerId_type_name: {
+              ledgerId: group.targetLedgerId,
+              type: category.type,
+              name: category.name,
+            },
+          },
+          create: {
+            ledgerId: group.targetLedgerId,
+            type: category.type,
+            name: category.name,
+            icon: category.icon,
+          },
+          update: {},
+        });
+        categoryIds.set(category.ref, created.id);
+      }
+      const resolve = (ref: string | null) => (ref ? (categoryIds.get(ref) ?? ref) : null);
+      for (const split of group.splits)
+        await tx.split.update({
+          where: { id: split.id, ownerId: userId },
+          data: { ledgerId: group.targetLedgerId, categoryId: resolve(split.categoryRef)! },
+        });
+      for (const transaction of group.transactions)
+        await tx.transaction.update({
+          where: { id: transaction.id },
+          data: { ledgerId: group.targetLedgerId, categoryId: resolve(transaction.categoryRef) },
+        });
+    }
+    for (const item of plan.withdrawalsToApply) {
+      if (item.kind === 'PERSONAL_SPLIT')
+        await this.splits.removeInTransaction(tx, userId, item.id, { purpose: 'ledger-leave' });
+      else
+        await this.debtEntries.removeInTransaction(tx, userId, item.entries[0]!.id, {
+          purpose: 'ledger-leave',
+        });
+    }
   }
 
   private async loadMember(
@@ -262,64 +442,11 @@ export class LedgerLeaveService {
       }),
     ]);
     const alreadyMerged = new Set(mergedBefore.map((row) => row.mergedFromId));
-    const normalize = (t: TransactionRow): LeaveTransaction => ({
-      ...t,
-      payer: t.payerPerson
-        ? {
-            userId: t.payerPerson.userId,
-            name: t.payerPerson.name ?? t.payerPerson.user?.name ?? '',
-          }
-        : { userId: t.creatorId, name: t.creator.name },
-      shares:
-        t.ledgerSplit?.shares.map((s) => ({ userId: s.person.userId, share: s.share })) ?? null,
-      settlement: t.settlement
-        ? {
-            from: {
-              userId: t.settlement.fromPerson.userId,
-              name: t.settlement.fromPerson.name ?? t.settlement.fromPerson.user?.name ?? '',
-            },
-            to: {
-              userId: t.settlement.toPerson.userId,
-              name: t.settlement.toPerson.name ?? t.settlement.toPerson.user?.name ?? '',
-            },
-          }
-        : null,
-    });
+    const normalize = normalizeTransaction;
     const shared = rows
       .filter((t) => !t.debtEntry && !t.splitId && !t.differenceOfId && !alreadyMerged.has(t.id))
       .map(normalize);
-    const personalItems: LeavePersonalItem[] = rows
-      .filter(
-        (t) =>
-          t.debtEntry?.counterparty.ownerId === userId &&
-          t.debtEntry.deletedAt === null &&
-          !t.debtEntry.splitId &&
-          !t.debtEntry.settlesEntryId,
-      )
-      .map((t) => ({
-        id: t.id,
-        kind: 'PERSONAL_DEBT',
-        date: t.date,
-        title: t.title,
-        category: t.category,
-        share: null,
-        transactions: [t, ...rows.filter((b) => b.differenceOfId === t.id)].map(normalize),
-        entries: [
-          t.debtEntry!,
-          ...(t.debtEntry!.settledBy?.deletedAt === null ? [t.debtEntry!.settledBy] : []),
-        ],
-      }));
-    for (const split of splitRows)
-      personalItems.push({
-        id: split.id,
-        kind: 'PERSONAL_SPLIT',
-        date: split.date,
-        title: split.title,
-        category: split.category,
-        share: split.participants.find((p) => p.counterpartyId === null)?.share ?? 0,
-        transactions: rows.filter((t) => t.splitId === split.id).map(normalize),
-        entries: split.entries,
-      });
+    const personalItems = groupPersonalLeaveItems(rows, splitRows, userId, normalize);
     const effects = new Map<string, LedgerLeavePreview['items'][number]['accountEffects']>();
     const zeroed = accounts.map((a) => ({ ...a, initialBalance: 0 }));
     // 項目的帳戶效果也走既有公式。分帳與還款分支按一個可勾選項目一起計算。
@@ -488,4 +615,29 @@ function bad(message: string) {
 }
 function conflict(code: string) {
   return new AppException(HttpStatus.CONFLICT, code, code);
+}
+
+function normalizeTransaction(t: TransactionRow) {
+  return {
+    ...t,
+    payer: t.payerPerson
+      ? {
+          userId: t.payerPerson.userId,
+          name: t.payerPerson.name ?? t.payerPerson.user?.name ?? '',
+        }
+      : { userId: t.creatorId, name: t.creator.name },
+    shares: t.ledgerSplit?.shares.map((s) => ({ userId: s.person.userId, share: s.share })) ?? null,
+    settlement: t.settlement
+      ? {
+          from: {
+            userId: t.settlement.fromPerson.userId,
+            name: t.settlement.fromPerson.name ?? t.settlement.fromPerson.user?.name ?? '',
+          },
+          to: {
+            userId: t.settlement.toPerson.userId,
+            name: t.settlement.toPerson.name ?? t.settlement.toPerson.user?.name ?? '',
+          },
+        }
+      : null,
+  };
 }
