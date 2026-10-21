@@ -210,3 +210,4 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - e2e helper：`api.ts` 新增第一頁交易查詢；`ui.ts` 新增餘額轉換斷言。
 - 偏離：無；僅修改 `apps/web/e2e/` 與本節紀錄，未改產品程式、Prisma、API 或 shared。
 - 驗證：`pnpm --filter @ledger/web test:e2e` 68 passed、0 failed、0 skip/fixme；新增三條主線全通過。`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 全通過。
+- 總控驗收退回 1 處：`expectBalanceTransition` 只讀一次 `innerText` 不會重試，改成 `expect.poll`（8ce501c）。
