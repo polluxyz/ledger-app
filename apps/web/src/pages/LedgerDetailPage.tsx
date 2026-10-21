@@ -19,7 +19,7 @@ import { LedgerRenameDialog } from '../features/ledgers/LedgerRenameDialog';
 import { MemberDialog } from '../features/ledgers/MemberDialog';
 import { MemberList } from '../features/ledgers/MemberList';
 import { ROLE_LABEL } from '../features/ledgers/role-labels';
-import { useArchiveLedger, useLedger, useUnarchiveLedger } from '../features/ledgers/use-ledgers';
+import { useLedger, useUnarchiveLedger } from '../features/ledgers/use-ledgers';
 import { useRemoveMember, useUpdateMemberRole } from '../features/ledgers/use-members';
 import { GuestList } from '../features/ledger-people/GuestList';
 import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
@@ -110,14 +110,13 @@ function LedgerDetailView({
   const [removing, setRemoving] = useState<LedgerMemberInfo | null>(null);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   // 危險操作同時間只會開一個彈窗，用一個欄位表示比多個布林值更不容易出錯。
-  const [danger, setDanger] = useState<'archive' | 'delete' | 'unarchive' | null>(null);
+  const [danger, setDanger] = useState<'delete' | 'unarchive' | null>(null);
   // 改角色的錯誤（例如降級最後一位 owner）貼在那一列底下，不放頁面頂端——
   // 整頁共用一個錯誤框的話，看的人不知道是哪一列造成的。
   const [roleError, setRoleError] = useState<{ userId: string; message: string } | undefined>();
 
   const updateRole = useUpdateMemberRole(ledger.id);
   const removeMember = useRemoveMember(ledger.id);
-  const archiveLedger = useArchiveLedger();
   const unarchiveLedger = useUnarchiveLedger();
   const memberHasTransactions =
     removeMember.error instanceof ApiError &&
@@ -189,18 +188,7 @@ function LedgerDetailView({
   function closeDanger() {
     setDanger(null);
     // 清掉上一個動作留下的錯誤，下次開啟時是乾淨的。
-    archiveLedger.reset();
     unarchiveLedger.reset();
-  }
-
-  function confirmArchive() {
-    archiveLedger.mutate(ledger.id, {
-      onSuccess: () => {
-        setDanger(null);
-        // 不必導頁。已封存的帳本這一頁仍看得到，重新取回的明細會自己換成唯讀樣貌；
-        // 作用中帳本則由 ActiveLedgerProvider 自動退回第一本未封存的。
-      },
-    });
   }
 
   function confirmUnarchive() {
@@ -327,18 +315,13 @@ function LedgerDetailView({
                 取消封存
               </Button>
             ) : (
-              <>
-                <Button variant="secondary" onClick={() => setDanger('archive')}>
-                  封存帳本
-                </Button>
-                <Button
-                  variant="secondary"
-                  className={styles.deleteButton}
-                  onClick={() => setDanger('delete')}
-                >
-                  刪除帳本
-                </Button>
-              </>
+              <Button
+                variant="secondary"
+                className={styles.deleteButton}
+                onClick={() => setDanger('delete')}
+              >
+                刪除帳本
+              </Button>
             )}
           </div>
         </section>
@@ -372,31 +355,23 @@ function LedgerDetailView({
       )}
 
       <Dialog
-        open={danger === 'archive' || danger === 'unarchive'}
-        title={danger === 'unarchive' ? `取消封存「${ledger.name}」` : `封存「${ledger.name}」`}
+        open={danger === 'unarchive'}
+        title={`取消封存「${ledger.name}」`}
         onClose={closeDanger}
       >
         <div className={styles.confirmActions}>
-          <FormError error={danger === 'unarchive' ? unarchiveLedger.error : archiveLedger.error} />
+          <FormError error={unarchiveLedger.error} />
           <div className={styles.dangerActions}>
             <Button
               type="button"
               variant="secondary"
-              disabled={archiveLedger.isPending || unarchiveLedger.isPending}
+              disabled={unarchiveLedger.isPending}
               onClick={closeDanger}
             >
               取消
             </Button>
-            <Button
-              type="button"
-              disabled={archiveLedger.isPending || unarchiveLedger.isPending}
-              onClick={danger === 'unarchive' ? confirmUnarchive : confirmArchive}
-            >
-              {archiveLedger.isPending || unarchiveLedger.isPending
-                ? '處理中…'
-                : danger === 'unarchive'
-                  ? '取消封存'
-                  : '封存'}
+            <Button type="button" disabled={unarchiveLedger.isPending} onClick={confirmUnarchive}>
+              {unarchiveLedger.isPending ? '處理中…' : '取消封存'}
             </Button>
           </div>
         </div>

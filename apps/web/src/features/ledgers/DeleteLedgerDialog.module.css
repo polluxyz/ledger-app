@@ -36,6 +36,88 @@
   min-width: 0;
 }
 
+.moveRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.moveItems {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moveTarget {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+
+.moveAction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.moveAction:hover:not(:disabled) {
+  background-color: var(--color-fill);
+  color: var(--color-text);
+}
+
+.moveAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.moveAction svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.removeMove {
+  color: var(--color-danger);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.pickerLink {
+  justify-self: start;
+  padding: var(--space-xs) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pickerLink:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.pickerLink:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .counterpartyName {
   display: inline-flex;
   align-items: center;
@@ -79,12 +161,17 @@
 
 @media (max-width: 34rem) {
   .accountRow,
-  .counterpartyRow {
+  .counterpartyRow,
+  .moveRow {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .balanceChange {
+    align-self: flex-end;
+  }
+
+  .moveTarget {
     align-self: flex-end;
   }
 }

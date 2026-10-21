@@ -187,3 +187,10 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
   3. 合併來的「我付、有分帳」→ 標在份額那一筆（spec 原有）。
      `PUT`、`DELETE` 與回應的 `marked` 共用 `markRepresentative`。
 - 驗證（worker）：隔離 9 條全綠；新 e2e `transaction-marks.e2e-spec.ts` 17 條；API e2e 46 檔 418 條全綠。交易列表 200 筆（20 筆標註）`limit=50` 實測 21.47ms。
+
+### L4（ldm-web-del，2026-10-21）
+
+- 帳本頁合併封存／刪除入口；私人帳本改用 `leave-preview`、`leave` 搬移分組與名稱確認，新增選交易／選帳本流程；3k 共享刪除沿用原對話框，預覽數字共用上色元件。
+- 偏離：無；未改 Prisma、API 或 shared，也未跑 e2e。
+- 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通過；`pnpm test` shared 116、API 582、Web 799（Web 102 個測試檔），共 1,497 條全綠。
+- 總控驗收退回 1 處：帳戶歸零也要照增減上色，只有往來段「兩清」用一般色（spec W194 的「歸零用一般文字色」是總控寫錯，已改 0418df8）。修正 ba1e028。

@@ -52,12 +52,17 @@ describe('Ledger detail page', () => {
     });
   }
 
+  function parseRequestBody(init?: RequestInit): Record<string, unknown> {
+    if (typeof init?.body !== 'string') throw new Error('預期請求帶 JSON body');
+    return JSON.parse(init.body) as Record<string, unknown>;
+  }
+
   function routeFetch(
     overrides: {
       detail?: () => Promise<Response>;
       me?: Record<string, unknown>;
-      remove?: () => Promise<Response>;
-      preview?: unknown;
+      leavePreview?: unknown;
+      leave?: () => Promise<Response>;
       unarchive?: () => Promise<Response>;
       people?: unknown[];
       groups?: unknown[];
@@ -90,22 +95,22 @@ describe('Ledger detail page', () => {
           Promise.resolve(jsonResponse(200, { ...detail, archivedAt: null }))
         );
       }
-      if (target.endsWith('/ledgers/led-2/removal-preview')) {
+      if (target.endsWith('/ledgers/led-2/leave-preview') && init?.method === 'POST') {
         return Promise.resolve(
           jsonResponse(
             200,
-            overrides.preview ?? {
+            overrides.leavePreview ?? {
+              items: [],
               accounts: [],
-              counterparties: [],
-              withdrawsDebts: false,
-              delete: { allowed: true, blockedBy: null },
+              carryOvers: [],
+              withdrawals: [],
+              leave: { allowed: true, blockedBy: null },
             },
           ),
         );
       }
-      // 刪除的網址帶著 ?confirm=，接不到下面那個 endsWith 的分支。
-      if (init?.method === 'DELETE' && target.includes('/ledgers/led-2')) {
-        return overrides.remove?.() ?? Promise.resolve(new Response(null, { status: 204 }));
+      if (target.endsWith('/ledgers/led-2/leave') && init?.method === 'POST') {
+        return overrides.leave?.() ?? Promise.resolve(new Response(null, { status: 204 }));
       }
       if (target.endsWith('/ledgers/led-2')) {
         if (init?.method === 'PATCH') {
@@ -291,15 +296,15 @@ describe('Ledger detail page', () => {
     expect(screen.queryByRole('heading', { name: '危險操作' })).not.toBeInTheDocument();
   });
 
-  it('archives the ledger without typing a name or showing a description', async () => {
+  it('opens the shared 3k dialog from the single delete button and can archive there', async () => {
     routeFetch();
     const user = userEvent.setup();
 
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: '封存帳本' }));
-    expect(screen.getByRole('heading', { name: '封存「家庭帳本」' })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/輸入/)).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: '刪除帳本' }));
+    expect(await screen.findByRole('heading', { name: '刪除「家庭帳本」' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '封存帳本' })).not.toBeInTheDocument();
     expect(screen.queryByText(/無法解除封存/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '封存' }));
 
@@ -312,21 +317,18 @@ describe('Ledger detail page', () => {
     });
   });
 
-  /**
-   * 危險操作區裡兩顆按鈕的後果差很多：封存可以只是收起來，刪除是連資料一起消失。
-   * 2h 之後只有刪除帶危險樣式，靠 class 驗——顏色本身在單元測試裡讀不到。
-   */
-  it('marks only 刪除帳本 with the dangerous styling', async () => {
+  it('shows one dangerous delete button for an active ledger', async () => {
     routeFetch();
 
     render(<App />);
 
     const remove = await screen.findByRole('button', { name: '刪除帳本' });
     expect(remove.className).toMatch(/deleteButton/);
-    expect(screen.getByRole('button', { name: '封存帳本' }).className).not.toMatch(/deleteButton/);
+    expect(screen.getAllByRole('button', { name: '刪除帳本' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '封存帳本' })).not.toBeInTheDocument();
   });
 
-  it('loads the removal preview, deletes with the typed name, and returns to the list', async () => {
+  it('previews with moves and deletes a private ledger through leave after the exact name', async () => {
     routeFetch({
       detail: () => Promise.resolve(jsonResponse(200, { ...detail, kind: 'PERSONAL' })),
     });
@@ -336,20 +338,32 @@ describe('Ledger detail page', () => {
 
     await user.click(await screen.findByRole('button', { name: '刪除帳本' }));
     expect(await screen.findByRole('heading', { name: '刪除「家庭帳本」' })).toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.some(([url]) => String(url).endsWith('/ledgers/led-2/removal-preview')),
-    ).toBe(true);
+    const preview = await waitFor(() =>
+      fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).endsWith('/ledgers/led-2/leave-preview') &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    );
+    expect(parseRequestBody(preview?.[1] as RequestInit)).toEqual({
+      deleteLedger: true,
+      moves: [],
+    });
     await user.type(screen.getByLabelText('輸入帳本名稱'), '家庭帳本');
     await user.click(screen.getByRole('button', { name: '刪除' }));
 
     await waitFor(() => {
       const remove = fetchMock.mock.calls.find(
-        (call) => (call[1] as RequestInit | undefined)?.method === 'DELETE',
+        ([url, init]) =>
+          String(url).endsWith('/ledgers/led-2/leave') &&
+          (init as RequestInit | undefined)?.method === 'POST',
       );
       expect(remove).toBeDefined();
-      const deleteUrl = new URL(String(remove?.[0]));
-      expect(deleteUrl.searchParams.get('confirm')).toBe('家庭帳本');
-      expect(deleteUrl.searchParams.has('withdrawDebts')).toBe(false);
+      expect(parseRequestBody(remove?.[1] as RequestInit)).toEqual({
+        deleteLedger: true,
+        moves: [],
+        confirm: '家庭帳本',
+      });
     });
     await waitFor(() => {
       expect(window.location.pathname).toBe('/ledgers');
@@ -391,7 +405,7 @@ describe('Ledger detail page', () => {
       ).toBe(true);
       expect(window.location.pathname).toBe('/ledgers/led-2');
     });
-    expect(await screen.findByRole('button', { name: '封存帳本' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '刪除帳本' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '取消封存' })).not.toBeInTheDocument();
   });
 

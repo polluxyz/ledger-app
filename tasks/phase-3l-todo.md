@@ -10,7 +10,7 @@ plan：`tasks/phase-3l-plan.md`；spec：`docs/specs/phase-3l-move-and-copy.md`�
       驗收：單元測試涵蓋分組（SC-N6）、分類對應（SC-N5）、`moves` 的檢查（SC-N14）、中途失敗整筆回滾；SC-N1～N4、N14 的 API e2e 通過；隔離測試 SC-N7 轉綠；3k 的退出 e2e 照舊全綠。
 - [x] **L3 標註**（依賴 L1、L2；`ldm-mark`）：plan §1.4。
       驗收：SC-N10～N13 的 API e2e 通過；隔離測試 SC-N12 轉綠；所有回傳 `Transaction` 的端點都帶 `marked`；交易列表 API < 500ms。
-- [ ] **L4 刪除對話框**（依賴 L0；`ldm-web-del`）：plan §1.5。
+- [x] **L4 刪除對話框**（依賴 L0；`ldm-web-del`）：plan §1.5。
       驗收：元件測試涵蓋 W194、W195（含「×」「修改」、選過的帳本灰掉、已在其他組的交易不出現）、刪除後數字上色、每次改組就重新取預覽且只顯示最新結果；3k 退出對話框的元件測試全綠；Web 檢查全綠。
 - [ ] **L5 ⋯ 選單、複製、標註**（依賴 L0；`ldm-web-row`）：plan §1.6。
       驗收：元件測試涵蓋 W196～W200、SC-N8、SC-N9；Web 檢查全綠。

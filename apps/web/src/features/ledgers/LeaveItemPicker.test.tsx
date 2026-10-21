@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { LedgerLeaveItem, LedgerLeavePreview } from '@ledger/shared';
-import { LeaveItemPicker } from './LeaveItemPicker';
+import { LeaveItemPicker, LeavePreviewSections } from './LeaveItemPicker';
+import styles from './LeaveItemPicker.module.css';
 
 const item: LedgerLeaveItem = {
   id: 'item-1',
@@ -68,5 +69,94 @@ describe('LeaveItemPicker', () => {
     expect(onExcludedItemIdsChange).toHaveBeenLastCalledWith([]);
     await user.click(screen.getByRole('button', { name: '完成' }));
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('supports an initially unchecked include selection for private ledger moves', async () => {
+    const user = userEvent.setup();
+    const onSelectedItemIdsChange = vi.fn();
+    render(
+      <LeaveItemPicker
+        items={[item]}
+        preview={undefined}
+        previewError={null}
+        isPreviewLoading={false}
+        excludedItemIds={[]}
+        selectedCount={0}
+        onExcludedItemIdsChange={vi.fn()}
+        selectionMode="include"
+        selectedItemIds={[]}
+        onSelectedItemIdsChange={onSelectedItemIdsChange}
+        submitLabel="下一步"
+        onComplete={vi.fn()}
+      />,
+    );
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).not.toBeChecked();
+    expect(screen.queryByRole('heading', { name: '帳戶' })).not.toBeInTheDocument();
+    await user.click(checkboxes[1]!);
+    expect(onSelectedItemIdsChange).toHaveBeenCalledWith(['item-1']);
+  });
+
+  it('colors only the after balance by comparing the server values and keeps carryovers uncolored', () => {
+    const colorPreview: LedgerLeavePreview = {
+      ...preview,
+      accounts: [
+        { accountId: 'increase', name: '增加', balance: 10000, balanceAfter: 14000 },
+        { accountId: 'decrease', name: '減少', balance: 15000, balanceAfter: 7000 },
+        { accountId: 'same', name: '相等', balance: 3000, balanceAfter: 3000 },
+        { accountId: 'zero-expense', name: '歸零支出', balance: 200000, balanceAfter: 0 },
+        { accountId: 'zero-income', name: '歸零收入', balance: -500000, balanceAfter: 0 },
+      ],
+      carryOvers: [
+        {
+          ledgerPersonId: 'person-1',
+          displayName: '小明',
+          amount: 2000,
+          counterpartyId: 'cp-1',
+        },
+      ],
+      withdrawals: [
+        {
+          counterpartyId: 'cp-cleared',
+          displayName: '小林',
+          linked: false,
+          balance: 2000,
+          balanceAfter: 0,
+        },
+      ],
+    };
+    render(<LeavePreviewSections preview={colorPreview} columnHint="現在 → 刪除後" />);
+
+    expect(screen.getAllByText('現在 → 刪除後')).toHaveLength(2);
+    expect(screen.getByText('$100')).toHaveClass(styles.balanceBefore!);
+    expect(screen.getByText('$140')).toHaveClass(styles.balanceAfterIncome!);
+    expect(screen.getByText('$70')).toHaveClass(styles.balanceAfterExpense!);
+    const equalAmounts = screen.getAllByText('$30');
+    expect(equalAmounts[0]).toHaveClass(styles.balanceBefore!);
+    expect(equalAmounts[1]).toHaveClass(styles.balanceAfter!);
+    const zeroExpenseRow = screen.getByText('歸零支出').closest('li');
+    expect(zeroExpenseRow).not.toBeNull();
+    expect(within(zeroExpenseRow as HTMLElement).getByText('$0')).toHaveClass(
+      styles.balanceAfterExpense!,
+    );
+    const zeroIncomeRow = screen.getByText('歸零收入').closest('li');
+    expect(zeroIncomeRow).not.toBeNull();
+    expect(within(zeroIncomeRow as HTMLElement).getByText('$0')).toHaveClass(
+      styles.balanceAfterIncome!,
+    );
+    const clearedRow = screen.getByText('小林').closest('li');
+    expect(clearedRow).not.toBeNull();
+    const clearedValue = within(clearedRow as HTMLElement).getByText('兩清');
+    expect(clearedValue).toHaveClass(styles.balanceAfter!);
+    expect(clearedValue).not.toHaveClass(styles.balanceAfterIncome!);
+    expect(clearedValue).not.toHaveClass(styles.balanceAfterExpense!);
+    const carryOverRow = screen.getByText('小明').closest('li');
+    expect(carryOverRow).not.toBeNull();
+    const carryOverAmount = carryOverRow?.querySelector(`.${styles.arrowAmount!}`);
+    expect(carryOverAmount).not.toBeNull();
+    expect(carryOverAmount).not.toHaveClass(styles.balanceAfterIncome!);
+    expect(carryOverAmount).not.toHaveClass(styles.balanceAfterExpense!);
   });
 });
