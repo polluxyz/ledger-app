@@ -16,5 +16,5 @@ plan：`tasks/phase-3l-plan.md`；spec：`docs/specs/phase-3l-move-and-copy.md`�
       驗收：元件測試涵蓋 W196～W200、SC-N8、SC-N9；Web 檢查全綠。
 - [x] **L6 Web e2e**（依賴 L2～L5；`ldm-web-e2e`）：plan §1.7。
       驗收：兩套 Web e2e 全綠，含 spec §6 的主線。
-- [ ] **L7 整體驗收、PR、部署**（總控）：plan §4。
+- [x] **L7 整體驗收、PR、部署**（總控）：plan §4。
       驗收：隔離測試紅轉綠；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；dev 備份後 `migrate deploy`，照 plan §4 點過一次；worktree、分支、測試資料庫清掉。
