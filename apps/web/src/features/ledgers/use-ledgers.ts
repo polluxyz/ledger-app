@@ -5,6 +5,7 @@ import type {
   LedgerLeavePreview,
   LedgerRemovalPreview,
   LedgerSummary,
+  LeaveMove,
   LeaveRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
@@ -193,6 +194,31 @@ export function useLeavePreview(
       apiRequest<LedgerLeavePreview>(`/ledgers/${ledgerId}/leave-preview`, {
         method: 'POST',
         body: { ...request, excludedItemIds },
+      }),
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+}
+
+/** 私人帳本刪除預覽；分組搬移每次變更都以完整 moves 作為獨立快取鍵。 */
+export function useDeleteLedgerPreview(
+  ledgerId: string,
+  moves: readonly LeaveMove[],
+  enabled = true,
+) {
+  const requestMoves = moves.map((move) => ({
+    targetLedgerId: move.targetLedgerId,
+    itemIds: [...move.itemIds].sort(),
+  }));
+
+  return useQuery({
+    queryKey: ['ledger-delete-preview', ledgerId, requestMoves],
+    queryFn: () =>
+      apiRequest<LedgerLeavePreview>(`/ledgers/${ledgerId}/leave-preview`, {
+        method: 'POST',
+        body: { deleteLedger: true, moves: requestMoves },
       }),
     enabled,
     placeholderData: keepPreviousData,

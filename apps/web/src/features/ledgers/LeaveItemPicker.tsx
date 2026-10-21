@@ -17,6 +17,13 @@ interface LeaveItemPickerProps {
   excludedItemIds: readonly string[];
   selectedCount: number;
   onExcludedItemIdsChange: (ids: string[]) => void;
+  /** 私人帳本搬移時改以「已選項目」表示勾選狀態；3k 維持 excluded 模式。 */
+  selectionMode?: 'exclude' | 'include';
+  selectedItemIds?: readonly string[];
+  onSelectedItemIdsChange?: (ids: string[]) => void;
+  submitLabel?: string;
+  allowEmptySelection?: boolean;
+  onCancel?: () => void;
   onComplete: () => void;
 }
 
@@ -29,9 +36,16 @@ export function LeaveItemPicker({
   excludedItemIds,
   selectedCount,
   onExcludedItemIdsChange,
+  selectionMode = 'exclude',
+  selectedItemIds = [],
+  onSelectedItemIdsChange,
+  submitLabel = '完成',
+  allowEmptySelection = false,
+  onCancel,
   onComplete,
 }: LeaveItemPickerProps) {
   const excluded = useMemo(() => new Set(excludedItemIds), [excludedItemIds]);
+  const selected = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
   const allSelected = items.length > 0 && selectedCount === items.length;
   const [changedAccountIds, setChangedAccountIds] = useState<ReadonlySet<string>>(() => new Set());
   const previousPreview = useRef<LedgerLeavePreview | undefined>(undefined);
@@ -59,10 +73,22 @@ export function LeaveItemPicker({
   }, [preview]);
 
   function toggleAll() {
-    onExcludedItemIdsChange(allSelected ? items.map((item) => item.id) : []);
+    if (selectionMode === 'include') {
+      onSelectedItemIdsChange?.(allSelected ? [] : items.map((item) => item.id));
+    } else {
+      onExcludedItemIdsChange(allSelected ? items.map((item) => item.id) : []);
+    }
   }
 
   function toggleItem(itemId: string) {
+    if (selectionMode === 'include') {
+      const next = new Set(selected);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      onSelectedItemIdsChange?.([...next].sort());
+      return;
+    }
+
     const next = new Set(excluded);
     if (next.has(itemId)) next.delete(itemId);
     else next.add(itemId);
@@ -70,7 +96,7 @@ export function LeaveItemPicker({
   }
 
   return (
-    <Dialog open title="選擇交易" onClose={onComplete} className={styles.pickerDialog}>
+    <Dialog open title="選擇交易" onClose={onCancel ?? onComplete} className={styles.pickerDialog}>
       <div className={styles.content}>
         <label className={styles.selectAll}>
           <input
@@ -90,27 +116,36 @@ export function LeaveItemPicker({
             <LeaveItemRow
               key={item.id}
               item={item}
-              checked={!excluded.has(item.id)}
+              checked={selectionMode === 'include' ? selected.has(item.id) : !excluded.has(item.id)}
               onChange={() => toggleItem(item.id)}
             />
           ))}
         </ul>
 
-        <div className={styles.preview} aria-live="polite">
-          {isPreviewLoading && <p className={styles.status}>載入中…</p>}
-          {preview && (
-            <LeavePreviewSections
-              preview={preview}
-              showUnchanged
-              changedAccountIds={changedAccountIds}
-            />
-          )}
-          <FormError error={previewError} />
-        </div>
+        {selectionMode === 'exclude' && (
+          <div className={styles.preview} aria-live="polite">
+            {isPreviewLoading && <p className={styles.status}>載入中…</p>}
+            {preview && (
+              <LeavePreviewSections
+                preview={preview}
+                showUnchanged
+                changedAccountIds={changedAccountIds}
+              />
+            )}
+            <FormError error={previewError} />
+          </div>
+        )}
 
         <div className={styles.actions}>
-          <Button type="button" onClick={onComplete} disabled={isPreviewLoading}>
-            完成
+          <Button
+            type="button"
+            onClick={onComplete}
+            disabled={
+              isPreviewLoading ||
+              (selectionMode === 'include' && !allowEmptySelection && selectedCount === 0)
+            }
+          >
+            {submitLabel}
           </Button>
         </div>
       </div>
@@ -156,10 +191,12 @@ export function LeavePreviewSections({
   preview,
   showUnchanged = false,
   changedAccountIds,
+  columnHint,
 }: {
   preview: LedgerLeavePreview;
   showUnchanged?: boolean;
   changedAccountIds?: ReadonlySet<string>;
+  columnHint?: string;
 }) {
   const names = [
     ...preview.carryOvers.map((item) => item.displayName),
@@ -175,9 +212,12 @@ export function LeavePreviewSections({
     <div className={styles.sections}>
       {hasAccounts && (
         <section className={styles.section} aria-labelledby={`${headingId}-accounts`}>
-          <h3 id={`${headingId}-accounts`} className={styles.sectionTitle}>
-            帳戶
-          </h3>
+          <div className={styles.sectionHeading}>
+            <h3 id={`${headingId}-accounts`} className={styles.sectionTitle}>
+              帳戶
+            </h3>
+            {columnHint && <span className={styles.columnHint}>{columnHint}</span>}
+          </div>
           {preview.accounts.length === 0 ? (
             <p className={styles.unchanged}>不變</p>
           ) : (
@@ -191,7 +231,11 @@ export function LeavePreviewSections({
                 >
                   <span>{account.name}</span>
                   <span className={styles.amount}>
-                    {formatMoney(account.balance)} → {formatMoney(account.balanceAfter)}
+                    <span className={styles.balanceBefore}>{formatMoney(account.balance)}</span>
+                    <span aria-hidden="true">→</span>
+                    <span className={balanceAfterClass(account.balance, account.balanceAfter)}>
+                      {formatMoney(account.balanceAfter)}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -201,9 +245,12 @@ export function LeavePreviewSections({
       )}
       {hasRelations && (
         <section className={styles.section} aria-labelledby={`${headingId}-relations`}>
-          <h3 id={`${headingId}-relations`} className={styles.sectionTitle}>
-            往來
-          </h3>
+          <div className={styles.sectionHeading}>
+            <h3 id={`${headingId}-relations`} className={styles.sectionTitle}>
+              往來
+            </h3>
+            {columnHint && <span className={styles.columnHint}>{columnHint}</span>}
+          </div>
           <ul className={styles.summaryList}>
             {preview.carryOvers.map((carryOver) => {
               const from = carryOver.amount > 0 ? carryOver.displayName : '我';
@@ -232,12 +279,14 @@ export function LeavePreviewSections({
                     name={withdrawal.displayName}
                     amount={withdrawal.balance}
                     avatarLabels={avatarLabels}
+                    valueClassName={styles.balanceBefore}
                   />
                   <span aria-hidden="true">→</span>
                   <CounterpartyBalance
                     name={withdrawal.displayName}
                     amount={withdrawal.balanceAfter}
                     avatarLabels={avatarLabels}
+                    valueClassName={balanceAfterClass(withdrawal.balance, withdrawal.balanceAfter)}
                   />
                 </span>
               </li>
@@ -253,16 +302,18 @@ function CounterpartyBalance({
   name,
   amount,
   avatarLabels,
+  valueClassName,
 }: {
   name: string;
   amount: number;
   avatarLabels: ReadonlyMap<string, string>;
+  valueClassName?: string;
 }) {
-  if (amount === 0) return <span>兩清</span>;
+  if (amount === 0) return <span className={valueClassName}>兩清</span>;
   const from = amount > 0 ? name : '我';
   const to = amount > 0 ? '我' : name;
   return (
-    <span className={styles.arrowAmount}>
+    <>
       <MiniOweArrow
         from={from}
         fromLabel={avatarLabels.get(from)}
@@ -270,7 +321,15 @@ function CounterpartyBalance({
         toLabel={avatarLabels.get(to)}
         compact
       />
-      {formatMoney(Math.abs(amount))}
-    </span>
+      <span className={valueClassName}>{formatMoney(Math.abs(amount))}</span>
+    </>
   );
+}
+
+/** 後端提供的前後餘額只用來呈現方向，不在前端重算餘額。 */
+function balanceAfterClass(balance: number, balanceAfter: number) {
+  if (balanceAfter === 0 || balanceAfter === balance) return styles.balanceAfter;
+  return balanceAfter > balance
+    ? `${styles.balanceAfter} ${styles.balanceAfterIncome}`
+    : `${styles.balanceAfter} ${styles.balanceAfterExpense}`;
 }

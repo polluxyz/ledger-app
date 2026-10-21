@@ -119,10 +119,23 @@
   gap: var(--space-xs);
 }
 
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
 .sectionTitle {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+.columnHint {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 .unchanged {
@@ -174,6 +187,24 @@
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.balanceBefore {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.balanceAfter {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.balanceAfterIncome {
+  color: var(--color-income);
+}
+
+.balanceAfterExpense {
+  color: var(--color-expense);
 }
 
 .actions {
