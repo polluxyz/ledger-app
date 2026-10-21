@@ -6,6 +6,8 @@ import {
   debtCategoryTypeOf,
   isDebtTransactionType,
   ListTransactionsQuery,
+  ListMarkedTransactionsQuery,
+  MarkedTransaction,
   ManualTransactionType,
   Paginated,
   Transaction,
@@ -65,6 +67,7 @@ interface AccountRef {
 /** 一筆交易資料列，已 join 其分類、帳戶與建立者。 */
 interface TransactionRow {
   id: string;
+  transactionMarks?: Array<{ userId: string }>;
   mergeId?: string | null;
   mergedFromId?: string | null;
   merge?: { userId: string; sourceLedgerName: string } | null;
@@ -198,6 +201,24 @@ const TRANSACTION_INCLUDE = {
   },
 } as const;
 
+/** 只載入檢視者自己的標註，避免讀出其他成員的私人狀態，也避免逐筆查詢。 */
+const transactionInclude = (viewerUserId: string) => ({
+  ...TRANSACTION_INCLUDE,
+  transactionMarks: { where: { userId: viewerUserId }, select: { userId: true } },
+});
+
+/** 合併的份額與代墊只顯示份額；一般列表與跨帳本標註列表共用這個 SQL 條件。 */
+const mergedAdvanceExcluded = Prisma.sql`AND NOT (
+  t."mergeId" IS NOT NULL AND t."type"::text IN ('LEND', 'BORROW')
+  AND EXISTS (
+    SELECT 1 FROM "Transaction" share
+    WHERE share."ledgerId" = t."ledgerId" AND share."mergeId" = t."mergeId"
+      AND share."mergedFromId" = t."mergedFromId" AND share."deletedAt" IS NULL
+      AND ((share."type"::text = 'EXPENSE' AND t."type"::text = 'LEND')
+        OR (share."type"::text = 'INCOME' AND t."type"::text = 'BORROW'))
+  )
+)`;
+
 interface CreateTransactionInput {
   type: ManualTransactionType;
   amount: number;
@@ -226,6 +247,7 @@ interface UpdateTransactionInput {
 
 interface ViewContext {
   mergeRows?: Map<string, TransactionRow[]>;
+  markRows?: Map<string, TransactionRow>;
   mergedOriginalIds?: Set<string>;
   shared: boolean;
   viewerTemporaryAccountId: string | null;
@@ -239,6 +261,116 @@ export class TransactionsService {
     private readonly prisma: PrismaService,
     private readonly people: LedgerPeopleService,
   ) {}
+
+  /** 標註只改本人的列；代表 id 與單筆讀取共用，代墊 id 也會落在份額上。 */
+  async setMarked(
+    ledgerId: string,
+    transactionId: string,
+    userId: string,
+    marked: boolean,
+  ): Promise<void> {
+    const member = await this.prisma.ledgerMember.findUnique({
+      where: { ledgerId_userId: { ledgerId, userId } },
+    });
+    if (!member) throw this.notFound('Ledger');
+    const { transaction, context } = await this.loadTransactionView(
+      ledgerId,
+      transactionId,
+      userId,
+    );
+    const key = { userId, transactionId: this.markRepresentative(transaction, context).id };
+    if (marked) {
+      await this.prisma.transactionMark.upsert({
+        where: { userId_transactionId: key },
+        create: key,
+        // 空 update 會讓 Prisma 先查再建；保留實際 update，交給資料庫原子 upsert。
+        update: { userId },
+      });
+    } else {
+      await this.prisma.transactionMark.deleteMany({ where: key });
+    }
+  }
+
+  /** 跨帳本先篩選現任成員與本人標註，再分頁；每本帳本各自建立遮蔽與合併脈絡。 */
+  async listMarked(
+    viewerUserId: string,
+    query: ListMarkedTransactionsQuery,
+  ): Promise<Paginated<MarkedTransaction>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const visible = Prisma.sql`
+      WITH ranked AS (
+        SELECT t."id", COALESCE(s."date", t."date") AS "sortDate", t."createdAt",
+          ROW_NUMBER() OVER (
+            PARTITION BY CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END
+            ORDER BY CASE WHEN t."type"::text IN ('EXPENSE', 'INCOME') THEN 0 ELSE 1 END, t."createdAt", t."id"
+          ) AS rn
+        FROM "Transaction" t
+        LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
+        WHERE t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
+          AND EXISTS (SELECT 1 FROM "LedgerMember" member WHERE member."ledgerId" = t."ledgerId" AND member."userId" = ${viewerUserId})
+          AND EXISTS (SELECT 1 FROM "TransactionMark" mark WHERE mark."transactionId" = t."id" AND mark."userId" = ${viewerUserId})
+          ${mergedAdvanceExcluded}
+      ), visible AS (
+        SELECT "id", "sortDate", "createdAt" FROM ranked WHERE rn = 1
+      )`;
+    const selected = await this.prisma.$queryRaw<Array<{ id: string; total: bigint }>>(Prisma.sql`
+      ${visible}
+      SELECT "id", COUNT(*) OVER() AS total FROM visible
+      ORDER BY "sortDate" DESC, "createdAt" DESC, "id" DESC
+      OFFSET ${(page - 1) * limit} LIMIT ${limit}
+    `);
+    const total = selected.length
+      ? Number(selected[0]!.total)
+      : Number(
+          (
+            await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+          ${visible} SELECT COUNT(*) AS count FROM visible
+        `)
+          )[0]?.count ?? 0n,
+        );
+    const rows = selected.length
+      ? await this.prisma.transaction.findMany({
+          where: {
+            id: { in: selected.map((item) => item.id) },
+            deletedAt: null,
+            ledger: { members: { some: { userId: viewerUserId } } },
+          },
+          include: {
+            ...transactionInclude(viewerUserId),
+            ledger: { select: { id: true, name: true } },
+          },
+        })
+      : [];
+    const contexts = new Map<string, ViewContext>();
+    for (const ledgerId of new Set(rows.map((row) => row.ledgerId))) {
+      const context = await this.viewContext(ledgerId, viewerUserId);
+      await this.loadRowContext(
+        ledgerId,
+        viewerUserId,
+        rows.filter((row) => row.ledgerId === ledgerId),
+        context,
+      );
+      contexts.set(ledgerId, context);
+    }
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return {
+      items: selected.flatMap(({ id }) => {
+        const row = byId.get(id);
+        return row
+          ? [
+              {
+                ...this.toTransaction(row, viewerUserId, contexts.get(row.ledgerId)),
+                ledger: row.ledger,
+              },
+            ]
+          : [];
+      }),
+      page,
+      limit,
+      total,
+    };
+  }
 
   /**
    * 在帳本中記下一筆交易。分類與帳戶各自的必填與否，取決於交易型別與帳本設定；
@@ -321,7 +453,7 @@ export class TransactionsService {
         note: input.note ?? null,
         title: input.title ?? null,
       },
-      include: TRANSACTION_INCLUDE,
+      include: transactionInclude(creatorId),
     });
     return this.toTransaction(transaction, creatorId);
   }
@@ -346,19 +478,6 @@ export class TransactionsService {
           WHERE st."transactionId" = t."id"
         )`
       : Prisma.empty;
-
-    // 份額與代墊是一件事：所有成員都只看一列，來源資訊另在回應時遮蔽。
-    // 在篩選及分頁之前排除代墊，避免分類篩選時只剩半筆或 total 重複計數。
-    const mergedAdvanceExcluded = Prisma.sql`AND NOT (
-      t."mergeId" IS NOT NULL AND t."type"::text IN ('LEND', 'BORROW')
-      AND EXISTS (
-        SELECT 1 FROM "Transaction" share
-        WHERE share."ledgerId" = t."ledgerId" AND share."mergeId" = t."mergeId"
-          AND share."mergedFromId" = t."mergedFromId" AND share."deletedAt" IS NULL
-          AND ((share."type"::text = 'EXPENSE' AND t."type"::text = 'LEND')
-            OR (share."type"::text = 'INCOME' AND t."type"::text = 'BORROW'))
-      )
-    )`;
 
     // SQL 先依分帳擁有者合併，再篩選、分頁與計數；先取交易再在記憶體合併會讓
     // 第 2 頁筆數和 total 都錯。其他帳本成員的 s 為 null，因此逐筆看見原交易。
@@ -389,7 +508,7 @@ export class TransactionsService {
     const rows = selected.length
       ? await this.prisma.transaction.findMany({
           where: { ledgerId, deletedAt: null, id: { in: selected.map((item) => item.id) } },
-          include: TRANSACTION_INCLUDE,
+          include: transactionInclude(viewerUserId),
         })
       : [];
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -413,7 +532,7 @@ export class TransactionsService {
         );
 
     const context = await this.viewContext(ledgerId, viewerUserId);
-    await this.loadMergeContext(ledgerId, viewerUserId, rows, context);
+    await this.loadRowContext(ledgerId, viewerUserId, rows, context);
     return {
       items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
       page,
@@ -491,7 +610,7 @@ export class TransactionsService {
           accountId: finalAccountId ?? null,
           toAccountId: finalToAccountId ?? null,
         },
-        include: TRANSACTION_INCLUDE,
+        include: transactionInclude(viewerUserId),
       });
     });
     if (updated.mergeId) return this.getById(ledgerId, updated.id, viewerUserId);
@@ -772,7 +891,7 @@ export class TransactionsService {
     return tx.transaction.update({
       where: { ledgerId, id: primary.id },
       data: input.categoryId !== undefined ? { categoryId: input.categoryId } : {},
-      include: TRANSACTION_INCLUDE,
+      include: transactionInclude(callerUserId),
     });
   }
 
@@ -1415,16 +1534,26 @@ export class TransactionsService {
     transactionId: string,
     viewerUserId: string,
   ): Promise<Transaction> {
+    const { transaction, context } = await this.loadTransactionView(
+      ledgerId,
+      transactionId,
+      viewerUserId,
+    );
+    return this.toTransaction(transaction, viewerUserId, context);
+  }
+
+  /** 單筆讀取與標註寫入共用載入路徑，避免代表列的選擇各自漂移。 */
+  private async loadTransactionView(ledgerId: string, transactionId: string, viewerUserId: string) {
     const transaction = await this.prisma.transaction.findFirst({
       where: { id: transactionId, ledgerId, deletedAt: null },
-      include: TRANSACTION_INCLUDE,
+      include: transactionInclude(viewerUserId),
     });
     if (!transaction) {
       throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
     }
     const context = await this.viewContext(ledgerId, viewerUserId);
-    await this.loadMergeContext(ledgerId, viewerUserId, [transaction], context);
-    return this.toTransaction(transaction, viewerUserId, context);
+    await this.loadRowContext(ledgerId, viewerUserId, [transaction], context);
+    return { transaction, context };
   }
 
   /** 原交易的防重複補帳戶判斷限縮在來源帳本與本人；軟刪除的合併紀錄也仍算合併過。 */
@@ -1458,8 +1587,8 @@ export class TransactionsService {
     }
   }
 
-  /** 批次補上當頁的合併配對與本人合併紀錄，不逐列查詢，也不改動分頁選出的 id。 */
-  private async loadMergeContext(
+  /** 批次補上當頁的合併配對、本人合併紀錄與標註代表列，不逐列查詢或改動分頁 id。 */
+  private async loadRowContext(
     ledgerId: string,
     viewerUserId: string,
     rows: TransactionRow[],
@@ -1472,7 +1601,7 @@ export class TransactionsService {
     if (groups.length) {
       const companions = await this.prisma.transaction.findMany({
         where: { ledgerId, deletedAt: null, OR: groups },
-        include: TRANSACTION_INCLUDE,
+        include: transactionInclude(viewerUserId),
       });
       for (const row of companions) {
         const key = this.mergeKey(row);
@@ -1494,6 +1623,63 @@ export class TransactionsService {
         if (row.mergedFromId) context.mergedOriginalIds.add(row.mergedFromId);
       }
     }
+    await this.loadMarkContext(ledgerId, viewerUserId, rows, context);
+  }
+
+  /** 分支跟隨還款；個人分帳僅對擁有者合成。一次取回當頁需要的代表列與標註。 */
+  private async loadMarkContext(
+    ledgerId: string,
+    viewerUserId: string,
+    rows: TransactionRow[],
+    context: ViewContext,
+  ): Promise<void> {
+    context.markRows = new Map();
+    const parentIds = rows.flatMap((row) => (row.differenceOfId ? [row.differenceOfId] : []));
+    const parents = parentIds.length
+      ? await this.prisma.transaction.findMany({
+          where: { ledgerId, deletedAt: null, id: { in: parentIds } },
+          include: transactionInclude(viewerUserId),
+        })
+      : [];
+    const allRows = [...rows, ...parents];
+    const splitIds = [
+      ...new Set(
+        allRows.filter((row) => row.split?.ownerId === viewerUserId).map((row) => row.splitId!),
+      ),
+    ];
+    const splitRows = splitIds.length
+      ? await this.prisma.transaction.findMany({
+          where: { ledgerId, deletedAt: null, differenceOfId: null, splitId: { in: splitIds } },
+          include: transactionInclude(viewerUserId),
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        })
+      : [];
+    for (const row of allRows) {
+      if (row.split?.ownerId !== viewerUserId) continue;
+      const group = splitRows.filter((candidate) => candidate.splitId === row.splitId);
+      const representative =
+        group.find((candidate) => this.isIncomeExpense(candidate.type)) ?? group[0];
+      if (representative) context.markRows.set(row.id, representative);
+    }
+    for (const row of rows) {
+      const parent = parents.find((candidate) => candidate.id === row.differenceOfId);
+      if (parent) context.markRows.set(row.id, context.markRows.get(parent.id) ?? parent);
+    }
+  }
+
+  /** PUT、DELETE 與所有交易回應使用同一個代表列，隱藏的分支／代墊不會留下不可見標註。 */
+  private markRepresentative(row: TransactionRow, context?: ViewContext): TransactionRow {
+    const representative = context?.markRows?.get(row.id) ?? row;
+    const group = representative.mergeId
+      ? context?.mergeRows?.get(this.mergeKey(representative))
+      : undefined;
+    const share = group?.find((candidate) => this.isIncomeExpense(candidate.type));
+    const advance = group?.find(
+      (candidate) =>
+        (share?.type === 'EXPENSE' && candidate.type === 'LEND') ||
+        (share?.type === 'INCOME' && candidate.type === 'BORROW'),
+    );
+    return share && advance ? share : representative;
   }
 
   private mergeKey(row: TransactionRow): string {
@@ -1632,8 +1818,10 @@ export class TransactionsService {
               share: share && advance ? share.amount : null,
             }
           : null,
-      // 3l L0：契約先就位，L3 改成呼叫者自己的標註。
-      marked: false,
+      marked:
+        this.markRepresentative(row, context).transactionMarks?.some(
+          (mark) => mark.userId === viewerUserId,
+        ) ?? false,
       createdAt: row.createdAt.toISOString(),
     };
   }

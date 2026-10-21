@@ -1,6 +1,11 @@
 import { AccountsService } from '../accounts/accounts.service';
 import type { Prisma } from '../generated/prisma/client';
-import { planLedgerLeave, type LeavePlanInput, type LeaveTransaction } from './ledger-leave-plan';
+import {
+  groupPersonalLeaveItems,
+  planLedgerLeave,
+  type LeavePlanInput,
+  type LeaveTransaction,
+} from './ledger-leave-plan';
 
 const category = { id: 'source-food', name: '餐飲', type: 'EXPENSE' as const, icon: 'utensils' };
 const accountRows = ['cash', 'card', 'temporary'].map((id) => ({
@@ -44,6 +49,71 @@ function input(overrides: Partial<LeavePlanInput> = {}): LeavePlanInput {
     ...overrides,
   };
 }
+
+/** 共用分組保留 3k 的本人隔離、結清分支與分帳項目 id，3l 直接沿用。 */
+describe('groupPersonalLeaveItems', () => {
+  it('還款連同 differenceOf 與有效 settledBy；分帳連同所有交易，其他人的借還不列入', () => {
+    const entry = {
+      id: 'entry',
+      counterpartyId: 'cp',
+      delta: -480,
+      deletedAt: null,
+      splitId: null,
+      settlesEntryId: null,
+      counterparty: { ownerId: 'me' },
+      settledBy: {
+        id: 'settlement',
+        counterpartyId: 'cp',
+        delta: -20,
+        deletedAt: null as Date | null,
+      },
+    };
+    const rows = [
+      { ...row({ id: 'repayment' }), splitId: null, differenceOfId: null, debtEntry: entry },
+      { ...row({ id: 'branch' }), splitId: null, differenceOfId: 'repayment', debtEntry: null },
+      { ...row({ id: 'split-share' }), splitId: 'split', differenceOfId: null, debtEntry: null },
+      {
+        ...row({ id: 'split-advance', type: 'LEND' }),
+        splitId: 'split',
+        differenceOfId: null,
+        debtEntry: null,
+      },
+      {
+        ...row({ id: 'other' }),
+        splitId: null,
+        differenceOfId: null,
+        debtEntry: { ...entry, counterparty: { ownerId: 'other' } },
+      },
+      {
+        ...row({ id: 'settlement-row' }),
+        splitId: null,
+        differenceOfId: null,
+        debtEntry: { ...entry, settlesEntryId: 'entry' },
+      },
+    ];
+    const splits = [
+      {
+        id: 'split',
+        date: new Date(),
+        title: null,
+        category,
+        participants: [{ counterpartyId: null, share: 100 }],
+        entries: [{ id: 'split-entry', counterpartyId: 'cp', delta: 200 }],
+      },
+    ];
+    const items = groupPersonalLeaveItems(rows, splits, 'me', (t) => t);
+    expect(items.map((i) => [i.id, i.transactions.map((t) => t.id)])).toEqual([
+      ['repayment', ['repayment', 'branch']],
+      ['split', ['split-share', 'split-advance']],
+    ]);
+    expect(items[0]!.entries.map((e) => e.id)).toEqual(['entry', 'settlement']);
+    expect(items[1]!.share).toBe(100);
+    entry.settledBy.deletedAt = new Date();
+    expect(
+      groupPersonalLeaveItems(rows, splits, 'me', (t) => t)[0]!.entries.map((e) => e.id),
+    ).toEqual(['entry']);
+  });
+});
 
 /** 用正式 AccountsService 的公式比較原交易與計畫，mock 只負責 SQL groupBy 的分組加總。 */
 async function balances(

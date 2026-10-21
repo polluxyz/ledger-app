@@ -12,9 +12,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload, Paginated, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AllowOnArchived } from '../common/decorators/allow-on-archived.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
 import { LedgerAccessGuard } from '../ledgers/guards/ledger-access.guard';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -42,6 +43,32 @@ import { TransactionsService } from './transactions.service';
 @Controller('ledgers/:ledgerId/transactions')
 export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
+
+  @Put(':transactionId/mark')
+  @RequireLedgerRole('VIEWER')
+  @AllowOnArchived()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: '標註呼叫者自己的交易；重複標註仍成功。' })
+  mark(
+    @Param('ledgerId') ledgerId: string,
+    @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.transactions.setMarked(ledgerId, transactionId, user.sub, true);
+  }
+
+  @Delete(':transactionId/mark')
+  @RequireLedgerRole('VIEWER')
+  @AllowOnArchived()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: '取消呼叫者自己的標註；未標註仍成功。' })
+  unmark(
+    @Param('ledgerId') ledgerId: string,
+    @Param('transactionId') transactionId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.transactions.setMarked(ledgerId, transactionId, user.sub, false);
+  }
 
   // 讀取只需 VIEWER；寫入（新增／更新／刪除）需要 EDITOR。
   // 每個端點都要傳目前使用者：帳戶欄位只對它的主人顯示，因此 service 必須知道

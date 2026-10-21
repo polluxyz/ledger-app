@@ -48,6 +48,78 @@ export interface LeavePersonalItem {
   entries: { id: string; counterpartyId: string; delta: number }[];
 }
 
+/** 分組只依關聯判斷；3k 與 3l 共用，避免還款分支或個人分帳只帶走一半。 */
+export function groupPersonalLeaveItems<
+  T extends {
+    id: string;
+    date: Date;
+    title: string | null;
+    category: LeaveCategory | null;
+    splitId: string | null;
+    differenceOfId: string | null;
+    debtEntry:
+      | ({
+          deletedAt: Date | null;
+          splitId: string | null;
+          settlesEntryId: string | null;
+          counterparty: { ownerId: string };
+          settledBy: {
+            id: string;
+            counterpartyId: string;
+            delta: number;
+            deletedAt: Date | null;
+          } | null;
+        } & { id: string; counterpartyId: string; delta: number })
+      | null;
+  },
+>(
+  rows: readonly T[],
+  splits: readonly {
+    id: string;
+    date: Date;
+    title: string | null;
+    category: LeaveCategory;
+    participants: { counterpartyId: string | null; share: number }[];
+    entries: { id: string; counterpartyId: string; delta: number }[];
+  }[],
+  userId: string,
+  normalize: (row: T) => LeaveTransaction,
+): LeavePersonalItem[] {
+  const items: LeavePersonalItem[] = rows
+    .filter(
+      (t) =>
+        t.debtEntry?.counterparty.ownerId === userId &&
+        t.debtEntry.deletedAt === null &&
+        !t.debtEntry.splitId &&
+        !t.debtEntry.settlesEntryId,
+    )
+    .map((t) => ({
+      id: t.id,
+      kind: 'PERSONAL_DEBT',
+      date: t.date,
+      title: t.title,
+      category: t.category,
+      share: null,
+      transactions: [t, ...rows.filter((branch) => branch.differenceOfId === t.id)].map(normalize),
+      entries: [
+        t.debtEntry!,
+        ...(t.debtEntry!.settledBy?.deletedAt === null ? [t.debtEntry!.settledBy] : []),
+      ],
+    }));
+  for (const split of splits)
+    items.push({
+      id: split.id,
+      kind: 'PERSONAL_SPLIT',
+      date: split.date,
+      title: split.title,
+      category: split.category,
+      share: split.participants.find((p) => p.counterpartyId === null)?.share ?? 0,
+      transactions: rows.filter((t) => t.splitId === split.id).map(normalize),
+      entries: split.entries,
+    });
+  return items;
+}
+
 export interface LeavePlanInput {
   userId: string;
   sourceLedgerName: string;
