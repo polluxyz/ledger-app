@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { LedgerSummary, Transaction } from '@ledger/shared';
+import type { LedgerSummary, MarkedTransaction, Transaction } from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -18,6 +18,7 @@ import {
 } from '../features/transactions/TransactionWorkbench';
 import { TransactionList } from '../features/transactions/TransactionList';
 import { useTransactions } from '../features/transactions/use-transactions';
+import { useMarkedTransactions, useSetTransactionMark } from '../features/transactions/use-marks';
 import { PendingCard } from '../features/linking/PendingCard';
 import styles from './HomePage.module.css';
 
@@ -78,10 +79,33 @@ export default function HomePage() {
  * 右側欄沒有頁面登記，寬度自然是 0——沒有帳本就沒有地方可以記帳。
  */
 function LedgerView() {
-  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
+  const {
+    ledger,
+    setActiveLedgerId,
+    isLoading: ledgerLoading,
+    error: ledgerError,
+  } = useActiveLedger();
+  const [pendingMarkedTransaction, setPendingMarkedTransaction] =
+    useState<MarkedTransaction | null>(null);
+  const clearPendingMarkedTransaction = useCallback(() => setPendingMarkedTransaction(null), []);
+  const switchToMarkedLedger = useCallback(
+    (transaction: MarkedTransaction) => {
+      setPendingMarkedTransaction(transaction);
+      setActiveLedgerId(transaction.ledger.id);
+    },
+    [setActiveLedgerId],
+  );
 
   if (ledger) {
-    return <Dashboard key={ledger.id} ledger={ledger} />;
+    return (
+      <Dashboard
+        key={ledger.id}
+        ledger={ledger}
+        pendingMarkedTransaction={pendingMarkedTransaction}
+        onPendingMarkedTransactionHandled={clearPendingMarkedTransaction}
+        onSwitchToMarkedLedger={switchToMarkedLedger}
+      />
+    );
   }
 
   return (
@@ -112,21 +136,35 @@ function LedgerView() {
  * `editing` 放在這一層的理由與交易頁相同（D25）：最近交易在頁面裡、編輯面板在
  * 右側欄（portal 過去），兩者只有這個共同的父層。
  */
-function Dashboard({ ledger }: { ledger: LedgerSummary }) {
+interface DashboardProps {
+  ledger: LedgerSummary;
+  pendingMarkedTransaction: MarkedTransaction | null;
+  onPendingMarkedTransactionHandled: () => void;
+  onSwitchToMarkedLedger: (transaction: MarkedTransaction) => void;
+}
+
+function Dashboard({
+  ledger,
+  pendingMarkedTransaction,
+  onPendingMarkedTransactionHandled,
+  onSwitchToMarkedLedger,
+}: DashboardProps) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
-  const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
+  const [panelTarget, setPanelTarget] = useState<PanelTarget>(() =>
+    pendingMarkedTransaction?.ledger.id === ledger.id
+      ? editTargetOf(pendingMarkedTransaction)
+      : { kind: 'new' },
+  );
+  const [markedExpanded, setMarkedExpanded] = useState(false);
 
   // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
   const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
+  const marked = useMarkedTransactions(markedExpanded);
+  const setTransactionMark = useSetTransactionMark();
+  const markedTransactions = marked.data?.items?.filter((item) => item.ledger != null) ?? [];
 
   function startEditing(transaction: Transaction) {
-    setPanelTarget(
-      transaction.settlement
-        ? { kind: 'settlement', settlement: transaction }
-        : transaction.debt
-          ? { kind: 'debtTransaction', transaction }
-          : { kind: 'transaction', transaction },
-    );
+    setPanelTarget(editTargetOf(transaction));
     // 使用者收起過右側欄時，點了一筆卻沒反應是最糟的情況。
     open();
   }
@@ -135,6 +173,40 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
     setPanelTarget({ kind: 'fillAccount', transaction });
     open();
   }
+
+  function startCopying(transaction: Transaction) {
+    setPanelTarget({ kind: 'copy', transaction });
+    open();
+  }
+
+  function startDeleting(transaction: Transaction) {
+    setPanelTarget({ kind: 'transaction', transaction, initialDeleteOpen: true });
+    open();
+  }
+
+  function toggleMark(transaction: Transaction, sourceLedgerId = ledger.id) {
+    setTransactionMark.mutate({
+      ledgerId: sourceLedgerId,
+      transactionId: transaction.id,
+      marked: transaction.marked,
+    });
+  }
+
+  function startEditingMarked(transaction: Transaction) {
+    const markedTransaction = marked.data?.items.find((item) => item.id === transaction.id);
+    if (!markedTransaction) return;
+    if (markedTransaction.ledger.id !== ledger.id) {
+      onSwitchToMarkedLedger(markedTransaction);
+      return;
+    }
+    startEditing(transaction);
+  }
+
+  useEffect(() => {
+    if (pendingMarkedTransaction?.ledger.id !== ledger.id) return;
+    open();
+    onPendingMarkedTransactionHandled();
+  }, [ledger.id, onPendingMarkedTransactionHandled, open, pendingMarkedTransaction]);
 
   /*
    * 關閉只收起右側欄，不清掉正在編輯的那一筆（W57）：收起有滑出動畫，這時換成新增表單，
@@ -184,6 +256,18 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
         <StatsRow authenticated />
 
         <div className={styles.cards}>
+          {marked.data && marked.data.total > 0 && markedTransactions.length > 0 && (
+            <MarkedTransactionsCard
+              transactions={markedTransactions}
+              total={marked.data.total}
+              expanded={markedExpanded}
+              onExpand={() => setMarkedExpanded(true)}
+              selectedId={selectedId}
+              onSelect={startEditingMarked}
+              onFillAccount={fillAccount}
+              onToggleMark={toggleMark}
+            />
+          )}
           <RecentTransactions
             transactions={recent.data?.items ?? []}
             isLoading={recent.isLoading}
@@ -191,6 +275,9 @@ function Dashboard({ ledger }: { ledger: LedgerSummary }) {
             selectedId={selectedId}
             onSelect={startEditing}
             onFillAccount={fillAccount}
+            onCopy={startCopying}
+            onDelete={startDeleting}
+            onToggleMark={(transaction) => toggleMark(transaction)}
           />
           <AccountBalances />
         </div>
@@ -209,6 +296,9 @@ interface RecentTransactionsProps {
   selectedId: string | null;
   onSelect: (transaction: Transaction) => void;
   onFillAccount: (transaction: Transaction) => void;
+  onCopy: (transaction: Transaction) => void;
+  onDelete: (transaction: Transaction) => void;
+  onToggleMark: (transaction: Transaction) => void;
 }
 
 /**
@@ -224,6 +314,9 @@ function RecentTransactions({
   selectedId,
   onSelect,
   onFillAccount,
+  onCopy,
+  onDelete,
+  onToggleMark,
 }: RecentTransactionsProps) {
   return (
     <section className={styles.dataCard} aria-labelledby="recent-transactions">
@@ -244,6 +337,9 @@ function RecentTransactions({
         selectedId={selectedId}
         onSelect={onSelect}
         onFillAccount={onFillAccount}
+        onCopy={onCopy}
+        onDelete={onDelete}
+        onToggleMark={onToggleMark}
       />
     </section>
   );
@@ -257,6 +353,9 @@ function RecentBody({
   selectedId,
   onSelect,
   onFillAccount,
+  onCopy,
+  onDelete,
+  onToggleMark,
 }: RecentTransactionsProps) {
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
@@ -280,8 +379,75 @@ function RecentBody({
       onEdit={onSelect}
       onEditDebtTransaction={onSelect}
       onFillAccount={onFillAccount}
+      onCopy={onCopy}
+      onDelete={onDelete}
+      onToggleMark={onToggleMark}
     />
   );
+}
+
+interface MarkedTransactionsCardProps {
+  transactions: MarkedTransaction[];
+  total: number;
+  expanded: boolean;
+  onExpand: () => void;
+  selectedId: string | null;
+  onSelect: (transaction: Transaction) => void;
+  onFillAccount: (transaction: Transaction) => void;
+  onToggleMark: (transaction: Transaction, ledgerId?: string) => void;
+}
+
+/** 所有帳本的標註交易；點「再 N 筆」後由 hook 逐頁載入全部資料。 */
+function MarkedTransactionsCard({
+  transactions,
+  total,
+  expanded,
+  onExpand,
+  selectedId,
+  onSelect,
+  onFillAccount,
+  onToggleMark,
+}: MarkedTransactionsCardProps) {
+  const ledgerNames = new Map(transactions.map((item) => [item.id, item.ledger.name]));
+  const ledgerIds = new Map(transactions.map((item) => [item.id, item.ledger.id]));
+
+  return (
+    <section
+      className={`${styles.dataCard} ${styles.markedCard}`}
+      aria-labelledby="marked-transactions"
+    >
+      <div className={styles.cardHead}>
+        <h2 className={styles.cardHeading} id="marked-transactions">
+          標註
+        </h2>
+      </div>
+      <TransactionList
+        transactions={transactions}
+        isLoading={false}
+        error={null}
+        selectedId={selectedId}
+        onEdit={onSelect}
+        onEditDebtTransaction={onSelect}
+        onFillAccount={onFillAccount}
+        onToggleMark={onToggleMark}
+        ledgerNames={ledgerNames}
+        ledgerIds={ledgerIds}
+      />
+      {!expanded && total > 10 && (
+        <button type="button" className={styles.moreMarked} onClick={onExpand}>
+          再 {total - 10} 筆
+        </button>
+      )}
+    </section>
+  );
+}
+
+function editTargetOf(transaction: Transaction): PanelTarget {
+  return transaction.settlement
+    ? { kind: 'settlement', settlement: transaction }
+    : transaction.debt
+      ? { kind: 'debtTransaction', transaction }
+      : { kind: 'transaction', transaction };
 }
 
 /** 三張「即將推出」的統計卡（phase-2h · D5：原樣保留，只換樣式）。 */

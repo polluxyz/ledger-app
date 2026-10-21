@@ -60,6 +60,8 @@ import {
 import styles from './TransactionForm.module.css';
 import { CategoryPicker } from './CategoryPicker';
 import fieldLayoutStyles from './TransactionFieldLayout.module.css';
+import { isLedgerWritable, useLedgers } from '../ledgers/use-ledgers';
+import { canDeleteTransactionFromEditor } from './transaction-actions';
 
 /** 新增模式的分段控制多一格「借還」：它不是交易型別，只是改渲染 DebtEntryForm。 */
 type EntryTab = ManualTransactionType | 'DEBT';
@@ -68,6 +70,16 @@ interface TransactionFormProps {
   ledger: LedgerSummary;
   /** 有值＝編輯模式，欄位預填這一筆。 */
   transaction?: Transaction;
+  /** 有值＝複製模式；只用來源預填欄位，不會傳入編輯 mutation。 */
+  copyFrom?: Transaction;
+  /** 下列欄位由複製模式外層提供，讓切帳本時可以重建整張表單。 */
+  copySourceLedgerId?: string;
+  copyIncludesPeople?: boolean;
+  copyLedgerOptions?: LedgerSummary[];
+  copyLedgersLoading?: boolean;
+  onCopyLedgerChange?: (ledgerId: string) => void;
+  /** 從列選單選刪除時，直接打開表單原有的確認視窗。 */
+  initialDeleteOpen?: boolean;
   /** 有值＝透過分帳端點編輯；會從 API 回應還原完整名單與分法。 */
   split?: Split;
   /** 編輯成功後呼叫（通常用來關閉彈窗）。新增模式不會呼叫。 */
@@ -114,12 +126,41 @@ interface TransactionFormProps {
  * 不能進編輯表單（後端 409 `DEBT_TRANSACTION_READ_ONLY`），所以那一格只在
  * 新增模式出現。
  */
-export function TransactionForm({ ledger, transaction, split, ...props }: TransactionFormProps) {
+export function TransactionForm(props: TransactionFormProps) {
+  if (props.copyFrom) {
+    return <CopyTransactionForm {...props} />;
+  }
+  return <TransactionFormForLedger {...props} />;
+}
+
+function CopyTransactionForm({ ledger, copyFrom, ...props }: TransactionFormProps) {
+  const ledgers = useLedgers(false);
+  const [targetLedgerId, setTargetLedgerId] = useState(ledger.id);
+  const options = (ledgers.data ?? []).filter(isLedgerWritable);
+  const targetLedger = options.find((item) => item.id === targetLedgerId) ?? ledger;
+
+  return (
+    <TransactionFormForLedger
+      key={targetLedger.id}
+      {...props}
+      ledger={targetLedger}
+      copyFrom={copyFrom}
+      copySourceLedgerId={ledger.id}
+      copyIncludesPeople={targetLedger.id === ledger.id && ledger.kind === 'SHARED'}
+      copyLedgerOptions={options}
+      copyLedgersLoading={ledgers.isLoading}
+      onCopyLedgerChange={setTargetLedgerId}
+    />
+  );
+}
+
+function TransactionFormForLedger({ ledger, transaction, split, ...props }: TransactionFormProps) {
   if (transaction?.merge != null) {
     return (
       <MergedTransactionForm
         ledger={ledger}
         transaction={transaction}
+        initialDeleteOpen={props.initialDeleteOpen}
         onSaved={props.onSaved}
         onCancel={props.onCancel}
       />
@@ -156,6 +197,7 @@ export function TransactionForm({ ledger, transaction, split, ...props }: Transa
 interface MergedTransactionFormProps {
   ledger: LedgerSummary;
   transaction: Transaction;
+  initialDeleteOpen?: boolean;
   onSaved?: () => void;
   onCancel?: () => void;
 }
@@ -164,6 +206,7 @@ interface MergedTransactionFormProps {
 function MergedTransactionForm({
   ledger,
   transaction,
+  initialDeleteOpen,
   onSaved,
   onCancel,
 }: MergedTransactionFormProps) {
@@ -181,7 +224,7 @@ function MergedTransactionForm({
   const [accountSelectionTouched, setAccountSelectionTouched] = useState(false);
   const [toAccountId, setToAccountId] = useState(transaction.toAccount?.id ?? '');
   const [toAccountSelectionTouched, setToAccountSelectionTouched] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(initialDeleteOpen ?? false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
 
   const selectedAccountId = accountOptions.some((account) => account.id === accountId)
@@ -384,11 +427,18 @@ function SharedLedgerTransactionForm(props: TransactionFormProps) {
 function TransactionFormContent({
   ledger,
   transaction,
+  copyFrom,
+  copySourceLedgerId,
+  copyIncludesPeople = false,
+  copyLedgerOptions,
+  copyLedgersLoading = false,
+  onCopyLedgerChange,
   split,
   onSaved,
   onCancel,
   amountFieldId,
   initialDebtCounterparty,
+  initialDeleteOpen,
   isSharedLedger,
   sharedPeople,
   sharedCurrentUserId,
@@ -409,11 +459,13 @@ function TransactionFormContent({
   const [tab, setTab] = useState<EntryTab>(
     split
       ? split.type
-      : transaction && !isDebtTransactionType(transaction.type)
-        ? transaction.type
-        : !isEdit && initialDebtCounterparty
-          ? 'DEBT'
-          : 'EXPENSE',
+      : copyFrom && !isDebtTransactionType(copyFrom.type)
+        ? copyFrom.type
+        : transaction && !isDebtTransactionType(transaction.type)
+          ? transaction.type
+          : !isEdit && initialDebtCounterparty
+            ? 'DEBT'
+            : 'EXPENSE',
   );
   const [amount, setAmount] = useState(
     split
@@ -425,7 +477,9 @@ function TransactionFormContent({
         )
       : transaction
         ? centsToInput(transaction.amount)
-        : '',
+        : copyFrom
+          ? centsToInput(copyFrom.amount)
+          : '',
   );
   const [date, setDate] = useState(() =>
     toDateInputValue(
@@ -433,22 +487,35 @@ function TransactionFormContent({
     ),
   );
   const [categoryId, setCategoryId] = useState(
-    split?.category.id ?? transaction?.category?.id ?? '',
+    split?.category.id ??
+      transaction?.category?.id ??
+      (copyFrom && ledger.id === copySourceLedgerId ? (copyFrom.category?.id ?? '') : ''),
   );
-  const [accountId, setAccountId] = useState(split?.account?.id ?? transaction?.account?.id ?? '');
+  const [accountId, setAccountId] = useState(
+    split?.account?.id ?? transaction?.account?.id ?? copyFrom?.account?.id ?? '',
+  );
   const [accountSelectionTouched, setAccountSelectionTouched] = useState(false);
   const [sharedPayerPersonId, setSharedPayerPersonId] = useState<string | null>(
-    transaction?.payer?.id ?? null,
+    transaction?.payer?.id ?? (copyIncludesPeople ? (copyFrom?.payer?.id ?? null) : null),
   );
   const [sharedPayerChanged, setSharedPayerChanged] = useState(false);
-  const [toAccountId, setToAccountId] = useState(transaction?.toAccount?.id ?? '');
-  const [title, setTitle] = useState(split?.title ?? transaction?.title ?? '');
-  const [note, setNote] = useState(split?.note ?? transaction?.note ?? '');
+  const [toAccountId, setToAccountId] = useState(
+    transaction?.toAccount?.id ?? copyFrom?.toAccount?.id ?? '',
+  );
+  const [title, setTitle] = useState(split?.title ?? transaction?.title ?? copyFrom?.title ?? '');
+  const [note, setNote] = useState(split?.note ?? transaction?.note ?? copyFrom?.note ?? '');
   const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
-    split?.payer || (isSharedLedger && transaction?.payer) ? 'counterparty' : 'account',
+    split?.payer ||
+    (isSharedLedger && (transaction?.payer || (copyIncludesPeople && copyFrom?.payer)))
+      ? 'counterparty'
+      : 'account',
   );
   const [payerName, setPayerName] = useState(
-    split?.payer?.name ?? (isSharedLedger ? transaction?.payer?.name : undefined) ?? '',
+    split?.payer?.name ??
+      (isSharedLedger
+        ? (transaction?.payer?.name ?? (copyIncludesPeople ? copyFrom?.payer?.name : undefined))
+        : undefined) ??
+      '',
   );
   const [selectedPayer, setSelectedPayer] = useState<{
     counterpartyId: string;
@@ -456,9 +523,11 @@ function TransactionFormContent({
   } | null>(split?.payer ?? null);
   const [splitEnabled, setSplitEnabled] = useState(() =>
     isSharedLedger
-      ? transaction === undefined && split === undefined
-        ? true
-        : transaction?.ledgerSplit != null
+      ? copyFrom !== undefined
+        ? copyIncludesPeople && copyFrom.ledgerSplit !== null
+        : transaction === undefined && split === undefined
+          ? true
+          : transaction?.ledgerSplit != null
       : split !== undefined,
   );
   const [splitMethod, setSplitMethod] = useState<SplitMethod>(split?.method ?? 'EQUAL');
@@ -490,11 +559,12 @@ function TransactionFormContent({
   const [ledgerSplitReady, setLedgerSplitReady] = useState(!isSharedLedger);
   const [splitOptionsOpen, setSplitOptionsOpen] = useState(false);
   const [deleteSplitOpen, setDeleteSplitOpen] = useState(false);
-  const [deleteTransactionOpen, setDeleteTransactionOpen] = useState(false);
+  const [deleteTransactionOpen, setDeleteTransactionOpen] = useState(initialDeleteOpen ?? false);
   const [splitEditWarningOpen, setSplitEditWarningOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
   const [resolvingNames, setResolvingNames] = useState(false);
   const ledgerSplitInitKey = useRef('');
+  const mappedCategoryLedgerId = useRef('');
 
   /**
    * 「借還」分頁選中時，交易欄位整個不渲染、改渲染 `DebtEntryForm`。對交易
@@ -510,6 +580,15 @@ function TransactionFormContent({
    */
   const categoryType: CategoryType = type === 'TRANSFER' ? 'EXPENSE' : type;
   const categories = useCategories(ledgerId, categoryType);
+  const copyCategoryType: CategoryType | undefined = copyFrom?.category
+    ? copyFrom.type === 'INCOME'
+      ? 'INCOME'
+      : 'EXPENSE'
+    : undefined;
+  const copyCategories = useCategories(
+    copyFrom?.category && copySourceLedgerId !== ledgerId ? ledgerId : null,
+    copyCategoryType,
+  );
   const accounts = useAccounts();
   const recordDefaults = useRecordDefaults(ledgerId);
   const accountOptions = selectableAccounts(accounts.data ?? []);
@@ -525,22 +604,54 @@ function TransactionFormContent({
     ledgerPeople.find((person) => person.userId === sharedCurrentUserId)?.id ?? null;
 
   useEffect(() => {
+    if (
+      !copyFrom ||
+      copySourceLedgerId === ledgerId ||
+      mappedCategoryLedgerId.current === ledgerId ||
+      !copyCategories.isSuccess
+    ) {
+      return;
+    }
+    mappedCategoryLedgerId.current = ledgerId;
+    setCategoryId(
+      copyCategories.data.find((category) => category.name === copyFrom.category?.name)?.id ?? '',
+    );
+  }, [copyCategories.data, copyCategories.isSuccess, copyFrom, copySourceLedgerId, ledgerId]);
+
+  useEffect(() => {
     if (!isSharedLedger || sharedCurrentUserId === null || sharedPeople === undefined) return;
-    const nextInitKey = `${ledgerId}:${transaction?.id ?? 'new'}`;
+    const nextInitKey = `${ledgerId}:${transaction?.id ?? copyFrom?.id ?? 'new'}`;
     if (ledgerSplitInitKey.current === nextInitKey) return;
     ledgerSplitInitKey.current = nextInitKey;
 
-    const savedSplit = transaction?.ledgerSplit ?? null;
+    const savedSplit = copyFrom
+      ? copyIncludesPeople
+        ? copyFrom.ledgerSplit
+        : null
+      : (transaction?.ledgerSplit ?? null);
     setLedgerSplitParticipants(
       savedSplit
         ? restoreLedgerSplitPeople(sharedPeople, mePersonId, savedSplit)
         : createDefaultLedgerSplitPeople(sharedPeople, mePersonId),
     );
-    setSplitEnabled(savedSplit !== null || (transaction === undefined && split === undefined));
+    setSplitEnabled(
+      savedSplit !== null ||
+        (copyFrom === undefined && transaction === undefined && split === undefined),
+    );
     setSplitMethod(savedSplit?.method ?? 'EQUAL');
     setSplitPrecision(savedSplit?.precision ?? 'CENT');
     setLedgerSplitReady(true);
-  }, [isSharedLedger, ledgerId, mePersonId, sharedCurrentUserId, sharedPeople, split, transaction]);
+  }, [
+    copyFrom,
+    copyIncludesPeople,
+    isSharedLedger,
+    ledgerId,
+    mePersonId,
+    sharedCurrentUserId,
+    sharedPeople,
+    split,
+    transaction,
+  ]);
 
   const pending =
     resolvingNames ||
@@ -553,6 +664,8 @@ function TransactionFormContent({
       : isEdit
         ? updateTransaction.isPending || createSplit.isPending
         : createTransaction.isPending || createSplit.isPending);
+  const copyLedgerUnavailable =
+    copyFrom !== undefined && !(copyLedgerOptions ?? []).some((option) => option.id === ledgerId);
   const error =
     submissionError ??
     createLedgerPerson?.error ??
@@ -1413,6 +1526,8 @@ function TransactionFormContent({
           block
           disabled={
             pending ||
+            copyLedgersLoading ||
+            copyLedgerUnavailable ||
             transferBlocked ||
             amountCents === null ||
             amountCents <= 0 ||
@@ -1433,7 +1548,7 @@ function TransactionFormContent({
             取消
           </Button>
         )}
-        {transaction && !split && (
+        {transaction && !split && canDeleteTransactionFromEditor(transaction) && (
           <Button
             type="button"
             variant="secondary"
@@ -1518,7 +1633,7 @@ function TransactionFormContent({
             {editorPages}
           </fieldset>
         </form>
-        {transaction && !split && (
+        {transaction && !split && canDeleteTransactionFromEditor(transaction) && (
           <ConfirmDialog
             open={deleteTransactionOpen}
             title="刪除交易"
@@ -1579,6 +1694,25 @@ function TransactionFormContent({
     // 外框由放它的地方給（右側面板，或窄螢幕的卡片），表單自己不畫框。
     <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
       <legend className={styles.legend}>新增一筆交易</legend>
+      {copyFrom && (
+        <Select
+          label="帳本"
+          value={ledgerId}
+          disabled={copyLedgersLoading || copyLedgerOptions?.length === 0}
+          onChange={(event) => onCopyLedgerChange?.(event.target.value)}
+        >
+          {copyLedgerOptions?.some((option) => option.id === ledgerId) ? null : (
+            <option value={ledgerId} disabled>
+              {ledger.name}
+            </option>
+          )}
+          {copyLedgerOptions?.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </Select>
+      )}
       {isDebtTab ? (
         <>
           {segmented}

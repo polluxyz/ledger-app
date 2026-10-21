@@ -274,6 +274,106 @@ describe('TransactionList', () => {
     expect(row(4)).not.toHaveClass(cssClass('selected'));
   });
 
+  it('opens the row menu in the specified order and keeps marked rows highlighted', async () => {
+    const user = userEvent.setup();
+    const transaction = makeTransaction({ id: 'marked-menu', marked: true });
+    const onCopy = vi.fn();
+    const onDelete = vi.fn();
+    const onToggleMark = vi.fn();
+    renderList({
+      transactions: [transaction],
+      onCopy,
+      onDelete,
+      onToggleMark,
+    });
+
+    const listRow = row(0);
+    expect(listRow).toHaveClass(cssClass('marked'));
+    await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
+
+    const menu = within(listRow).getByRole('menu', { name: '交易動作' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['編輯', '複製', '取消標註', '刪除']);
+    await user.click(within(menu).getByRole('menuitem', { name: '取消標註' }));
+    expect(onToggleMark).toHaveBeenCalledWith(transaction, undefined);
+  });
+
+  it('omits copy for debt, settlement, and merged shared expenses while viewers can mark', async () => {
+    const user = userEvent.setup();
+    const person = { id: 'person-me', name: 'Alice', userId: 'u1', status: 'MEMBER' as const };
+    const transactionsToCheck = [
+      makeTransaction({
+        id: 'debt-copy-disabled',
+        type: 'LEND',
+        category: null,
+        debt: {
+          entryId: 'entry-debt-copy-disabled',
+          counterpartyId: 'counterparty-1',
+          counterpartyName: '小明',
+          kind: 'LEND',
+          paired: false,
+          note: null,
+        },
+      }),
+      makeTransaction({
+        id: 'settlement-copy-disabled',
+        type: 'TRANSFER',
+        category: null,
+        settlement: { id: 'settlement-1', from: person, to: { ...person, id: 'person-other' } },
+      }),
+      makeTransaction({
+        id: 'merged-share-copy-disabled',
+        merge: { sourceLedgerName: '家用', share: 5000 },
+      }),
+    ];
+    const onCopy = vi.fn();
+    const onDelete = vi.fn();
+    const onToggleMark = vi.fn();
+    renderList({
+      transactions: transactionsToCheck,
+      onCopy,
+      onDelete,
+      onToggleMark,
+      onEditDebtTransaction: vi.fn(),
+    });
+
+    for (let index = 0; index < transactionsToCheck.length; index += 1) {
+      const listRow = row(index);
+      await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
+      const menu = within(listRow).getByRole('menu', { name: '交易動作' });
+      expect(within(menu).queryByRole('menuitem', { name: '複製' })).not.toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: '標註' })).toBeInTheDocument();
+      if (index === 0) {
+        expect(within(menu).getByRole('menuitem', { name: '編輯' })).toBeInTheDocument();
+        expect(within(menu).queryByRole('menuitem', { name: '刪除' })).not.toBeInTheDocument();
+      }
+      await user.click(within(menu).getByRole('menuitem', { name: '標註' }));
+    }
+
+    expect(onCopy).not.toHaveBeenCalled();
+    expect(onToggleMark).toHaveBeenCalledTimes(3);
+  });
+
+  it('allows copying a merged expense when it has no shared portion', async () => {
+    const user = userEvent.setup();
+    const transaction = makeTransaction({
+      id: 'merged-expense-without-share',
+      merge: { sourceLedgerName: '家用', share: null },
+    });
+    const onCopy = vi.fn();
+    renderList({ transactions: [transaction], onCopy });
+
+    const listRow = row(0);
+    await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
+    const menu = within(listRow).getByRole('menu', { name: '交易動作' });
+    await user.click(within(menu).getByRole('menuitem', { name: '複製' }));
+
+    expect(onCopy).toHaveBeenCalledWith(transaction);
+  });
+
   it('keeps the edit entry on an ordinary expense row', async () => {
     const user = userEvent.setup();
     const { onEdit } = renderList();
@@ -647,7 +747,8 @@ describe('TransactionList', () => {
 
       const listRow = row(0);
       expect(listRow).not.toHaveClass(cssClass('clickable'));
-      expect(within(listRow).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(listRow).queryByRole('button', { name: /^編輯/ })).not.toBeInTheDocument();
+      expect(within(listRow).getByRole('button', { name: /更多交易動作/ })).toBeInTheDocument();
       await user.click(screen.getByText('借出'));
     });
 
@@ -706,7 +807,8 @@ describe('TransactionList', () => {
 
       const listRow = row(0);
       expect(listRow).not.toHaveClass(cssClass('clickable'));
-      expect(within(listRow).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(listRow).queryByRole('button', { name: /^編輯/ })).not.toBeInTheDocument();
+      expect(within(listRow).getByRole('button', { name: /更多交易動作/ })).toBeInTheDocument();
       await userEvent.setup().click(screen.getByText('借出 · 小明'));
       expect(onEdit).not.toHaveBeenCalled();
     });
