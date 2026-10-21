@@ -6,27 +6,26 @@
 
 ---
 
-## 最新交接（2026-10-19，3k 已合併並部署；等開發者操作回饋）
+## 最新交接（2026-10-21，3l 已合併並部署；等開發者操作回饋）
 
 ### 現況
 
-- 3k（退出共享帳本並合併到別的帳本）已合併：#137（squash `912e0d9`）。spec `docs/specs/phase-3k-leave-and-merge.md`（決策 189～208），驗證數字與偏離記在 `tasks/phase-3k-plan.md` §6。
-  - 實作時開發者另外核可：`DebtEntry.merge`（W192 顯示來源帳本名）、`LedgerMerge.targetLedgerId` 改 `SET NULL`（多一個 migration）、被加回時撤銷上次的帳本轉入（決策 208）、拿掉恆為 `false` 的 `left` 欄位與 `LEDGER_LEFT`。
-- 已部署到 dev（2026-10-19）：備份 `D:\Projects\ledger-app-backups\ledger_dev_before_3k_20261019_2053.dump`，套用 `20261019000000_ledger_merge`、`20261019130000_ledger_merge_target_set_null`，`web-redesign` detached 在 `912e0d9`，shared 與 API 已 build。部署前查「已退出、帳戶還在算」為 0 筆。
-- 部署後用暫時的 3200 埠照 plan §4 走過一次：a@a.com 建暫時共享帳本、加 b@b.com、記住宿／晚餐／結清；b 退出並合併後帳戶餘額不變、合併來的 3 列標來源帳本、借還頁不再出現、打開回 404；a 以最後一人全部不合併刪除，預覽與結果一致；最後刪掉 b 合併來的交易，兩人帳戶都回到原值。軟刪除的交易與 `LedgerMerge` 留在資料庫。
-- **開發者 10-19 晚上在 main worktree（`D:\Projects\ledger-app`）開了 API 與 Vite**：main 的 shared `dist` 與 `src/generated/prisma` 是舊的，API 報 117 個型別錯；Vite 因 5173 被佔用跑到 5174。已請他停掉、改回 `web-redesign` 重開。
-- 分工（2026-10-19 起）：main 的 session 是總控，`backend` worktree（detached，DB `ledger_backend_test`）做後端，前端 session 開在 `web-redesign`。3k 期間兩個 session 各有子分支，只有總控寫整合分支。兩個 session 都已停手待命。
-- worktree：`backend`、`ledger-split-web`（協調者寫文件用，`.env` 指向 `ledger_test`）、`web-redesign`（開發者的 dev），都 detached 在 `912e0d9`。3k 的分支都已刪。
-- **待開發者同意刪除的測試資料庫**：`ledger_lvm_{migrate,rules,leave,merged,web,webe2e}_test`。`ledger_backend_test` 是 backend worktree 長駐用的，保留。
-- Codex 週額度用到約 99%（約 10-25 重置）。開發者 10-19 指示：Codex 用到 worker 真的報額度錯誤才換 `fallback-1`，不看 §4 的 95% 門檻（`docs/orca-multi-agent.md` §4 還沒改）。
+- 3l（刪除私人帳本時分組搬走交易、複製交易、標註交易）已合併：#140（squash `d29d454`）。spec `docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200），驗證數字、偏離與驗收退回記在 `tasks/phase-3l-plan.md` §6。
+  - 實作時開發者另外決定：搬進共享帳本的個人借還照 3b 決策 13（別人看得到交易、看不到往來）；帳本頁按鈕寫「刪除帳本」；刪除後數字依增減上色，3k 退出對話框一起改。
+  - 後端 L3 自訂的規則 C：列表不單獨顯示的交易被標註時，存到列表上看得到的代表列（結清分支→還款、個人分帳→擁有者的合成列、合併來的→份額）。已向開發者報告。
+- 已部署到 dev（2026-10-21）：備份 `D:Projectsledger-app-backupsledger_dev_before_3l_20261021_1247.dump`，套用 `20261021000000_transaction_mark`，main worktree 已 pull 到 `d29d454`、shared 與 API 已 build。用暫時的 3200 埠照 plan §4 走過一次，結果都符合，暫時資料已清。
+- **開發者的 dev 伺服器現在從 main worktree（`D:Projectsledger-app`）跑**：API 是 `node dist/main`、Vite 在 `apps/web`。部署要做在 main，不是 `web-redesign`。
+- 分工（2026-10-21 起）：**網頁實作只交給 Codex**，Claude Code 只做規劃、派工、驗收，驗收不過退回 Codex，不自己改網頁程式；Codex 用完就停下來問，不換層。**總控不跟其他 session 互傳訊息**，讀分支掌握進度；要決定的事開發者會親自到各 session 回答。後端仍照角色表。
+- worktree：`backend`（DB `ledger_backend_test`）、`ledger-split-web`（總控寫文件用，`.env` 指向 `ledger_test`）都 detached 在 `main`；`web-redesign` 還停在 `912e0d9`，目前沒在用。3l 的本機分支都已刪。
+- **待開發者同意刪除**：測試資料庫 `ledger_ldm_{int,migrate,move,mark,webdel,webrow,webe2e}_test`；遠端分支 `feature/ldm-api`（後端子分支，不是 PR 來源）。`ledger_backend_test` 長駐，保留。
+- Codex 週額度 10-21 已重置，3l 用到約 8%。
 
 ### 下一步
 
-1. 請開發者在 `web-redesign` 重開 API 與 Vite、按 `Ctrl + Shift + R`，操作 3k。
-2. 請 d@d.com（花蓮三日）、a2@a.com（share）用新流程退出。
-3. 刪除上面列的 6 個測試資料庫（等開發者同意）。
-4. 依回饋開修訂（先改 spec 再改程式）。
-5. 3k 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限；並決定前端、後端 session 怎麼分工。
+1. 請開發者重開 API 與 Vite、按 `Ctrl + Shift + R`，操作 3l。
+2. 刪除上面列的測試資料庫與遠端分支（等開發者同意）。
+3. 依回饋開修訂（先改 spec 再改程式）。
+4. 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
 
 ### 開發者的偏好（不在 spec 裡的）
 
@@ -45,11 +44,11 @@
 
 ### 替開發者部署
 
-開發者的 dev 伺服器在 `web-redesign` worktree（detached HEAD）跑，API 用 `node dist/main`，不是 watch。
+開發者的 dev 伺服器在 main worktree（`D:\Projects\ledger-app`）跑（2026-10-21 確認），API 用 `node dist/main`，不是 watch。
 
 - 只改前端：Vite 會自動更新，請他按 `Ctrl + Shift + R`。
 - 後端或 `packages/shared` 有改：
-  1. `git checkout --detach origin/main`。
+  1. main worktree 跑 `git pull`（它在 `main` 分支上，不是 detached）。
   2. `pnpm --filter @ledger/shared build`。Vite 會自己更新預先打包，不必刪 `.vite`。
   3. schema 有變：先 `pg_dump` 備份 `ledger_dev`，在 `apps/api` 手動跑 `prisma generate`（`pnpm install --frozen-lockfile` 不一定會重跑），再跑 `prisma migrate deploy`。
   4. `apps/api` 跑 `pnpm build`，然後請他重開 API 與 Vite。

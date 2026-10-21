@@ -211,3 +211,12 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - 偏離：無；僅修改 `apps/web/e2e/` 與本節紀錄，未改產品程式、Prisma、API 或 shared。
 - 驗證：`pnpm --filter @ledger/web test:e2e` 68 passed、0 failed、0 skip/fixme；新增三條主線全通過。`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 全通過。
 - 總控驗收退回 1 處：`expectBalanceTransition` 只讀一次 `innerText` 不會重試，改成 `expect.poll`（8ce501c）。
+
+### L7（總控，2026-10-21）
+
+- 整合分支最後一輪：單元 shared 116、API 617、Web 812；API e2e 46 檔 418 條（含隔離 9 條）；Web e2e 68 條；lint、typecheck、format、build 全過。PR #140 CI 全綠，squash merge（`d29d454`）。
+- 部署：備份 `D:Projectsledger-app-backupsledger_dev_before_3l_20261021_1247.dump`，`migrate deploy` 套用 `20261021000000_transaction_mark`，build shared 與 API。開發者的 dev 從 main worktree 跑（不是 `web-redesign`），部署做在 main。
+- 照 §4 在 dev 用暫時的 3200 埠走過一次（a@a.com，帳本都是暫時建的）：私人帳本 3 筆（支出、互轉、借給暫時對象）全部不搬的預覽列出 2 個帳戶與 1 個往來；分兩組搬到暫時共享帳本與暫時私人帳本後預覽為空；同一本目標出現兩次回 400；執行後帳戶餘額不變、來源帳本 404、交易在各自的目標、往來餘額不變；標註跟著交易到新帳本；複製到共享帳本對到同名分類。最後刪掉暫時帳本與對象，帳戶回到原值，沒有殘留。
+- 分工偏離：plan 原本前後端各一個 session；開發者 10-21 改成網頁實作只交給 Codex、Claude 只做規劃與驗收，前端 session 收掉，L4～L6 由總控派 Codex。總控不再與其他 session 互傳訊息，改讀分支掌握進度。
+- 驗收退回：L4 一次（帳戶歸零的上色）、L5 一次（選單收起、參數命名）、L6 一次（斷言不重試）。都退回 Codex 修，總控沒有改網頁程式。
+- 發現：3k 的共享帳本刪除預覽在沒有目標帳本時回 400（`A target ledger is required`），要全部不合併必須先帶一個目標取預覽、再把全部項目放進 `excludedItemIds`。畫面上一開始就選了目標所以不受影響，只是 API 直接呼叫時不直覺；沒有改。

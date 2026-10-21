@@ -60,7 +60,7 @@
 | [`phase-3i-debt-entry-edit.md`](specs/phase-3i-debt-entry-edit.md)                 | 階段三：3i 借還紀錄可改名稱、帳戶、分類       | 已完成    |
 | [`phase-3j-ledger-delete-archive.md`](specs/phase-3j-ledger-delete-archive.md)     | 階段三：3j 帳本刪除、封存、取消封存           | 已完成    |
 | [`phase-3k-leave-and-merge.md`](specs/phase-3k-leave-and-merge.md)                 | 階段三：3k 退出共享帳本並合併到別的帳本       | 已完成    |
-| [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易 | 已核可    |
+| [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易 | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                              | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
