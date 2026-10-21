@@ -28,10 +28,14 @@ describe('Home dashboard', () => {
     archivedAt: null,
     role: 'OWNER',
   };
+  const otherLedger = { ...ledger, id: 'ledger-2', name: '共享帳本', kind: 'SHARED' };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
   let incomingLinkInvites: unknown[] = [];
   let incomingProposals: unknown[] = [];
+  let availableLedgers = [ledger];
+  let markedTransactions: Record<string, unknown>[] = [];
+  let markedTotal = 0;
 
   /** 七筆交易：後端若多給了，卡片仍然只顯示 5 筆。 */
   const transactions = Array.from({ length: 7 }, (_, index) => ({
@@ -46,6 +50,7 @@ describe('Home dashboard', () => {
     creator: { id: 'u1', name: 'Alice' },
     debt: null,
     createdAt: '2026-08-12T04:00:00.000Z',
+    marked: false,
   }));
 
   beforeEach(() => {
@@ -55,8 +60,15 @@ describe('Home dashboard', () => {
     fetchMock.mockReset();
     incomingLinkInvites = [];
     incomingProposals = [];
+    transactions.forEach((transaction) => {
+      transaction.marked = false;
+    });
+    ledger.role = 'OWNER';
+    availableLedgers = [ledger];
+    markedTransactions = [];
+    markedTotal = 0;
 
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const json = (body: unknown) =>
         Promise.resolve(
           new Response(JSON.stringify(body), {
@@ -64,6 +76,25 @@ describe('Home dashboard', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.endsWith('/mark')) {
+        if (init?.method === 'DELETE') {
+          markedTransactions = markedTransactions.filter((item) => item.id !== 'txn-marked');
+          markedTotal = markedTransactions.length;
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (url.includes('/transactions/marked')) {
+        const parsed = new URL(url, 'http://localhost');
+        const page = Number(parsed.searchParams.get('page') ?? 1);
+        const limit = Number(parsed.searchParams.get('limit') ?? 10);
+        const start = (page - 1) * limit;
+        return json({
+          items: markedTransactions.slice(start, start + limit),
+          page,
+          limit,
+          total: markedTotal,
+        });
+      }
       if (url.includes('/transactions')) {
         return json({ items: transactions, page: 1, limit: 5, total: 7 });
       }
@@ -92,7 +123,7 @@ describe('Home dashboard', () => {
       if (url.includes('/accounts')) {
         return json([account]);
       }
-      return json([ledger]);
+      return json(availableLedgers);
     });
   });
 
@@ -206,6 +237,124 @@ describe('Home dashboard', () => {
     expect(listCall).toContain('limit=5');
   });
 
+  it('shows marked transactions above recent activity with ledger names and lets a viewer unmark', async () => {
+    const user = userEvent.setup();
+    signIn();
+    ledger.role = 'VIEWER';
+    transactions[1]!.marked = true;
+    availableLedgers = [ledger, otherLedger];
+    markedTransactions = [
+      {
+        ...transactions[0],
+        id: 'txn-marked',
+        marked: true,
+        ledger: { id: otherLedger.id, name: otherLedger.name },
+      },
+    ];
+    markedTotal = 1;
+
+    render(<App />);
+
+    const markedCard = await screen.findByRole('region', { name: '標註' }, WAIT);
+    const recent = await screen.findByRole('region', { name: '最近交易' }, WAIT);
+    expect(markedCard.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+    expect(within(markedCard).getByText('共享帳本')).toBeInTheDocument();
+    expect(within(recent).getAllByRole('listitem')[1]!.className).toMatch(/marked/);
+    const recentRow = within(recent).getAllByRole('listitem')[0]!;
+    await user.click(within(recentRow).getByRole('button', { name: /更多交易動作/ }));
+    const recentMenu = within(recentRow).getByRole('menu', { name: '交易動作' });
+    await user.click(within(recentMenu).getByRole('menuitem', { name: '標註' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/ledgers/ledger-1/transactions/txn-1/mark'),
+        expect.objectContaining({ method: 'PUT' }),
+      ),
+    );
+
+    const listRow = within(markedCard).getByRole('listitem');
+    expect(listRow.className).toMatch(/marked/);
+    await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
+    const menu = within(listRow).getByRole('menu', { name: '交易動作' });
+    expect(within(menu).getByRole('menuitem', { name: '取消標註' })).toBeInTheDocument();
+    await user.click(within(menu).getByRole('menuitem', { name: '取消標註' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '標註' })).not.toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/ledgers/ledger-2/transactions/txn-marked/mark'),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('hides the marked card when empty and expands more than ten entries', async () => {
+    const user = userEvent.setup();
+    signIn();
+    const firstRender = render(<App />);
+    await recentCard();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((call) => String(call[0]).includes('/transactions/marked')),
+      ).toBe(true),
+    );
+    expect(screen.queryByRole('region', { name: '標註' })).not.toBeInTheDocument();
+
+    markedTransactions = Array.from({ length: 12 }, (_, index) => {
+      const transaction = transactions[index % transactions.length]!;
+      return {
+        ...transaction,
+        id: `txn-marked-${index + 1}`,
+        marked: true,
+        ledger: { id: ledger.id, name: ledger.name },
+      };
+    });
+    markedTotal = 12;
+    const markedQuery = fetchMock.mock.calls.find((call) =>
+      String(call[0]).includes('/transactions/marked'),
+    );
+    expect(markedQuery).toBeDefined();
+    // 重新掛載後以最新的標註清單呈現首頁卡片。
+    firstRender.unmount();
+    render(<App />);
+    const card = await screen.findByRole('region', { name: '標註' }, WAIT);
+    expect(within(card).getAllByRole('listitem')).toHaveLength(10);
+    await user.click(within(card).getByRole('button', { name: '再 2 筆' }));
+    await waitFor(() => expect(within(card).getAllByRole('listitem')).toHaveLength(12), WAIT);
+    expect(within(card).queryByRole('button', { name: '再 2 筆' })).not.toBeInTheDocument();
+  });
+
+  it('switches to the marked transaction ledger before opening its editor', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    markedTransactions = [
+      {
+        ...transactions[0],
+        id: 'txn-other-ledger',
+        amount: 9900,
+        marked: true,
+        ledger: { id: otherLedger.id, name: otherLedger.name },
+      },
+    ];
+    markedTotal = 1;
+
+    render(<App />);
+
+    const card = await screen.findByRole('region', { name: '標註' }, WAIT);
+    await user.click(within(card).getByRole('button', { name: /^編輯/ }));
+    const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(panel).getByLabelText('金額')).toHaveValue(99);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((call) =>
+          String(call[0]).includes('/ledgers/ledger-2/transactions'),
+        ),
+      ).toBe(true),
+    );
+  });
+
   it('links on to the full transaction list and to the accounts page', async () => {
     signIn();
 
@@ -252,7 +401,7 @@ describe('Home dashboard', () => {
     render(<App />);
 
     const card = await recentCard();
-    const row = card.getAllByRole('button', { name: /餐飲/ })[1]!;
+    const row = card.getAllByRole('button', { name: /^編輯.*餐飲/ })[0]!;
     row.focus();
     await user.keyboard('{Enter}');
 
@@ -333,7 +482,7 @@ describe('Home dashboard', () => {
     expect(card.getByText('借出 · 小明')).toBeInTheDocument();
     expect(card.getByText('借出', { exact: true })).toBeInTheDocument();
     expect(card.queryByText('轉帳')).not.toBeInTheDocument();
-    expect(card.getByRole('button', { name: /借出/ })).toBeInTheDocument();
+    expect(card.getByRole('button', { name: /^編輯.*借出/ })).toBeInTheDocument();
 
     await user.click(card.getByText('借出 · 小明'));
     const debtEditor = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);

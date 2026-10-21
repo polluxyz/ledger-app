@@ -145,6 +145,11 @@ export interface Transaction {
   difference: TransactionDifferenceRef | null;
   /** 退出共享帳本時合併來的（3k 決策 196、W191）；只有合併者本人看得到，其他為 `null`。 */
   merge: TransactionMerge | null;
+  /**
+   * 我有沒有標註這筆（3l 決策 222）。標註只屬於標註的人：同一筆共享帳本的交易，每個成員看到的是
+   * 自己的標註。所有回傳 `Transaction` 的端點都帶。
+   */
+  marked: boolean;
   /** 這筆資料列被建立的時間（ISO 8601）。 */
   createdAt: string;
 }
@@ -260,4 +265,20 @@ export interface ListTransactionsQuery {
   type?: TransactionType;
   /** 只看某個人付（收）的（3e §5.2）；舊資料以記帳的人為付款人。 */
   payerPersonId?: string;
+}
+
+/**
+ * `GET /transactions/marked` 的一列（3l §4.2）：我所有帳本裡我標註的交易，多帶所屬帳本，
+ * 首頁「標註」卡用它在第二行寫帳本名（W200）。只算我現在是成員的帳本、沒刪除的交易。
+ */
+export interface MarkedTransaction extends Transaction {
+  ledger: { id: string; name: string };
+}
+
+/** `GET /transactions/marked` 的查詢參數。依日期、再依建立時間由新到舊。 */
+export interface ListMarkedTransactionsQuery {
+  /** 以 1 為起始的頁碼（預設 1）。 */
+  page?: number;
+  /** 每頁筆數（預設 10，上限 100）。 */
+  limit?: number;
 }

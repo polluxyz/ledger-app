@@ -51,19 +51,21 @@ function build() {
   const accounts = {
     calculateBalances: jest.fn().mockResolvedValue({ balances: new Map(), used: new Set() }),
   };
+  const ledgers = { deleteLedgerRows: jest.fn() };
   const service = new LedgerLeaveService(
     prisma as never,
     accounts as never,
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    ledgers as never,
   );
   return {
     service,
     tx,
     prisma,
     accounts,
+    ledgers,
     source: (value: typeof source) => {
       source = value;
     },
@@ -78,6 +80,81 @@ describe('LedgerLeaveService', () => {
   beforeEach(() =>
     jest.mocked(computeLedgerSummary).mockResolvedValue({ people: [], suggestions: [] }),
   );
+  const personal = (role = 'OWNER', archivedAt: Date | null = null) => ({
+    ...membership(role, archivedAt),
+    ledger: { ...membership(role, archivedAt).ledger, kind: 'PERSONAL' },
+  });
+  it.each([
+    {},
+    { deleteLedger: true },
+    { deleteLedger: false, moves: [] },
+    { deleteLedger: true, moves: null },
+    { deleteLedger: true, moves: [], targetLedgerId: null },
+    { deleteLedger: true, moves: [], excludedItemIds: null },
+  ])('私人帳本 request 必須使用專用欄位：%j', async (request) => {
+    const b = build();
+    b.source(personal());
+    for (const action of ['preview', 'leave'] as const)
+      await expect(b.service[action]('source', 'me', request as never)).rejects.toMatchObject({
+        status: 400,
+      });
+    expect(b.ledgers.deleteLedgerRows).not.toHaveBeenCalled();
+  });
+  it.each([
+    {},
+    { targetLedgerId: null },
+    { excludedItemIds: [] },
+    { ...request, moves: [] },
+    { ...request, moves: null },
+  ])('共享帳本必要欄位與禁止 moves 由 service 檢查：%j', async (request) => {
+    const b = build();
+    await expect(b.service.preview('source', 'me', request as never)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(b.tx.ledgerMerge.create).not.toHaveBeenCalled();
+  });
+  it('私人帳本：擁有者、封存預覽仍驗目標；執行封存 409 與 confirm 400', async () => {
+    const b = build();
+    const request = { deleteLedger: true, moves: [] };
+    b.source(personal('EDITOR'));
+    await expect(b.service.preview('source', 'me', request)).rejects.toMatchObject({ status: 403 });
+    b.source(personal('OWNER', new Date()));
+    expect((await b.service.preview('source', 'me', request)).leave).toEqual({
+      allowed: false,
+      blockedBy: 'LEDGER_ARCHIVED',
+    });
+    await expect(b.service.leave('source', 'me', request)).rejects.toMatchObject({ status: 409 });
+    b.source(personal());
+    await expect(b.service.leave('source', 'me', request)).rejects.toMatchObject({ status: 400 });
+  });
+  it('私人帳本：來源與全部目標一起排序鎖 Ledger、LedgerMember；不建立合併或清帳戶引用', async () => {
+    const b = build();
+    b.source(personal());
+    // 無項目時仍可觀察鎖順序，未知 item 在計畫階段才拒絕。
+    await expect(
+      b.service.leave('source', 'me', {
+        deleteLedger: true,
+        confirm: '花蓮三日',
+        moves: [
+          { targetLedgerId: 'target', itemIds: ['unknown'] },
+          { targetLedgerId: 'aaa', itemIds: ['another'] },
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    const calls = b.tx.$queryRaw.mock.calls as unknown as [TemplateStringsArray, string, string][];
+    expect(calls.map((call) => call[1])).toEqual(['aaa', 'source', 'target']);
+    for (const [strings] of calls) expect(strings.join('')).toContain('FOR UPDATE OF l, m');
+    b.tx.$queryRaw.mockClear();
+    await b.service.leave('source', 'me', { deleteLedger: true, moves: [], confirm: '花蓮三日' });
+    expect(b.ledgers.deleteLedgerRows).toHaveBeenCalledWith(b.tx, 'source');
+    expect(b.tx.ledgerMerge.create).not.toHaveBeenCalled();
+    expect(b.tx.transaction.updateMany).not.toHaveBeenCalled();
+    expect(b.tx.ledgerPersonPointer.deleteMany).not.toHaveBeenCalled();
+    expect(b.prisma.$transaction.mock.calls.at(-1)![1]).toEqual({
+      isolationLevel: 'Serializable',
+      timeout: 30000,
+    });
+  });
   it('非成員 404 優先於封存與所有輸入檢查', async () => {
     const b = build();
     b.source(null);

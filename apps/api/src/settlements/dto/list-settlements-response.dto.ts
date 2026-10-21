@@ -141,6 +141,9 @@ export class SettlementTransactionDto implements Transaction {
   @ApiProperty({ type: Object, nullable: true, description: '結清不是合併來的，恆為 null（3k）。' })
   merge!: null;
 
+  @ApiProperty({ description: '我有沒有標註這筆（3l 決策 222）；只看呼叫者自己的標註。' })
+  marked!: boolean;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 }

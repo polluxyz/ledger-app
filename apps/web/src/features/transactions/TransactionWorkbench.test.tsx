@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
+import { toDateInputValue } from '../../lib/format';
 
 /**
  * 右側欄的內容（spec 2i §4.5、SC-35）。2h 時這些案例住在 `HomePage.test.tsx`，
@@ -29,25 +30,47 @@ describe('Transaction workbench in the right panel', () => {
     archivedAt: null,
     role: 'OWNER',
   };
+  const targetLedger = {
+    ...ledger,
+    id: 'ledger-2',
+    name: '另一個帳本',
+  };
+  const emptyCategoryLedger = {
+    ...ledger,
+    id: 'ledger-3',
+    name: '沒有同名分類',
+  };
   const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE' };
   const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
+  const otherAccount = { id: 'acc-2', name: '銀行', initialBalance: 0, balance: 125000 };
   const lunch = {
     id: 'txn-1',
     type: 'EXPENSE',
     amount: 12000,
     date: '2026-08-12T04:00:00.000Z',
     note: '午餐',
+    title: '便當',
     category: expenseCategory,
     account: { id: account.id, name: account.name },
     toAccount: null,
     creator: { id: 'u1', name: 'Alice' },
     createdAt: '2026-08-12T04:00:00.000Z',
   };
+  const mePerson = { id: 'person-me', name: 'Alice', userId: 'u1', status: 'MEMBER' };
+  const mingPerson = { id: 'person-ming', name: '小明', userId: 'u2', status: 'MEMBER' };
+  let ledgers = [ledger];
+  let listedTransaction: Record<string, unknown> = lunch;
+  const createdTransactions: { url: string; body: unknown }[] = [];
 
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     window.history.pushState({}, '', '/transactions');
+    ledger.kind = 'PERSONAL';
+    ledger.role = 'OWNER';
+    ledgers = [ledger];
+    listedTransaction = lunch;
+    createdTransactions.length = 0;
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
 
@@ -59,19 +82,34 @@ describe('Transaction workbench in the right panel', () => {
             headers: { 'Content-Type': 'application/json' },
           }),
         );
+      if (url.endsWith('/transactions') && options?.method === 'POST') {
+        createdTransactions.push({
+          url,
+          body: typeof options.body === 'string' ? JSON.parse(options.body) : options.body,
+        });
+        return json({ ...lunch, id: 'txn-created' });
+      }
       if (url.endsWith('/transactions/txn-1') && options?.method === 'PATCH') {
         return json(lunch);
       }
+      if (url.includes('/people')) return json([mePerson, mingPerson]);
+      if (url.endsWith('/users/me')) {
+        return json({ id: 'u1', email: 'alice@example.test', name: 'Alice' });
+      }
       if (url.includes('/transactions')) {
-        return json({ items: [lunch], page: 1, limit: 20, total: 1 });
+        return json({ items: [listedTransaction], page: 1, limit: 20, total: 1 });
       }
       if (url.includes('/categories')) {
+        if (url.includes('/ledgers/ledger-2/categories')) {
+          return json([{ ...expenseCategory, id: 'cat-2' }]);
+        }
+        if (url.includes('/ledgers/ledger-3/categories')) return json([]);
         return json([expenseCategory]);
       }
       if (url.includes('/accounts')) {
-        return json([account]);
+        return json([account, otherAccount]);
       }
-      return json([ledger]);
+      return json(ledgers);
     });
   });
 
@@ -100,8 +138,129 @@ describe('Transaction workbench in the right panel', () => {
   it('shows the add form in the panel by default', async () => {
     render(<App />);
 
-    expect(await findAddForm()).toBeInTheDocument();
+    const form = await findAddForm();
+    expect(form).toBeInTheDocument();
+    expect(within(form).queryByLabelText('帳本')).not.toBeInTheDocument();
     expect(editPanel()).not.toBeInTheDocument();
+  });
+
+  it('copies a personal transaction with its account and uses today as the date', async () => {
+    const user = userEvent.setup();
+    listedTransaction = lunch;
+    render(<App />);
+
+    const moreButton = await screen.findByRole('button', { name: /更多交易動作/ }, WAIT);
+    await user.click(moreButton);
+    await user.click(screen.getByRole('menuitem', { name: '複製' }));
+
+    const form = await findAddForm();
+    expect(within(form).getByLabelText('帳本')).toHaveValue('ledger-1');
+    expect(within(form).getByLabelText('日期')).toHaveValue(toDateInputValue());
+    expect(within(form).getByLabelText('金額')).toHaveValue(120);
+    expect(within(form).getByLabelText('帳戶')).toHaveValue('acc-1');
+    expect(within(form).getByLabelText('名稱')).toHaveValue('便當');
+    expect(within(form).getByLabelText('備註')).toHaveValue('午餐');
+  });
+
+  it('copies both accounts from a transfer', async () => {
+    const user = userEvent.setup();
+    listedTransaction = {
+      ...lunch,
+      type: 'TRANSFER',
+      category: null,
+      toAccount: { id: otherAccount.id, name: otherAccount.name },
+    };
+    render(<App />);
+
+    const moreButton = await screen.findByRole('button', { name: /更多交易動作/ }, WAIT);
+    await user.click(moreButton);
+    await user.click(screen.getByRole('menuitem', { name: '複製' }));
+
+    const form = await findAddForm();
+    expect(within(form).getByRole('button', { name: '轉帳' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(form).getByLabelText('轉出帳戶')).toHaveValue('acc-1');
+    expect(within(form).getByLabelText('轉入帳戶')).toHaveValue('acc-2');
+  });
+
+  it('copies a shared transaction, maps its category, clears split people after changing ledger, and posts to that ledger', async () => {
+    const user = userEvent.setup();
+    ledger.kind = 'SHARED';
+    const sharedTransaction = {
+      ...lunch,
+      account: null,
+      payer: mingPerson,
+      ledgerSplit: {
+        method: 'EQUAL',
+        precision: 'CENT',
+        shares: [
+          { person: mePerson, share: 6000, ratio: null },
+          { person: mingPerson, share: 6000, ratio: null },
+        ],
+      },
+    };
+    listedTransaction = sharedTransaction;
+    ledgers = [ledger, targetLedger, emptyCategoryLedger];
+    render(<App />);
+
+    const moreButton = await screen.findByRole('button', { name: /更多交易動作/ }, WAIT);
+    await user.click(moreButton);
+    await user.click(screen.getByRole('menuitem', { name: '複製' }));
+
+    let form = await findAddForm();
+    expect(within(form).getByLabelText('帳本')).toHaveValue('ledger-1');
+    expect(within(form).getByRole('button', { name: '支出' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(form).getByLabelText('金額')).toHaveValue(120);
+    expect(within(form).getByLabelText('日期')).toHaveValue(toDateInputValue());
+    expect(within(form).getByRole('combobox', { name: '分類' })).toHaveAttribute(
+      'aria-valuetext',
+      '餐飲',
+    );
+    expect(within(form).getByLabelText('名稱')).toHaveValue('便當');
+    expect(within(form).getByLabelText('備註')).toHaveValue('午餐');
+    expect(within(form).getByLabelText('付款人')).toHaveValue('小明');
+    expect(within(form).getByRole('checkbox', { name: '分帳' })).toBeChecked();
+
+    await user.selectOptions(within(form).getByLabelText('帳本'), 'ledger-3');
+    form = await findAddForm();
+    await waitFor(() =>
+      expect(within(form).getByRole('combobox', { name: '分類' })).toHaveAttribute(
+        'aria-valuetext',
+        '請選擇分類',
+      ),
+    );
+    expect(within(form).queryByLabelText('付款人')).not.toBeInTheDocument();
+    const splitCheckbox = within(form).getByRole('checkbox', { name: '分帳' });
+    expect(splitCheckbox).not.toBeChecked();
+    expect(within(form).queryByText('小明')).not.toBeInTheDocument();
+
+    await user.selectOptions(within(form).getByLabelText('帳本'), 'ledger-2');
+    form = await findAddForm();
+    await waitFor(() =>
+      expect(within(form).getByRole('combobox', { name: '分類' })).toHaveAttribute(
+        'aria-valuetext',
+        '餐飲',
+      ),
+    );
+    await user.click(within(form).getByRole('button', { name: '新增' }));
+
+    await waitFor(() => expect(createdTransactions).toHaveLength(1), WAIT);
+    expect(createdTransactions[0]?.url).toContain('/ledgers/ledger-2/transactions');
+    expect(createdTransactions[0]?.body).toMatchObject({
+      type: 'EXPENSE',
+      amount: 12000,
+      categoryId: 'cat-2',
+      accountId: 'acc-1',
+      title: '便當',
+      note: '午餐',
+    });
+    expect(createdTransactions[0]?.body).not.toHaveProperty('payerPersonId');
+    expect(createdTransactions[0]?.body).not.toHaveProperty('ledgerSplit');
   });
 
   it('replaces the add form with the edit panel when a row is edited', async () => {

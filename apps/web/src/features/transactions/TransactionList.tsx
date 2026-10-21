@@ -1,4 +1,4 @@
-import { Fragment, useState, type MouseEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   actualAmountOf,
   debtCategoryTypeOf,
@@ -18,6 +18,7 @@ import {
   formatMoney,
   formatTransactionAmount,
 } from '../../lib/format';
+import { canCopyTransaction, canDeleteTransactionFromEditor } from './transaction-actions';
 import styles from './TransactionList.module.css';
 
 interface TransactionListProps {
@@ -37,6 +38,12 @@ interface TransactionListProps {
   onEditDebtTransaction?: (transaction: Transaction) => void;
   /** 點「臨時帳戶」（`accountPending: true`）時，打開換帳戶表單（3e W125）。 */
   onFillAccount?: (transaction: Transaction) => void;
+  onCopy?: (transaction: Transaction) => void;
+  onDelete?: (transaction: Transaction) => void;
+  onToggleMark?: (transaction: Transaction, ledgerId?: string) => void;
+  /** 首頁標註卡把所屬帳本加在名稱列後面。 */
+  ledgerNames?: ReadonlyMap<string, string>;
+  ledgerIds?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -135,10 +142,48 @@ export function TransactionList({
   onEdit,
   onEditDebtTransaction,
   onFillAccount,
+  onCopy,
+  onDelete,
+  onToggleMark,
+  ledgerNames,
+  ledgerIds,
 }: TransactionListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentUser = useCurrentUser();
   const currentUserId = currentUser.data?.id;
+
+  useEffect(() => {
+    if (openMenuId === null) return;
+
+    function closeMenuOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      if (
+        menuRef.current?.contains(event.target) ||
+        menuTriggerRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setOpenMenuId(null);
+    }
+
+    function closeMenuOnEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpenMenuId(null);
+      menuTriggerRef.current?.focus();
+    }
+
+    document.addEventListener('pointerdown', closeMenuOnOutsidePointer);
+    document.addEventListener('keydown', closeMenuOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenuOnOutsidePointer);
+      document.removeEventListener('keydown', closeMenuOnEscape);
+    };
+  }, [openMenuId]);
+
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -284,12 +329,16 @@ export function TransactionList({
                       </span>
                     )}
                     {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
+                    {ledgerNames?.get(transaction.id) && (
+                      <span className={styles.ledgerName}>{ledgerNames.get(transaction.id)}</span>
+                    )}
                   </span>
                 </>
               );
               const rowClassNames = [
                 styles.row,
                 isClickable ? styles.clickable : '',
+                transaction.marked ? styles.marked : '',
                 transaction.id === selectedId ? styles.selected : '',
                 expanded ? styles.rowExpanded : '',
               ]
@@ -365,6 +414,79 @@ export function TransactionList({
                         >
                           ›
                         </button>
+                      )}
+                      <button
+                        type="button"
+                        className={styles.action}
+                        aria-label={`更多交易動作：${describe(transaction)}`}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuId === transaction.id}
+                        onClick={(event) => {
+                          const isOpen = openMenuId === transaction.id;
+                          if (!isOpen) menuTriggerRef.current = event.currentTarget;
+                          setOpenMenuId(isOpen ? null : transaction.id);
+                        }}
+                      >
+                        ⋯
+                      </button>
+                      {openMenuId === transaction.id && (
+                        <div
+                          ref={menuRef}
+                          className={styles.menu}
+                          role="menu"
+                          aria-label="交易動作"
+                        >
+                          {isClickable && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                openRow(transaction);
+                              }}
+                            >
+                              編輯
+                            </button>
+                          )}
+                          {onCopy && canCopyTransaction(transaction) && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                onCopy(transaction);
+                              }}
+                            >
+                              複製
+                            </button>
+                          )}
+                          {onToggleMark && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                onToggleMark(transaction, ledgerIds?.get(transaction.id));
+                              }}
+                            >
+                              {transaction.marked ? '取消標註' : '標註'}
+                            </button>
+                          )}
+                          {onDelete &&
+                            isClickable &&
+                            canDeleteTransactionFromEditor(transaction) && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onDelete(transaction);
+                                }}
+                              >
+                                刪除
+                              </button>
+                            )}
+                        </div>
                       )}
                     </span>
                     {expanded && (hasExpandableDetails || hasDifferenceDetails) && (

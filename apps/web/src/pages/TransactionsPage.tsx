@@ -31,6 +31,7 @@ import {
   type TransactionFilters,
 } from '../features/transactions/transaction-query';
 import { useTransactions } from '../features/transactions/use-transactions';
+import { useSetTransactionMark } from '../features/transactions/use-marks';
 import styles from './TransactionsPage.module.css';
 
 /**
@@ -110,6 +111,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     requestedView === 'debts' && requestedTab === 'shared' ? settleIntent : null;
 
   const transactions = useTransactions(ledger.id, toListQuery(filters, page));
+  const setTransactionMark = useSetTransactionMark();
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
   const [pendingCounterpartyId, setPendingCounterpartyId] = useState<string | null>(null);
@@ -170,6 +172,24 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   function startEditingDebtTransaction(transaction: Transaction) {
     setPanelTarget({ kind: 'debtTransaction', transaction });
     open();
+  }
+
+  function startCopying(transaction: Transaction) {
+    setPanelTarget({ kind: 'copy', transaction });
+    open();
+  }
+
+  function startDeleting(transaction: Transaction) {
+    setPanelTarget({ kind: 'transaction', transaction, initialDeleteOpen: true });
+    open();
+  }
+
+  function toggleMark(transaction: Transaction) {
+    setTransactionMark.mutate({
+      ledgerId: ledger.id,
+      transactionId: transaction.id,
+      currentlyMarked: transaction.marked,
+    });
   }
 
   /*
@@ -361,6 +381,9 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
                 onEdit={startEditing}
                 onEditDebtTransaction={startEditingDebtTransaction}
                 onFillAccount={fillAccount}
+                onCopy={startCopying}
+                onDelete={startDeleting}
+                onToggleMark={toggleMark}
                 // 右側欄正在編輯的那一筆要在列表上標出來，否則使用者看不出面板裡是哪一筆。
                 // 收起後內容還留著（見 closeWorkbench），所以只在右側欄開著時標示。
                 selectedId={selectedTransactionId}

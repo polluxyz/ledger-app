@@ -14,22 +14,48 @@ import type { CategoryIcon } from '../constants/category-icons';
  * `POST /ledgers/{ledgerId}/leave-preview` 與 `POST /ledgers/{ledgerId}/leave` 的 body。
  *
  * 預覽與執行送同一份內容；執行時 `deleteLedger` 為真才需要 `confirm`。
+ *
+ * 刪除私人帳本（3l）也用這組型別：私人帳本只有我一個人，「刪除私人帳本」等於 3k 的
+ * 「最後一個人刪除共享帳本」（3l 決策 216）。兩種帳本帶的欄位不同，由後端依帳本種類檢查：
+ *
+ * - 共享帳本：必帶 `targetLedgerId`、`excludedItemIds`，不能帶 `moves`（照 3k）。
+ * - 私人帳本：必帶 `deleteLedger: true` 與 `moves`，不能帶 `targetLedgerId`、`excludedItemIds`。
+ *
+ * 私人帳本的搬移**不是合併**：交易照原樣改屬目標帳本，不建新的一筆、不標來源（3l 決策 210）。
  */
 export interface LeaveRequest {
-  /** 合併到哪一本（決策 201）。沒有要合併的項目（全部取消勾選）時可以是 `null`。 */
-  targetLedgerId: string | null;
-  /** 取消勾選的項目，值是 `LedgerLeaveItem.id`。不屬於預覽項目的 id 回 400。 */
-  excludedItemIds: string[];
-  /** 最後一個人刪除共享帳本（決策 204）：先合併，再刪除帳本。 */
+  /** 合併到哪一本（決策 201）。沒有要合併的項目（全部取消勾選）時可以是 `null`。只用於共享帳本。 */
+  targetLedgerId?: string | null;
+  /** 取消勾選的項目，值是 `LedgerLeaveItem.id`。不屬於預覽項目的 id 回 400。只用於共享帳本。 */
+  excludedItemIds?: string[];
+  /** 最後一個人刪除共享帳本（決策 204）：先合併，再刪除帳本。私人帳本一律為真。 */
   deleteLedger?: boolean;
   /** `deleteLedger` 時必須等於帳本名稱，防手滑；只有執行時檢查。 */
   confirm?: string;
+  /**
+   * 私人帳本刪除時的搬移（3l 決策 209）：每組是「一本目標帳本＋要搬過去的項目」。不在任何一組的
+   * 項目＝不搬，跟著帳本刪掉。空陣列＝全部不搬。只用於私人帳本。
+   */
+  moves?: LeaveMove[];
+}
+
+/**
+ * 私人帳本刪除時的一組搬移（3l §4.1）。以下都回 400：同一個項目出現在兩組、同一本目標帳本出現
+ * 兩次（畫面上選過的帳本不能再選，W195）、`itemIds` 是空的、項目 id 不屬於這次預覽、目標是要刪的這本。
+ */
+export interface LeaveMove {
+  /** 搬到哪一本（3l 決策 212）：我能記帳、沒封存的帳本，私人或共享都可以。 */
+  targetLedgerId: string;
+  /** 這組要搬的項目，值是 `LedgerLeaveItem.id`。至少 1 個。 */
+  itemIds: string[];
 }
 
 /**
  * 預覽裡的一個項目的來源：
  *
- * - `SHARED`：共享帳本的交易（付款、分帳、結清、我自己的帳戶互轉）。
+ * - `SHARED`：一般交易。共享帳本是付款、分帳、結清、我自己的帳戶互轉；私人帳本（3l）是一般收支、
+ *   帳戶互轉、之前合併進來的交易（合併來的「我付、有分帳」兩筆算一項，id 是份額那一筆）。
+ *   值沿用 3k 的名字：3l 規定預覽回應的形狀不變。
  * - `PERSONAL_DEBT`：我在這本帳本記的個人借還（3b），合併時改屬目標帳本（決策 197）。
  * - `PERSONAL_SPLIT`：我在這本帳本記的個人分帳（3c），同上。
  */
@@ -108,6 +134,9 @@ export type LedgerLeaveBlocker = (typeof LEDGER_LEAVE_BLOCKERS)[number];
  *
  * 帶 `deleteLedger: true` 時是「最後一個人刪除帳本」的預覽，`blockedBy` 會多判斷
  * `HAS_OTHER_MEMBERS` 與 `HAS_OTHERS_TRANSACTIONS`。
+ *
+ * 私人帳本（3l §4.1）：`items` 是全部項目，前端自己濾掉已經在某一組的；`accounts`、`withdrawals`
+ * 只算沒搬的（等於刪除後的結果）；`carryOvers` 恆為空陣列（私人帳本沒有帳本裡的人）。
  */
 export interface LedgerLeavePreview {
   items: LedgerLeaveItem[];

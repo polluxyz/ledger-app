@@ -1,4 +1,4 @@
-import { formatMoney, type CreateSettlementRequest, type LedgerDetail } from '@ledger/shared';
+import type { CreateSettlementRequest, LedgerDetail } from '@ledger/shared';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
   addMember,
@@ -16,7 +16,13 @@ import {
 } from './api';
 import { API_BASE_URL } from './env';
 import { expect, test } from './fixtures';
-import { debtRow, expandDebtRow, openDebtsTab, openTransactions } from './ui';
+import {
+  debtRow,
+  expandDebtRow,
+  expectBalanceTransition,
+  openDebtsTab,
+  openTransactions,
+} from './ui';
 
 const SOURCE_LEDGER_NAME = '花蓮三日';
 const TARGET_LEDGER_NAME = '日常';
@@ -248,19 +254,26 @@ test('退出前取消住宿：信用卡預覽同步更新並保留其他合併�
   const lodgingItem = picker.getByRole('listitem').filter({ hasText: '住宿' });
   await lodgingItem.getByRole('checkbox').uncheck();
 
-  const expectedAccountChange = `${formatMoney(cardBalanceBefore)} → ${formatMoney(scenario.creditCard.initialBalance)}`;
   const pickerCardRow = picker
     .getByRole('region', { name: '帳戶' })
     .getByRole('listitem')
     .filter({ hasText: '信用卡' });
-  await expect(pickerCardRow).toContainText(expectedAccountChange);
+  await expectBalanceTransition(
+    pickerCardRow,
+    cardBalanceBefore,
+    scenario.creditCard.initialBalance,
+  );
   await picker.getByRole('button', { name: '完成', exact: true }).click();
 
   const dialogCardRow = dialog
     .getByRole('region', { name: '帳戶' })
     .getByRole('listitem')
     .filter({ hasText: '信用卡' });
-  await expect(dialogCardRow).toContainText(expectedAccountChange);
+  await expectBalanceTransition(
+    dialogCardRow,
+    cardBalanceBefore,
+    scenario.creditCard.initialBalance,
+  );
   await dialog.getByRole('button', { name: '退出', exact: true }).click();
 
   await expect(page).toHaveURL(/\/ledgers$/);
