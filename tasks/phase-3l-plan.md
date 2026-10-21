@@ -152,4 +152,9 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 
 ## 6. 實作紀錄
 
-（實作時填）
+### L0（總控，2026-10-21）
+
+- shared：`LeaveMove`、`LeaveRequest.moves`；`targetLedgerId`、`excludedItemIds` 改成可省略（spec §4.1 私人帳本不能帶）。共享帳本仍由 DTO 要求，service 內以 `?? null`、`?? []` 收斂。`LedgerLeaveItemKind` 的 `SHARED` 註解改成「一般交易」。`Transaction.marked`、`MarkedTransaction`、`ListMarkedTransactionsQuery`。
+- API 端 `marked` 先一律回 `false`（`toTransaction`、結清的 Swagger DTO）；Web `useLeavePreview` 的參數改成 3k 兩個欄位必帶；測試 fixture 補 `marked: false`。
+- 隔離測試 `ledger-delete-move-isolation.e2e-spec.ts` 9 條全紅：SC-N7 的 5 條是私人帳本預覽被 DTO 擋成 400；SC-N12 的 4 條是路由不存在、`TransactionMark` 表不存在。404 類的斷言都配了正向對照，實作前不會假綠。表還沒有 Prisma model，測試用 raw SQL 數標註，L1 之後可以換成 model。
+- 驗證：shared 116、API 582、Web 102 檔全綠；API e2e 44 檔 391 條，只有新的 9 條紅；lint、typecheck、format 通過。整合分支的 worktree 用 `ledger_ldm_int_test`。

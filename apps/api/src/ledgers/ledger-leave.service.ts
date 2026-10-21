@@ -116,7 +116,7 @@ export class LedgerLeaveService {
         } else if (await this.lastOwner(tx, member))
           throw conflict(ErrorCode.LAST_OWNER_CANNOT_LEAVE);
         const { plan } = await this.loadPlan(tx, member, userId, request, true);
-        const targetLedgerId = plan.hasSelectedItems ? request.targetLedgerId : null;
+        const targetLedgerId = plan.hasSelectedItems ? (request.targetLedgerId ?? null) : null;
         const merge = await tx.ledgerMerge.create({
           data: {
             userId,
@@ -364,7 +364,7 @@ export class LedgerLeaveService {
       personalItems,
       ownAccountIds: accounts.map((a) => a.id),
       effects,
-      excludedItemIds: request.excludedItemIds,
+      excludedItemIds: request.excludedItemIds ?? [],
       ledgerAmounts: otherPeople.map(({ person }) => ({
         ledgerPersonId: person.id,
         displayName: person.name,
@@ -382,17 +382,17 @@ export class LedgerLeaveService {
     // 先判斷有沒有勾選，再依 §4.2 檢查目標，最後才拒絕未知的 excluded id。
     const preliminary = planLedgerLeave({ ...input, targetCategories: [] });
     // 已被來源 blocker 擋下的預覽仍回 200；只略過「沒有目標」，非 null 目標與未知 id 照驗。
-    if (requireTarget && preliminary.hasSelectedItems && request.targetLedgerId === null)
+    const targetLedgerId = request.targetLedgerId ?? null;
+    if (requireTarget && preliminary.hasSelectedItems && targetLedgerId === null)
       throw bad('A target ledger is required for selected items.');
     let targetCategories: NonNullable<(typeof rows)[number]['category']>[] = [];
-    if (request.targetLedgerId !== null) {
-      const target = await this.loadMember(tx, request.targetLedgerId, userId, lockTarget);
+    if (targetLedgerId !== null) {
+      const target = await this.loadMember(tx, targetLedgerId, userId, lockTarget);
       if (target.role === 'VIEWER') throw forbidden();
       if (target.ledger.archivedAt) throw conflict(ErrorCode.LEDGER_ARCHIVED);
-      if (request.targetLedgerId === ledgerId)
-        throw bad('The target must differ from the source ledger.');
+      if (targetLedgerId === ledgerId) throw bad('The target must differ from the source ledger.');
       targetCategories = await tx.category.findMany({
-        where: { ledgerId: request.targetLedgerId },
+        where: { ledgerId: targetLedgerId },
       });
     }
     const plan = planLedgerLeave({ ...input, targetCategories });

@@ -94,6 +94,7 @@ describe('SettlementForm', () => {
     differenceOfId: null,
     difference: null,
     merge: null,
+    marked: false,
     createdAt: '2026-09-02T00:00:00.000Z',
   };
   const otherPayerTransaction: Transaction = {

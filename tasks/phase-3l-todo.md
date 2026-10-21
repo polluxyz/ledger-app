@@ -2,7 +2,7 @@
 
 plan：`tasks/phase-3l-plan.md`；spec：`docs/specs/phase-3l-move-and-copy.md`。
 
-- [ ] **L0 契約與隔離測試**（總控）：plan §1.1。
+- [x] **L0 契約與隔離測試**（總控）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`ledger-delete-move-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 通過。
 - [ ] **L1 migration**（依賴 L0；`ldm-migrate`）：plan §1.2。
       驗收：`prisma migrate dev` 在自己的 `_test` 資料庫套用成功；重複標註被主鍵擋、刪交易時標註跟著刪（SQL 驗證）；既有 API e2e 全綠。

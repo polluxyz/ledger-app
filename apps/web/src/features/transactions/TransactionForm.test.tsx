@@ -315,6 +315,7 @@ describe('TransactionForm', () => {
       differenceOfId: null,
       difference: null,
       merge: null,
+      marked: false,
       createdAt: '2026-09-15T04:00:00.000Z',
       ...overrides,
     };

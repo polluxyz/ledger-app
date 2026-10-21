@@ -59,6 +59,7 @@ describe('TransactionList', () => {
       differenceOfId: null,
       difference: null,
       merge: null,
+      marked: false,
       createdAt: '2026-08-16T12:00:00',
       ...overrides,
     };

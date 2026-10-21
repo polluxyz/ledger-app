@@ -128,6 +128,7 @@ describe('TransactionsService', () => {
       differenceOfId: null,
       difference: null,
       merge: null,
+      marked: false,
       createdAt: joined.createdAt.toISOString(),
     });
   });

@@ -1632,6 +1632,8 @@ export class TransactionsService {
               share: share && advance ? share.amount : null,
             }
           : null,
+      // 3l L0：契約先就位，L3 改成呼叫者自己的標註。
+      marked: false,
       createdAt: row.createdAt.toISOString(),
     };
   }

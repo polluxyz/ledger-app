@@ -176,7 +176,8 @@ export function useRemovalPreview(ledgerId: string, enabled = true) {
  */
 export function useLeavePreview(
   ledgerId: string,
-  request: Pick<LeaveRequest, 'targetLedgerId' | 'excludedItemIds' | 'deleteLedger'>,
+  request: Required<Pick<LeaveRequest, 'targetLedgerId' | 'excludedItemIds'>> &
+    Pick<LeaveRequest, 'deleteLedger'>,
   enabled = true,
 ) {
   const excludedItemIds = [...request.excludedItemIds].sort();
