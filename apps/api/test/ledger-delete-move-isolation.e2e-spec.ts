@@ -139,12 +139,8 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
     };
   }
 
-  /** 還沒有 Prisma model 時也能編譯：L1 建表前查詢會失敗，正好是紅燈。 */
   async function markCount(): Promise<number> {
-    const rows = await prisma.$queryRaw<
-      { count: bigint }[]
-    >`SELECT count(*) FROM "TransactionMark"`;
-    return Number(rows[0]!.count);
+    return prisma.transactionMark.count();
   }
 
   const deleteWith = (moves: LeaveRequest['moves']): LeaveRequest => ({
