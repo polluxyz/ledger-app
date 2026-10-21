@@ -8,6 +8,8 @@ interface TransactionDialogProps {
   ledger: LedgerSummary;
   /** 要編輯的那一筆；null＝面板關閉。 */
   transaction: Transaction | null;
+  /** 從列選單直接選刪除時，沿用表單原本的確認視窗。 */
+  initialDeleteOpen?: boolean;
   onClose: () => void;
 }
 
@@ -25,7 +27,12 @@ interface TransactionDialogProps {
  * 關閉的四條路（儲存成功、關閉鈕、Esc、取消）都走同一個 `onClose`——面板回到
  * 新增表單、焦點回到原本那顆按鈕，這些由 `Dialog` 的 panel 變體負責。
  */
-export function TransactionDialog({ ledger, transaction, onClose }: TransactionDialogProps) {
+export function TransactionDialog({
+  ledger,
+  transaction,
+  initialDeleteOpen,
+  onClose,
+}: TransactionDialogProps) {
   const splitId = transaction?.merge == null ? (transaction?.split?.id ?? null) : null;
   const split = useSplit(splitId);
 
@@ -39,6 +46,7 @@ export function TransactionDialog({ ledger, transaction, onClose }: TransactionD
           ledger={ledger}
           transaction={transaction}
           split={split.data}
+          initialDeleteOpen={initialDeleteOpen}
           onSaved={onClose}
           onCancel={onClose}
         />
@@ -47,6 +55,7 @@ export function TransactionDialog({ ledger, transaction, onClose }: TransactionD
         <TransactionForm
           ledger={ledger}
           transaction={transaction}
+          initialDeleteOpen={initialDeleteOpen}
           onSaved={onClose}
           onCancel={onClose}
         />

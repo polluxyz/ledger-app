@@ -27,7 +27,8 @@ import styles from './TransactionWorkbench.module.css';
  */
 export type PanelTarget =
   | { kind: 'new' }
-  | { kind: 'transaction'; transaction: Transaction }
+  | { kind: 'transaction'; transaction: Transaction; initialDeleteOpen?: boolean }
+  | { kind: 'copy'; transaction: Transaction }
   | { kind: 'debtTransaction'; transaction: Transaction }
   | { kind: 'split'; splitId: string }
   | { kind: 'settlement'; settlement?: Transaction; prefill?: SettlementPrefill }
@@ -98,7 +99,7 @@ export function TransactionWorkbench({
 
   return (
     <RightPanelContent>
-      {activeTarget.kind === 'new' && (
+      {(activeTarget.kind === 'new' || activeTarget.kind === 'copy') && (
         <div className={styles.add}>
           {/*
             收起鈕疊在表單標題那一列的右邊，而不是放進 `<legend>` 裡：legend 的文字
@@ -113,14 +114,20 @@ export function TransactionWorkbench({
           >
             <Icon name="chevronRight" size={18} />
           </button>
-          <TransactionForm ledger={ledger} amountFieldId={amountFieldId} />
+          <TransactionForm
+            key={activeTarget.kind === 'copy' ? activeTarget.transaction.id : 'new'}
+            ledger={ledger}
+            amountFieldId={amountFieldId}
+            copyFrom={activeTarget.kind === 'copy' ? activeTarget.transaction : undefined}
+          />
         </div>
       )}
       {activeTarget.kind === 'transaction' && (
         <TransactionDialog
-          key={activeTarget.transaction.id}
+          key={`${activeTarget.transaction.id}:${activeTarget.initialDeleteOpen ? 'delete' : 'edit'}`}
           ledger={ledger}
           transaction={activeTarget.transaction}
+          initialDeleteOpen={activeTarget.initialDeleteOpen}
           onClose={handleClose}
         />
       )}

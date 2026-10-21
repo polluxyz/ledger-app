@@ -194,3 +194,10 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - 偏離：無；未改 Prisma、API 或 shared，也未跑 e2e。
 - 驗證：`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通過；`pnpm test` shared 116、API 582、Web 799（Web 102 個測試檔），共 1,497 條全綠。
 - 總控驗收退回 1 處：帳戶歸零也要照增減上色，只有往來段「兩清」用一般色（spec W194 的「歸零用一般文字色」是總控寫錯，已改 0418df8）。修正 ba1e028。
+
+### L5（ldm-web-row，2026-10-21）
+
+- 完成交易列「⋯」編輯／複製／標註／刪除入口、複製表單帳本與欄位預填、標註端點 hook，以及首頁跨帳本標註卡與展開分頁。
+- 偏離：無；標註 API 尚未合併，元件測試以 `vi.mock` 替代，未執行 e2e。
+- 驗證：shared 116、API 582、Web 805 項測試通過；`pnpm lint`、`pnpm typecheck`、`pnpm format:check` 通過。
+- 總控驗收退回 2 處：「⋯」選單點外面與按 Esc 要收起（Esc 後焦點回到按鈕）；`useSetTransactionMark` 的參數 `marked` 實為目前狀態，改名。修正 b767154，Web 807 條。
