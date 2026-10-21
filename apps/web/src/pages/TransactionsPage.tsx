@@ -188,7 +188,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     setTransactionMark.mutate({
       ledgerId: ledger.id,
       transactionId: transaction.id,
-      marked: transaction.marked,
+      currentlyMarked: transaction.marked,
     });
   }
 

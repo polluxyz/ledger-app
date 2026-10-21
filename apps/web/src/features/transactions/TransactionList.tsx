@@ -1,4 +1,4 @@
-import { Fragment, useState, type MouseEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   actualAmountOf,
   debtCategoryTypeOf,
@@ -150,8 +150,40 @@ export function TransactionList({
 }: TransactionListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentUser = useCurrentUser();
   const currentUserId = currentUser.data?.id;
+
+  useEffect(() => {
+    if (openMenuId === null) return;
+
+    function closeMenuOnOutsidePointer(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      if (
+        menuRef.current?.contains(event.target) ||
+        menuTriggerRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setOpenMenuId(null);
+    }
+
+    function closeMenuOnEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpenMenuId(null);
+      menuTriggerRef.current?.focus();
+    }
+
+    document.addEventListener('pointerdown', closeMenuOnOutsidePointer);
+    document.addEventListener('keydown', closeMenuOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenuOnOutsidePointer);
+      document.removeEventListener('keydown', closeMenuOnEscape);
+    };
+  }, [openMenuId]);
+
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
@@ -389,14 +421,21 @@ export function TransactionList({
                         aria-label={`更多交易動作：${describe(transaction)}`}
                         aria-haspopup="menu"
                         aria-expanded={openMenuId === transaction.id}
-                        onClick={() =>
-                          setOpenMenuId(openMenuId === transaction.id ? null : transaction.id)
-                        }
+                        onClick={(event) => {
+                          const isOpen = openMenuId === transaction.id;
+                          if (!isOpen) menuTriggerRef.current = event.currentTarget;
+                          setOpenMenuId(isOpen ? null : transaction.id);
+                        }}
                       >
                         ⋯
                       </button>
                       {openMenuId === transaction.id && (
-                        <div className={styles.menu} role="menu" aria-label="交易動作">
+                        <div
+                          ref={menuRef}
+                          className={styles.menu}
+                          role="menu"
+                          aria-label="交易動作"
+                        >
                           {isClickable && (
                             <button
                               type="button"

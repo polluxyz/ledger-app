@@ -188,7 +188,7 @@ function Dashboard({
     setTransactionMark.mutate({
       ledgerId: sourceLedgerId,
       transactionId: transaction.id,
-      marked: transaction.marked,
+      currentlyMarked: transaction.marked,
     });
   }
 

@@ -46,14 +46,14 @@ export function useSetTransactionMark() {
     mutationFn: ({
       ledgerId,
       transactionId,
-      marked,
+      currentlyMarked,
     }: {
       ledgerId: string;
       transactionId: string;
-      marked: boolean;
+      currentlyMarked: boolean;
     }) =>
       apiRequest<void>(`/ledgers/${ledgerId}/transactions/${transactionId}/mark`, {
-        method: marked ? 'DELETE' : 'PUT',
+        method: currentlyMarked ? 'DELETE' : 'PUT',
       }),
     onSuccess: (_data, { ledgerId, transactionId }) => {
       void queryClient.invalidateQueries({ queryKey: ['transactions'] });

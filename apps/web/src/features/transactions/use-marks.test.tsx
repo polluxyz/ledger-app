@@ -90,7 +90,7 @@ describe('transaction marks', () => {
       await result.current.mutateAsync({
         ledgerId: 'ledger-1',
         transactionId: 'txn-1',
-        marked: false,
+        currentlyMarked: false,
       });
     });
     await waitFor(() =>
@@ -104,7 +104,7 @@ describe('transaction marks', () => {
       await result.current.mutateAsync({
         ledgerId: 'ledger-1',
         transactionId: 'txn-1',
-        marked: true,
+        currentlyMarked: true,
       });
     });
     await waitFor(() =>

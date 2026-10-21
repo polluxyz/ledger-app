@@ -301,6 +301,35 @@ describe('TransactionList', () => {
     expect(onToggleMark).toHaveBeenCalledWith(transaction, undefined);
   });
 
+  it('closes the row menu when clicking outside it', async () => {
+    const user = userEvent.setup();
+    renderList({ transactions: [makeTransaction({ id: 'outside-menu' })] });
+
+    const listRow = row(0);
+    await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
+    expect(within(listRow).getByRole('menu', { name: '交易動作' })).toBeInTheDocument();
+
+    await user.click(screen.getByText('8月16日 星期日'));
+
+    expect(within(listRow).queryByRole('menu', { name: '交易動作' })).not.toBeInTheDocument();
+  });
+
+  it('closes the row menu on Escape and returns focus to its trigger', async () => {
+    const user = userEvent.setup();
+    renderList({ transactions: [makeTransaction({ id: 'escape-menu' })] });
+
+    const listRow = row(0);
+    const trigger = within(listRow).getByRole('button', { name: /更多交易動作/ });
+    await user.click(trigger);
+    const menu = within(listRow).getByRole('menu', { name: '交易動作' });
+    within(menu).getByRole('menuitem', { name: '編輯' }).focus();
+
+    await user.keyboard('{Escape}');
+
+    expect(within(listRow).queryByRole('menu', { name: '交易動作' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it('omits copy for debt, settlement, and merged shared expenses while viewers can mark', async () => {
     const user = userEvent.setup();
     const person = { id: 'person-me', name: 'Alice', userId: 'u1', status: 'MEMBER' as const };
