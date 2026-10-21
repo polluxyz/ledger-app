@@ -17,15 +17,14 @@
 - **開發者的 dev 伺服器現在從 main worktree（`D:Projectsledger-app`）跑**：API 是 `node dist/main`、Vite 在 `apps/web`。部署要做在 main，不是 `web-redesign`。
 - 分工（2026-10-21 起）：**網頁實作只交給 Codex**，Claude Code 只做規劃、派工、驗收，驗收不過退回 Codex，不自己改網頁程式；Codex 用完就停下來問，不換層。**總控不跟其他 session 互傳訊息**，讀分支掌握進度；要決定的事開發者會親自到各 session 回答。後端仍照角色表。
 - worktree：`backend`（DB `ledger_backend_test`）、`ledger-split-web`（總控寫文件用，`.env` 指向 `ledger_test`）都 detached 在 `main`；`web-redesign` 還停在 `912e0d9`，目前沒在用。3l 的本機分支都已刪。
-- **待開發者同意刪除**：測試資料庫 `ledger_ldm_{int,migrate,move,mark,webdel,webrow,webe2e}_test`；遠端分支 `feature/ldm-api`（後端子分支，不是 PR 來源）。`ledger_backend_test` 長駐，保留。
+- 3l 的測試資料庫 `ledger_ldm_*_test` 與遠端分支 `feature/ldm-api` 已經開發者同意刪除。剩 `ledger_dev`、`ledger_test`、`ledger_backend_test`（backend worktree 長駐，保留）。
 - Codex 週額度 10-21 已重置，3l 用到約 8%。
 
 ### 下一步
 
 1. 請開發者重開 API 與 Vite、按 `Ctrl + Shift + R`，操作 3l。
-2. 刪除上面列的測試資料庫與遠端分支（等開發者同意）。
-3. 依回饋開修訂（先改 spec 再改程式）。
-4. 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
+2. 依回饋開修訂（先改 spec 再改程式）。
+3. 之後是階段四 AI 文字記帳。開工前先問開發者：LLM provider、草稿欄位、費用上限。
 
 ### 開發者的偏好（不在 spec 裡的）
 
