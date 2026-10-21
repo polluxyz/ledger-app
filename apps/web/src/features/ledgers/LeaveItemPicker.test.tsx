@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { LedgerLeaveItem, LedgerLeavePreview } from '@ledger/shared';
@@ -106,7 +106,8 @@ describe('LeaveItemPicker', () => {
         { accountId: 'increase', name: '增加', balance: 10000, balanceAfter: 14000 },
         { accountId: 'decrease', name: '減少', balance: 15000, balanceAfter: 7000 },
         { accountId: 'same', name: '相等', balance: 3000, balanceAfter: 3000 },
-        { accountId: 'zero', name: '歸零', balance: 9000, balanceAfter: 0 },
+        { accountId: 'zero-expense', name: '歸零支出', balance: 200000, balanceAfter: 0 },
+        { accountId: 'zero-income', name: '歸零收入', balance: -500000, balanceAfter: 0 },
       ],
       carryOvers: [
         {
@@ -114,6 +115,15 @@ describe('LeaveItemPicker', () => {
           displayName: '小明',
           amount: 2000,
           counterpartyId: 'cp-1',
+        },
+      ],
+      withdrawals: [
+        {
+          counterpartyId: 'cp-cleared',
+          displayName: '小林',
+          linked: false,
+          balance: 2000,
+          balanceAfter: 0,
         },
       ],
     };
@@ -126,7 +136,22 @@ describe('LeaveItemPicker', () => {
     const equalAmounts = screen.getAllByText('$30');
     expect(equalAmounts[0]).toHaveClass(styles.balanceBefore!);
     expect(equalAmounts[1]).toHaveClass(styles.balanceAfter!);
-    expect(screen.getByText('$0')).toHaveClass(styles.balanceAfter!);
+    const zeroExpenseRow = screen.getByText('歸零支出').closest('li');
+    expect(zeroExpenseRow).not.toBeNull();
+    expect(within(zeroExpenseRow as HTMLElement).getByText('$0')).toHaveClass(
+      styles.balanceAfterExpense!,
+    );
+    const zeroIncomeRow = screen.getByText('歸零收入').closest('li');
+    expect(zeroIncomeRow).not.toBeNull();
+    expect(within(zeroIncomeRow as HTMLElement).getByText('$0')).toHaveClass(
+      styles.balanceAfterIncome!,
+    );
+    const clearedRow = screen.getByText('小林').closest('li');
+    expect(clearedRow).not.toBeNull();
+    const clearedValue = within(clearedRow as HTMLElement).getByText('兩清');
+    expect(clearedValue).toHaveClass(styles.balanceAfter!);
+    expect(clearedValue).not.toHaveClass(styles.balanceAfterIncome!);
+    expect(clearedValue).not.toHaveClass(styles.balanceAfterExpense!);
     const carryOverRow = screen.getByText('小明').closest('li');
     expect(carryOverRow).not.toBeNull();
     const carryOverAmount = carryOverRow?.querySelector(`.${styles.arrowAmount!}`);

@@ -286,7 +286,11 @@ export function LeavePreviewSections({
                     name={withdrawal.displayName}
                     amount={withdrawal.balanceAfter}
                     avatarLabels={avatarLabels}
-                    valueClassName={balanceAfterClass(withdrawal.balance, withdrawal.balanceAfter)}
+                    valueClassName={
+                      withdrawal.balanceAfter === 0
+                        ? styles.balanceAfter
+                        : balanceAfterClass(withdrawal.balance, withdrawal.balanceAfter)
+                    }
                   />
                 </span>
               </li>
@@ -328,7 +332,7 @@ function CounterpartyBalance({
 
 /** 後端提供的前後餘額只用來呈現方向，不在前端重算餘額。 */
 function balanceAfterClass(balance: number, balanceAfter: number) {
-  if (balanceAfter === 0 || balanceAfter === balance) return styles.balanceAfter;
+  if (balanceAfter === balance) return styles.balanceAfter;
   return balanceAfter > balance
     ? `${styles.balanceAfter} ${styles.balanceAfterIncome}`
     : `${styles.balanceAfter} ${styles.balanceAfterExpense}`;
