@@ -175,3 +175,15 @@ spec：`docs/specs/phase-3l-move-and-copy.md`（決策 209～226、W194～W200�
 - 回滾測試放在 API e2e：`jest.spyOn(LedgersService.deleteLedgerRows)` 在分類、搬移、撤銷之後丟錯，斷言帳本、交易歸屬、分類、分帳、往來全部不變。
 - **spec 衝突（開發者 2026-10-21 決定）**：隔離測試 SC-N7 原本斷言其他成員看不到搬進共享帳本的個人借還，跟 3b 決策 13（看得到交易、看不到背後的往來）衝突。開發者選照 3b；總控在整合分支 4c6e085 改 spec 決策 214、§1 第 4 步、SC-N2 與那條斷言。`transactions.service.ts` 的可見度沒改。
 - 驗證（worker）：新 e2e 10 條、隔離 SC-N7 5 條轉綠；API e2e 45 檔 401 條，只有 SC-N12 4 條紅（等 L3）；3k 的 e2e 檔全綠、沒改斷言。
+
+### L3（`ldm-mark`，2026-10-21）
+
+- 放在 `transactions/`，不另開 `marks/` 模組：`toTransaction`、每本帳本的 `ViewContext`、合併代墊的 SQL 條件都在 `TransactionsService`，放一起才不會出現第二套顯示規則。新 `MarkedTransactionsController` 處理 `GET /transactions/marked`。
+- `PUT`／`DELETE …/mark`：`LedgerAccessGuard` 的 `VIEWER`＋`@AllowOnArchived()`；交易不在這本或已刪除 → 404；`userId` 只取 JWT。標註用 upsert（`update` 不留空，空的 update 會讓 Prisma 先查再建，併發重複 PUT 時撞主鍵）、取消用 `deleteMany`。
+- `marked`：所有讀取的 include 只帶呼叫者自己的 `transactionMarks`，由 `toTransaction` 統一算。逐一確認過的端點：交易列表、單筆、建立、修改、補帳戶、結清列表／建立／修改／補帳戶、解散分帳、`GET /transactions/marked`。
+- **協調者補的規則（spec 沒寫到，worker 問）**：列表不單獨顯示的交易被直接標註時，寫入時就存到「呼叫者在列表上看到的那一列」，標註列表才看得到每一個標註。
+  1. 結清分支（`differenceOfId` 不為 null）→ 標在它的還款交易上。
+  2. 個人分帳的交易 → 只有分帳擁有者合成到代表列（同列表的 rn=1：收支優先、再 `createdAt`、`id`）；其他成員在列表逐筆看到，照原 id 標。
+  3. 合併來的「我付、有分帳」→ 標在份額那一筆（spec 原有）。
+     `PUT`、`DELETE` 與回應的 `marked` 共用 `markRepresentative`。
+- 驗證（worker）：隔離 9 條全綠；新 e2e `transaction-marks.e2e-spec.ts` 17 條；API e2e 46 檔 418 條全綠。交易列表 200 筆（20 筆標註）`limit=50` 實測 21.47ms。
