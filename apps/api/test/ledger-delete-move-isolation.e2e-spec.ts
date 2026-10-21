@@ -17,7 +17,7 @@ import { auth, createCounterparty, person, type Person } from './linking-utils';
  *
  * - 刪除私人帳本時搬走：別人的私人帳本 404；目標是我只能檢視的帳本 403、封存的 409、
  *   不是成員的 404，而且都沒有寫入。搬進共享帳本只動我自己的資料：其他成員的帳戶不變，
- *   看得到一般交易、看不到我的個人借還。
+ *   看得到搬過去的交易，但看不到我背後的往來（3b 決策 13）。
  * - 標註：不是成員 404；`ledgerId` 跟交易不符 404；已刪除的交易 404；檢視者可以標；
  *   標註只屬於標註的人，別人的回應與標註列表都看不到。
  *
@@ -221,7 +221,7 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
       expect(ok.status).toBe(200);
     });
 
-    it('搬進共享帳本只動我自己的資料：其他成員帳戶不變、看得到一般交易、看不到我的借還', async () => {
+    it('搬進共享帳本只動我自己的資料：其他成員帳戶不變、看得到交易、看不到我背後的往來', async () => {
       const s = await scene();
       const carolBefore = await listAccounts(app, s.carol.token);
       const bobBefore = await listAccounts(app, s.bob.token);
@@ -238,9 +238,10 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
         .get(`/api/ledgers/${s.homeId}/transactions`)
         .set(auth(s.carol.token))
         .expect(200);
-      const carolIds = (carolList.body as Paginated<Transaction>).items.map((t) => t.id);
-      expect(carolIds).toContain(s.ticketId);
-      expect(carolIds).not.toContain(s.lendId);
+      // 3b 決策 13：其他成員看得到借還交易，看不到背後的往來（spec 決策 214，2026-10-21 更正）。
+      const carolItems = (carolList.body as Paginated<Transaction>).items;
+      expect(carolItems.map((t) => t.id)).toEqual(expect.arrayContaining([s.ticketId, s.lendId]));
+      expect(carolItems.find((t) => t.id === s.lendId)!.debt).toBeNull();
 
       // 搬過去的交易還是用 Bob 自己的帳戶，沒有改到 Carol 的。
       const moved = await prisma.transaction.findMany({
