@@ -13,10 +13,10 @@
 | `fallback-1`   | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                    |
 | `fallback-2`   | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                             |
 | `fallback-3`   | 前三層都不能用                                                  | 一行，`--agent claude --model claude-sonnet-5-5 --effort high`                                                        |
-| `advisor`      | 跟協調者討論計畫或設計，不寫程式（見 §1.1）                     | 一行，`--agent antigravity --model gemini-4-argon-high`，不帶 `--effort`（強度寫在模型 id 裡）                        |
-| `advisor` 備援 | `advisor` 額度用完                                              | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh"` |
+| `advisor`      | 要開發者拍板的決策，先聽第二意見（見 §1.1）                     | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh"` |
+| `advisor` 備援 | `advisor` 額度用完                                              | 一行，`--agent antigravity --model gemini-4-argon-high`，不帶 `--effort`（強度寫在模型 id 裡）                        |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。`advisor` 先用 Gemini 4 Argon high，用完改 Codex `gpt-6.1-sol` xhigh（2026-10-18）。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`gpt-6-luna` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。`advisor` 先問 Codex `gpt-6.1-sol` xhigh，用完改 Gemini 4 Argon high（2026-10-22；10-18 原本是 Argon 優先）。兩個都用完就不往下換。
 
 兩種啟動方式：
 
@@ -46,15 +46,21 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
 
-### 1.1 advisor（討論計畫）
+### 1.1 徵詢 `advisor`（第二意見）
 
-開發者 2026-10-18 同意：有些計畫可以先跟 `advisor` 討論，想清楚再回報開發者。
+要請開發者拍板的事（Ask first 事項、決策卡、偏離 spec、方案取捨、spec 的假設清單），先問 `advisor`，再一起報告。開發者 2026-10-22 決定照 Pollux 的做法，而且先問 Codex（§0）。
 
-- 適合：設計取捨多、會牽動既有決策的計畫（例如退出規則與複製功能），寫 spec 前的前提清單、替代方案、風險。
-- Task spec 要自足：附上相關 spec 的段落路徑與要回答的問題。advisor 只讀檔與回答，**不改檔、不 commit、不跑 migration**，用 `worker_done` 的摘要或 `--report-path` 帶回意見。
-- 放在協調者寫文件用的 worktree，不另開；它不碰資料庫。
-- advisor 的意見只是參考：取捨與決定仍由開發者核可，協調者回報時要分清楚「advisor 的意見」與「協調者的建議」。
-- 額度用完的判定與換層照 §4；`advisor` 備援是 Codex，`orca account list` 查得到用量。
+1. 依 §0 的 `advisor` 列，在協調者自己的 worktree（`--worktree path:<協調者的 worktree>`）派工：Codex 先開兩段式終端機再接上，Argon 用一行 `worker-start`。沒有進行中的 run 就先 `run-create`。Codex 用完與否照 §4 判定；判定用完就 `worker-stop`、`orca terminal close`，用 `--retry-of` 改派 Argon。
+2. 徵詢 spec 寫：背景（相關 spec、plan 的路徑與已知事實）、要決定的問題、目前想到的方案。**不寫自己傾向哪一個**，避免它順著答。要它回：推薦哪個與理由、每個方案的壞處、有沒有漏掉的方案或風險。
+3. Constraints 換成這幾條：唯讀，不改檔、不 commit；不跑 DB 測試、e2e 與 `prisma migrate`；回覆用繁體中文，以 `worker_done` 帶回。
+4. 收到回覆後確認 `git status` 乾淨，再 `worker-release`；兩段式再 `orca terminal close`。
+5. 雙方在關鍵點意見不同時，把自己的反駁送回去再問一輪，最多兩輪。
+6. 報告時並列：`advisor` 的建議、自己的建議、一致與分歧之處，以及最後建議。決定仍由開發者核可。
+
+例外：
+
+- 只是請開發者提供資訊或執行指令（貼輸出、確認畫面）不用徵詢。
+- Codex 與 Argon 都用完：不往下換，直接問開發者，報告時註明這次沒問到。
 
 ## 2. 派工迴圈
 
@@ -126,6 +132,7 @@ Codex 用到沒有為止（開發者 2026-10-19）：`usedPercent` 只當參考�
 
 - `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。網頁任務例外：Codex 用完就停下來告訴開發者，等 Codex 重置，不派給其他層。
 - `backend`：Codex 沒用完就派。用完的話，看 `resetsAt`：一小時內會重置就等重置再派，否則問開發者。這類工作不派給其他層。
+- `advisor`：Codex 沒用完就派 Codex；用完派 Argon。Argon 也用完就不徵詢，報告時註明。Argon 查不到用量，被判定用完後的回復照「自動回復」的 5 小時規則。
 - `fallback-3`（Claude）和協調者共用同一個 Claude 額度。`claude` 的 `session` 超過 80 就不派，避免協調者自己被卡住。
 
 ### 執行中檢查

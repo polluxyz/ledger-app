@@ -135,6 +135,7 @@ Specify --> Plan --> Tasks --> Implement
 3. **四件事一律先說明再做**（完整清單見 §14）：資料模型變更、API 介面變更、新增相依套件、修改 CI。即使 plan 裡提過也一樣。
 4. **遇到計畫外的問題**：在已核可的範圍內解得掉就解掉，記進 plan 的實作紀錄；會改變方向或觸及上一條的，停下來說明。**偏離已核可的 spec 或 plan 之前一定要先講。**
 5. **Git 全自動**（見 §10），**CI 失敗自動修並重推**，修完報告原因與改動。
+6. **要開發者拍板的決策，先徵詢 `advisor` 角色**，報告時並列雙方看法與分歧（做法與例外見 `docs/orca-multi-agent.md` §1.1）。
 
 ### 報告方式
 
@@ -256,7 +257,6 @@ Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 - 難或要求高準確的工作（migration SQL、授權與資料隔離、鎖、金額與帳戶規則）派 `backend` 角色；其餘，包括單純的 API 端點與補測試，派 `default`。schema、API、授權的產出不管哪個角色做，驗收時都逐行看 diff，自己重跑隔離測試與 e2e。
 - 額度用完由協調者主動查，自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
-- 設計取捨多的計畫，可以先派 `advisor` 角色討論，想清楚再回報開發者（`docs/orca-multi-agent.md` §1.1）。advisor 只給意見、不改檔；決定仍由開發者核可。
 - worker 的產出一律由協調者驗收後才進 PR。
 - 一件事完成就換 session，不等 context 滿（`docs/orca-multi-agent.md` §6.3）。換 session 時先讀 `docs/handoff.md` 與自己工作區的 `docs/handoff/<工作區>.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
 
