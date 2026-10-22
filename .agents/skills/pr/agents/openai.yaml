@@ -1,0 +1,3 @@
+interface:
+  display_name: 'Ledger PR'
+  short_description: '以實際驗證證據、影響範圍與回復方式撰寫 ledger-app PR 描述'
