@@ -41,6 +41,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 - Claude Code 是 coordinator（協調者），負責規劃、拆工、派工、驗收、開 PR。實作預設派給 worker，能平行的一次全部派出去。
 - 協調者自己做的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
+- 網頁（`apps/web`）的實作只派 Codex（`default` 的 Codex 那一層），協調者連小修也不自己做，驗收不過就退回 Codex（開發者 2026-10-21）。Codex 用完時網頁任務不換層，見 §4「派工前檢查」。
 - 動到 schema、API、授權的產出，不管哪個角色做，協調者驗收時都要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
@@ -93,7 +94,7 @@ Constraints 每次都寫這六條：
 
 依 agent 再加：
 
-- **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。
+- **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 預設只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。本機的 Codex 設定（`~/.codex` 與 Orca 各帳號目錄的 `config.toml`）已加上 `project_doc_fallback_filenames = ["CLAUDE.md"]`（2026-10-21），新 session 會自動載入根目錄的 `CLAUDE.md`。開頭那句仍要寫：worker 從 worktree 根目錄啟動，`apps/api`、`apps/web` 的 `CLAUDE.md` 不會自動載入。Orca 新增 Codex 帳號時，要在新帳號目錄的 `config.toml` 補這一行。
 - **Claude**：加一句「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」。Claude 做長任務時，可能報完進度就停下，`worker_done` 也沒送出。
 
 通用規則（金額不用浮點數、授權 deny by default、前端不寫業務邏輯、註解用繁體中文）已寫在 `CLAUDE.md`，不必重抄。
@@ -111,9 +112,11 @@ Constraints 每次都寫這六條：
 
 任一條成立就當作這個 provider 用完：
 
-- `rateLimits` 的 `session` 或 `weekly` 的 `usedPercent` ≥ 95。
+- `rateLimits` 的 `session` 或 `weekly` 的 `usedPercent` ≥ 95。Codex 不用這條，見下一段。
 - worker 畫面或回報出現額度類錯誤。
 - worker 閒置（`orca terminal wait --for tui-idle` 立刻返回）、沒有 `worker_done`，畫面最後一段是 provider 錯誤。
+
+Codex 用到沒有為止（開發者 2026-10-19）：`usedPercent` 只當參考，不提早換層。等 worker 畫面或回報真的出現額度類錯誤，才判定 Codex 用完。
 
 畫面只寫 rate limit、too many requests、請稍後再試，而且用量沒到 95：當作暫時性，同一個角色重派一次並報告。
 
@@ -121,7 +124,7 @@ Constraints 每次都寫這六條：
 
 每次 `worker-start` 前跑一次 `orca account list --json`，從角色表最上面的可用層開始：
 
-- `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。
+- `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。網頁任務例外：Codex 用完就停下來告訴開發者，等 Codex 重置，不派給其他層。
 - `backend`：Codex 沒用完就派。用完的話，看 `resetsAt`：一小時內會重置就等重置再派，否則問開發者。這類工作不派給其他層。
 - `fallback-3`（Claude）和協調者共用同一個 Claude 額度。`claude` 的 `session` 超過 80 就不派，避免協調者自己被卡住。
 
@@ -137,7 +140,7 @@ Constraints 每次都寫這六條：
 
 換層只對那一次派工有效，不是永久切換。
 
-- 下一次派工前照樣做「派工前檢查」。上層的 `usedPercent` 降回 95 以下，或已經過了記下的 `resetsAt`，就回到原本的層。
+- 下一次派工前照樣做「派工前檢查」。上層的 `usedPercent` 降回 95 以下，或已經過了記下的 `resetsAt`，就回到原本的層。Codex 只看是否已過 `resetsAt`。
 - 查不到用量的層（GLM、Gemini）被判定用完時，記下時間。過 5 小時後的派工，先試它一次。
 - 已經在下層執行中的 worker 讓它做完，不要因為上層恢復就中途換回去。
 - 回到原本的層時，也告訴開發者一聲。
