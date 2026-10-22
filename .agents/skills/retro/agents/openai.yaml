@@ -1,0 +1,5 @@
+interface:
+  display_name: 'Ledger Retro'
+  short_description: '根據開發 session 的實際紀錄提出文件、工具與自動檢查改善候選'
+policy:
+  allow_implicit_invocation: false
