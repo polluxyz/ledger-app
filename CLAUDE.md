@@ -120,6 +120,14 @@ Specify --> Plan --> Tasks --> Implement
 - **spec 是活文件**：需求或設計變更時先更新 spec 再改程式；spec 與程式碼一起進版控；PR 描述連回對應章節。
 - 單行修正、錯字這類自足的小變更不需完整 spec，但仍要先說清楚驗收條件。
 
+### 專案 skills
+
+權威指令在 `.agents/skills/`，讓 Codex 讀得到；`.claude/skills/` 的同名入口只連過去：
+
+- [`pr`](.agents/skills/pr/SKILL.md)：建立或更新 PR 時讀。
+- [`implement-spec`](.agents/skills/implement-spec/SKILL.md)：使用者啟動後，在核可範圍內把整份 spec 派工、整合、驗收到完。
+- [`retro`](.agents/skills/retro/SKILL.md)：使用者手動啟動，只提有證據的改善候選。
+
 ### 決策門控
 
 1. **Spec 與 plan 要核可才動工。** 這是唯一擋得住「整個方向做錯」的閘門，所以要寫得具體：可驗證的成功條件、替代方案、為什麼選這個。
@@ -200,7 +208,7 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 ### Pull Request
 
 - 每個 feature / fix 開獨立 PR，**不把無關變更混在一起**。
-- 描述依 `.github/pull_request_template.md` 的四節填：改了什麼、為什麼、如何測試、影響範圍（特別是有沒有動到資料模型或 API）。
+- 描述依 `.github/pull_request_template.md` 的三節填：改動與原因、驗證證據、合併風險與回復。實際執行結果對應驗證 commit，未執行的項目如實註明。
 - **標題用 Conventional Commits 格式**，英文。squash merge 後它就是 `main` 上的 commit 標題，必須能獨立看懂。
 - 必須通過 CI 才能合併，合併用 squash merge。
 - 單人開發時亦進行自我 code review，把 PR 當成留給未來審查者的決策紀錄。
