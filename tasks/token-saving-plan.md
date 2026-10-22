@@ -52,19 +52,20 @@
 
 - 移除 `backend`（detached `d29d454`）、`web-redesign`（detached `912e0d9`）：工作區沒有未提交的改動，HEAD 都已在 main 裡。`orca worktree rm` 留下 `node_modules` 等殘檔，另外刪掉。
 - 保留 `ledger-split-web`：分支 `docs/agent-workflow-skills`，10-22 還有寫入，另一個 session 在用。
-- 測試資料庫 `ledger_backend_test` 已沒有 worktree 使用，刪除被權限擋下，待開發者處理。
+- 測試資料庫 `ledger_backend_test` 已沒有 worktree 使用，刪除被權限擋下。10-22 新 session 經開發者同意刪除。
+- `ledger-split-web` 後來在 #147 合併後收掉，worktree 與分支都已不在。
 
 ### L2（#144，`294b0ba`）
 
 - 手動執行 hook：主工作區與 `stats-2j` 都 exit 0，印出正確的分支與 HEAD。當時沒有 open PR，`gh pr list --state open --json number,headRefName,title` 回傳空陣列，欄位名稱正確。
-- 待確認：新 session 的 `/context` 顯示「Auto-compact window: 150k」。`stats-2j`、`ai-4a` 要併入含 #144 的 main 才會生效。
+- 10-22 實測通過：新的主工作區 session 的 `/context` 顯示「Auto-compact window: 150k tokens」（當時 59.3k/150k，autocompact buffer 33k）。`stats-2j`、`ai-4a` 要併入含 #144 的 main 才會生效：10-22 已併入並推上去（兩個 worktree 沒有未提交的改動、沒有 session 在跑）。
 
 ### L3（#145，`1ef0022`）
 
 - `docs/orca-multi-agent.md` 新增 §6.3，§6 標題、§6.1、§6.2 同步修改；`CLAUDE.md` §11 加入口。
 - handoff 拆成入口 `docs/handoff.md`（工作區表格、跨工作區規則、開發者偏好）與 `docs/handoff/main.md`、`stats-2j.md`、`ai-4a.md`。內容原文搬移；部署步驟只有主工作區會用，放在 `main.md`。
 - 其他 session：2j、4a 的 session 還沒開過（兩個 worktree 沒有任何 Claude 或 Codex 的對話紀錄），開了就直接照新結構。關掉兩個閒置的終端機：舊總控 5298c2d0（工作已在 #143 交接，停在 resume 畫面）、做完 #142 的 Codex。通知 skills 移植 session（`ledger-split-web`）：目前的 PR 合併後照 §6.3 收尾。
-- 待確認：實際換一次 session（§4 成功條件）。
+- 10-22 實測通過：新的主工作區 session 讀入口與 `docs/handoff/main.md` 後，說對 worktree、分支、HEAD、下一步與待核可事項，開發者確認。
 
 ### L4
 

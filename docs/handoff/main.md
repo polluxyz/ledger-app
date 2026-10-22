@@ -6,11 +6,12 @@
 
 - 角色：管理。handoff 入口、部署 dev、跨分支協調、從 Pollux 移植節省 token 的做法（`tasks/token-saving-plan.md`）。
 - 3l 已合併並部署（#140，`d29d454`）；之後 #142 修了搬移對話框的橫向捲動。開發者沒有再回報 3l 的問題。
-- 10-22 清掉沒在用的 worktree `backend`、`web-redesign`。測試資料庫 `ledger_backend_test` 已沒人用，刪除被權限擋下，待開發者處理。
+- 10-22 清掉沒在用的 worktree `backend`、`web-redesign`。沒人用的測試資料庫 `ledger_backend_test` 經開發者同意刪除。`ledger-split-web` 的工作已在 #147 合併，worktree 與分支都已不在。
+- 10-22 把 main（#144～#148）併進 2j、4a 兩條分支並推上去。
 
 ## 下一步
 
-- 節省 token：L1～L4 已完成。剩 L5 的 7 天觀察與兩項待確認（新 session 的 `/context` 顯示 150k、實際換一次 session），見 `tasks/token-saving-plan.md` §4、§5。
+- 節省 token：L1～L4 已完成，L2、L3 的實測都通過。剩 L5 的 7 天觀察，見 `tasks/token-saving-plan.md` §4、§5。
 - 2j、4a 合併後部署到 dev。
 
 ## 替開發者部署
