@@ -14,7 +14,7 @@ metadata:
 
 ## 載入契約與恢復現況
 
-1. 讀 [CLAUDE.md §5、§10、§11](../../../CLAUDE.md)、[多代理派工規則](../../../docs/orca-multi-agent.md) 與 [docs/handoff.md](../../../docs/handoff.md)（目前的分工、平行分支與共用資源）。動到 `apps/api` 或 `apps/web` 的任務，另讀該 app 的 `CLAUDE.md`。
+1. 讀 [CLAUDE.md §5、§10、§11](../../../CLAUDE.md)、[多代理派工規則](../../../docs/orca-multi-agent.md)，以及 `CLAUDE.md` §11 指定的交接文件（目前的分工、平行分支與共用資源）。動到 `apps/api` 或 `apps/web` 的任務，另讀該 app 的 `CLAUDE.md`。
 2. 下 Orca 指令前，用 `orca skills get orchestration` 與 `orca skills get orca-cli` 取得版本相符指南（指南由 orca 執行檔提供，不依賴 agent 是否裝了同名 skill）。展開任務圖時另取 `orca skills get orchestration --reference references/coordinator-loop.md`，新 worktree 放置與整合分支基底依 `--reference references/placement-and-remote.md`；這兩份不在本 skill 目錄。沿用其確認過的 CLI，不以 Claude Code 內建的 Agent tool 取代 Orca。
 3. 解析傳入的 spec 路徑或階段代號（如 `3l`、`2j`），讀 `docs/specs/` 的 spec、`tasks/<功能>-plan.md`、`tasks/<功能>-todo.md` 與成功條件。確認哪些範圍已核可；只有核可狀態或範圍確實缺失時，才提出需要使用者決定的問題。
 4. 先查分支、未提交變更、既有 Run／Task／Dispatch、已整合的 commit 與驗收紀錄。恢復同一批工作時接續已確認的狀態，避免重建任務、重派仍在工作的 worker，或覆寫他人的修改。
@@ -29,7 +29,7 @@ metadata:
 
 - **測試資料庫**：會碰 Prisma 的 worker，派工前由協調者把它 worktree 的 `apps/api/.env` 與 `.env.test` 都指向專屬的 `ledger_<名稱>_test`（細節見 `docs/orca-multi-agent.md` §3）。`ledger_dev` 永遠不碰。
 - **Web e2e**：Playwright 用固定 port 3100／5273，整台機器同時只能一個 worktree 跑，平行的其他分支 session 也算在內。跑之前先看 port 有沒有被占。API e2e 各用各的資料庫就能平行。
-- **dev 環境**：port 3000／5173 是開發者在主工作區跑的 dev 伺服器。部署到 dev 只在主工作區做，依 `docs/handoff.md` 的部署步驟。
+- **dev 環境**：port 3000／5173 是開發者在主工作區跑的 dev 伺服器。部署到 dev 只在主工作區做，依交接文件的部署步驟。
 - **Codex 額度**：平行的分支 session 共用同一個週額度。
 - **會花錢的外部呼叫**：例如真的 LLM provider。只在 spec 或使用者授權的驗收項目執行。
 - **檔案 Ownership**：重疊的檔案不能同時派給兩個 worker。
@@ -47,7 +47,7 @@ metadata:
 ## 決策門控與溝通
 
 - `CLAUDE.md` §5 決策門控第 3 條的四件事（資料模型、API 介面、相依套件、CI），即使 plan 已寫到，動手前仍先向使用者說明。偏離已核可的 spec 或 plan 之前先停下說明；在核可範圍內解得掉的問題，解掉並記進 plan 的實作紀錄。
-- 只透過 `orca orchestration` 跟自己派出的 worker 溝通。不用 `orca terminal send` 傳話給其他 Claude Code session（主工作區或其他分支），要確認其他分支的進度就讀它的 git 紀錄；需要決定的事直接告訴使用者。
+- 跟自己派出的 worker 透過 `orca orchestration` 溝通。不要求其他 Claude Code session（主工作區或其他分支）逐件匯報，也不把每件工作轉送給它們；要確認其他分支的進度就讀它的 git 紀錄。需要決定的事直接告訴使用者。
 
 ## 整份驗收與收尾
 
