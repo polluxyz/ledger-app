@@ -175,7 +175,9 @@ Constraints 每次都寫這六條：
 - 不要在 spec 寫「想清楚再做」，也不要要求它把推理寫進回覆。思考量只用 `--effort` 調。依據：[Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)。
 - 它停在半途、沒送 `worker_done` 時，用 `orca terminal send` 點名還沒做的項目請它繼續。同一個任務最多催 2～3 次，之後讀畫面判斷是不是真的卡住。
 
-## 6. Session 交接（context 快滿時）
+## 6. Session 交接（一件事完成或 context 過大時）
+
+什麼時候換見 6.3；換的程序是 6.0～6.2。
 
 ### 6.0 一次只留一個活著的 session
 
@@ -191,7 +193,7 @@ Constraints 每次都寫這六條：
 
 ### 6.1 舊 session
 
-1. 更新 `docs/handoff.md`（只寫現況、下一步、開發者當場給的偏好、已知問題），開 PR 合併。沒有 Run 的純交接也要做。
+1. 更新自己工作區的 `docs/handoff/<工作區>.md` 與入口 `docs/handoff.md` 表格中的那一列（只寫現況、下一步、開發者當場給的偏好、已知問題）。有變動才改，併進這件工作最後一個 PR；沒有 PR 可併時才單獨開 docs PR。
 2. 有 Run 時：把處理完的 Delivery `--ack` 掉，再留交接信 `orca orchestration send --to run:<run_id> --subject "handoff" --body "..." --json`，最後把 `run_id` 交給使用者。
 3. 依 6.0 收尾。
 
@@ -199,7 +201,7 @@ Constraints 每次都寫這六條：
 
 ### 6.2 新 session
 
-用 `claude --dangerously-skip-permissions` 開，第一件事讀 `docs/handoff.md`。有 Run 時：
+用 `claude --dangerously-skip-permissions` 開，第一件事讀 `docs/handoff.md` 與自己工作區的檔案，其他工作區的檔案不讀。有 Run 時：
 
 ```bash
 orca orchestration run-use     --id <run_id> --json
@@ -209,6 +211,34 @@ orca orchestration worker-list --run <run_id> --json
 ```
 
 確認綁定成功：`run-use` 的 `coordinator_handle` 要是自己、`consumer_generation` 要加 1；`check` 的回應要有 `runId`。沒有 `runId` 代表沒綁上，不是信箱空了。
+
+### 6.3 一件事完成就換 session
+
+長 session 每輪都重送整段對話，是 token 的最大宗（`tasks/token-saving-plan.md` §1：10-15 起平均 context 24 萬，一個長 session 占快取讀取 40%）。所以協調者做完一件事就主動換 session，不等 context 滿。
+
+**觸發**：目前核可的一個完整工作單位做完，例如整個階段、或開發者交代的一項修正都已合併。不是任一 PR 合併就換；交接本身的 PR 不算。
+
+**共同門檻**，全部成立才換：
+
+- 沒有進行中的 worker、待處理的 Delivery 或問題、驗收或背景作業（`run_in_background` 也算）。
+- 開發者已送出的要求都處理完。
+- 沒有只存在對話裡、還沒寫下的操作狀態（部署做到第幾步、開發者貼回的輸出等）。
+
+**context 過大**：超過約 12～13 萬 token（試行值；`.claude/settings.json` 在 15 萬自動壓縮）時，先把重點寫進 plan 與 handoff，到下一個符合共同門檻的時間點再換。不要為了換 session 丟下進行中的 Run。
+
+**步驟**：
+
+1. 依 6.1 更新 handoff，停止寫入。
+2. 開新終端機，只啟動 agent，提示不放進 `--command`（中文與多層引號在 Windows 上容易被拆壞）。用和自己同一種 agent，Claude 是：
+   `orca terminal create --worktree path:<目前的 worktree> --title "<工作區> 接手" --command "claude --dangerously-skip-permissions" --json`
+3. `orca terminal wait --terminal <新 handle> --for tui-idle --timeout-ms 120000 --json`，確認 satisfied。
+4. `orca terminal send --terminal <新 handle> --text "讀 docs/handoff.md 與 docs/handoff/<工作區>.md，接手<工作區>。先唯讀確認 worktree、分支、HEAD 與下一步、待核可事項，回報後等開發者指示。" --enter --wait-submit 30 --json`。逾時就讀同一個 handle 的畫面，不要重開或重送。
+5. 讀新 session 的畫面，確認它開始讀 handoff，而且沒有以 resume 接上舊對話。有 Run 時，新 session 依 6.2 綁定。
+6. 依 6.0 收尾：報告新舊 handle 與 `orca terminal close --terminal <舊 handle>`，由開發者關舊分頁。
+
+開發者關掉舊分頁之前，兩個 session 都還活著，「只剩一個 agent」靠的是舊 session 停手的約定，不是技術保證。新 session 沒有新的核可工作時，只確認接手並等待，不自己開始下一段。
+
+換 session 是各工作區自己的事，不用向總控匯報；總控讀 git 掌握進度。
 
 ## 7. 環境
 
