@@ -91,3 +91,19 @@
 6. 要參考某一頁時，由開發者明確指名，不要自己去翻。
 
 判斷準則（三題都不明確時預設 Markdown）：要進版控嗎？會被反覆修訂嗎？是不是靠並排比較才說得清？前兩題為「是」就用 Markdown，第三題為「是」才用 HTML。
+
+## 程式碼檢索（codebase-memory-mcp）
+
+`CLAUDE.md` §12 的細節。索引過期、或查詢結果和實際檔案對不上時讀這一節。
+
+重新索引（用 Bash，勿用 PowerShell）：
+
+```bash
+~/.local/bin/codebase-memory-mcp.exe cli index_repository \
+  --repo-path "d:/Projects/ledger-app" --mode moderate
+```
+
+- 參數是 `--repo-path`，**不是** `--path`；傳錯會讓 indexing worker 靜悄悄崩潰。
+- `trace_path --function-name <NestJS Class>` 會回傳空的 callers，因為建構子注入不算 call edge；查類別關聯改用 `search_graph` 看 `in_degree`。
+- 大改動後圖譜會過期，先重新索引再依賴它。
+- 在 worktree 裡索引可能指向主工作區的路徑，第一次使用前先跑 `index_status` 確認。

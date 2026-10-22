@@ -250,3 +250,12 @@ orca orchestration worker-list --run <run_id> --json
 - `orca` 不一定在 PATH 上。從 Orca 以外開的 session 用 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe`。
 - Orca 重開後，舊的 `check --wait` 可能留下 `waiter_exists`，一直回空結果。改用 `worker-list` 的 `projection.outcome` 輪詢，或等舊 waiter 逾時。
 - 新 worktree 建在 `C:/Users/<使用者>/orca/workspaces/<repo>/<name>`，分支名是 `<github 帳號>/<name>`。`.worktreeinclude` 列的檔案會被複製過去，`node_modules` 不會，要自己跑 `pnpm install`。
+
+### 7.1 worktree 規則的細節（`CLAUDE.md` §11）
+
+worktree 是硬碟上獨立的一份簽出，與主工作區共用同一個 `.git`，但工作目錄的檔案是各自的實體副本。
+
+- `pnpm install` 會連帶執行 `postinstall: prisma generate`，把 Prisma Client 產到該 worktree 自己的 `node_modules`。不同分支的 lock 檔與 Prisma schema 可能不同，所以不能跨 worktree 共用 `node_modules`。
+- `.worktreeinclude` 目前列 `apps/api/.env`、`apps/api/.env.test`、`.claude/settings.local.json`。
+- 兩套 e2e 共用 `ledger_test` 資料庫，每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。API e2e 不佔 port，worktree 的 `.env.test` 改指向自己的資料庫就能平行（見 §3）。
+- Orca 的 hook 在 `~/.claude/settings.json` 與 `~/.orca/`，skill 在 `~/.agents/skills/`，都在 repo 之外，CI 用不到。可用的 skill：`orca-cli`（worktree、終端機、內建瀏覽器）、`orchestration`（多 agent 協調）、`orca-per-workspace-env`（容器 / VM 環境配方，目前用不到）。
