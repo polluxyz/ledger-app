@@ -258,7 +258,7 @@ Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
 - 設計取捨多的計畫，可以先派 `advisor` 角色討論，想清楚再回報開發者（`docs/orca-multi-agent.md` §1.1）。advisor 只給意見、不改檔；決定仍由開發者核可。
 - worker 的產出一律由協調者驗收後才進 PR。
-- 換 session 時先讀 `docs/handoff.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
+- 一件事完成就換 session，不等 context 滿（`docs/orca-multi-agent.md` §6.3）。換 session 時先讀 `docs/handoff.md` 與自己工作區的 `docs/handoff/<工作區>.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
 
 派工指令、Task spec 格式、換層、各 agent 的坑、交接程序，都在 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
 
