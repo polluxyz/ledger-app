@@ -54,6 +54,22 @@
 - 保留 `ledger-split-web`：分支 `docs/agent-workflow-skills`，10-22 還有寫入，另一個 session 在用。
 - 測試資料庫 `ledger_backend_test` 已沒有 worktree 使用，刪除被權限擋下，待開發者處理。
 
-### L2
+### L2（#144，`294b0ba`）
 
-- 手動執行 hook：主工作區 exit 0，印出分支與 open PR；`stats-2j` 印出分支。
+- 手動執行 hook：主工作區與 `stats-2j` 都 exit 0，印出正確的分支與 HEAD。當時沒有 open PR，`gh pr list --state open --json number,headRefName,title` 回傳空陣列，欄位名稱正確。
+- 待確認：新 session 的 `/context` 顯示「Auto-compact window: 150k」。`stats-2j`、`ai-4a` 要併入含 #144 的 main 才會生效。
+
+### L3（#145，`1ef0022`）
+
+- `docs/orca-multi-agent.md` 新增 §6.3，§6 標題、§6.1、§6.2 同步修改；`CLAUDE.md` §11 加入口。
+- handoff 拆成入口 `docs/handoff.md`（工作區表格、跨工作區規則、開發者偏好）與 `docs/handoff/main.md`、`stats-2j.md`、`ai-4a.md`。內容原文搬移；部署步驟只有主工作區會用，放在 `main.md`。
+- 其他 session：2j、4a 的 session 還沒開過（兩個 worktree 沒有任何 Claude 或 Codex 的對話紀錄），開了就直接照新結構。關掉兩個閒置的終端機：舊總控 5298c2d0（工作已在 #143 交接，停在 resume 畫面）、做完 #142 的 Codex。通知 skills 移植 session（`ledger-split-web`）：目前的 PR 合併後照 §6.3 收尾。
+- 待確認：實際換一次 session（§4 成功條件）。
+
+### L4
+
+- `CLAUDE.md` 11,419 → 10,487 字元。規則一條都沒刪：
+  - §11 worktree 規則的原因與細節（`postinstall`、`.worktreeinclude` 清單、e2e 資料庫與 port、Orca hook／skill 位置）→ `docs/orca-multi-agent.md` §7.1。
+  - §12 重新索引指令、`--repo-path` 陷阱、已知限制 → `docs/README.md`「程式碼檢索」。
+  - §11 額度查詢的指令名稱拿掉（§4 已有）；§13 入口縮短。
+- 避開 `docs/agent-workflow-skills` 分支正在改的 §5、§10，減少合併衝突。

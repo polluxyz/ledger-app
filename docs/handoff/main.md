@@ -10,7 +10,7 @@
 
 ## 下一步
 
-- 節省 token：L4（`CLAUDE.md` 瘦身）與 L5（7 天觀察），見 `tasks/token-saving-plan.md`。
+- 節省 token：L1～L4 已完成。剩 L5 的 7 天觀察與兩項待確認（新 session 的 `/context` 顯示 150k、實際換一次 session），見 `tasks/token-saving-plan.md` §4、§5。
 - 2j、4a 合併後部署到 dev。
 
 ## 替開發者部署
