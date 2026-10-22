@@ -58,6 +58,8 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 ## 2. 派工迴圈
 
+使用者要求完成整份已核可的 spec 時，讀 [`implement-spec`](../.agents/skills/implement-spec/SKILL.md)：以任務依賴持續續派，在整合分支驗收。該流程沿用本文件的角色、資源限制與恢復規則。
+
 ```bash
 orca orchestration run-create --objective "<目標>" --json
 orca orchestration worker-start ...                      # 見 §0
