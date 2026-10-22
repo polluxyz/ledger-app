@@ -41,6 +41,7 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 - Claude Code 是 coordinator（協調者），負責規劃、拆工、派工、驗收、開 PR。實作預設派給 worker，能平行的一次全部派出去。
 - 協調者自己做的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
+- 網頁（`apps/web`）的實作只派 Codex（`default` 的 Codex 那一層），協調者連小修也不自己做，驗收不過就退回 Codex（開發者 2026-10-21）。Codex 用完時網頁任務不換層，見 §4「派工前檢查」。
 - 動到 schema、API、授權的產出，不管哪個角色做，協調者驗收時都要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
@@ -56,6 +57,8 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 - 額度用完的判定與換層照 §4；`advisor` 備援是 Codex，`orca account list` 查得到用量。
 
 ## 2. 派工迴圈
+
+使用者要求完成整份已核可的 spec 時，讀 [`implement-spec`](../.agents/skills/implement-spec/SKILL.md)：以任務依賴持續續派，在整合分支驗收。該流程沿用本文件的角色、資源限制與恢復規則。
 
 ```bash
 orca orchestration run-create --objective "<目標>" --json
@@ -91,7 +94,7 @@ Constraints 每次都寫這六條：
 
 依 agent 再加：
 
-- **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。
+- **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 預設只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。本機的 Codex 設定（`~/.codex` 與 Orca 各帳號目錄的 `config.toml`）已加上 `project_doc_fallback_filenames = ["CLAUDE.md"]`（2026-10-21），新 session 會自動載入根目錄的 `CLAUDE.md`。開頭那句仍要寫：worker 從 worktree 根目錄啟動，`apps/api`、`apps/web` 的 `CLAUDE.md` 不會自動載入。Orca 新增 Codex 帳號時，要在新帳號目錄的 `config.toml` 補這一行。
 - **Claude**：加一句「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」。Claude 做長任務時，可能報完進度就停下，`worker_done` 也沒送出。
 
 通用規則（金額不用浮點數、授權 deny by default、前端不寫業務邏輯、註解用繁體中文）已寫在 `CLAUDE.md`，不必重抄。
@@ -109,9 +112,11 @@ Constraints 每次都寫這六條：
 
 任一條成立就當作這個 provider 用完：
 
-- `rateLimits` 的 `session` 或 `weekly` 的 `usedPercent` ≥ 95。
+- `rateLimits` 的 `session` 或 `weekly` 的 `usedPercent` ≥ 95。Codex 不用這條，見下一段。
 - worker 畫面或回報出現額度類錯誤。
 - worker 閒置（`orca terminal wait --for tui-idle` 立刻返回）、沒有 `worker_done`，畫面最後一段是 provider 錯誤。
+
+Codex 用到沒有為止（開發者 2026-10-19）：`usedPercent` 只當參考，不提早換層。等 worker 畫面或回報真的出現額度類錯誤，才判定 Codex 用完。
 
 畫面只寫 rate limit、too many requests、請稍後再試，而且用量沒到 95：當作暫時性，同一個角色重派一次並報告。
 
@@ -119,7 +124,7 @@ Constraints 每次都寫這六條：
 
 每次 `worker-start` 前跑一次 `orca account list --json`，從角色表最上面的可用層開始：
 
-- `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。
+- `default`：Codex 沒用完就派 Codex，用完就往下找第一個沒用完的 `fallback`。網頁任務例外：Codex 用完就停下來告訴開發者，等 Codex 重置，不派給其他層。
 - `backend`：Codex 沒用完就派。用完的話，看 `resetsAt`：一小時內會重置就等重置再派，否則問開發者。這類工作不派給其他層。
 - `fallback-3`（Claude）和協調者共用同一個 Claude 額度。`claude` 的 `session` 超過 80 就不派，避免協調者自己被卡住。
 
@@ -135,7 +140,7 @@ Constraints 每次都寫這六條：
 
 換層只對那一次派工有效，不是永久切換。
 
-- 下一次派工前照樣做「派工前檢查」。上層的 `usedPercent` 降回 95 以下，或已經過了記下的 `resetsAt`，就回到原本的層。
+- 下一次派工前照樣做「派工前檢查」。上層的 `usedPercent` 降回 95 以下，或已經過了記下的 `resetsAt`，就回到原本的層。Codex 只看是否已過 `resetsAt`。
 - 查不到用量的層（GLM、Gemini）被判定用完時，記下時間。過 5 小時後的派工，先試它一次。
 - 已經在下層執行中的 worker 讓它做完，不要因為上層恢復就中途換回去。
 - 回到原本的層時，也告訴開發者一聲。
@@ -175,7 +180,9 @@ Constraints 每次都寫這六條：
 - 不要在 spec 寫「想清楚再做」，也不要要求它把推理寫進回覆。思考量只用 `--effort` 調。依據：[Prompting Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)。
 - 它停在半途、沒送 `worker_done` 時，用 `orca terminal send` 點名還沒做的項目請它繼續。同一個任務最多催 2～3 次，之後讀畫面判斷是不是真的卡住。
 
-## 6. Session 交接（context 快滿時）
+## 6. Session 交接（一件事完成或 context 過大時）
+
+什麼時候換見 6.3；換的程序是 6.0～6.2。
 
 ### 6.0 一次只留一個活著的 session
 
@@ -191,7 +198,7 @@ Constraints 每次都寫這六條：
 
 ### 6.1 舊 session
 
-1. 更新 `docs/handoff.md`（只寫現況、下一步、開發者當場給的偏好、已知問題），開 PR 合併。沒有 Run 的純交接也要做。
+1. 更新自己工作區的 `docs/handoff/<工作區>.md` 與入口 `docs/handoff.md` 表格中的那一列（只寫現況、下一步、開發者當場給的偏好、已知問題）。有變動才改，併進這件工作最後一個 PR；沒有 PR 可併時才單獨開 docs PR。
 2. 有 Run 時：把處理完的 Delivery `--ack` 掉，再留交接信 `orca orchestration send --to run:<run_id> --subject "handoff" --body "..." --json`，最後把 `run_id` 交給使用者。
 3. 依 6.0 收尾。
 
@@ -199,7 +206,7 @@ Constraints 每次都寫這六條：
 
 ### 6.2 新 session
 
-用 `claude --dangerously-skip-permissions` 開，第一件事讀 `docs/handoff.md`。有 Run 時：
+用 `claude --dangerously-skip-permissions` 開，第一件事讀 `docs/handoff.md` 與自己工作區的檔案，其他工作區的檔案不讀。有 Run 時：
 
 ```bash
 orca orchestration run-use     --id <run_id> --json
@@ -210,8 +217,45 @@ orca orchestration worker-list --run <run_id> --json
 
 確認綁定成功：`run-use` 的 `coordinator_handle` 要是自己、`consumer_generation` 要加 1；`check` 的回應要有 `runId`。沒有 `runId` 代表沒綁上，不是信箱空了。
 
+### 6.3 一件事完成就換 session
+
+長 session 每輪都重送整段對話，是 token 的最大宗（`tasks/token-saving-plan.md` §1：10-15 起平均 context 24 萬，一個長 session 占快取讀取 40%）。所以協調者做完一件事就主動換 session，不等 context 滿。
+
+**觸發**：目前核可的一個完整工作單位做完，例如整個階段、或開發者交代的一項修正都已合併。不是任一 PR 合併就換；交接本身的 PR 不算。
+
+**共同門檻**，全部成立才換：
+
+- 沒有進行中的 worker、待處理的 Delivery 或問題、驗收或背景作業（`run_in_background` 也算）。
+- 開發者已送出的要求都處理完。
+- 沒有只存在對話裡、還沒寫下的操作狀態（部署做到第幾步、開發者貼回的輸出等）。
+
+**context 過大**：超過約 12～13 萬 token（試行值；`.claude/settings.json` 在 15 萬自動壓縮）時，先把重點寫進 plan 與 handoff，到下一個符合共同門檻的時間點再換。不要為了換 session 丟下進行中的 Run。
+
+**步驟**：
+
+1. 依 6.1 更新 handoff，停止寫入。
+2. 開新終端機，只啟動 agent，提示不放進 `--command`（中文與多層引號在 Windows 上容易被拆壞）。用和自己同一種 agent，Claude 是：
+   `orca terminal create --worktree path:<目前的 worktree> --title "<工作區> 接手" --command "claude --dangerously-skip-permissions" --json`
+3. `orca terminal wait --terminal <新 handle> --for tui-idle --timeout-ms 120000 --json`，確認 satisfied。
+4. `orca terminal send --terminal <新 handle> --text "讀 docs/handoff.md 與 docs/handoff/<工作區>.md，接手<工作區>。先唯讀確認 worktree、分支、HEAD 與下一步、待核可事項，回報後等開發者指示。" --enter --wait-submit 30 --json`。逾時就讀同一個 handle 的畫面，不要重開或重送。
+5. 讀新 session 的畫面，確認它開始讀 handoff，而且沒有以 resume 接上舊對話。有 Run 時，新 session 依 6.2 綁定。
+6. 依 6.0 收尾：報告新舊 handle 與 `orca terminal close --terminal <舊 handle>`，由開發者關舊分頁。
+
+開發者關掉舊分頁之前，兩個 session 都還活著，「只剩一個 agent」靠的是舊 session 停手的約定，不是技術保證。新 session 沒有新的核可工作時，只確認接手並等待，不自己開始下一段。
+
+換 session 是各工作區自己的事，不用向總控匯報；總控讀 git 掌握進度。
+
 ## 7. 環境
 
 - `orca` 不一定在 PATH 上。從 Orca 以外開的 session 用 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe`。
 - Orca 重開後，舊的 `check --wait` 可能留下 `waiter_exists`，一直回空結果。改用 `worker-list` 的 `projection.outcome` 輪詢，或等舊 waiter 逾時。
 - 新 worktree 建在 `C:/Users/<使用者>/orca/workspaces/<repo>/<name>`，分支名是 `<github 帳號>/<name>`。`.worktreeinclude` 列的檔案會被複製過去，`node_modules` 不會，要自己跑 `pnpm install`。
+
+### 7.1 worktree 規則的細節（`CLAUDE.md` §11）
+
+worktree 是硬碟上獨立的一份簽出，與主工作區共用同一個 `.git`，但工作目錄的檔案是各自的實體副本。
+
+- `pnpm install` 會連帶執行 `postinstall: prisma generate`，把 Prisma Client 產到該 worktree 自己的 `node_modules`。不同分支的 lock 檔與 Prisma schema 可能不同，所以不能跨 worktree 共用 `node_modules`。
+- `.worktreeinclude` 目前列 `apps/api/.env`、`apps/api/.env.test`、`.claude/settings.local.json`。
+- 兩套 e2e 共用 `ledger_test` 資料庫，每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。API e2e 不佔 port，worktree 的 `.env.test` 改指向自己的資料庫就能平行（見 §3）。
+- Orca 的 hook 在 `~/.claude/settings.json` 與 `~/.orca/`，skill 在 `~/.agents/skills/`，都在 repo 之外，CI 用不到。可用的 skill：`orca-cli`（worktree、終端機、內建瀏覽器）、`orchestration`（多 agent 協調）、`orca-per-workspace-env`（容器 / VM 環境配方，目前用不到）。

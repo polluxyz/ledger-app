@@ -1,0 +1,5 @@
+interface:
+  display_name: 'Ledger Implement Spec'
+  short_description: '透過 Orca 依任務相依關係持續續派並完成已核可的 ledger-app 規格'
+policy:
+  allow_implicit_invocation: false

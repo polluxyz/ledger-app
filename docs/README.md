@@ -9,7 +9,7 @@
 | `docs/reports/`   | 一次性的技術報告                   | 寫完不動               |
 | `docs/artifacts/` | HTML 產出（規劃圖、提案頁）        | **不進版控**，隨時可刪 |
 
-**換 session 時先讀 [`handoff.md`](handoff.md)**（每次交接更新）。
+**換 session 時先讀 [`handoff.md`](handoff.md) 與自己工作區的 `handoff/<工作區>.md`**（每次交接更新）。
 
 規範文件另外放：根目錄的 `CLAUDE.md`（怎麼做）、[`orca-multi-agent.md`](orca-multi-agent.md)（多代理派工與交接）、`專案決策脈絡.md`（當初為何這樣決定）、`README.md`（怎麼跑起來）。分層規範在 `apps/api/CLAUDE.md` 與 `apps/web/CLAUDE.md`。
 
@@ -91,3 +91,19 @@
 6. 要參考某一頁時，由開發者明確指名，不要自己去翻。
 
 判斷準則（三題都不明確時預設 Markdown）：要進版控嗎？會被反覆修訂嗎？是不是靠並排比較才說得清？前兩題為「是」就用 Markdown，第三題為「是」才用 HTML。
+
+## 程式碼檢索（codebase-memory-mcp）
+
+`CLAUDE.md` §12 的細節。索引過期、或查詢結果和實際檔案對不上時讀這一節。
+
+重新索引（用 Bash，勿用 PowerShell）：
+
+```bash
+~/.local/bin/codebase-memory-mcp.exe cli index_repository \
+  --repo-path "d:/Projects/ledger-app" --mode moderate
+```
+
+- 參數是 `--repo-path`，**不是** `--path`；傳錯會讓 indexing worker 靜悄悄崩潰。
+- `trace_path --function-name <NestJS Class>` 會回傳空的 callers，因為建構子注入不算 call edge；查類別關聯改用 `search_graph` 看 `in_degree`。
+- 大改動後圖譜會過期，先重新索引再依賴它。
+- 在 worktree 裡索引可能指向主工作區的路徑，第一次使用前先跑 `index_status` 確認。
