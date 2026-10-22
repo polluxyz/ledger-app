@@ -58,7 +58,7 @@
 ### L2（#144，`294b0ba`）
 
 - 手動執行 hook：主工作區與 `stats-2j` 都 exit 0，印出正確的分支與 HEAD。當時沒有 open PR，`gh pr list --state open --json number,headRefName,title` 回傳空陣列，欄位名稱正確。
-- 待確認：新 session 的 `/context` 顯示「Auto-compact window: 150k」。`stats-2j`、`ai-4a` 要併入含 #144 的 main 才會生效：10-22 已併入並推上去（兩個 worktree 沒有未提交的改動、沒有 session 在跑）。
+- 10-22 實測通過：新的主工作區 session 的 `/context` 顯示「Auto-compact window: 150k tokens」（當時 59.3k/150k，autocompact buffer 33k）。`stats-2j`、`ai-4a` 要併入含 #144 的 main 才會生效：10-22 已併入並推上去（兩個 worktree 沒有未提交的改動、沒有 session 在跑）。
 
 ### L3（#145，`1ef0022`）
 

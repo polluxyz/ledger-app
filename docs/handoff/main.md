@@ -11,7 +11,7 @@
 
 ## 下一步
 
-- 節省 token：L1～L4 已完成，L3 的換 session 實測通過。剩 L5 的 7 天觀察，和 L2 待確認（新 session 的 `/context` 顯示 150k），見 `tasks/token-saving-plan.md` §4、§5。
+- 節省 token：L1～L4 已完成，L2、L3 的實測都通過。剩 L5 的 7 天觀察，見 `tasks/token-saving-plan.md` §4、§5。
 - 2j、4a 合併後部署到 dev。
 
 ## 替開發者部署
