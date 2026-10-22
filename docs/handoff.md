@@ -10,12 +10,11 @@
 
 開發者 2026-10-21 決定：2j 統計與 4a AI 文字記帳**各開一條分支、各由一個 session 負責**，開發者分別到各工作區對話；需要管理時才回 main。
 
-| worktree           | 分支                         | 交接檔                          | 測試資料庫          | 狀態                                 |
-| ------------------ | ---------------------------- | ------------------------------- | ------------------- | ------------------------------------ |
-| 主工作區           | `main`                       | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調  |
-| `stats-2j`         | `feature/phase-2j-stats`     | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 核可中：spec §10 要跟開發者確認      |
-| `ai-4a`            | `feature/phase-4a-ai`        | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | spec 已核可，下一步寫 plan、todo     |
-| `ledger-split-web` | `docs/agent-workflow-skills` | —                               | —                   | 另一個 session 移植 Pollux 的 skills |
+| worktree   | 分支                     | 交接檔                          | 測試資料庫          | 狀態                                |
+| ---------- | ------------------------ | ------------------------------- | ------------------- | ----------------------------------- |
+| 主工作區   | `main`                   | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調 |
+| `stats-2j` | `feature/phase-2j-stats` | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 核可中：spec §10 要跟開發者確認     |
+| `ai-4a`    | `feature/phase-4a-ai`    | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | spec 已核可，下一步寫 plan、todo    |
 
 ## 跨工作區的規則
 
