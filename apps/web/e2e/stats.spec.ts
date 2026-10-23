@@ -380,6 +380,111 @@ async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
+async function expectHomeCardSpacing(page: Page): Promise<void> {
+  const assetCard = page.getByRole('region', { name: '資產' });
+  const summary = page.locator('[aria-label="本月收支"]');
+  const nextCard = page.getByRole('region', { name: '最近交易' });
+  await expect(assetCard).toBeVisible();
+  await expect(summary).toBeVisible();
+  await expect(nextCard).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const [assetBox, summaryBox, nextBox] = await Promise.all([
+        assetCard.boundingBox(),
+        summary.boundingBox(),
+        nextCard.boundingBox(),
+      ]);
+      if (!assetBox || !summaryBox || !nextBox) {
+        return Number.POSITIVE_INFINITY;
+      }
+
+      const assetToSummaryGap = summaryBox.y - (assetBox.y + assetBox.height);
+      const summaryToNextGap = nextBox.y - (summaryBox.y + summaryBox.height);
+      return Math.abs(assetToSummaryGap - summaryToNextGap);
+    })
+    .toBeLessThanOrEqual(1);
+}
+
+async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
+  const amounts = [
+    { label: '本月支出', amount: '$12,345,678' },
+    { label: '本月收入', amount: '$1,234,567' },
+    { label: '結餘', amount: '-$11,111,111' },
+  ];
+
+  for (const { label, amount } of amounts) {
+    const card = page.getByRole('link', { name: `${label} ${amount}` });
+    await expect(card).toBeVisible();
+    const value = card.locator('strong');
+    const metrics = await value.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return {
+        text: element.textContent?.trim(),
+        lineCount: range.getClientRects().length,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      };
+    });
+
+    expect(metrics.text).toBe(amount);
+    expect(metrics.lineCount).toBe(1);
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
+  }
+}
+
+async function expectTrendMonthRows(monthCells: Locator, singleLine: boolean): Promise<void> {
+  const layouts = await monthCells.evaluateAll((cells) =>
+    cells.map((cell) => {
+      const parts = Array.from(cell.children);
+      const year = parts[0];
+      const month = parts[1];
+      if (!year || !month) {
+        return null;
+      }
+
+      const yearRect = year.getBoundingClientRect();
+      const monthRect = month.getBoundingClientRect();
+      const yearRange = document.createRange();
+      yearRange.selectNodeContents(year);
+      const monthRange = document.createRange();
+      monthRange.selectNodeContents(month);
+      const distinctLineCount = (range: Range) =>
+        new Set(Array.from(range.getClientRects(), (rect) => rect.top)).size;
+      return {
+        yearText: year.textContent?.trim(),
+        monthText: month.textContent?.trim(),
+        yearTop: yearRect.top,
+        monthTop: monthRect.top,
+        yearLineCount: distinctLineCount(yearRange),
+        monthLineCount: distinctLineCount(monthRange),
+        yearWhiteSpace: getComputedStyle(year).whiteSpace,
+        monthWhiteSpace: getComputedStyle(month).whiteSpace,
+      };
+    }),
+  );
+
+  expect(layouts).toHaveLength(12);
+  for (const layout of layouts) {
+    expect(layout).not.toBeNull();
+    if (!layout) {
+      continue;
+    }
+
+    expect(layout.yearText).toMatch(/^\d{4}年$/);
+    expect(layout.monthText).toMatch(/^\d{1,2}月$/);
+    expect(layout.yearLineCount).toBe(1);
+    expect(layout.monthLineCount).toBe(1);
+    expect(layout.yearWhiteSpace).toBe('nowrap');
+    expect(layout.monthWhiteSpace).toBe('nowrap');
+    expect(layout.monthTop).toBeGreaterThanOrEqual(layout.yearTop);
+    if (singleLine) {
+      expect(Math.abs(layout.monthTop - layout.yearTop)).toBeLessThanOrEqual(1);
+    }
+  }
+}
+
 async function expectStatsTouchTargets(page: Page): Promise<void> {
   const tabButtons = statsTabs(page).getByRole('button');
   const tabCount = await tabButtons.count();
@@ -450,6 +555,59 @@ async function seedTwoLedgersForHistory(
 
 /** SC-R15：以 API 建立正式資料，主流程從首頁開始並在統計與交易頁走完。 */
 test.describe('2j 統計頁端對端', () => {
+  test('首頁長金額在 390px 與 1280px 保持單行', async ({ signedInPage: page, userA, request }) => {
+    const month = currentTaiwanMonth();
+    const ledger = await createLedger(request, userA.token, {
+      name: '長金額測試',
+      kind: 'PERSONAL',
+    });
+    const accountId = await cashAccountId(request, userA);
+    const expenseCategory = await createCategory(request, userA.token, ledger.id, {
+      name: '大額支出',
+      type: 'EXPENSE',
+    });
+    const incomeCategory = await createCategory(request, userA.token, ledger.id, {
+      name: '大額收入',
+      type: 'INCOME',
+    });
+
+    await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 1_234_567_800,
+      date: month.transactionDate,
+      categoryId: expenseCategory.id,
+      accountId,
+      title: '大額支出',
+    });
+    await createTransaction(request, userA.token, ledger.id, {
+      type: 'INCOME',
+      amount: 123_456_700,
+      date: month.transactionDate,
+      categoryId: incomeCategory.id,
+      accountId,
+      title: '大額收入',
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => window.localStorage.setItem('ledger.theme', value), theme);
+      await page.goto('/');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await switchLedger(page, ledger.name);
+      await expectHomeAmountsOnOneLine(page);
+      await expectHomeCardSpacing(page);
+      await expectNoHorizontalPageScroll(page);
+
+      if (theme === 'light') {
+        await page.setViewportSize({ width: 1280, height: 844 });
+        await expectHomeAmountsOnOneLine(page);
+        await expectHomeCardSpacing(page);
+        await expectNoHorizontalPageScroll(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
+    }
+  });
+
   test('SC-R15：家用首頁、分類、趨勢、成員與相關交易', async ({
     signedInPage: page,
     userA,
@@ -830,6 +988,13 @@ test.describe('2j 統計頁端對端', () => {
         expect(parts[0]).toMatch(/^\d{4}年$/);
         expect(parts[1]).toMatch(/^\d{1,2}月$/);
         expect((await cell.innerText()).replace(/\s/g, '')).toBe(`${parts[0]}${parts[1]}`);
+      }
+      await expectTrendMonthRows(monthCells, false);
+      if (theme === 'light') {
+        await page.setViewportSize({ width: 1280, height: 844 });
+        await expectTrendMonthRows(monthCells, true);
+        await expectNoHorizontalPageScroll(page);
+        await page.setViewportSize({ width: 390, height: 844 });
       }
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);

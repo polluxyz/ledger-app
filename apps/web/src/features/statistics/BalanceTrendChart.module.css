@@ -1,9 +1,11 @@
 .card {
   min-width: 0;
-  padding: 1.25rem 1.5rem 0.75rem;
-  border: 1px solid var(--color-border);
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--card-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .heading {
@@ -88,13 +90,7 @@
 }
 
 .status {
-  margin: 2rem 0;
+  margin: var(--space-xl) 0;
   color: var(--color-text-muted);
   text-align: center;
-}
-
-@media (max-width: 480px) {
-  .card {
-    padding: 1rem 0.75rem 0.5rem;
-  }
 }
