@@ -256,3 +256,17 @@ spec：`docs/specs/phase-2j-stats.md`（決策 227～236、254～257、260～265
   - 補驗收：決策 262、DTO 的 400、單一端點失敗、SC-R17 用真的退出 API、效能腳本的資料庫檢查與 `--listTests`。
   - 修正 `backend` 額度用完的規則（不換層）。
   - 沒有採納：快照一致性的併發測試。這種測試要靠時間差製造衝突，結果不穩定。改由協調者逐行確認查詢都在同一個 `RepeatableRead` 交易裡。
+- 2026-10-23 D0（`82667c7`）：shared 型別與 13 條隔離測試，路由不存在時全紅（404）。
+- 2026-10-23 S1a 驗收通過，合進整合分支（`52a0eea`）。協調者重跑單元測試 68 條（另用 `TZ=America/New_York` 再跑一次）與 `statistics-core` e2e 3 條，全過。測試資料庫的時區是 `Asia/Taipei`，10/31 與 11/1 的邊界測試照樣通過，證明篩選不受 session 時區影響。
+- 流程偏離：S1a 與 W3 的 `worker_done` 在驗收前就 ack 了，違反 `docs/orca-multi-agent.md` §2「驗收沒過不要 ack」。S1a 後來驗收通過；W3 改用 reply 退回。之後一律先驗收再 ack。
+- 2026-10-23 W3 第一次交付（`6b2ce58`）退回補 3 點：趨勢長條圖與折線圖滑過或聚焦時預覽該月、點擊才選月份；三個元件重複的固定分組名稱抽成一份；折線圖 y 軸處理負值、零線畫在 0 的真實位置。
+- 2026-10-23 第 2 波派出 S1b（`2j-stats-api`）與 S2（`2j-balance`），各用自己的測試資料庫。
+- 2026-10-23 W1 驗收通過，合進整合分支（`a74129f`）。協調者重跑 web typecheck、lint、822 個測試、prettier，全過。已知小事：台灣當月的換算在 `use-balance-trend.ts` 與 `HomePage.tsx` 各寫一份，W2 做 `stats-url.ts` 時收成一份。
+- 2026-10-23 W3 第二次交付（`8bad61e`）再退回 2 點：`TrendLineChart` 的滑過預覽、點擊選月份沒有做；`TrendLineChart.test.tsx` 有 3 條斷言被放寬（`'收入 $0'`→`'$0'` 等），元件文字沒變，要改回精確斷言。原 dispatch 已結束，worker 改送 status 訊息回報。
+- 2026-10-23 Task spec 的指令寫錯：`pnpm --filter @ledger/api test:e2e -- statistics-isolation -t "..."` 的 `--` 會讓 Jest 把 `-t` 當成檔名篩選，結果跑到別人的測試。正確寫法是不加 `--`：`pnpm --filter @ledger/api test:e2e statistics-isolation -t balance-trend`。S1b、S2 都自己發現並改用正確指令。之後的 Task spec 照正確寫法寫。
+- 2026-10-23 W3 第三次交付（`969588c`）通過，合進整合分支（`e37e92f`）。
+- 2026-10-23 第 2 波派出 W2（`2j-web-page`，從 `e37e92f` 開）。Task spec 補一項釐清：分類分頁的支出／收入切換只是頁面狀態，不寫進網址，也不寫 localStorage。
+- 2026-10-23 S2 驗收通過，合進整合分支（`3520907`）。協調者重跑 `balance-trend` 21 條、隔離 2 條、帳戶回歸 38 條、全套單元測試與檢查，全過。12 個月查詢實測 35.67ms，沒有改成分桶算法；`calculateBalances` 簽名只加可選的 client 與日期條件。SC-R17 用真的退出 API 做出來，退出後趨勢與帳戶頁都歸 0。
+- 2026-10-23 S1b 驗收通過，合進整合分支（`1eb481d`）。協調者重跑 `statistics` 25 條、`statistics-core` 3 條、`ledgers` 15 條、全套單元測試與檢查，全過。
+- 2026-10-23 整合分支跑隔離測試全套 13/13 轉綠；`statistics*` 41、`balance-trend` 21、帳戶與帳本回歸 53 條全過；API 單元 714、Web 843、shared 116，lint、typecheck、format 全過。
+- 2026-10-23 計畫外問題：W3 的 `DonutChart`、`HorizontalBarChart` 沒有點擊回呼，只有 `CategoryLegendList` 有。決策 236 要求切片與長條也能點，W3 驗收時漏看。W2 回報後，協調者放寬 W2 的檔案權限，讓它在這兩個元件的 groups 資料加可選的 `onSelect`（只有 `CATEGORY` 可點），既有斷言不得放寬。在已核可範圍內，不改 spec。

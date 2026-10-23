@@ -9,7 +9,8 @@
 - 寫 spec 時協調者自己補的 3 個細節，已在送審時向開發者說明並一起核可：`people` 不列收入與支出都是 0 的人；同一個回應讀同一份資料快照；新增成功條件 SC-R27～R29。
 - 實作在整合分支 `feature/phase-2j-stats-impl`（從 docs PR 合併後的 `main` 開）。進度看 todo 的勾選與 plan §6 實作紀錄。
 - 產出（不進版控）：`docs/artifacts/stats-ia/`（版面比較頁、圖型切換原型 `claude-4.html`、`advisor/round1.md`、`round2.md`）。
-- Orca run `run_404efb59895f`。
+- Orca run：資訊架構提案 `run_404efb59895f`（已結束）；實作 `run_524feab581d4`。
+- 進行中的 worker：W2 `2j-web-page`（Codex）。S1a、S1b、S2、W1、W3 已合併。
 
 ## 下一步
 
