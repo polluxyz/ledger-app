@@ -9,9 +9,12 @@ import { COUNTERPARTIES_KEY } from '../debts/use-debts';
 import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import {
   useCreateTransaction,
+  useCreateTransactionForLedger,
   useDeleteTransaction,
   useUpdateTransaction,
+  transactionsKey,
 } from './use-transactions';
+import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 
 /**
  * 記帳頁上可能有兩個「分類」下拉：新增表單一個、篩選列一個。查詢一律限縮在新增
@@ -284,5 +287,28 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
     const remove = renderHook(() => useDeleteTransaction('ledger-1'), { wrapper });
     await act(() => remove.result.current.mutateAsync('txn-1'));
     expectDebtTotalsInvalidated();
+  });
+
+  it('writes an AI draft to its supplied ledger and invalidates that ledger and account balances', async () => {
+    invalidate.mockClear();
+    const create = renderHook(() => useCreateTransactionForLedger(), { wrapper });
+    await act(() =>
+      create.result.current.mutateAsync({
+        ledgerId: 'ledger-2',
+        input: { type: 'EXPENSE', amount: 12000, date: '2026-10-05' },
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/ledgers/ledger-2/transactions'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const keys = (invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>).map(
+      ([filters]) => filters.queryKey,
+    );
+    expect(keys).toEqual(
+      expect.arrayContaining([transactionsKey('ledger-2'), ACCOUNTS_KEY]) as unknown,
+    );
+    expect(keys).not.toContain(transactionsKey('ledger-1'));
   });
 });
