@@ -1,0 +1,146 @@
+.section {
+  display: grid;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.list {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
+
+.draft {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.draft:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+.firstLine,
+.metadata {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.firstLine {
+  align-items: center;
+}
+
+.type,
+.metadata {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.amount {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.chip,
+.ledger,
+.missing {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+
+.ledger {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.missing {
+  border-style: dashed;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.iconButton {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.iconButton:first-child {
+  color: var(--color-income);
+}
+
+.iconButton:disabled,
+.draft:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 600px) {
+  .item {
+    align-items: start;
+  }
+
+  .actions {
+    align-self: center;
+  }
+}

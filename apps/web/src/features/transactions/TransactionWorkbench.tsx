@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef } from 'react';
-import { actualAmountOf, type Cents, type LedgerSummary, type Transaction } from '@ledger/shared';
+import {
+  actualAmountOf,
+  type Cents,
+  type LedgerSummary,
+  type Transaction,
+  type TransactionDraft,
+} from '@ledger/shared';
 import { RightPanelContent } from '../../app/RightPanel';
 import { useRightPanel } from '../../app/right-panel-context';
 import { Dialog } from '../../components/Dialog';
@@ -27,12 +33,15 @@ import styles from './TransactionWorkbench.module.css';
  */
 export type PanelTarget =
   | { kind: 'new' }
+  | { kind: 'draft'; item: { key: string; draft: TransactionDraft } }
   | { kind: 'transaction'; transaction: Transaction; initialDeleteOpen?: boolean }
   | { kind: 'copy'; transaction: Transaction }
   | { kind: 'debtTransaction'; transaction: Transaction }
   | { kind: 'split'; splitId: string }
   | { kind: 'settlement'; settlement?: Transaction; prefill?: SettlementPrefill }
   | { kind: 'fillAccount'; transaction: Transaction };
+
+const noop = () => {};
 
 /** 從結清建議打開結清表單時預填的值（W119）。金額是分。 */
 export interface SettlementPrefill {
@@ -49,6 +58,10 @@ export interface TransactionWorkbenchProps {
   editing?: Transaction | null;
   /** 關閉面板（儲存成功、取消、關閉、Esc）時呼叫。 */
   onClose?: () => void;
+  /** AI 草稿表單寫入成功後由頁面移除對應草稿。 */
+  onDraftSaved?: (key: string) => void;
+  /** 讓草稿列在表單送出期間鎖住同一筆，避免兩個入口同時寫入。 */
+  onDraftSavingChange?: (key: string, saving: boolean) => void;
   /** @deprecated 相容舊的 onEditDone prop */
   onEditDone?: () => void;
 }
@@ -73,18 +86,28 @@ export function TransactionWorkbench({
   target,
   editing,
   onClose,
+  onDraftSaved,
+  onDraftSavingChange,
   onEditDone,
 }: TransactionWorkbenchProps) {
-  const { close, focusRequest } = useRightPanel();
+  const { close, focusRequest, isOpen } = useRightPanel();
   const amountFieldId = useId();
   // 初值就是目前的計數，所以「第一次 render」永遠不算一次 focus 要求。
   const seenFocusRequest = useRef(focusRequest);
 
-  const handleClose = onClose ?? onEditDone ?? (() => {});
+  const handleClose = onClose ?? onEditDone ?? noop;
   const activeTarget: PanelTarget =
     target ?? (editing ? { kind: 'transaction', transaction: editing } : { kind: 'new' });
-  const ledgers = useLedgers(true, activeTarget.kind === 'debtTransaction');
+  const ledgers = useLedgers(
+    true,
+    activeTarget.kind === 'debtTransaction' || activeTarget.kind === 'draft',
+  );
   const debtLedger = ledgers.data?.find((item) => item.id === ledger.id);
+  const draftLedger =
+    activeTarget.kind === 'draft'
+      ? (ledgers.data?.find((item) => item.id === activeTarget.item.draft.ledgerId) ??
+        (ledger.id === activeTarget.item.draft.ledgerId ? ledger : undefined))
+      : undefined;
 
   useEffect(() => {
     if (focusRequest === seenFocusRequest.current) {
@@ -97,9 +120,15 @@ export function TransactionWorkbench({
     }
   }, [focusRequest, amountFieldId]);
 
+  useEffect(() => {
+    if (!isOpen && activeTarget.kind === 'draft') handleClose();
+  }, [activeTarget.kind, handleClose, isOpen]);
+
   return (
     <RightPanelContent>
-      {(activeTarget.kind === 'new' || activeTarget.kind === 'copy') && (
+      {(activeTarget.kind === 'new' ||
+        activeTarget.kind === 'copy' ||
+        (activeTarget.kind === 'draft' && draftLedger !== undefined)) && (
         <div className={styles.add}>
           {/*
             收起鈕疊在表單標題那一列的右邊，而不是放進 `<legend>` 裡：legend 的文字
@@ -110,17 +139,39 @@ export function TransactionWorkbench({
             type="button"
             className={styles.collapse}
             aria-label="收起新增面板"
-            onClick={close}
+            onClick={activeTarget.kind === 'draft' ? handleClose : close}
           >
             <Icon name="chevronRight" size={18} />
           </button>
           <TransactionForm
-            key={activeTarget.kind === 'copy' ? activeTarget.transaction.id : 'new'}
-            ledger={ledger}
+            key={
+              activeTarget.kind === 'copy'
+                ? activeTarget.transaction.id
+                : activeTarget.kind === 'draft'
+                  ? activeTarget.item.key
+                  : 'new'
+            }
+            ledger={activeTarget.kind === 'draft' ? draftLedger! : ledger}
             amountFieldId={amountFieldId}
             copyFrom={activeTarget.kind === 'copy' ? activeTarget.transaction : undefined}
+            draft={activeTarget.kind === 'draft' ? activeTarget.item.draft : undefined}
+            onSaved={
+              activeTarget.kind === 'draft'
+                ? () => onDraftSaved?.(activeTarget.item.key)
+                : undefined
+            }
+            onDraftSavingChange={
+              activeTarget.kind === 'draft'
+                ? (saving) => onDraftSavingChange?.(activeTarget.item.key, saving)
+                : undefined
+            }
           />
         </div>
+      )}
+      {activeTarget.kind === 'draft' && !draftLedger && (
+        <p role={ledgers.isLoading ? undefined : 'alert'}>
+          {ledgers.isLoading ? '載入中…' : '找不到草稿的帳本，請重新解析。'}
+        </p>
       )}
       {activeTarget.kind === 'transaction' && (
         <TransactionDialog

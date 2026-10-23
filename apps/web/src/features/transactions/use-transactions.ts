@@ -86,15 +86,36 @@ function invalidateAfterWrite(queryClient: QueryClient, ledgerId: string | null)
  * 因此畫面不必重整就會出現新的一筆。
  */
 export function useCreateTransaction(ledgerId: string | null) {
+  const mutation = useCreateTransactionForLedger();
+
+  return {
+    ...mutation,
+    mutate: (input: CreateTransactionRequest, options?: Parameters<typeof mutation.mutate>[1]) =>
+      mutation.mutate({ ledgerId, input }, options),
+    mutateAsync: (input: CreateTransactionRequest) => mutation.mutateAsync({ ledgerId, input }),
+  };
+}
+
+/**
+ * 新增交易時由呼叫端指定帳本，供 AI 草稿寫入它所屬的帳本；成功後仍沿用一般新增的
+ * 失效範圍，避免切換目前帳本才能看到新交易或更新後的餘額。
+ */
+export function useCreateTransactionForLedger() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateTransactionRequest) =>
+    mutationFn: ({
+      ledgerId,
+      input,
+    }: {
+      ledgerId: string | null;
+      input: CreateTransactionRequest;
+    }) =>
       apiRequest<Transaction>(`/ledgers/${ledgerId!}/transactions`, {
         method: 'POST',
         body: input,
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient, ledgerId),
+    onSuccess: (_transaction, { ledgerId }) => invalidateAfterWrite(queryClient, ledgerId),
   });
 }
 
