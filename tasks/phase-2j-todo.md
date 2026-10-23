@@ -2,7 +2,7 @@
 
 plan：`tasks/phase-2j-plan.md`；spec：`docs/specs/phase-2j-stats.md`。
 
-- [ ] **D0 契約與隔離測試**（協調者）：plan §1.1。
+- [x] **D0 契約與隔離測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`statistics-isolation.e2e-spec.ts` 紅燈，且每條 404 斷言都有正向對照、「已退出」用真的退出 API 做出來；API／Web typecheck 通過。
 - [ ] **S1a 統計核心**（依賴 D0；`2j-stats-core`，`backend`）：plan §1.2。
       驗收：單元測試涵蓋決策 230、234、260（含同餘數、極小值、溢位）與台灣時間的日期邊界（跨月、閏日），並用 `TZ=America/New_York` 再跑一次；CTE 與 `attribution.ts` 的差異測試涵蓋 SC-R28 的每種資料形態與多人分帳，資料庫 session 時區換成別的再跑一次；SQL 分桶寫成先標 UTC 再轉台灣。
