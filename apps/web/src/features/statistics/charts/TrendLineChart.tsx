@@ -148,13 +148,22 @@ export function TrendLineChart({
               const showYear = index === 0 || monthNumber === '01';
               const showYearAfterJanuary =
                 monthNumber === '02' && months[index - 1]?.month === `${year}-01`;
+              const left = months.length <= 1 ? 50 : (index / (months.length - 1)) * 100;
+              const transform =
+                months.length <= 1 || (index > 0 && index < months.length - 1)
+                  ? 'translateX(-50%)'
+                  : index === 0
+                    ? undefined
+                    : 'translateX(-100%)';
               return (
-                <li key={month.month}>
+                <li key={month.month} style={{ left: `${left}%`, transform }}>
                   <span>{Number(monthNumber)}月</span>
-                  <span className={`${styles.year} ${styles.yearAfterJanuary}`}>
-                    {showYearAfterJanuary ? year : '\u00a0'}
+                  <span className={styles.year}>
+                    <span className={styles.yearPrimary}>{showYear ? year : '\u00a0'}</span>
+                    <span className={styles.yearAfterJanuary}>
+                      {showYearAfterJanuary ? year : '\u00a0'}
+                    </span>
                   </span>
-                  <span className={styles.year}>{showYear ? year : '\u00a0'}</span>
                 </li>
               );
             })}

@@ -130,10 +130,8 @@
 }
 
 .months {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  align-items: flex-start;
-  gap: max(4px, var(--space-xs));
+  position: relative;
+  min-height: 2.4em;
   margin: var(--space-xs) 0 0;
   padding: 0;
   color: var(--color-text-muted);
@@ -142,17 +140,31 @@
 }
 
 .months li {
+  position: absolute;
+  top: 0;
   display: flex;
-  min-width: 0;
   flex-direction: column;
   text-align: center;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
 .year {
-  min-height: 1.1em;
+  position: relative;
+  display: block;
+  height: 1.1em;
   font-size: 0.625rem;
   line-height: 1.1;
+}
+
+.yearPrimary,
+.yearAfterJanuary {
+  position: absolute;
+  inset: 0;
+}
+
+.yearPrimary {
+  display: block;
 }
 
 .yearAfterJanuary {
@@ -160,16 +172,12 @@
 }
 
 @container (max-width: 480px) {
-  .months li:nth-child(odd) {
-    grid-column: span 2;
-  }
-
   .months li:nth-child(even) {
     display: none;
   }
 
   .yearAfterJanuary {
-    display: inline;
+    display: block;
   }
 }
 

@@ -76,12 +76,41 @@ async function expectResponsiveLineMonthLabels(
     const [, year, monthNumber] = monthMatch;
     const showYear = previousVisibleYear === null || previousVisibleYear !== year;
     const expectedDigits = [Number(monthNumber), ...(showYear ? [Number(year)] : [])];
-    const labelDigits = (await labels.nth(index).innerText()).match(/\d+/g) ?? [];
+    const label = labels.nth(index);
+    const labelDigits = (await label.innerText()).match(/\d+/g) ?? [];
     expect(labelDigits.map(Number)).toEqual(expectedDigits);
-    expect(
-      await labels.nth(index).evaluate((element) => getComputedStyle(element).whiteSpace),
-    ).toBe('nowrap');
+    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+    expect(await label.evaluate((element) => element.children.length)).toBe(2);
     previousVisibleYear = year!;
+  }
+}
+
+async function expectResponsiveLineMonthPositions(labels: Locator, points: Locator): Promise<void> {
+  const count = await labels.count();
+  await expect(points).toHaveCount(count * 2);
+
+  for (let index = 0; index < count; index += 1) {
+    const label = labels.nth(index);
+    if (!(await label.isVisible())) {
+      continue;
+    }
+
+    const labelRect = await label.evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return { left, right };
+    });
+    const pointRect = await points.nth(index * 2).evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return { left, right };
+    });
+    const alignedLabelX =
+      index === 0
+        ? labelRect.left
+        : index === count - 1
+          ? labelRect.right
+          : (labelRect.left + labelRect.right) / 2;
+    const incomePointX = (pointRect.left + pointRect.right) / 2;
+    expect(Math.abs(alignedLabelX - incomePointX)).toBeLessThanOrEqual(6);
   }
 }
 
@@ -776,13 +805,16 @@ test.describe('2j 統計頁端對端', () => {
       expect(pointFills.length).toBeGreaterThan(0);
       expect(pointFills).not.toContain('none');
       const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
+      const linePoints = lineChart.locator('svg circle');
       await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 6);
+      await expectResponsiveLineMonthPositions(lineLabels, linePoints);
       await expectMonthLabelGaps(lineLabels);
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       if (theme === 'light') {
         await page.setViewportSize({ width: 1280, height: 844 });
         await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 12);
+        await expectResponsiveLineMonthPositions(lineLabels, linePoints);
         await page.setViewportSize({ width: 390, height: 844 });
       }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();

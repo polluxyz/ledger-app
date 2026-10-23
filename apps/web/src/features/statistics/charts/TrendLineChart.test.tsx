@@ -20,17 +20,30 @@ describe('TrendLineChart', () => {
       />,
     );
 
-    const compactYearClass = styles.yearAfterJanuary;
-    const monthLabels = [...container.querySelectorAll('ol[aria-hidden="true"] li')].map((label) =>
-      [...label.children]
-        .filter(
-          (child) => compactYearClass === undefined || !child.classList.contains(compactYearClass),
-        )
-        .map((child) => child.textContent ?? '')
-        .join('')
-        .replace(/\s/g, ''),
+    const labels = [...container.querySelectorAll('ol[aria-hidden="true"] li')];
+    const monthLabels = labels.map((label) =>
+      `${label.children[0]?.textContent ?? ''}${label.querySelector(`.${styles.yearPrimary}`)?.textContent ?? ''}`.replace(
+        /\s/g,
+        '',
+      ),
     );
     expect(monthLabels).toEqual(['11月2025', '12月', '1月2026', '2月']);
+    expect(labels.map((label) => label.children.length)).toEqual([2, 2, 2, 2]);
+    const labelPositions = labels.map((label) =>
+      Number.parseFloat((label as HTMLElement).style.left),
+    );
+    expect(labelPositions).toHaveLength(4);
+    expect(labelPositions[0]).toBe(0);
+    expect(labelPositions[1]).toBeCloseTo(100 / 3);
+    expect(labelPositions[2]).toBeCloseTo(200 / 3);
+    expect(labelPositions[3]).toBe(100);
+    expect(labels.map((label) => (label as HTMLElement).style.transform)).toEqual([
+      '',
+      'translateX(-50%)',
+      'translateX(-50%)',
+      'translateX(-100%)',
+    ]);
+    expect(labels[3]?.querySelector(`.${styles.yearAfterJanuary}`)).toHaveTextContent('2026');
     expect(screen.getByRole('img')).toHaveAttribute(
       'aria-label',
       expect.stringContaining('2025年11月'),
