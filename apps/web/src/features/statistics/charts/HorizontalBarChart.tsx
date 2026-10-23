@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { Cents, StatisticsGroup, StatisticsPerson } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import { getChartColorForId, getStatisticsGroupColor, type ChartTheme } from './chart-colors';
+import { fixedGroupLabel } from './chart-format';
 import styles from './HorizontalBarChart.module.css';
 
 /** 橫條圖保留 API 傳入的順序與全部項目；長文字和金額可以換行閱讀。 */
@@ -70,19 +71,4 @@ export function HorizontalBarChart({
 
 function directionLabel(direction: 'expense' | 'income'): string {
   return direction === 'expense' ? '支出' : '收入';
-}
-
-function fixedGroupLabel(kind: StatisticsGroup['kind']): string {
-  switch (kind) {
-    case 'DIFFERENCE':
-      return '結清差額';
-    case 'BAD_DEBT':
-      return '呆帳';
-    case 'DEBT_FORGIVEN':
-      return '債務免除';
-    case 'UNCATEGORIZED':
-      return '未分類';
-    case 'CATEGORY':
-      return '分類';
-  }
 }

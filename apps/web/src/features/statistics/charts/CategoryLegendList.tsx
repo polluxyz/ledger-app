@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { StatisticsGroup } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import { getStatisticsGroupColor, type ChartTheme } from './chart-colors';
-import { formatPercentageBps } from './chart-format';
+import { fixedGroupLabel, formatPercentageBps } from './chart-format';
 import styles from './CategoryLegendList.module.css';
 
 /** 分類清單保留後端順序，使用 percentageBps 原值格式化百分比，不自行重算。 */
@@ -53,19 +53,4 @@ export function CategoryLegendList({
       {items.length === 0 && <li className={styles.empty}>沒有資料</li>}
     </ul>
   );
-}
-
-function fixedGroupLabel(kind: StatisticsGroup['kind']): string {
-  switch (kind) {
-    case 'DIFFERENCE':
-      return '結清差額';
-    case 'BAD_DEBT':
-      return '呆帳';
-    case 'DEBT_FORGIVEN':
-      return '債務免除';
-    case 'UNCATEGORIZED':
-      return '未分類';
-    case 'CATEGORY':
-      return '分類';
-  }
 }

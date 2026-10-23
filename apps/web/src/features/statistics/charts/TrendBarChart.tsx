@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { StatisticsTrendMonth } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import styles from './TrendBarChart.module.css';
@@ -16,13 +17,18 @@ export function TrendBarChart({
   onSelectMonth,
   title = '趨勢長條圖',
 }: TrendBarChartProps) {
+  const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
+  const [focusedMonth, setFocusedMonth] = useState<string | null>(null);
   const maximumAmount = Math.max(0, ...months.flatMap((month) => [month.income, month.expense]));
-  const selected = months.find((month) => month.month === selectedMonth);
+  const selected =
+    months.find((month) => month.month === focusedMonth) ??
+    months.find((month) => month.month === hoveredMonth) ??
+    months.find((month) => month.month === selectedMonth);
 
   return (
     <section className={styles.wrapper} aria-label={title}>
       {selected && (
-        <dl className={styles.summary}>
+        <dl className={styles.summary} aria-live="polite">
           <div>
             <dt>收入</dt>
             <dd>{formatMoney(selected.income)}</dd>
@@ -51,6 +57,10 @@ export function TrendBarChart({
                   className={styles.monthButton}
                   aria-label={ariaLabel}
                   aria-pressed={month.month === selectedMonth}
+                  onPointerEnter={() => setHoveredMonth(month.month)}
+                  onPointerLeave={() => setHoveredMonth(null)}
+                  onFocus={() => setFocusedMonth(month.month)}
+                  onBlur={() => setFocusedMonth(null)}
                   onClick={() => onSelectMonth(month.month)}
                 >
                   <span className={styles.bars} aria-hidden="true">

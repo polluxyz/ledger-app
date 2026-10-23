@@ -1,6 +1,7 @@
 import type { Cents, StatisticsGroup, StatisticsPerson } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import { getChartColorForId, getStatisticsGroupColor, type ChartTheme } from './chart-colors';
+import { fixedGroupLabel } from './chart-format';
 import styles from './DonutChart.module.css';
 
 /** 甜甜圈只把已計算的統計資料轉成弧度，並以無障礙名稱提供每個精確金額。 */
@@ -123,19 +124,4 @@ function polarPoint(degrees: number): { x: string; y: string } {
     x: (CENTER + RADIUS * Math.cos(radians)).toFixed(3),
     y: (CENTER + RADIUS * Math.sin(radians)).toFixed(3),
   };
-}
-
-function fixedGroupLabel(kind: StatisticsGroup['kind']): string {
-  switch (kind) {
-    case 'DIFFERENCE':
-      return '結清差額';
-    case 'BAD_DEBT':
-      return '呆帳';
-    case 'DEBT_FORGIVEN':
-      return '債務免除';
-    case 'UNCATEGORIZED':
-      return '未分類';
-    case 'CATEGORY':
-      return '分類';
-  }
 }

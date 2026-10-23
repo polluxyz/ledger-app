@@ -13,10 +13,15 @@ const HEIGHT = 220;
 const PADDING = 20;
 
 export function TrendLineChart({ months, title = '趨勢折線圖' }: TrendLineChartProps) {
-  const maximumAmount = Math.max(0, ...months.flatMap((month) => [month.income, month.expense]));
+  const values = months.flatMap((month) => [month.income, month.expense]);
+  const minimumAmount = Math.min(0, ...values);
+  const maximumAmount = Math.max(0, ...values);
+  const amountRange = maximumAmount - minimumAmount;
   const availableHeight = HEIGHT - PADDING * 2;
   const yFor = (amount: number) =>
-    maximumAmount > 0 ? PADDING + (1 - amount / maximumAmount) * availableHeight : HEIGHT - PADDING;
+    amountRange > 0
+      ? PADDING + ((maximumAmount - amount) / amountRange) * availableHeight
+      : HEIGHT - PADDING;
   const xFor = (index: number) =>
     months.length <= 1 ? WIDTH / 2 : (index / (months.length - 1)) * WIDTH;
   const incomePoints = months
@@ -25,9 +30,7 @@ export function TrendLineChart({ months, title = '趨勢折線圖' }: TrendLineC
   const expensePoints = months
     .map((month, index) => `${xFor(index)},${yFor(month.expense)}`)
     .join(' ');
-  const showZeroLine = months.some(
-    (month) => month.net <= 0 || month.income < 0 || month.expense < 0,
-  );
+  const showZeroLine = values.some((value) => value <= 0) || months.some((month) => month.net <= 0);
   const chartLabel = [
     title,
     ...months.map(
@@ -54,8 +57,8 @@ export function TrendLineChart({ months, title = '趨勢折線圖' }: TrendLineC
               <line
                 x1="0"
                 x2={WIDTH}
-                y1={HEIGHT - PADDING}
-                y2={HEIGHT - PADDING}
+                y1={yFor(0)}
+                y2={yFor(0)}
                 className={styles.zeroLine}
                 data-zero-line="true"
               />

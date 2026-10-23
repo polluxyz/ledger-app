@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TrendBarChart } from './TrendBarChart';
@@ -29,6 +29,35 @@ describe('TrendBarChart', () => {
     previousMonth.focus();
     await user.keyboard('{Enter}');
     expect(onSelectMonth).toHaveBeenCalledWith('2026-05');
+  });
+
+  it('previews hovered and focused months without selecting them', async () => {
+    const user = userEvent.setup();
+    const onSelectMonth = vi.fn();
+    render(
+      <TrendBarChart
+        selectedMonth="2026-06"
+        onSelectMonth={onSelectMonth}
+        months={[
+          { month: '2026-05', income: 20_000, expense: 8_000, net: 12_000 },
+          { month: '2026-06', income: 135_500, expense: 150_000, net: -14_500 },
+        ]}
+      />,
+    );
+
+    const mayButton = screen.getByRole('button', { name: /2026年5月/ });
+    await user.hover(mayButton);
+    expect(screen.getByText('$200')).toBeInTheDocument();
+    expect(onSelectMonth).not.toHaveBeenCalled();
+
+    await user.unhover(mayButton);
+    expect(screen.getByText('$1,355')).toBeInTheDocument();
+
+    act(() => mayButton.focus());
+    expect(screen.getByText('$200')).toBeInTheDocument();
+    expect(onSelectMonth).not.toHaveBeenCalled();
+    act(() => mayButton.blur());
+    expect(screen.getByText('$1,355')).toBeInTheDocument();
   });
 
   it('renders an empty state for an empty trend', () => {
