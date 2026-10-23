@@ -71,7 +71,7 @@ describe('AppSidebar 的浮動選單', () => {
   });
 
   /**
-   * Slice 4 新增了「分類」與「個人資料」兩個連結。釘住它們的存在與去向：
+   * Slice 4 新增了「分類」與「個人資料」兩個連結，2j 再新增統計入口。釘住它們的存在與去向：
    * 導覽連結的文字同時是 e2e 的選取器，改字就是改契約。
    *
    * 2i 把「個人資料」從導覽移進使用者選單（SC-31.4、SC-32.1），所以這一條的
@@ -83,6 +83,7 @@ describe('AppSidebar 的浮動選單', () => {
 
     // 分類連結刻意不帶 `?ledgerId=`——從導覽進去就是看作用中帳本那一本。
     expect(screen.getByRole('link', { name: '分類' })).toHaveAttribute('href', '/categories');
+    expect(screen.getByRole('link', { name: '統計' })).toHaveAttribute('href', '/stats');
 
     await user.click(screen.getByRole('button', { name: '帳號選單' }));
     expect(screen.getByRole('link', { name: '個人資料' })).toHaveAttribute('href', '/profile');
@@ -161,7 +162,7 @@ describe('AppSidebar 的收合', () => {
 
     await user.click(screen.getByRole('button', { name: '收合側欄' }));
 
-    for (const name of ['首頁', '交易', '對象', '帳本', '帳戶', '分類']) {
+    for (const name of ['首頁', '交易', '統計', '對象', '帳本', '帳戶', '分類']) {
       expect(screen.getByRole('link', { name })).toBeInTheDocument();
     }
 
@@ -182,14 +183,27 @@ describe('AppSidebar 的收合', () => {
     expect(within(sidebar()).queryByRole('link', { name: '個人資料' })).not.toBeInTheDocument();
   });
 
-  it('places the counterparties link after transactions and points it to its page', () => {
+  it('places statistics under transactions and counterparties after both', () => {
     render(<App />);
 
     expect(screen.getByRole('link', { name: '交易' })).toHaveAttribute('href', '/transactions');
+    expect(screen.getByRole('link', { name: '統計' })).toHaveAttribute('href', '/stats');
     expect(screen.getByRole('link', { name: '對象' })).toHaveAttribute('href', '/counterparties');
+    const transactionIconPath = screen
+      .getByRole('link', { name: '交易' })
+      .querySelector('svg path')
+      ?.getAttribute('d');
+    const statisticsIconPath = screen
+      .getByRole('link', { name: '統計' })
+      .querySelector('svg path')
+      ?.getAttribute('d');
+    expect(statisticsIconPath).not.toBe(transactionIconPath);
     const links = within(screen.getByRole('navigation', { name: '主要導覽' })).getAllByRole('link');
-    expect(links.indexOf(screen.getByRole('link', { name: '對象' }))).toBe(
+    expect(links.indexOf(screen.getByRole('link', { name: '統計' }))).toBe(
       links.indexOf(screen.getByRole('link', { name: '交易' })) + 1,
+    );
+    expect(links.indexOf(screen.getByRole('link', { name: '對象' }))).toBe(
+      links.indexOf(screen.getByRole('link', { name: '統計' })) + 1,
     );
   });
 });

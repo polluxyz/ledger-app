@@ -6,6 +6,7 @@ import type {
   AuthUser,
   Category,
   Counterparty,
+  CreateCategoryRequest,
   CreateAccountRequest,
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
@@ -13,6 +14,7 @@ import type {
   CreateSplitRequest,
   CreateTransactionRequest,
   FriendRequest,
+  ForgiveCounterpartyRequest,
   LedgerMemberInfo,
   LedgerPerson,
   LedgerRemovalPreview,
@@ -24,6 +26,7 @@ import type {
   Split,
   Transaction,
   UpdateCounterpartyRequest,
+  UpdateUserRequest,
 } from '@ledger/shared';
 import { API_BASE_URL } from './env';
 
@@ -91,6 +94,19 @@ export async function registerUser(
   );
 
   return { id: registered.id, email, name, token: loggedIn.accessToken };
+}
+
+/** 改測試帳號名稱，供需要驗證成員長名稱的版面測試使用。 */
+export async function updateUserName(
+  request: APIRequestContext,
+  token: string,
+  name: string,
+): Promise<AuthUser> {
+  const response = await request.patch(`${API_BASE_URL}/users/me`, {
+    headers: authHeaders(token),
+    data: { name } satisfies UpdateUserRequest,
+  });
+  return readJson<AuthUser>(response, `更新使用者名稱為「${name}」`);
 }
 
 /** 列出使用者有權存取的帳本。註冊時會自動建立一本個人帳本，所以永遠至少有一本。 */
@@ -177,6 +193,20 @@ export async function listCategories(
     headers: authHeaders(token),
   });
   return readJson<Category[]>(response, '列出分類');
+}
+
+/** 建立統計測試需要的分類；測試資料仍經過正式分類 API 驗證。 */
+export async function createCategory(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+  body: CreateCategoryRequest,
+): Promise<Category> {
+  const response = await request.post(`${API_BASE_URL}/ledgers/${ledgerId}/categories`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<Category>(response, `建立分類「${body.name}」`);
 }
 
 /** 列出使用者的帳戶。註冊時會自動建立一個「現金」帳戶。 */
@@ -314,6 +344,20 @@ export async function createDebtEntry(
     data: { ...body, record } satisfies CreateDebtEntryRequest,
   });
   return readJson<CreateDebtEntryResponse>(response, '記一筆往來');
+}
+
+/** 免除往來餘額，透過正式 API 建立統計用的呆帳資料。 */
+export async function forgiveCounterparty(
+  request: APIRequestContext,
+  token: string,
+  counterpartyId: string,
+  body: ForgiveCounterpartyRequest,
+): Promise<CreateDebtEntryResponse> {
+  const response = await request.post(`${API_BASE_URL}/counterparties/${counterpartyId}/forgive`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<CreateDebtEntryResponse>(response, '免除往來餘額');
 }
 
 /** 改對象的名字（暱稱）。 */

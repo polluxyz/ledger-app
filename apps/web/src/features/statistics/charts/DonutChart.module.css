@@ -1,0 +1,66 @@
+.wrapper {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.chart {
+  position: relative;
+  display: grid;
+  width: min(220px, 100%);
+  aspect-ratio: 1;
+  place-items: center;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.track {
+  fill: none;
+  stroke: var(--color-fill);
+}
+
+.slice {
+  stroke-linecap: butt;
+}
+
+.selectable {
+  cursor: pointer;
+}
+
+.selectable:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.center {
+  position: absolute;
+  display: flex;
+  width: 62%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  text-align: center;
+}
+
+.direction {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.total {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: clamp(var(--text-base), 4vw, var(--text-lg));
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}

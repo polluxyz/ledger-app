@@ -26,7 +26,7 @@
 | 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 未開始 |
 | 五   | 語音（STT）+ 本地模型 provider           | 未開始 |
 
-階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）與 **2i 版面第二輪**；兩者都已完成。
+階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）與 **2i 版面第二輪**；兩者都已完成。**2j 統計**原屬階段二，在階段三之後補做，已完成。
 
 不要提前實作後續階段的功能，也不要預先建立未來階段才需要的檔案。
 
@@ -61,6 +61,7 @@
 | [`phase-3j-ledger-delete-archive.md`](specs/phase-3j-ledger-delete-archive.md)     | 階段三：3j 帳本刪除、封存、取消封存           | 已完成    |
 | [`phase-3k-leave-and-merge.md`](specs/phase-3k-leave-and-merge.md)                 | 階段三：3k 退出共享帳本並合併到別的帳本       | 已完成    |
 | [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易 | 已完成    |
+| [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢           | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                              | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
