@@ -2,7 +2,7 @@
 
 plan：`tasks/phase-4a-plan.md`；spec：`docs/specs/phase-4a-ai-text.md`。
 
-- [ ] **T0 契約與隔離測試**（協調者）：plan §1.1。
+- [x] **T0 契約與隔離測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`isDraftComplete` 單元測試綠（含名稱 null 不擋、轉帳同帳戶不完整）；`ai-parse-isolation.e2e-spec.ts` 紅燈，404／403／409 都有正向對照，SC-P7 斷言帳本等於目前帳本；API／Web typecheck 通過。
 - [ ] **T1 `AiModule` 與解析**（依賴 T0；`ai4a-api`，`backend`）：plan §1.2。
       驗收：plan §1.2「測試」的單元與 API e2e 全部通過；隔離測試轉綠；既有 API e2e 全綠（`LedgerAccessGuard` 行為不變）；同一人換 token／IP／帳本共用 10 次、兩人同 IP 各 10 次。

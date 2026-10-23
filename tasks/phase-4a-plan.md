@@ -278,4 +278,9 @@ spec：`docs/specs/phase-4a-ai-text.md`（決策 237～253、W208～W214、SC-P1
 
 ## 7. 實作紀錄
 
-（實作時填）
+### T0（commit `34157bb`）
+
+- `test/e2e-utils.ts` 的 `createE2EApp` 多一個選填參數 `configure(builder)`，預設不改。讓 e2e 能用 `overrideProvider(LLM_PROVIDER)` 注入 stub。既有呼叫不受影響。
+- 隔離測試比 §1.1 多驗決策 253 的清單內容：`user` 等於去掉前後空白的句子；system 含可寫入的帳本名，不含檢視者、封存、退出的帳本名，不含別人的帳本與帳戶名，不含句子本身，不含任何 UUID。
+- 紅燈結果：11 條中 7 條失敗（路由還不存在）。4 條「404」案例暫時通過，因為路由不存在也回 404。正向對照（我的帳本 200、stub 被呼叫 2 次）會在 T1 前保持紅燈，所以 T1 完成後這 4 條才有意義。
+- 需要真代號的情境（例如代號對到型別不符的分類）stub 寫不出來，交給 T1 的 `ai-parse.e2e-spec.ts`。
