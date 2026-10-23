@@ -23,5 +23,7 @@ plan：`tasks/phase-2j-plan.md`；spec：`docs/specs/phase-2j-stats.md`。
       驗收：`stats.spec.ts` 涵蓋 SC-R15、R20、R21（390px 淺色與深色沒有橫向捲動、觸控區至少 44px）；兩套 Web e2e 全綠。
 - [x] **W5 圖表畫面修正**（D1 截圖對照時追加；依賴 W4；`2j-chart-fixes`，Codex）：plan §6 D1 截圖紀錄。
       驗收：折線圖的線 computed `fill` 是 `none`，`stats.spec.ts` 有斷言；390px 月份標籤不在字中間斷開；成員清單有色塊且顏色等於圖裡同一位成員；SC-R21 仍全綠；Web 檢查與完整 Web e2e 全綠。
+- [ ] **W6 首頁金額與趨勢表格換行**（D1 截圖對照時追加；依賴 W5；`2j-home-fixes`，Codex）：plan §6 D1 第二次截圖紀錄。
+      驗收：390px 與 1280px 下首頁 3 張摘要卡的長金額（`-$12,345,677`）只有 1 行、不截斷、整頁沒有橫向捲動，`stats.spec.ts` 有斷言；趨勢表格放得下時月份一行、放不下只在年與月之間換行；Web 檢查與完整 Web e2e 全綠。
 - [ ] **D1 整體驗收、PR、部署**（協調者）：plan §4。
       驗收：隔離測試紅轉綠；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；SC-R13 三個端點 p95 < 500ms，記進實作紀錄；390px 與桌面、淺色與深色截圖逐項對過 W220～W225；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；dev 照 plan §4 點過一次；worker 都 `worker-release`，worktree、子分支、worker 測試資料庫清掉。
