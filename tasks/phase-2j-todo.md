@@ -14,7 +14,7 @@ plan：`tasks/phase-2j-plan.md`；spec：`docs/specs/phase-2j-stats.md`。
       驗收：SC-R1～R10、R12、R23、R27、R28 的 API e2e 通過，R27、R28 打真的端點；決策 262 的正負不變量在每份種子上檢查；DTO 的 400（無效 enum、`months` 是 0／25／1.5／非數字、日期格式錯、日期不存在）都有 e2e；成員資格檢查與三組加總在同一個 `RepeatableRead` 交易裡；隔離測試 SC-R7、SC-R11（§4.1、§4.2）轉綠；既有 API e2e 全綠。
 - [x] **S2 資產趨勢**（依賴 S1a；`2j-balance`，`backend`）：plan §1.4。
       驗收：餘額只透過 `calculateBalances` 算；`calculateBalances` 每一步都檢查安全整數，另有中間值溢位的單元測試；SC-R16、R17（退出用真的 API）、R29 的 API e2e 通過；隔離測試 SC-R11（§4.3）轉綠；既有帳戶 e2e 全綠。
-- [ ] **W2 統計頁**（依賴 W1、W3；`2j-web-page`，Codex）：plan §1.8。
+- [x] **W2 統計頁**（依賴 W1、W3；`2j-web-page`，Codex）：plan §1.8。
       驗收：`stats-url.ts` 的單元測試涵蓋優先順序、無效值、決策 265 的正規化；元件測試涵蓋 W202～W205、W222、W225、SC-R19（切圖型不重打 API）、R20、R22 的頁面部分（單一端點失敗只影響那一區）、R24～R26、決策 236；交易頁讀網址篩選的測試涵蓋再次導入、返回鍵、無效值、手動改篩選後不被覆寫；既有交易頁測試全綠；Web 檢查全綠。
 - [x] **S3 效能腳本**（依賴 S1b、S2；`2j-perf`，`default`）：plan §1.5。
       驗收：`test:perf` 能跑，輸出三個端點的 p95（排序後索引 94）與 commit、Node、PostgreSQL、機器資訊；`test:e2e -- --listTests` 的清單裡沒有這個檔；資料庫名稱不以 `_test` 結尾時直接失敗、不灌資料。
