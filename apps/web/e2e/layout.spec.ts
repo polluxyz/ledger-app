@@ -51,12 +51,14 @@ async function seedTransactions(request: APIRequestContext, token: string): Prom
 
 /** 完整落在視窗內的交易列數。只露出一半的不算——使用者看不到金額。 */
 async function fullyVisibleRows(page: Page): Promise<number> {
-  return page.evaluate(
-    () =>
-      [...document.querySelectorAll('main li')].filter(
-        (item) => item.getBoundingClientRect().bottom <= window.innerHeight,
-      ).length,
-  );
+  return page
+    .getByRole('main')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('button', { name: /^更多交易動作：/ }) })
+    .evaluateAll(
+      (items) =>
+        items.filter((item) => item.getBoundingClientRect().bottom <= window.innerHeight).length,
+    );
 }
 
 /**

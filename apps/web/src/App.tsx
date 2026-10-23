@@ -4,6 +4,7 @@ import { AppSidebar } from './app/AppSidebar';
 import { AppTopBar } from './app/AppTopBar';
 import { PageErrorBoundary } from './app/PageErrorBoundary';
 import { PageToolbar } from './app/PageToolbar';
+import { PageToolbarSlotProvider } from './app/PageToolbarSlotProvider';
 import { AppProviders } from './app/providers';
 import { RightPanel } from './app/RightPanel';
 import { RightPanelProvider } from './app/RightPanelProvider';
@@ -20,8 +21,8 @@ import styles from './App.module.css';
  * 版面是三欄（spec 2i §4.2）：側欄、中間內容、右側欄。右側欄的**位置**在這裡，
  * **內容**由記帳頁透過 `RightPanelContent` 放進來；管理頁不放，第三欄就是 0 寬。
  *
- * 中間欄最上方是橫條（SC-38）。2026-10-07 起它空著（保留給之後的 AI 功能），
- * 帳本切換與各頁的主要按鈕由頁面直接放進自己的內容裡。
+ * 中間欄最上方是橫條（SC-38）：交易頁把 AI 輸入列放進去，帳本切換與其他頁面
+ * 的主要按鈕仍由頁面放在自己的內容裡。
  *
  * 頁面內容包在 `PageErrorBoundary` 裡：某一頁渲染出錯時只換掉中間欄，側欄還能切到
  * 別頁，切頁就恢復。
@@ -37,21 +38,23 @@ export default function App() {
     <BrowserRouter>
       <AppProviders>
         <RightPanelProvider>
-          <div className={styles.shell}>
-            <AppTopBar menuTrigger={menu.triggerProps} />
-            <div className={styles.body}>
-              <AppSidebar panel={menu.panelProps} isOpen={menu.isOpen} onNavigate={menu.close} />
-              <main className={styles.main}>
-                <PageToolbar />
-                <div className={styles.content}>
-                  <PageErrorBoundary>
-                    <AppRoutes />
-                  </PageErrorBoundary>
-                </div>
-              </main>
-              <RightPanel />
+          <PageToolbarSlotProvider>
+            <div className={styles.shell}>
+              <AppTopBar menuTrigger={menu.triggerProps} />
+              <div className={styles.body}>
+                <AppSidebar panel={menu.panelProps} isOpen={menu.isOpen} onNavigate={menu.close} />
+                <main className={styles.main}>
+                  <PageToolbar />
+                  <div className={styles.content}>
+                    <PageErrorBoundary>
+                      <AppRoutes />
+                    </PageErrorBoundary>
+                  </div>
+                </main>
+                <RightPanel />
+              </div>
             </div>
-          </div>
+          </PageToolbarSlotProvider>
         </RightPanelProvider>
       </AppProviders>
     </BrowserRouter>
