@@ -2,13 +2,15 @@
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
-## 現況（2026-10-21）
+## 現況（2026-10-23）
 
-- 分支 `feature/phase-2j-stats`，worktree `stats-2j`，測試資料庫 `ledger_stats_test`。
-- spec `docs/specs/phase-2j-stats.md` 只在這條分支上，還沒進 main。狀態：核可中，§10 的 10 項要跟開發者確認。
-- 預覽頁（不進版控）：`docs/artifacts/step-2j-stats-preview.html`（v2，首頁加資產趨勢圖）。
-- 分期與口徑的研究：advisor（Codex gpt-6-astra high，開發者指定）的報告結論已寫進 spec。
+- worktree `stats-2j`，測試資料庫 `ledger_stats_test`。
+- spec `docs/specs/phase-2j-stats.md`、plan `tasks/phase-2j-plan.md`、todo `tasks/phase-2j-todo.md` 都已核可，並以 docs PR 合進 `main`。plan 經 advisor 審過一輪並依意見修訂（plan §6）。
+- 寫 spec 時協調者自己補的 3 個細節，已在送審時向開發者說明並一起核可：`people` 不列收入與支出都是 0 的人；同一個回應讀同一份資料快照；新增成功條件 SC-R27～R29。
+- 實作在整合分支 `feature/phase-2j-stats-impl`（從 docs PR 合併後的 `main` 開）。進度看 todo 的勾選與 plan §6 實作紀錄。
+- 產出（不進版控）：`docs/artifacts/stats-ia/`（版面比較頁、圖型切換原型 `claude-4.html`、`advisor/round1.md`、`round2.md`）。
+- Orca run `run_404efb59895f`。
 
 ## 下一步
 
-跟開發者確認 spec §10（API、歸屬規則、固定分組、明細、期間上限、效能量法、資產定義、初始餘額、資產 API）→ 寫 `tasks/phase-2j-plan.md`、`-todo.md` → 核可 → docs PR → 實作。
+照 todo 實作：D0（協調者）→ 第 1 波 S1a、W1、W3 → 第 2 波 S1b、S2、W2 → 第 3 波 S3、W4 → D1。後端派 `backend`；網頁只派 Codex。
