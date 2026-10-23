@@ -177,6 +177,21 @@ describe('PendingCard', () => {
       if (url.includes('/transactions')) {
         return response({ items: [], page: 1, limit: 5, total: 0 });
       }
+      if (url.includes('/ledgers/ledger-1/statistics')) {
+        return response({
+          ledgerId: 'ledger-1',
+          from: '2026-10-01',
+          to: '2026-10-31',
+          ledger: { expense: 0, income: 0, net: 0 },
+          mine: { expense: 0, income: 0, net: 0 },
+          expenseGroups: [],
+          incomeGroups: [],
+          people: null,
+        });
+      }
+      if (url.includes('/accounts/balance-trend')) {
+        return response({ months: [{ month: '2026-10', total: 50000 }] });
+      }
       if (url.includes('/accounts')) {
         return response([account, temporaryAccount]);
       }
@@ -369,7 +384,7 @@ describe('PendingCard', () => {
   it('does not render when there are no pending items', async () => {
     await renderHome();
 
-    await screen.findAllByText('即將推出', undefined, WAIT);
+    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument();
     }, WAIT);

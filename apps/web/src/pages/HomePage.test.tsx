@@ -1,7 +1,29 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GetLedgerStatisticsQuery, LedgerStatistics } from '@ledger/shared';
 import App from '../App';
+
+const statisticsApi = vi.hoisted(() => ({
+  getLedgerStatistics: vi.fn<(path: string) => Promise<unknown>>(),
+  getBalanceTrend: vi.fn<(path: string) => Promise<unknown>>(),
+}));
+
+vi.mock('../lib/api-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api-client')>();
+  return {
+    ...actual,
+    apiRequest: <T,>(path: string, options?: Parameters<typeof actual.apiRequest>[1]) => {
+      if (path.includes('/statistics?')) {
+        return statisticsApi.getLedgerStatistics(path) as Promise<T>;
+      }
+      if (path.startsWith('/accounts/balance-trend?')) {
+        return statisticsApi.getBalanceTrend(path) as Promise<T>;
+      }
+      return actual.apiRequest<T>(path, options);
+    },
+  };
+});
 
 /**
  * 首頁 dashboard（spec 2i SC-34.1、假設 8、9、13）。
@@ -36,6 +58,26 @@ describe('Home dashboard', () => {
   let availableLedgers = [ledger];
   let markedTransactions: Record<string, unknown>[] = [];
   let markedTotal = 0;
+  let statisticsFailure = false;
+  let balanceTrendFailure = false;
+
+  function ledgerStatistics(ledgerId: string, query: GetLedgerStatisticsQuery): LedgerStatistics {
+    const shared = ledgerId === otherLedger.id;
+    return {
+      ledgerId,
+      from: query.from,
+      to: query.to,
+      ledger: shared
+        ? { expense: 120000, income: 20000, net: -100000 }
+        : { expense: 70300, income: 5000000, net: 4929700 },
+      mine: shared
+        ? { expense: 45000, income: 20000, net: -25000 }
+        : { expense: 70300, income: 5000000, net: 4929700 },
+      expenseGroups: [],
+      incomeGroups: [],
+      people: shared ? [] : null,
+    };
+  }
 
   /** 七筆交易：後端若多給了，卡片仍然只顯示 5 筆。 */
   const transactions = Array.from({ length: 7 }, (_, index) => ({
@@ -67,6 +109,32 @@ describe('Home dashboard', () => {
     availableLedgers = [ledger];
     markedTransactions = [];
     markedTotal = 0;
+    statisticsFailure = false;
+    balanceTrendFailure = false;
+    statisticsApi.getLedgerStatistics.mockReset();
+    statisticsApi.getBalanceTrend.mockReset();
+    statisticsApi.getLedgerStatistics.mockImplementation((path) => {
+      if (statisticsFailure) return Promise.reject(new Error('statistics failed'));
+      const url = new URL(path, 'http://localhost');
+      const ledgerId = url.pathname.split('/')[2] ?? ledger.id;
+      return Promise.resolve(
+        ledgerStatistics(ledgerId, {
+          from: url.searchParams.get('from') ?? '',
+          to: url.searchParams.get('to') ?? '',
+          perspective: (url.searchParams.get('perspective') ?? undefined) as
+            GetLedgerStatisticsQuery['perspective'] | undefined,
+        }),
+      );
+    });
+    statisticsApi.getBalanceTrend.mockImplementation(() => {
+      if (balanceTrendFailure) return Promise.reject(new Error('balance trend failed'));
+      return Promise.resolve({
+        months: Array.from({ length: 12 }, (_, index) => ({
+          month: `2025-${String(index + 1).padStart(2, '0')}`,
+          total: 1000000 + index * 10000,
+        })),
+      });
+    });
 
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const json = (body: unknown) =>
@@ -128,6 +196,7 @@ describe('Home dashboard', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -160,8 +229,10 @@ describe('Home dashboard', () => {
 
     render(<App />);
 
-    // 統計卡是空狀態示意，固定 0，不做任何計算。
+    // 訪客只看示意數字，未登入不呼叫統計或資產端點。
     expect(screen.getAllByText('$0')).toHaveLength(3);
+    expect(statisticsApi.getLedgerStatistics).not.toHaveBeenCalled();
+    expect(statisticsApi.getBalanceTrend).not.toHaveBeenCalled();
     expect(screen.getByText(/登入後即可開始記帳/)).toBeInTheDocument();
     // dashboard 的東西一樣都不該出現。
     expect(screen.queryByRole('region', { name: '最近交易' })).not.toBeInTheDocument();
@@ -173,19 +244,105 @@ describe('Home dashboard', () => {
 
   // ── 登入後的 dashboard ───────────────────────────────────────────────────
 
-  it('shows the three placeholder stat cards', async () => {
+  it('shows monthly totals returned by the statistics endpoint', async () => {
     signIn();
 
     render(<App />);
 
-    // 正確的數字要由後端彙總端點提供；拿當頁交易自己加總只會算出錯的值。
-    expect(await screen.findAllByText('即將推出', undefined, WAIT)).toHaveLength(3);
-    for (const label of ['本月支出', '本月收入', '結餘']) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    await waitFor(() => expect(statisticsApi.getLedgerStatistics).toHaveBeenCalled(), WAIT);
+    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    expect(expense).toHaveTextContent('$703');
+    expect(screen.getByRole('link', { name: /本月收入/ })).toHaveTextContent('$50,000');
+    expect(screen.getByRole('link', { name: /結餘/ })).toHaveTextContent('$49,297');
+    expect(screen.queryByText('即將推出')).not.toBeInTheDocument();
   });
 
-  it('places the pending card before the stat cards when items are waiting', async () => {
+  it('shows ledger totals and mine totals only for a shared ledger', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    await user.click(within(switcher).getByRole('button'));
+    await user.click(within(switcher).getByRole('option', { name: /共享帳本/ }));
+
+    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    const income = screen.getByRole('link', { name: /本月收入/ });
+    const net = screen.getByRole('link', { name: /結餘/ });
+    expect(expense).toHaveTextContent('$1,200');
+    expect(expense).toHaveTextContent('我 $450');
+    expect(income).toHaveTextContent('$200');
+    expect(income).toHaveTextContent('我 $200');
+    expect(net).toHaveTextContent('-$1,000');
+    expect(net).toHaveTextContent('我 -$250');
+    expect(screen.queryByText('我 $703')).not.toBeInTheDocument();
+  });
+
+  it('uses the Taiwan calendar month for the statistics request and card link', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T16:30:00.000Z'));
+    signIn();
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    expect(expense).toHaveAttribute('href', '/stats?tab=cat&ledger=ledger-1&month=2026-11');
+    const statisticsRequest = statisticsApi.getLedgerStatistics.mock.calls
+      .map(([path]) => path)
+      .find((path) => path.includes('/ledgers/ledger-1/statistics'));
+    expect(statisticsRequest).toContain('from=2026-11-01');
+    expect(statisticsRequest).toContain('to=2026-11-30');
+  });
+
+  it('shows a statistics error without zero values while keeping the asset chart available', async () => {
+    signIn();
+    statisticsFailure = true;
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('統計暫時無法載入');
+    expect(screen.getByRole('heading', { name: '資產' })).toBeInTheDocument();
+    expect(screen.queryByText('$0')).not.toBeInTheDocument();
+  });
+
+  it('limits an asset error to the chart area', async () => {
+    signIn();
+    balanceTrendFailure = true;
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const chart = await screen.findByRole('region', { name: '資產' }, WAIT);
+    expect(await within(chart).findByText('資產暫時無法載入', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
+  });
+
+  it('keeps the asset request stable when switching ledgers and fetches new statistics', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    await screen.findByRole('group', { name: /每月資產/ }, WAIT);
+    const assetRequestCount = statisticsApi.getBalanceTrend.mock.calls.length;
+    expect(assetRequestCount).toBe(1);
+
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    await user.click(within(switcher).getByRole('button'));
+    await user.click(within(switcher).getByRole('option', { name: /共享帳本/ }));
+
+    expect(await screen.findByRole('link', { name: /本月支出.*1,200/ }, WAIT)).toBeInTheDocument();
+    expect(statisticsApi.getLedgerStatistics).toHaveBeenCalledWith(
+      expect.stringContaining('/ledgers/ledger-2/statistics'),
+    );
+    expect(statisticsApi.getBalanceTrend).toHaveBeenCalledTimes(assetRequestCount);
+  });
+
+  it('shows the asset chart, stat cards, then the pending card', async () => {
     signIn();
     incomingLinkInvites = [
       {
@@ -202,8 +359,12 @@ describe('Home dashboard', () => {
 
     await screen.findByRole('button', { name: '新增交易' }, WAIT);
     const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
-    const firstStat = (await screen.findAllByText('即將推出', undefined, WAIT))[0]!;
-    expect(card.compareDocumentPosition(firstStat) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    const chartHeading = await screen.findByRole('heading', { name: '資產' }, WAIT);
+    const firstStat = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    expect(
+      chartHeading.compareDocumentPosition(firstStat) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    expect(firstStat.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 
   it('does not place an empty pending card on the home page', async () => {
@@ -212,7 +373,7 @@ describe('Home dashboard', () => {
     render(<App />);
 
     await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    await screen.findAllByText('即將推出', undefined, WAIT);
+    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
     await waitFor(
       () => expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument(),
       WAIT,
