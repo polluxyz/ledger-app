@@ -183,13 +183,10 @@ export default function StatsPage() {
   const setSwitcherLedger = useCallback(
     (ledgerId: string) => {
       setActiveLedgerId(ledgerId);
-      void navigate(
-        {
-          pathname: location.pathname,
-          search: serializeStatsUrl({ ...state, ledgerId }),
-        },
-        { replace: true },
-      );
+      void navigate({
+        pathname: location.pathname,
+        search: serializeStatsUrl({ ...state, ledgerId }),
+      });
     },
     [location.pathname, navigate, setActiveLedgerId, state],
   );
@@ -294,15 +291,19 @@ export default function StatsPage() {
             <dl>
               <div>
                 <dt>收入</dt>
-                <dd>{formatMoney(totals.income)}</dd>
+                <dd aria-label={`收入 ${formatMoney(totals.income)}`}>
+                  {formatMoney(totals.income)}
+                </dd>
               </div>
               <div>
                 <dt>支出</dt>
-                <dd>{formatMoney(totals.expense)}</dd>
+                <dd aria-label={`支出 ${formatMoney(totals.expense)}`}>
+                  {formatMoney(totals.expense)}
+                </dd>
               </div>
               <div>
                 <dt>結餘</dt>
-                <dd>{formatMoney(totals.net)}</dd>
+                <dd aria-label={`結餘 ${formatMoney(totals.net)}`}>{formatMoney(totals.net)}</dd>
               </div>
             </dl>
           )}
@@ -641,7 +642,10 @@ function MemberTotals({ people }: { people: readonly StatisticsPerson[] }) {
   return (
     <ul className={styles.memberTotals} aria-label="成員收支">
       {people.map((person) => (
-        <li key={person.personId}>
+        <li
+          key={person.personId}
+          aria-label={`${person.name}，支出 ${formatMoney(person.expense)}，收入 ${formatMoney(person.income)}`}
+        >
           <strong>{person.name}</strong>
           <span>支出 {formatMoney(person.expense)}</span>
           <span>收入 {formatMoney(person.income)}</span>

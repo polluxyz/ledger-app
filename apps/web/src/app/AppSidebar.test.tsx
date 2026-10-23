@@ -189,6 +189,15 @@ describe('AppSidebar 的收合', () => {
     expect(screen.getByRole('link', { name: '交易' })).toHaveAttribute('href', '/transactions');
     expect(screen.getByRole('link', { name: '統計' })).toHaveAttribute('href', '/stats');
     expect(screen.getByRole('link', { name: '對象' })).toHaveAttribute('href', '/counterparties');
+    const transactionIconPath = screen
+      .getByRole('link', { name: '交易' })
+      .querySelector('svg path')
+      ?.getAttribute('d');
+    const statisticsIconPath = screen
+      .getByRole('link', { name: '統計' })
+      .querySelector('svg path')
+      ?.getAttribute('d');
+    expect(statisticsIconPath).not.toBe(transactionIconPath);
     const links = within(screen.getByRole('navigation', { name: '主要導覽' })).getAllByRole('link');
     expect(links.indexOf(screen.getByRole('link', { name: '統計' }))).toBe(
       links.indexOf(screen.getByRole('link', { name: '交易' })) + 1,

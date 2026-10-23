@@ -208,7 +208,7 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
           </NavLink>
           <NavLink to="/stats" className={navLinkClass} onClick={handleNavigate}>
             <span className={styles.rowIcon}>
-              <Icon name="receipt" />
+              <Icon name="chart" />
             </span>
             <span className={styles.collapsibleLabel}>統計</span>
           </NavLink>

@@ -187,10 +187,15 @@ describe('StatsPage', () => {
     expect(
       within(screen.getByRole('group', { name: '作用中帳本' })).getByRole('button'),
     ).toHaveTextContent('家用');
-    expect(summary.getByText('$1,200')).toBeInTheDocument();
-    expect(summary.getByText('-$1,000')).toBeInTheDocument();
-    expect(within(categoryList).getByRole('button', { name: /晚餐/ })).toBeInTheDocument();
-    expect(within(categoryList).getByRole('button', { name: /日用品/ })).toBeInTheDocument();
+    expect(summary.getByRole('definition', { name: '收入 $200' })).toBeInTheDocument();
+    expect(summary.getByRole('definition', { name: '支出 $1,200' })).toBeInTheDocument();
+    expect(summary.getByRole('definition', { name: '結餘 -$1,000' })).toBeInTheDocument();
+    expect(
+      within(categoryList).getByRole('button', { name: '晚餐，$900，75%' }),
+    ).toBeInTheDocument();
+    expect(
+      within(categoryList).getByRole('button', { name: '日用品，$300，25%' }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
         '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut',
@@ -220,6 +225,89 @@ describe('StatsPage', () => {
       ),
     );
     expect(await screen.findByRole('heading', { name: '統計' })).toBeInTheDocument();
+  });
+
+  it('pushes ledger changes and restores the previous ledger and summary on browser back', async () => {
+    const user = userEvent.setup();
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER&chart=donut';
+    const current = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut';
+    renderPage(current, {
+      initialLedgerId: familyLedger.id,
+      initialEntries: [previous, current],
+      initialIndex: 1,
+    });
+    await screen.findByRole('list', { name: '支出分類清單' });
+
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    await user.click(within(switcher).getByRole('button'));
+    await user.click(screen.getByRole('option', { name: /日常/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER&chart=donut',
+      ),
+    );
+    expect(screen.getByRole('region', { name: '收支摘要' })).toHaveTextContent('-$703');
+
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(current));
+    expect(await screen.findByRole('button', { name: /家用/ })).toBeInTheDocument();
+    const summary = within(screen.getByRole('region', { name: '收支摘要' }));
+    expect(summary.getByRole('definition', { name: '支出 $1,200' })).toBeInTheDocument();
+    expect(summary.getByRole('definition', { name: '結餘 -$1,000' })).toBeInTheDocument();
+  });
+
+  it('supports tab, chart, month, and category controls by keyboard and exposes precise amounts', async () => {
+    const user = userEvent.setup();
+    const initial = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=bar';
+    renderPage(initial, { initialLedgerId: familyLedger.id });
+
+    const firstCategoryList = await screen.findByRole('list', { name: '支出分類清單' });
+    const summary = within(screen.getByRole('region', { name: '收支摘要' }));
+    expect(summary.getByRole('definition', { name: '收入 $200' })).toBeInTheDocument();
+    expect(summary.getByRole('definition', { name: '支出 $1,200' })).toBeInTheDocument();
+    expect(
+      within(firstCategoryList).getByRole('button', { name: '晚餐，$900，75%' }),
+    ).toBeInTheDocument();
+
+    const trendTab = screen.getByRole('button', { name: '趨勢' });
+    await focusWithTab(user, trendTab);
+    await user.keyboard('{Enter}');
+    await screen.findByRole('list', { name: '每月收支' });
+
+    const lineChartButton = within(screen.getByRole('group', { name: '趨勢圖型' })).getByRole(
+      'button',
+      { name: '折線' },
+    );
+    await focusWithTab(user, lineChartButton);
+    await user.keyboard('{Enter}');
+    await screen.findByRole('region', { name: '趨勢折線圖' });
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('chart=line'));
+
+    const septemberButton = screen.getByRole('button', {
+      name: /2026年9月：收入/,
+    });
+    await focusWithTab(user, septemberButton);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('month=2026-09'));
+
+    const backButton = screen.getByRole('button', { name: '返回' });
+    await focusWithTab(user, backButton);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('month=2026-10'));
+    await focusWithTab(user, backButton);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('tab=cat'));
+
+    const categoryList = await screen.findByRole('list', { name: '支出分類清單' });
+    const dinnerButton = within(categoryList).getByRole('button', {
+      name: '晚餐，$900，75%',
+    });
+    await focusWithTab(user, dinnerButton);
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('交易頁')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/transactions?ledger=family&type=EXPENSE&categoryId=dinner&from=2026-10-01&to=2026-10-31',
+    );
   });
 
   it('keeps daily fixed groups and categories in backend order', async () => {
@@ -407,6 +495,11 @@ describe('StatsPage', () => {
 
     const memberList = await screen.findByRole('list', { name: '成員收支' });
     expect(within(memberList).getByText('我')).toBeInTheDocument();
+    expect(
+      within(memberList).getByRole('listitem', {
+        name: '我，支出 $450，收入 $200',
+      }),
+    ).toBeInTheDocument();
     expect(within(memberList).getByText('支出 $450')).toBeInTheDocument();
     expect(within(memberList).getByText('收入 $200')).toBeInTheDocument();
     expect(within(memberList).getByText('支出 $750')).toBeInTheDocument();
@@ -477,4 +570,17 @@ function LocationProbe() {
       </button>
     </div>
   );
+}
+
+async function focusWithTab(user: { tab: () => Promise<void> }, target: HTMLElement) {
+  if (document.activeElement === target) {
+    return;
+  }
+  for (let index = 0; index < 100; index += 1) {
+    await user.tab();
+    if (document.activeElement === target) {
+      return;
+    }
+  }
+  throw new Error('Tab sequence did not reach the requested control.');
 }

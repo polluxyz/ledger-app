@@ -399,6 +399,63 @@ describe('Transactions page', () => {
     ).toBe(true);
   });
 
+  it('reapplies the earlier imported filters and page one when browser back returns to URL A', async () => {
+    localStorage.setItem('ledger.activeLedgerId', ledger.id);
+    const originalFetch = fetchMock.getMockImplementation() as unknown as
+      ((url: string, init?: RequestInit) => Promise<Response>) | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const transactionUrl = String(url);
+      if (transactionUrl.includes('/transactions?')) {
+        const pageNumber = Number(new URL(transactionUrl).searchParams.get('page') ?? 1);
+        return Promise.resolve(
+          new Response(JSON.stringify({ items: [lunch], page: pageNumber, limit: 20, total: 42 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return originalFetch?.(url, init) ?? Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    window.history.pushState(
+      { usr: null, key: 'stats-import-a', idx: 0 },
+      '',
+      '/transactions?ledger=ledger-1&type=EXPENSE&categoryId=cat-1&from=2026-10-05&to=2026-10-20',
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    let filters = await screen.findByRole('region', { name: '篩選交易' }, WAIT);
+    expect(within(filters).getByLabelText('起日')).toHaveValue('2026-10-05');
+    expect(within(filters).getByLabelText('迄日')).toHaveValue('2026-10-20');
+
+    window.history.pushState(
+      { usr: null, key: 'stats-import-b', idx: 1 },
+      '',
+      '/transactions?ledger=ledger-1&type=EXPENSE&categoryId=cat-1&from=2026-11-01&to=2026-11-10',
+    );
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => {
+      filters = screen.getByRole('region', { name: '篩選交易' });
+      expect(within(filters).getByLabelText('起日')).toHaveValue('2026-11-01');
+      expect(within(filters).getByLabelText('迄日')).toHaveValue('2026-11-10');
+      expect(screen.getByRole('navigation', { name: '分頁' })).toHaveTextContent('第 1 / 3 頁');
+    });
+
+    await user.click(screen.getByRole('button', { name: '下一頁' }));
+    await waitFor(() =>
+      expect(screen.getByRole('navigation', { name: '分頁' })).toHaveTextContent('第 2 / 3 頁'),
+    );
+
+    window.history.back();
+    await waitFor(() => {
+      filters = screen.getByRole('region', { name: '篩選交易' });
+      expect(within(filters).getByLabelText('起日')).toHaveValue('2026-10-05');
+      expect(within(filters).getByLabelText('迄日')).toHaveValue('2026-10-20');
+      expect(screen.getByRole('navigation', { name: '分頁' })).toHaveTextContent('第 1 / 3 頁');
+    });
+  });
+
   it('ignores invalid dates and categories independently and does not switch to an unknown ledger', async () => {
     localStorage.setItem('ledger.activeLedgerId', ledger.id);
     window.history.pushState(
