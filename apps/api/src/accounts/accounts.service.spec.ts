@@ -23,6 +23,7 @@ describe('AccountsService', () => {
       delete: jest.Mock;
     };
     transaction: { groupBy: jest.Mock; count: jest.Mock };
+    $transaction: jest.Mock;
   };
 
   const userId = 'user-1';
@@ -77,6 +78,7 @@ describe('AccountsService', () => {
         delete: jest.fn(),
       },
       transaction: { groupBy: jest.fn(), count: jest.fn() },
+      $transaction: jest.fn(),
     };
     service = new AccountsService(prisma as unknown as PrismaService);
   });
@@ -236,6 +238,109 @@ describe('AccountsService', () => {
       [250],
     );
     expect(balance).toBe(1250); // 1000 + 500 − 300 − 200 + 250
+  });
+
+  it('rejects an unsafe intermediate balance even if a later subtraction would restore it', async () => {
+    await expect(
+      balanceOf(Number.MAX_SAFE_INTEGER, [
+        { type: 'INCOME', amount: 1 },
+        { type: 'EXPENSE', amount: 1 },
+      ]),
+    ).rejects.toMatchObject({ status: 500, errorCode: 'INTERNAL_ERROR' });
+  });
+
+  it('rejects an unsafe intermediate negative balance before a later addition', async () => {
+    await expect(
+      balanceOf(-Number.MAX_SAFE_INTEGER, [
+        { type: 'EXPENSE', amount: 1 },
+        { type: 'INCOME', amount: 1 },
+      ]),
+    ).rejects.toMatchObject({ status: 500, errorCode: 'INTERNAL_ERROR' });
+  });
+
+  it('rejects unsafe outgoing and incoming aggregate operands', async () => {
+    await expect(
+      balanceOf(-1, [{ type: 'INCOME', amount: Number.MAX_SAFE_INTEGER + 1 }]),
+    ).rejects.toBeInstanceOf(AppException);
+    await expect(balanceOf(-1, [], [Number.MAX_SAFE_INTEGER + 1])).rejects.toBeInstanceOf(
+      AppException,
+    );
+  });
+
+  it('rejects overflow from an incoming transfer or an unsafe initial balance', async () => {
+    await expect(balanceOf(Number.MAX_SAFE_INTEGER, [], [1])).rejects.toBeInstanceOf(AppException);
+    await expect(
+      service.calculateBalances([{ ...row, initialBalance: Number.MAX_SAFE_INTEGER + 1 }]),
+    ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('keeps both safe integer boundaries exact', async () => {
+    await expect(
+      balanceOf(Number.MAX_SAFE_INTEGER - 1, [{ type: 'INCOME', amount: 1 }]),
+    ).resolves.toBe(Number.MAX_SAFE_INTEGER);
+    await expect(
+      balanceOf(-Number.MAX_SAFE_INTEGER + 1, [{ type: 'EXPENSE', amount: 1 }]),
+    ).resolves.toBe(-Number.MAX_SAFE_INTEGER);
+  });
+
+  // 趨勢使用獨立的交易 client，驗證帳戶與每個月的聚合沒有漏出 RepeatableRead 快照。
+  it('reads owned accounts and monthly balances through the same repeatable-read client', async () => {
+    const tx = {
+      account: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([row, { ...row, id: 'temporary', isTemporary: true }]),
+      },
+      transaction: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    prisma.$transaction.mockImplementation((read: (client: typeof tx) => Promise<unknown>) =>
+      read(tx),
+    );
+    const calculate = jest.spyOn(service, 'calculateBalances');
+
+    await expect(service.balanceTrend(userId, '2026-10', 2)).resolves.toEqual({
+      months: [
+        { month: '2026-09', total: 0 },
+        { month: '2026-10', total: 0 },
+      ],
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'RepeatableRead',
+    });
+    expect(tx.account.findMany).toHaveBeenCalledWith({ where: { userId }, orderBy: { id: 'asc' } });
+    expect(prisma.account.findMany).not.toHaveBeenCalled();
+    expect(prisma.transaction.groupBy).not.toHaveBeenCalled();
+    expect(calculate).toHaveBeenNthCalledWith(1, expect.any(Array), tx, {
+      date: { lt: new Date('2026-09-30T16:00:00Z') },
+    });
+    expect(calculate).toHaveBeenNthCalledWith(2, expect.any(Array), tx, {
+      date: { lt: new Date('2026-10-31T16:00:00Z') },
+    });
+    expect(tx.transaction.groupBy).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects intermediate overflow across accounts before an offsetting account', async () => {
+    prisma.account.findMany.mockResolvedValue([
+      { ...row, initialBalance: Number.MAX_SAFE_INTEGER },
+      { ...row, id: 'second', initialBalance: 1 },
+      { ...row, id: 'third', initialBalance: -1 },
+    ]);
+    prisma.transaction.groupBy.mockResolvedValue([]);
+    prisma.$transaction.mockImplementation((read: (client: typeof prisma) => Promise<unknown>) =>
+      read(prisma),
+    );
+    await expect(service.balanceTrend(userId, '2026-10', 1)).rejects.toBeInstanceOf(AppException);
+  });
+
+  it.each([
+    ['2026-13', 12],
+    ['0001-01', 12],
+    ['2026-10', 0],
+    ['2026-10', 25],
+    ['2026-10', 1.5],
+  ])('maps invalid periods to 400 before querying (%s, %s)', async (month, count) => {
+    await expect(service.balanceTrend(userId, month, count)).rejects.toMatchObject({ status: 400 });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('excludes soft-deleted transactions from the sums', async () => {
