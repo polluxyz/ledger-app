@@ -21,5 +21,7 @@ plan：`tasks/phase-2j-plan.md`；spec：`docs/specs/phase-2j-stats.md`。
 - [x] **W4 Web e2e**（依賴 S1b、S2、W1、W2；`2j-web-e2e`，Codex）：plan §1.9。
       派工前：確認 ai-4a 沒有正在跑 Web e2e 的 worker。
       驗收：`stats.spec.ts` 涵蓋 SC-R15、R20、R21（390px 淺色與深色沒有橫向捲動、觸控區至少 44px）；兩套 Web e2e 全綠。
+- [ ] **W5 圖表畫面修正**（D1 截圖對照時追加；依賴 W4；`2j-chart-fixes`，Codex）：plan §6 D1 截圖紀錄。
+      驗收：折線圖的線 computed `fill` 是 `none`，`stats.spec.ts` 有斷言；390px 月份標籤不在字中間斷開；成員清單有色塊且顏色等於圖裡同一位成員；SC-R21 仍全綠；Web 檢查與完整 Web e2e 全綠。
 - [ ] **D1 整體驗收、PR、部署**（協調者）：plan §4。
       驗收：隔離測試紅轉綠；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；SC-R13 三個端點 p95 < 500ms，記進實作紀錄；390px 與桌面、淺色與深色截圖逐項對過 W220～W225；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；dev 照 plan §4 點過一次；worker 都 `worker-release`，worktree、子分支、worker 測試資料庫清掉。
