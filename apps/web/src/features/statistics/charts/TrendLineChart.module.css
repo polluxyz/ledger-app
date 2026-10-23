@@ -1,0 +1,87 @@
+.wrapper {
+  min-width: 0;
+  width: 100%;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+  font-size: var(--text-sm);
+}
+
+.incomeKey::before,
+.expenseKey::before {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.2rem;
+  margin-inline-end: var(--space-xs);
+  vertical-align: middle;
+  content: '';
+}
+
+.incomeKey::before {
+  background: var(--color-income);
+}
+
+.expenseKey::before {
+  background: var(--color-expense);
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.incomeLine,
+.expenseLine {
+  fill: none;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.incomeLine,
+.incomePoint {
+  stroke: var(--color-income);
+  fill: var(--color-income);
+}
+
+.expenseLine,
+.expensePoint {
+  stroke: var(--color-expense);
+  fill: var(--color-expense);
+}
+
+.zeroLine {
+  stroke: var(--color-text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+.months {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+
+.months li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-md);
+  color: var(--color-text-muted);
+  text-align: center;
+}
