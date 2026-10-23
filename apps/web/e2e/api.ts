@@ -7,6 +7,7 @@ import type {
   Category,
   Counterparty,
   CreateAccountRequest,
+  CreateCategoryRequest,
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
   CreateLedgerRequest,
@@ -177,6 +178,20 @@ export async function listCategories(
     headers: authHeaders(token),
   });
   return readJson<Category[]>(response, '列出分類');
+}
+
+/** 建立分類，供 e2e 以真實 API 準備帳本目錄。 */
+export async function createCategory(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+  body: CreateCategoryRequest,
+): Promise<Category> {
+  const response = await request.post(`${API_BASE_URL}/ledgers/${ledgerId}/categories`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<Category>(response, `建立分類「${body.name}」`);
 }
 
 /** 列出使用者的帳戶。註冊時會自動建立一個「現金」帳戶。 */
