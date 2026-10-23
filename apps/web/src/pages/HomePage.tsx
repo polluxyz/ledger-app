@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { LedgerSummary, MarkedTransaction, Transaction } from '@ledger/shared';
+import type {
+  BalanceTrend,
+  LedgerSummary,
+  MarkedTransaction,
+  StatisticsTotals,
+  Transaction,
+} from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -8,6 +14,9 @@ import { Icon } from '../components/Icon';
 import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
 import { AccountBalances } from '../features/accounts/AccountBalances';
+import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
+import { useBalanceTrend } from '../features/statistics/use-balance-trend';
+import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
@@ -20,6 +29,7 @@ import { TransactionList } from '../features/transactions/TransactionList';
 import { useTransactions } from '../features/transactions/use-transactions';
 import { useMarkedTransactions, useSetTransactionMark } from '../features/transactions/use-marks';
 import { PendingCard } from '../features/linking/PendingCard';
+import { formatMoney } from '../lib/format';
 import styles from './HomePage.module.css';
 
 /** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
@@ -34,8 +44,8 @@ const RECENT_LIMIT = 5;
  * - **已登入**：dashboard（spec 2i SC-34.1）——統計卡、最近 5 筆交易、帳戶餘額。
  *   完整的交易表格（篩選、分頁、刪除）搬到 `/transactions`。
  *
- * 統計卡片在登入後標示為「即將推出」：正確的數字必須由後端彙總端點提供，
- * 拿前端當頁的交易自行加總會是錯的（只算得到那一頁），也違反單一後端原則。
+ * 登入後的資產與收支摘要都只呈現後端回傳的數字；最近交易、帳戶餘額與標註卡沿用
+ * 各自的領域 hook，不在首頁重算任何帳務資料。
  */
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
@@ -48,7 +58,7 @@ export default function HomePage() {
 
   return (
     <>
-      <StatsRow authenticated={false} />
+      <GuestStatsRow />
 
       <section className={`${styles.card} ${styles.guest}`}>
         <p className={styles.note}>登入後即可開始記帳，並在這裡看到你的收支。</p>
@@ -85,6 +95,8 @@ function LedgerView() {
     isLoading: ledgerLoading,
     error: ledgerError,
   } = useActiveLedger();
+  // 帳戶跨帳本共用；hook 留在切帳本時不會卸載的這一層，資產圖不會因帳本 id 改變而重抓。
+  const balanceTrend = useBalanceTrend();
   const [pendingMarkedTransaction, setPendingMarkedTransaction] =
     useState<MarkedTransaction | null>(null);
   const clearPendingMarkedTransaction = useCallback(() => setPendingMarkedTransaction(null), []);
@@ -104,6 +116,9 @@ function LedgerView() {
         pendingMarkedTransaction={pendingMarkedTransaction}
         onPendingMarkedTransactionHandled={clearPendingMarkedTransaction}
         onSwitchToMarkedLedger={switchToMarkedLedger}
+        balanceTrendMonths={balanceTrend.data?.months}
+        balanceTrendLoading={balanceTrend.isLoading}
+        balanceTrendError={balanceTrend.error}
       />
     );
   }
@@ -111,8 +126,12 @@ function LedgerView() {
   return (
     <PageContent>
       <PageHeader title="總覽" />
+      <BalanceTrendChart
+        months={balanceTrend.data?.months}
+        isLoading={balanceTrend.isLoading}
+        error={balanceTrend.error}
+      />
       <PendingCard />
-      <StatsRow authenticated />
       {ledgerLoading && <p className={styles.note}>載入中…</p>}
       {ledgerError && <FormError error={ledgerError} />}
       {!ledgerLoading && !ledgerError && (
@@ -128,10 +147,8 @@ function LedgerView() {
 }
 
 /**
- * dashboard 本體（spec 2i §4.7）：頁首、三張統計卡、兩張並排的卡片。
- *
- * 版面用 grid 排成一列一列，2j 要加圖表時只是多一列卡片，不必動既有的區塊
- * （假設 9：這一輪不放圖表佔位）。
+ * dashboard 本體（spec 2i §4.7）：頁首、資產趨勢、三張收支卡與既有摘要卡。
+ * 資產資料由外層持有，換帳本時 dashboard 子樹會重建，但不會重抓資產趨勢。
  *
  * `editing` 放在這一層的理由與交易頁相同（D25）：最近交易在頁面裡、編輯面板在
  * 右側欄（portal 過去），兩者只有這個共同的父層。
@@ -141,6 +158,9 @@ interface DashboardProps {
   pendingMarkedTransaction: MarkedTransaction | null;
   onPendingMarkedTransactionHandled: () => void;
   onSwitchToMarkedLedger: (transaction: MarkedTransaction) => void;
+  balanceTrendMonths: BalanceTrend['months'] | undefined;
+  balanceTrendLoading: boolean;
+  balanceTrendError: unknown;
 }
 
 function Dashboard({
@@ -148,6 +168,9 @@ function Dashboard({
   pendingMarkedTransaction,
   onPendingMarkedTransactionHandled,
   onSwitchToMarkedLedger,
+  balanceTrendMonths,
+  balanceTrendLoading,
+  balanceTrendError,
 }: DashboardProps) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
   const [panelTarget, setPanelTarget] = useState<PanelTarget>(() =>
@@ -251,9 +274,13 @@ function Dashboard({
             </>
           }
         />
+        <BalanceTrendChart
+          months={balanceTrendMonths}
+          isLoading={balanceTrendLoading}
+          error={balanceTrendError}
+        />
+        <LedgerStatsRow ledger={ledger} />
         <PendingCard />
-
-        <StatsRow authenticated />
 
         <div className={styles.cards}>
           {marked.data && marked.data.total > 0 && markedTransactions.length > 0 && (
@@ -450,26 +477,137 @@ function editTargetOf(transaction: Transaction): PanelTarget {
       : { kind: 'transaction', transaction };
 }
 
-/** 三張「即將推出」的統計卡（phase-2h · D5：原樣保留，只換樣式）。 */
-function StatsRow({ authenticated }: { authenticated: boolean }) {
+/** 訪客首頁保留固定 0 的介面示意，不觸發需要登入的統計或資產端點。 */
+function GuestStatsRow() {
   return (
     <div className={styles.stats}>
-      <Stat label="本月支出" authenticated={authenticated} />
-      <Stat label="本月收入" authenticated={authenticated} />
-      <Stat label="結餘" authenticated={authenticated} />
+      <GuestStat label="本月支出" />
+      <GuestStat label="本月收入" />
+      <GuestStat label="結餘" />
     </div>
   );
 }
 
-/**
- * 單張統計卡片。未登入時顯示 0（空狀態示意）；已登入時顯示「即將推出」，
- * 等後端彙總端點完成後再點亮。
- */
-function Stat({ label, authenticated }: { label: string; authenticated: boolean }) {
+/** 未登入的示意卡沒有連結，也不會顯示成實際帳務資料。 */
+function GuestStat({ label }: { label: string }) {
   return (
     <div className={styles.stat}>
       <span className={styles.statLabel}>{label}</span>
-      <span className={styles.statValue}>{authenticated ? '即將推出' : '$0'}</span>
+      <span className={styles.statValue}>$0</span>
     </div>
   );
+}
+
+/** 目前帳本與台灣時間當月的摘要；數字全由統計端點提供。 */
+function LedgerStatsRow({ ledger }: { ledger: LedgerSummary }) {
+  const period = currentTaiwanMonthRange();
+  const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
+
+  if (statistics.error) {
+    return (
+      <div className={styles.statsMessage} role="alert">
+        統計暫時無法載入
+      </div>
+    );
+  }
+
+  if (statistics.isLoading || !statistics.data) {
+    return (
+      <div className={styles.statsMessage} role="status">
+        載入中…
+      </div>
+    );
+  }
+
+  // 回應格式不符契約時視為載入錯誤，不能讓整頁崩潰或顯示出假的 0。
+  const ledgerTotals = statistics.data.ledger;
+  const mineTotals = statistics.data.mine;
+  if (!ledgerTotals || !mineTotals) {
+    return (
+      <div className={styles.statsMessage} role="alert">
+        統計暫時無法載入
+      </div>
+    );
+  }
+
+  const shared = ledger.kind === 'SHARED';
+  const month = period.from.slice(0, 7);
+
+  return (
+    <div className={styles.stats} aria-label="本月收支">
+      <StatLink
+        label="本月支出"
+        amount={ledgerTotals.expense}
+        mine={mineTotals.expense}
+        shared={shared}
+        ledgerId={ledger.id}
+        month={month}
+      />
+      <StatLink
+        label="本月收入"
+        amount={ledgerTotals.income}
+        mine={mineTotals.income}
+        shared={shared}
+        ledgerId={ledger.id}
+        month={month}
+      />
+      <StatLink
+        label="結餘"
+        amount={ledgerTotals.net}
+        mine={mineTotals.net}
+        shared={shared}
+        ledgerId={ledger.id}
+        month={month}
+      />
+    </div>
+  );
+}
+
+/** 每張卡只格式化回傳金額，並將目前帳本與月份帶到統計頁。 */
+function StatLink({
+  label,
+  amount,
+  mine,
+  shared,
+  ledgerId,
+  month,
+}: {
+  label: string;
+  amount: StatisticsTotals['expense'];
+  mine: StatisticsTotals['expense'];
+  shared: boolean;
+  ledgerId: string;
+  month: string;
+}) {
+  return (
+    <Link
+      className={styles.stat}
+      to={`/stats?tab=cat&ledger=${encodeURIComponent(ledgerId)}&month=${month}`}
+    >
+      <span className={styles.statLabel}>{label}</span>
+      <strong className={styles.statValue}>{formatMoney(amount)}</strong>
+      {shared && <span className={styles.statMine}>我 {formatMoney(mine)}</span>}
+    </Link>
+  );
+}
+
+/** 組成目前台灣月份的起迄日，供統計 API 與後續導覽共用。 */
+function currentTaiwanMonthRange(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+
+  if (!year || !month) {
+    throw new Error('無法取得台灣時區的目前月份。');
+  }
+
+  const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  return {
+    from: `${year}-${month}-01`,
+    to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
+  };
 }
