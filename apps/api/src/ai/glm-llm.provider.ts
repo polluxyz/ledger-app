@@ -5,7 +5,8 @@ import {
   type LlmResponse,
 } from './llm-provider';
 
-const DEFAULT_TIMEOUT_MS = 15_000;
+// glm-5.3 即使思考強度 low 也偶有 10～20 秒的長尾；25 秒沒回就放棄，不自動重試（spec 決策 248）。
+const DEFAULT_TIMEOUT_MS = 25_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 /**
@@ -17,6 +18,7 @@ export class GlmLlmProvider implements LLMProvider {
     private readonly apiKey: string,
     private readonly model: string,
     private readonly baseUrl: string,
+    private readonly reasoningEffort?: 'low' | 'high' | 'max',
     private readonly fetchImplementation: typeof fetch = fetch,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}
@@ -50,6 +52,8 @@ export class GlmLlmProvider implements LLMProvider {
             ],
             stream: false,
             response_format: { type: 'json_object' },
+            // 沒設定就不送，避免不認得這個欄位的模型回參數錯誤。
+            ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
           }),
           redirect: 'error',
           signal: controller.signal,

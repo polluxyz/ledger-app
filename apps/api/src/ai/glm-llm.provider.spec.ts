@@ -31,8 +31,16 @@ function createProvider(
   fetchImplementation: FetchMock,
   baseUrl = 'https://open.bigmodel.cn/api/paas/v4',
   timeoutMs = 15,
+  reasoningEffort?: 'low' | 'high' | 'max',
 ): GlmLlmProvider {
-  return new GlmLlmProvider(API_KEY, 'glm-test-model', baseUrl, fetchImplementation, timeoutMs);
+  return new GlmLlmProvider(
+    API_KEY,
+    'glm-test-model',
+    baseUrl,
+    reasoningEffort,
+    fetchImplementation,
+    timeoutMs,
+  );
 }
 
 async function expectSafeProviderError(
@@ -127,6 +135,18 @@ describe('GlmLlmProvider', () => {
       expect(url).not.toContain(API_KEY);
       expect(requestBody).not.toContain(API_KEY);
       expect(JSON.stringify({ ...init, headers: {} })).not.toContain(API_KEY);
+    });
+
+    it('adds reasoning_effort only when it is configured', async () => {
+      const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}'));
+
+      await createProvider(fetchMock, undefined, 15, 'low').complete(BASE_REQUEST);
+
+      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<
+        string,
+        unknown
+      >;
+      expect(body['reasoning_effort']).toBe('low');
     });
   });
 

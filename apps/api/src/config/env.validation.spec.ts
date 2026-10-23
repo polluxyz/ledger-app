@@ -28,6 +28,17 @@ describe('validateEnv', () => {
     ).toBe('');
   });
 
+  it('treats a missing or blank reasoning effort as unset and rejects unknown values', () => {
+    expect(validateEnv(base).GLM_REASONING_EFFORT).toBeUndefined();
+    expect(validateEnv({ ...base, GLM_REASONING_EFFORT: '  ' }).GLM_REASONING_EFFORT).toBe(
+      undefined,
+    );
+    expect(validateEnv({ ...base, GLM_REASONING_EFFORT: 'low' }).GLM_REASONING_EFFORT).toBe('low');
+    expect(() => validateEnv({ ...base, GLM_REASONING_EFFORT: 'minimal' })).toThrow(
+      /GLM_REASONING_EFFORT/,
+    );
+  });
+
   it('rejects unknown providers instead of silently selecting fake', () => {
     expect(() => validateEnv({ ...base, LLM_PROVIDER: 'unknown' })).toThrow(/LLM_PROVIDER/);
   });
