@@ -67,6 +67,8 @@ export const ICON_PATHS = {
       <path d="M9 8h6M9 12h6" />
     </>
   ),
+  /* 長條統計圖。側欄收合時能與交易收據清楚區分。 */
+  chart: <path d="M4 20h16M6 17v-4h3v4M11 17V8h3v9M16 17V4h3v13" />,
   /* 齒輪。2i 的使用者選單「設定」用它。 */
   gear: (
     <>

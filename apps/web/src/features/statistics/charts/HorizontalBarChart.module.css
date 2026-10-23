@@ -20,6 +20,23 @@
   gap: var(--space-sm);
 }
 
+.rowButton {
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowButton:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
 .name {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -56,7 +73,8 @@
 }
 
 @media (max-width: 28rem) {
-  .row {
+  .row,
+  .rowButton {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
   }
 

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { DonutChart } from './DonutChart';
 
 /** 驗證圓餅角度與讀屏值使用傳入的統計契約，零金額不會形成假切片。 */
@@ -67,6 +67,61 @@ describe('DonutChart', () => {
       'aria-label',
       expect.stringContaining('餐飲 $50'),
     );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(document.querySelector('path')?.getAttribute('d')).toContain('A 84 84 0 0 1 110 194');
+  });
+
+  it('selects category slices with a click and with Enter or Space', () => {
+    const onSelect = vi.fn();
+    const category = {
+      kind: 'CATEGORY' as const,
+      category: { id: 'food', name: '餐飲', icon: null },
+      amount: 5_000,
+      percentageBps: 10_000,
+    };
+    render(
+      <DonutChart
+        direction="expense"
+        totalAmount={5_000}
+        data={{ kind: 'groups', items: [category], onSelect }}
+      />,
+    );
+
+    const slice = screen.getByRole('button', { name: '餐飲 $50' });
+    expect(slice).toHaveAttribute('tabindex', '0');
+    fireEvent.click(slice);
+    fireEvent.keyDown(slice, { key: 'Enter' });
+    fireEvent.keyDown(slice, { key: ' ' });
+    expect(onSelect).toHaveBeenCalledTimes(3);
+    expect(onSelect).toHaveBeenCalledWith(category);
+  });
+
+  it('does not make fixed groups or groups without onSelect clickable', () => {
+    const onSelect = vi.fn();
+    const fixed = {
+      kind: 'BAD_DEBT' as const,
+      category: null,
+      amount: 2_000,
+      percentageBps: 10_000,
+    };
+    const { rerender } = render(
+      <DonutChart
+        direction="expense"
+        totalAmount={2_000}
+        data={{ kind: 'groups', items: [fixed], onSelect }}
+      />,
+    );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('group', { name: /呆帳/ }));
+    expect(onSelect).not.toHaveBeenCalled();
+
+    rerender(
+      <DonutChart
+        direction="expense"
+        totalAmount={2_000}
+        data={{ kind: 'groups', items: [fixed] }}
+      />,
+    );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
