@@ -4,12 +4,20 @@ import { ErrorCode } from '@ledger/shared';
 import type { Env } from '../config/env.validation';
 import { AppException } from '../common/exceptions/app.exception';
 import { FakeLlmProvider } from './fake-llm.provider';
+import { GlmLlmProvider } from './glm-llm.provider';
 import type { LLMProvider } from './llm-provider';
 
-/** 設定不完整只影響 AI 請求，不能阻止其他記帳功能啟動。 */
+/**
+ * 依 `LLM_PROVIDER` 選模型。設定不完整只影響 AI 請求，不能阻止其他記帳功能啟動，
+ * 也不能悄悄改用 fake——那會讓正式環境回出假草稿。
+ */
 export function createLlmProvider(config: ConfigService<Env, true>): LLMProvider {
   if (config.get('LLM_PROVIDER', { infer: true }) === 'fake') return new FakeLlmProvider();
-  // T5 接上 GLM provider；完整與不完整的設定這次都維持未設定，不偷偷改用 fake。
+  const apiKey = config.get('GLM_API_KEY', { infer: true })?.trim();
+  const model = config.get('GLM_MODEL', { infer: true })?.trim();
+  if (apiKey && model) {
+    return new GlmLlmProvider(apiKey, model, config.get('GLM_BASE_URL', { infer: true }));
+  }
   return {
     complete: () => {
       throw new AppException(
