@@ -26,7 +26,6 @@
 
 .monthYear,
 .monthNumber {
-  display: block;
   white-space: nowrap;
 }
 
