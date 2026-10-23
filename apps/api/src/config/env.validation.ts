@@ -9,6 +9,10 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
   PORT: z.coerce.number().int().positive().default(3000),
+  LLM_PROVIDER: z.enum(['glm', 'fake']).default('fake'),
+  GLM_API_KEY: z.string().optional(),
+  GLM_MODEL: z.string().optional(),
+  GLM_BASE_URL: z.string().default('https://open.bigmodel.cn/api/paas/v4'),
   /**
    * 允許跨來源存取本 API 的前端網址（CORS）。Web 前端與 API 跑在不同的 port／
    * 網域，屬不同來源，瀏覽器預設會擋下請求，必須由後端明示放行。

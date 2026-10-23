@@ -105,6 +105,8 @@ export default defineConfig({
         CORS_ORIGIN: `${WEB_ORIGIN},${PREVIEW_ORIGIN}`,
         /** 停用限流，否則密集打 auth 端點會被擋（與 api 現有 e2e 一致）。 */
         NODE_ENV: 'test',
+        /** 明確固定假 provider，讓 e2e 不受本機環境變數選擇影響。 */
+        LLM_PROVIDER: 'fake',
       },
     },
     {

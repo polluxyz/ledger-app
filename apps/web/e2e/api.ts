@@ -6,8 +6,8 @@ import type {
   AuthUser,
   Category,
   Counterparty,
-  CreateCategoryRequest,
   CreateAccountRequest,
+  CreateCategoryRequest,
   CreateDebtEntryRequest,
   CreateDebtEntryResponse,
   CreateLedgerRequest,
@@ -195,7 +195,7 @@ export async function listCategories(
   return readJson<Category[]>(response, '列出分類');
 }
 
-/** 建立統計測試需要的分類；測試資料仍經過正式分類 API 驗證。 */
+/** 建立分類，供 e2e 以真實 API 準備測試資料。 */
 export async function createCategory(
   request: APIRequestContext,
   token: string,

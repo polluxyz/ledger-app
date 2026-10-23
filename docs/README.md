@@ -23,7 +23,7 @@
 | 一   | 核心記帳：帳本、交易 CRUD、認證授權      | 完成   |
 | 二   | Web 前端                                 | 完成   |
 | 三   | 好友 + 借還帳（雙邊連動交易 + 債務物件） | 進行中 |
-| 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 未開始 |
+| 四   | AI 文字版（`AiModule` + `LLMProvider`）  | 進行中 |
 | 五   | 語音（STT）+ 本地模型 provider           | 未開始 |
 
 階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）與 **2i 版面第二輪**；兩者都已完成。**2j 統計**原屬階段二，在階段三之後補做，已完成。
@@ -62,6 +62,7 @@
 | [`phase-3k-leave-and-merge.md`](specs/phase-3k-leave-and-merge.md)                 | 階段三：3k 退出共享帳本並合併到別的帳本       | 已完成    |
 | [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易 | 已完成    |
 | [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢           | 已完成    |
+| [`phase-4a-ai-text.md`](specs/phase-4a-ai-text.md)                                 | 階段四：4a AI 文字記帳（一句話變成交易草稿）  | 進行中    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                              | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。

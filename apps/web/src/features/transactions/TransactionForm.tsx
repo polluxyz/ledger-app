@@ -20,6 +20,7 @@ import {
   type SplitPrecision,
   type SplitType,
   type Transaction,
+  type TransactionDraft,
   type UpdateSplitRequest,
   type UpdateTransactionRequest,
 } from '@ledger/shared';
@@ -72,6 +73,8 @@ interface TransactionFormProps {
   transaction?: Transaction;
   /** 有值＝複製模式；只用來源預填欄位，不會傳入編輯 mutation。 */
   copyFrom?: Transaction;
+  /** AI 草稿模式：欄位照草稿呈現，null 不套用手動新增預設值。 */
+  draft?: TransactionDraft;
   /** 下列欄位由複製模式外層提供，讓切帳本時可以重建整張表單。 */
   copySourceLedgerId?: string;
   copyIncludesPeople?: boolean;
@@ -82,8 +85,10 @@ interface TransactionFormProps {
   initialDeleteOpen?: boolean;
   /** 有值＝透過分帳端點編輯；會從 API 回應還原完整名單與分法。 */
   split?: Split;
-  /** 編輯成功後呼叫（通常用來關閉彈窗）。新增模式不會呼叫。 */
+  /** 編輯成功或 AI 草稿新增成功後呼叫。 */
   onSaved?: () => void;
+  /** 讓頁面在草稿表單送出期間鎖住同一筆。 */
+  onDraftSavingChange?: (saving: boolean) => void;
   /**
    * 編輯模式的「取消」。有傳才渲染那顆按鈕——新增表單是常駐的，沒有「取消」
    * 可言（phase-2h · D9）。
@@ -428,6 +433,7 @@ function TransactionFormContent({
   ledger,
   transaction,
   copyFrom,
+  draft,
   copySourceLedgerId,
   copyIncludesPeople = false,
   copyLedgerOptions,
@@ -435,6 +441,7 @@ function TransactionFormContent({
   onCopyLedgerChange,
   split,
   onSaved,
+  onDraftSavingChange,
   onCancel,
   amountFieldId,
   initialDebtCounterparty,
@@ -457,42 +464,54 @@ function TransactionFormContent({
    * 進來時會一路送出一個後端必拒的 body；退回「支出」至少是個講得通的狀態。
    */
   const [tab, setTab] = useState<EntryTab>(
-    split
-      ? split.type
-      : copyFrom && !isDebtTransactionType(copyFrom.type)
-        ? copyFrom.type
-        : transaction && !isDebtTransactionType(transaction.type)
-          ? transaction.type
-          : !isEdit && initialDebtCounterparty
-            ? 'DEBT'
-            : 'EXPENSE',
+    draft
+      ? draft.type
+      : split
+        ? split.type
+        : copyFrom && !isDebtTransactionType(copyFrom.type)
+          ? copyFrom.type
+          : transaction && !isDebtTransactionType(transaction.type)
+            ? transaction.type
+            : !isEdit && initialDebtCounterparty
+              ? 'DEBT'
+              : 'EXPENSE',
   );
   const [amount, setAmount] = useState(
-    split
-      ? centsToInput(
-          split.payer
-            ? (split.participants.find((person) => person.counterpartyId === null)?.share ??
-                split.total)
-            : split.total,
-        )
-      : transaction
-        ? centsToInput(transaction.amount)
-        : copyFrom
-          ? centsToInput(copyFrom.amount)
-          : '',
+    draft
+      ? draft.amount === null
+        ? ''
+        : centsToInput(draft.amount)
+      : split
+        ? centsToInput(
+            split.payer
+              ? (split.participants.find((person) => person.counterpartyId === null)?.share ??
+                  split.total)
+              : split.total,
+          )
+        : transaction
+          ? centsToInput(transaction.amount)
+          : copyFrom
+            ? centsToInput(copyFrom.amount)
+            : '',
   );
   const [date, setDate] = useState(() =>
-    toDateInputValue(
-      split ? new Date(split.date) : transaction ? new Date(transaction.date) : undefined,
-    ),
+    draft
+      ? (draft.date ?? '')
+      : toDateInputValue(
+          split ? new Date(split.date) : transaction ? new Date(transaction.date) : undefined,
+        ),
   );
   const [categoryId, setCategoryId] = useState(
-    split?.category.id ??
-      transaction?.category?.id ??
-      (copyFrom && ledger.id === copySourceLedgerId ? (copyFrom.category?.id ?? '') : ''),
+    draft
+      ? (draft.categoryId ?? '')
+      : (split?.category.id ??
+          transaction?.category?.id ??
+          (copyFrom && ledger.id === copySourceLedgerId ? (copyFrom.category?.id ?? '') : '')),
   );
   const [accountId, setAccountId] = useState(
-    split?.account?.id ?? transaction?.account?.id ?? copyFrom?.account?.id ?? '',
+    draft
+      ? (draft.accountId ?? '')
+      : (split?.account?.id ?? transaction?.account?.id ?? copyFrom?.account?.id ?? ''),
   );
   const [accountSelectionTouched, setAccountSelectionTouched] = useState(false);
   const [sharedPayerPersonId, setSharedPayerPersonId] = useState<string | null>(
@@ -500,10 +519,16 @@ function TransactionFormContent({
   );
   const [sharedPayerChanged, setSharedPayerChanged] = useState(false);
   const [toAccountId, setToAccountId] = useState(
-    transaction?.toAccount?.id ?? copyFrom?.toAccount?.id ?? '',
+    draft
+      ? (draft.toAccountId ?? '')
+      : (transaction?.toAccount?.id ?? copyFrom?.toAccount?.id ?? ''),
   );
-  const [title, setTitle] = useState(split?.title ?? transaction?.title ?? copyFrom?.title ?? '');
-  const [note, setNote] = useState(split?.note ?? transaction?.note ?? copyFrom?.note ?? '');
+  const [title, setTitle] = useState(
+    draft ? (draft.title ?? '') : (split?.title ?? transaction?.title ?? copyFrom?.title ?? ''),
+  );
+  const [note, setNote] = useState(
+    draft ? '' : (split?.note ?? transaction?.note ?? copyFrom?.note ?? ''),
+  );
   const [paymentMode, setPaymentMode] = useState<'account' | 'counterparty' | 'self'>(() =>
     split?.payer ||
     (isSharedLedger && (transaction?.payer || (copyIncludesPeople && copyFrom?.payer)))
@@ -523,11 +548,13 @@ function TransactionFormContent({
   } | null>(split?.payer ?? null);
   const [splitEnabled, setSplitEnabled] = useState(() =>
     isSharedLedger
-      ? copyFrom !== undefined
-        ? copyIncludesPeople && copyFrom.ledgerSplit !== null
-        : transaction === undefined && split === undefined
-          ? true
-          : transaction?.ledgerSplit != null
+      ? draft !== undefined
+        ? false
+        : copyFrom !== undefined
+          ? copyIncludesPeople && copyFrom.ledgerSplit !== null
+          : transaction === undefined && split === undefined
+            ? true
+            : transaction?.ledgerSplit != null
       : split !== undefined,
   );
   const [splitMethod, setSplitMethod] = useState<SplitMethod>(split?.method ?? 'EQUAL');
@@ -636,7 +663,10 @@ function TransactionFormContent({
     );
     setSplitEnabled(
       savedSplit !== null ||
-        (copyFrom === undefined && transaction === undefined && split === undefined),
+        (draft === undefined &&
+          copyFrom === undefined &&
+          transaction === undefined &&
+          split === undefined),
     );
     setSplitMethod(savedSplit?.method ?? 'EQUAL');
     setSplitPrecision(savedSplit?.precision ?? 'CENT');
@@ -644,6 +674,7 @@ function TransactionFormContent({
   }, [
     copyFrom,
     copyIncludesPeople,
+    draft,
     isSharedLedger,
     ledgerId,
     mePersonId,
@@ -706,11 +737,14 @@ function TransactionFormContent({
    * 使用者的明確選擇。
    */
   const defaultAccountId =
-    !isEdit && !accountSelectionTouched && !recordDefaults.isFetching
+    draft === undefined && !isEdit && !accountSelectionTouched && !recordDefaults.isFetching
       ? (recordDefaults.data?.accountId ?? '')
       : '';
   const fallbackAccountId =
-    !isEdit && !accountSelectionTouched && !(isSharedLedger && sharedPayerChanged)
+    draft === undefined &&
+    !isEdit &&
+    !accountSelectionTouched &&
+    !(isSharedLedger && sharedPayerChanged)
       ? (accountOptions[0]?.id ?? '')
       : '';
   const selectedAccountId = showAccountField
@@ -725,7 +759,9 @@ function TransactionFormContent({
   const selectedToAccountId = showAccountField
     ? toAccountId && toAccountId !== selectedAccountId
       ? toAccountId
-      : (otherAccounts[0]?.id ?? '')
+      : draft === undefined
+        ? (otherAccounts[0]?.id ?? '')
+        : ''
     : '';
 
   /**
@@ -1039,6 +1075,7 @@ function TransactionFormContent({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (date === '') return;
     if (amountCents === null || amountCents <= 0) {
       return;
     }
@@ -1139,7 +1176,16 @@ function TransactionFormContent({
           ...(note === '' ? {} : { note }),
           ...(ledgerSplitInput === null ? {} : { ledgerSplit: ledgerSplitInput }),
         };
-        await createTransaction.mutateAsync(input);
+        if (draft !== undefined) onDraftSavingChange?.(true);
+        try {
+          await createTransaction.mutateAsync(input);
+          if (draft !== undefined) {
+            onSaved?.();
+            return;
+          }
+        } finally {
+          if (draft !== undefined) onDraftSavingChange?.(false);
+        }
 
         const nextPeople = createdPayerPerson
           ? [...ledgerPeople, createdPayerPerson]
@@ -1267,20 +1313,29 @@ function TransactionFormContent({
         return;
       }
 
-      await createTransaction.mutateAsync({
-        type,
-        amount: amountCents!,
-        date: isoDate,
-        categoryId: type === 'TRANSFER' ? undefined : categoryId,
-        accountId: selectedAccountId === '' ? undefined : selectedAccountId,
-        toAccountId:
-          type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
-        title: title === '' ? undefined : title,
-        note: note === '' ? undefined : note,
-      });
-      setAmount('');
-      setTitle('');
-      setNote('');
+      if (draft !== undefined) onDraftSavingChange?.(true);
+      try {
+        await createTransaction.mutateAsync({
+          type,
+          amount: amountCents!,
+          date: isoDate,
+          categoryId: type === 'TRANSFER' ? undefined : categoryId,
+          accountId: selectedAccountId === '' ? undefined : selectedAccountId,
+          toAccountId:
+            type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
+          title: title === '' ? undefined : title,
+          note: note === '' ? undefined : note,
+        });
+        if (draft !== undefined) {
+          onSaved?.();
+          return;
+        }
+        setAmount('');
+        setTitle('');
+        setNote('');
+      } finally {
+        if (draft !== undefined) onDraftSavingChange?.(false);
+      }
     } catch (error) {
       setSubmissionError(error);
     } finally {
@@ -1529,6 +1584,7 @@ function TransactionFormContent({
             copyLedgersLoading ||
             copyLedgerUnavailable ||
             transferBlocked ||
+            date === '' ||
             amountCents === null ||
             amountCents <= 0 ||
             (type !== 'TRANSFER' && categoryId === '') ||

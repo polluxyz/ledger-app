@@ -175,6 +175,21 @@ spec：`docs/specs/phase-4a-ai-text.md`（決策 237～253、W208～W214、SC-P1
   - W214：重新整理後沒有草稿；離開頁面後回來的回應不顯示。
   - 草稿寫入別本帳本後，那本的交易與帳戶 query 失效。
 
+#### 1.4.1 版面修正（T3b，`default`，Codex；2026-10-23 開發者選方案 E）
+
+T4 跑完整 Web e2e 時，既有的 SC-24.3（1440×900 交易頁首屏至少 10 筆）掉到 8 筆。原因是 T3 的 AI 卡片約 124px 高。advisor（Codex）與協調者都推薦方案 E，開發者核可。被否決的方案：A 縮小卡片（推算 9 筆，不夠）、B 併入明細工具列（餘裕約 5px，換行就失敗）、C 降門檻、D 按鈕展開（違反常駐入口）。
+
+- 輸入框（文字框＋送出鈕）放進 `app/PageToolbar` 的頂端橫條。2i 起這條就預留給 AI。
+  - 用 context 提供的插槽節點＋`createPortal` 放進去，只有交易頁會填。其他頁照舊空著。
+  - 橫條高度不變（`min-height: 3.5rem`），輸入列垂直置中。窄螢幕時文字框縮短，送出鈕不換行。
+- 拿掉卡片外框與可見標題「AI 記帳」。保留 `<label>`（視覺隱藏），讓螢幕閱讀器讀得到。
+- 錯誤訊息（W213）與草稿清單（W209）留在交易頁內容裡、「明細」上方，有內容才出現。不放進橫條，因為橫條會固定在畫面上方。
+- 送出中送出鈕顯示轉圈（W208），維持鎖住文字框、不重送。
+- 離開交易頁時，插槽裡的輸入框跟著卸載。草稿仍照 W214 只存在頁面 state。
+- `e2e/layout.spec.ts` 的 `fullyVisibleRows` 只數交易列表裡的列，不數 `main` 裡所有的 `li`。門檻維持 10，不改。
+
+驗收：SC-24.3 轉綠（無草稿、無錯誤的初始狀態）；完整 Web e2e 全綠；W208、W213 元件測試跟著位置更新；其他頁的橫條高度不變。
+
 ### 1.5 e2e（T4，`default`，Codex）
 
 依賴 T1、T3。
@@ -278,4 +293,51 @@ spec：`docs/specs/phase-4a-ai-text.md`（決策 237～253、W208～W214、SC-P1
 
 ## 7. 實作紀錄
 
-（實作時填）
+### T0（commit `34157bb`）
+
+- `test/e2e-utils.ts` 的 `createE2EApp` 多一個選填參數 `configure(builder)`，預設不改。讓 e2e 能用 `overrideProvider(LLM_PROVIDER)` 注入 stub。既有呼叫不受影響。
+- 隔離測試比 §1.1 多驗決策 253 的清單內容：`user` 等於去掉前後空白的句子；system 含可寫入的帳本名，不含檢視者、封存、退出的帳本名，不含別人的帳本與帳戶名，不含句子本身，不含任何 UUID。
+- 紅燈結果：11 條中 7 條失敗（路由還不存在）。4 條「404」案例暫時通過，因為路由不存在也回 404。正向對照（我的帳本 200、stub 被呼叫 2 次）會在 T1 前保持紅燈，所以 T1 完成後這 4 條才有意義。
+- 需要真代號的情境（例如代號對到型別不符的分類）stub 寫不出來，交給 T1 的 `ai-parse.e2e-spec.ts`。
+
+### 派工環境
+
+- 第 1 波改在新的 Orca run `run_9f754145ed8b` 派工。舊 run `run_d40c9ec85c2b` 綁的是上一個 session 的終端機，用它派工會回 `consumer_fenced`。
+- 角色表寫 `default` 用 max 強度，但 Orca 只接受到 xhigh。T3、T4、T3b 實際都用 Codex xhigh。
+
+### T1（commit `114cfb5`，合併 `e0d0f97`）
+
+- 照 §1.2 實作。T0 的隔離測試全部轉綠。API e2e 458/458、API 單元測試 707/707。
+- 假 provider 遇到劇本以外的句子會丟錯，端點回 500。這是 plan 核可的行為：假 provider 只給測試與 dev 用，不該悄悄回空草稿，讓測試誤以為「0 筆」是對的。
+
+### T2（commit `deacb67`）
+
+- 照 §1.3 實作，19 條單元測試通過，沒有新增套件。
+- 已知小瑕疵：HTTP 回非 2xx 時沒有取消讀 body。只影響連線多佔一下，不影響結果與日誌，先不修。
+
+### T3（commit `efdbe2b`，合併 `03cc1fa`）
+
+- 照 §1.4 實作，Web 單元測試 827/827。
+- 已知小瑕疵 1：「全部確認」進行中，如果表單同時在存另一筆，迴圈會停下但不顯示錯誤。已寫入的會移除，沒寫的留在清單，資料不會錯，只是少一句提示。
+- 已知小瑕疵 2：W214 的測試只檢查特定的 storage key，沒有掃整個 storage。
+
+### T4（commit `3f8cd3b`，合併 `601a62c`）
+
+- `ai-draft.spec.ts` 3/3，連跑 3 次都綠。`playwright.config.ts` 的 API webServer 明設 `LLM_PROVIDER: 'fake'`。
+- T4 跑完整 Web e2e 時，既有的 `layout.spec.ts`「SC-24.3：1440×900 首屏至少 10 筆」掉到 8 筆。原因是 T3 在「明細」上方加了約 124px 高的 AI 輸入卡片。
+
+### SC-24.3 與 T3b（commit `7b20384`，合併 `d525dd2`）
+
+- 依決策門控先問 advisor（Codex）。advisor 推算 4 個方案的首屏筆數，並指出 `PageToolbar` 的頂端橫條從 2i 起就預留給 AI。開發者選方案 E：輸入框放進頂端橫條，錯誤訊息與草稿留在「明細」上方，有內容才出現。spec 與本 plan 的修改在 commit `9e56d19`（§1.4.1）。
+- advisor 另外找到 2 個問題，一併在 T3b 修：W208 要求的轉圈原本只有文字；`fullyVisibleRows` 原本會數到 `main` 裡所有的 `li`。
+- 做法：`PageToolbarSlotProvider` 用 context 交出橫條內層的 DOM 節點，`AiDraftInput` 用 `createPortal` 把表單放進去。
+- 結果：SC-24.3 量到 10 筆；交易、帳戶、首頁的橫條都是 57px；375px 寬時輸入框 260px、沒有橫向捲動。layout 21/21、ai-draft 3/3、完整 Web e2e 71/71、Web 單元測試 827/827。
+- 小地方：送出中的按鈕同時有 `aria-label` 和視覺隱藏文字，念出來的名稱相同，不影響使用。
+
+### 與 2j 搶埠
+
+- Web e2e 用固定埠 3100／5273／5274。T3b 期間 stats-2j 的伺服器多次占用，worker 回報 3 次 escalation，最後改成輪詢、空了就跑。協調者不停別人的行程。
+
+### T5
+
+- 合併 T1～T4、T3b 後，在 `feature/phase-4a-ai` 重跑：format:check、lint、typecheck、build 通過；單元測試 shared 122、API 728、Web 827 全過；API e2e 458/458（`ledger_ai_test`）；完整 Web e2e 71/71（含 layout 與 ai-draft）。
