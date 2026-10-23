@@ -1,8 +1,9 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
-import { Account, ErrorCode } from '@ledger/shared';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
+import { Account, BalanceTrend, ErrorCode } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { taipeiMonthPeriod, taipeiMonths } from '../statistics/taipei-period';
 
 /**
  * 帳戶的業務邏輯：錢實際放在哪裡、還剩多少。
@@ -47,6 +48,18 @@ function directionOf(type: Prisma.TransactionGroupByOutputType['type']): 1 | -1 
   }
 }
 
+/** 每個運算元與中間結果都必須精確，避免溢位後減回安全範圍而掩蓋誤差。 */
+function safeBalance(value: number): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new AppException(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      ErrorCode.INTERNAL_ERROR,
+      'Unable to calculate account balances.',
+    );
+  }
+  return value;
+}
+
 @Injectable()
 export class AccountsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -64,6 +77,42 @@ export class AccountsService {
     const { balances, used } = await this.calculateBalances(accounts);
     return accounts.map((account) =>
       this.toAccount(account, balances.get(account.id) ?? 0, used.has(account.id)),
+    );
+  }
+
+  /** 依目前全部帳戶回算月底資產；帳戶清單與各月餘額共用同一份資料庫快照。 */
+  async balanceTrend(userId: string, endMonth: string, months = 12): Promise<BalanceTrend> {
+    let periods: Array<{ month: string; end: Date }>;
+    try {
+      periods = taipeiMonths(endMonth, months).map((month) => ({
+        month,
+        end: taipeiMonthPeriod(month).end,
+      }));
+    } catch (error) {
+      if (error instanceof RangeError) {
+        throw new BadRequestException('Invalid balance trend period.');
+      }
+      throw error;
+    }
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const accounts = await tx.account.findMany({
+          where: { userId },
+          orderBy: { id: 'asc' },
+        });
+        const result: BalanceTrend = { months: [] };
+        for (const { month, end } of periods) {
+          const { balances } = await this.calculateBalances(accounts, tx, { date: { lt: end } });
+          let total = 0;
+          for (const balance of balances.values()) {
+            total = safeBalance(total + safeBalance(balance));
+          }
+          result.months.push({ month, total });
+        }
+        return result;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
   }
 
@@ -94,7 +143,9 @@ export class AccountsService {
     client: Prisma.TransactionClient = this.prisma,
     scope: Prisma.TransactionWhereInput = {},
   ): Promise<{ balances: Map<string, number>; used: Set<string> }> {
-    const balances = new Map(accounts.map((account) => [account.id, account.initialBalance]));
+    const balances = new Map(
+      accounts.map((account) => [account.id, safeBalance(account.initialBalance)]),
+    );
     const used = new Set<string>();
     if (accounts.length === 0) {
       return { balances, used };
@@ -126,9 +177,9 @@ export class AccountsService {
         continue; // where 已排除，這裡只是讓型別收斂
       }
       used.add(group.accountId);
-      const sum = group._sum.amount ?? 0;
+      const sum = safeBalance(group._sum.amount ?? 0);
       const delta = directionOf(group.type) * sum;
-      balances.set(group.accountId, (balances.get(group.accountId) ?? 0) + delta);
+      balances.set(group.accountId, safeBalance((balances.get(group.accountId) ?? 0) + delta));
     }
 
     for (const group of incoming) {
@@ -136,8 +187,8 @@ export class AccountsService {
         continue;
       }
       used.add(group.toAccountId);
-      const sum = group._sum.amount ?? 0;
-      balances.set(group.toAccountId, (balances.get(group.toAccountId) ?? 0) + sum);
+      const sum = safeBalance(group._sum.amount ?? 0);
+      balances.set(group.toAccountId, safeBalance((balances.get(group.toAccountId) ?? 0) + sum));
     }
 
     return { balances, used };

@@ -81,3 +81,30 @@ export interface RecordDefaultsQuery {
    */
   ledgerId?: string;
 }
+
+/** 資產趨勢的一個月。 */
+export interface BalanceTrendMonth {
+  /** `YYYY-MM`，台灣時間的完整曆月。 */
+  month: string;
+  /** 那個月底（台灣時間）所有帳戶的餘額合計，單位：分。可以是負數（決策 255）。 */
+  total: Cents;
+}
+
+/**
+ * `GET /accounts/balance-trend` 的回應（2j spec §4.3）。
+ *
+ * 只算呼叫者自己的帳戶，沒有帳本或使用者參數可以改範圍（決策 257）。餘額沿用帳戶頁的
+ * 公式（決策 254），所以最後一個月若是本月，`total` 等於帳戶頁的總資產。
+ */
+export interface BalanceTrend {
+  /** 由舊到新，每個月都有。沒有帳戶時每個月都是 0。 */
+  months: BalanceTrendMonth[];
+}
+
+/** `GET /accounts/balance-trend` 的查詢參數。 */
+export interface GetBalanceTrendQuery {
+  /** 最後一個月，`YYYY-MM`。 */
+  endMonth: string;
+  /** 往前幾個月（含 `endMonth`），1～24 的整數，預設 12。 */
+  months?: number;
+}

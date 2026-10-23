@@ -1,0 +1,86 @@
+.list {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+}
+
+.row,
+.selectable {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 0.75rem minmax(0, 1fr) minmax(0, auto) minmax(3.5rem, auto);
+  align-items: start;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.selectable {
+  cursor: pointer;
+}
+
+.selectable:hover {
+  background: var(--color-fill);
+}
+
+.swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-top: 0.25rem;
+  border-radius: 2px;
+  background: var(--swatch-color);
+}
+
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.amount,
+.percentage {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.percentage {
+  color: var(--color-text-muted);
+}
+
+.empty {
+  padding: var(--space-md);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+@media (max-width: 28rem) {
+  .row,
+  .selectable {
+    grid-template-columns: 0.75rem minmax(0, 1fr) minmax(0, 0.8fr);
+  }
+
+  .amount {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .percentage {
+    grid-column: 3;
+  }
+}

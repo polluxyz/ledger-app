@@ -8,13 +8,15 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { Account, JwtPayload } from '@ledger/shared';
+import type { Account, BalanceTrend, JwtPayload } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
+import { GetBalanceTrendQueryDto } from './dto/get-balance-trend-query.dto';
 
 /**
  * 帳戶端點。與分類／交易不同，這裡**不在 `/ledgers/:id` 之下**，也不掛
@@ -33,6 +35,14 @@ export class AccountsController {
   @Get()
   list(@CurrentUser() user: JwtPayload): Promise<Account[]> {
     return this.accounts.list(user.sub);
+  }
+
+  @Get('balance-trend')
+  balanceTrend(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: GetBalanceTrendQueryDto,
+  ): Promise<BalanceTrend> {
+    return this.accounts.balanceTrend(user.sub, dto.endMonth, dto.months);
   }
 
   @Post()

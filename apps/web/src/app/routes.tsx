@@ -9,6 +9,7 @@ import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
 import ProfilePage from '../pages/ProfilePage';
 import RegisterPage from '../pages/RegisterPage';
+import StatsPage from '../pages/StatsPage';
 import TransactionsPage from '../pages/TransactionsPage';
 import { GuestOnlyRoute } from './GuestOnlyRoute';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -39,6 +40,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         {/* 交易表格從 2h 的首頁搬過來（spec 2i SC-34.2）；首頁改成 dashboard。 */}
         <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/stats" element={<StatsPage />} />
         <Route path="/counterparties" element={<CounterpartiesPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/ledgers" element={<LedgersPage />} />

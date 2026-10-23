@@ -17,6 +17,7 @@ import { LedgerPeopleModule } from './ledger-people/ledger-people.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { LedgerGroupsModule } from './ledger-groups/ledger-groups.module';
 import { AiModule } from './ai/ai.module';
+import { StatisticsModule } from './statistics/statistics.module';
 
 /**
  * 根模組：組裝整個應用程式。載入全域設定（環境變數驗證）、全站流量限制、
@@ -50,6 +51,7 @@ import { AiModule } from './ai/ai.module';
     SettlementsModule,
     LedgerGroupsModule,
     AiModule,
+    StatisticsModule,
   ],
   // 以 APP_GUARD 全域套用限流；JWT 認證 guard 則在 AuthModule 內註冊。
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
