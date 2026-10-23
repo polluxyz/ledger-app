@@ -1,6 +1,7 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import {
   addMember,
+  createAccount,
   createCategory,
   createDebtEntry,
   createLedger,
@@ -210,6 +211,15 @@ async function seedDailyLedger(
     title: '薪水',
   });
 
+  const savings = await createAccount(request, user.token, { name: '儲蓄', initialBalance: 0 });
+  await createTransaction(request, user.token, ledger.id, {
+    type: 'TRANSFER',
+    amount: 100_000,
+    date: month.transactionDate,
+    accountId,
+    toAccountId: savings.id,
+  });
+
   const badDebt = await createDebtEntry(request, user.token, {
     counterparty: { name: '小華' },
     kind: 'LEND',
@@ -265,18 +275,36 @@ async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
 }
 
 async function expectStatsTouchTargets(page: Page): Promise<void> {
-  const targets = [
-    statsTabs(page).getByRole('button'),
-    page.getByRole('group', { name: /圖型$/ }).getByRole('button'),
-  ];
-  for (const group of targets) {
-    const count = await group.count();
-    for (let index = 0; index < count; index += 1) {
-      const height = await group
-        .nth(index)
-        .evaluate((element) => element.getBoundingClientRect().height);
-      expect(height).toBeGreaterThanOrEqual(44);
+  const tabButtons = statsTabs(page).getByRole('button');
+  const tabCount = await tabButtons.count();
+  expect(tabCount).toBeGreaterThanOrEqual(2);
+  for (let index = 0; index < tabCount; index += 1) {
+    const height = await tabButtons
+      .nth(index)
+      .evaluate((element) => element.getBoundingClientRect().height);
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+
+  const chartGroups = page.getByRole('group', { name: /圖型$/ });
+  const chartGroupCount = await chartGroups.count();
+  expect(chartGroupCount).toBeGreaterThan(0);
+  const visibleChartGroups: Locator[] = [];
+  for (let index = 0; index < chartGroupCount; index += 1) {
+    const chartGroup = chartGroups.nth(index);
+    if (await chartGroup.isVisible()) {
+      visibleChartGroups.push(chartGroup);
     }
+  }
+  expect(visibleChartGroups).toHaveLength(1);
+
+  const chartButtons = visibleChartGroups[0]!.getByRole('button');
+  const chartButtonCount = await chartButtons.count();
+  expect(chartButtonCount).toBeGreaterThanOrEqual(2);
+  for (let index = 0; index < chartButtonCount; index += 1) {
+    const height = await chartButtons
+      .nth(index)
+      .evaluate((element) => element.getBoundingClientRect().height);
+    expect(height).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -667,7 +695,17 @@ test.describe('2j 統計頁端對端', () => {
         name: new RegExp(`^${LONG_MEMBER_NAME}，`),
       });
       await expect(longMember).toBeVisible();
-      await expect(longMember).toContainText(LONG_MEMBER_NAME);
+      const longMemberText = longMember.getByText(LONG_MEMBER_NAME, { exact: true });
+      await expect(longMemberText).toBeVisible();
+      const memberTextMetrics = await longMemberText.evaluate((element) => ({
+        text: element.textContent?.trim(),
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        textOverflow: getComputedStyle(element).textOverflow,
+      }));
+      expect(memberTextMetrics.text).toBe(LONG_MEMBER_NAME);
+      expect(memberTextMetrics.scrollWidth).toBeLessThanOrEqual(memberTextMetrics.clientWidth);
+      expect(memberTextMetrics.textOverflow).not.toBe('ellipsis');
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       await chartSwitch(page, '成員圖型').getByRole('button', { name: '圓餅' }).click();
