@@ -2,6 +2,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TrendLineChart } from './TrendLineChart';
+import styles from './TrendLineChart.module.css';
 
 /** 驗證折線點位可處理零、常數與負值序列，且月份互動與無障礙標籤正確。 */
 describe('TrendLineChart', () => {
@@ -19,8 +20,15 @@ describe('TrendLineChart', () => {
       />,
     );
 
+    const compactYearClass = styles.yearAfterJanuary;
     const monthLabels = [...container.querySelectorAll('ol[aria-hidden="true"] li')].map((label) =>
-      label.textContent?.replace(/\s/g, ''),
+      [...label.children]
+        .filter(
+          (child) => compactYearClass === undefined || !child.classList.contains(compactYearClass),
+        )
+        .map((child) => child.textContent ?? '')
+        .join('')
+        .replace(/\s/g, ''),
     );
     expect(monthLabels).toEqual(['11月2025', '12月', '1月2026', '2月']);
     expect(screen.getByRole('img')).toHaveAttribute(

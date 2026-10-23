@@ -1,6 +1,3 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import {
   addMember,
@@ -27,16 +24,6 @@ import { switchLedger } from './ui';
 const LONG_CATEGORY_NAME = '超長分類名稱驗證文字'.repeat(4);
 const LONG_MEMBER_NAME = '測試共享帳本成員名稱完整顯示確認'.repeat(3);
 
-function artifactPath(fileName: string): string {
-  const path = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '../../../docs/artifacts',
-    fileName,
-  );
-  mkdirSync(dirname(path), { recursive: true });
-  return path;
-}
-
 async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
   const count = await labels.count();
   expect(count).toBe(12);
@@ -56,6 +43,61 @@ async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
     const expected = `${month}月${index === 0 || month === 1 ? year : ''}`;
     expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
     expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+  }
+}
+
+async function expectResponsiveLineMonthLabels(
+  labels: Locator,
+  controls: Locator,
+  expectedVisibleCount: number,
+): Promise<void> {
+  const count = await labels.count();
+  expect(count).toBe(12);
+  await expect(controls).toHaveCount(count);
+
+  const visibleIndices: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    if (await labels.nth(index).isVisible()) {
+      visibleIndices.push(index);
+    }
+  }
+  expect(visibleIndices.length).toBeGreaterThan(0);
+  expect(visibleIndices.length).toBe(expectedVisibleCount);
+
+  let previousVisibleYear: string | null = null;
+  for (const index of visibleIndices) {
+    const accessibleName = await controls.nth(index).getAttribute('aria-label');
+    const monthMatch = accessibleName?.match(/^(\d{4})\D+(\d{1,2})\D/);
+    expect(monthMatch).not.toBeNull();
+    if (!monthMatch) {
+      continue;
+    }
+
+    const [, year, monthNumber] = monthMatch;
+    const showYear = previousVisibleYear === null || previousVisibleYear !== year;
+    const expectedDigits = [Number(monthNumber), ...(showYear ? [Number(year)] : [])];
+    const labelDigits = (await labels.nth(index).innerText()).match(/\d+/g) ?? [];
+    expect(labelDigits.map(Number)).toEqual(expectedDigits);
+    expect(
+      await labels.nth(index).evaluate((element) => getComputedStyle(element).whiteSpace),
+    ).toBe('nowrap');
+    previousVisibleYear = year!;
+  }
+}
+
+async function expectMonthLabelGaps(labels: Locator): Promise<void> {
+  const visibleLabels = labels.filter({ visible: true });
+  const count = await visibleLabels.count();
+  expect(count).toBeGreaterThan(0);
+  const gaps = await visibleLabels.evaluateAll((elements) =>
+    elements.slice(1).map((element, index) => {
+      const current = element.getBoundingClientRect();
+      const previous = elements[index]!.getBoundingClientRect();
+      return current.left - previous.right;
+    }),
+  );
+  for (const gap of gaps) {
+    expect(gap).toBeGreaterThanOrEqual(4);
   }
 }
 
@@ -718,9 +760,6 @@ test.describe('2j 統計頁端對端', () => {
       );
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
-      if (theme === 'light') {
-        await page.screenshot({ path: artifactPath('2j-trend-bar-390-light.png'), fullPage: true });
-      }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
       const lineChart = page.getByRole('region', { name: '趨勢折線圖' });
       await expect(lineChart).toBeVisible();
@@ -737,14 +776,14 @@ test.describe('2j 統計頁端對端', () => {
       expect(pointFills.length).toBeGreaterThan(0);
       expect(pointFills).not.toContain('none');
       const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
-      await expectCompactMonthLabels(lineLabels, lineChart.locator('button'));
+      await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 6);
+      await expectMonthLabelGaps(lineLabels);
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       if (theme === 'light') {
-        await page.screenshot({
-          path: artifactPath('2j-trend-line-390-light.png'),
-          fullPage: true,
-        });
+        await page.setViewportSize({ width: 1280, height: 844 });
+        await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 12);
+        await page.setViewportSize({ width: 390, height: 844 });
       }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();
       const trendTable = page.getByRole('table', { name: '趨勢表格' });

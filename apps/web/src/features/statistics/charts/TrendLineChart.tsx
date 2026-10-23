@@ -146,9 +146,14 @@ export function TrendLineChart({
             {months.map((month, index) => {
               const [year, monthNumber] = month.month.split('-');
               const showYear = index === 0 || monthNumber === '01';
+              const showYearAfterJanuary =
+                monthNumber === '02' && months[index - 1]?.month === `${year}-01`;
               return (
                 <li key={month.month}>
                   <span>{Number(monthNumber)}月</span>
+                  <span className={`${styles.year} ${styles.yearAfterJanuary}`}>
+                    {showYearAfterJanuary ? year : '\u00a0'}
+                  </span>
                   <span className={styles.year}>{showYear ? year : '\u00a0'}</span>
                 </li>
               );
