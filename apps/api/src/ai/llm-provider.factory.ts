@@ -16,7 +16,12 @@ export function createLlmProvider(config: ConfigService<Env, true>): LLMProvider
   const apiKey = config.get('GLM_API_KEY', { infer: true })?.trim();
   const model = config.get('GLM_MODEL', { infer: true })?.trim();
   if (apiKey && model) {
-    return new GlmLlmProvider(apiKey, model, config.get('GLM_BASE_URL', { infer: true }));
+    return new GlmLlmProvider(
+      apiKey,
+      model,
+      config.get('GLM_BASE_URL', { infer: true }),
+      config.get('GLM_REASONING_EFFORT', { infer: true }),
+    );
   }
   return {
     complete: () => {

@@ -29,6 +29,32 @@ describe('LLM provider factory', () => {
     ).toBeInstanceOf(GlmLlmProvider);
   });
 
+  it('passes the configured reasoning effort to the GLM request', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: '{"drafts":[]}' } }] })),
+      );
+    try {
+      await createLlmProvider(
+        new ConfigService<Env, true>({
+          LLM_PROVIDER: 'glm',
+          GLM_API_KEY: 'key',
+          GLM_MODEL: 'model',
+          GLM_BASE_URL: 'https://example.test/v4',
+          GLM_REASONING_EFFORT: 'low',
+        }),
+      ).complete({ system: '', user: '', schema: {} });
+      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<
+        string,
+        unknown
+      >;
+      expect(body['reasoning_effort']).toBe('low');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it.each([
     {},
     { GLM_API_KEY: '  ' },

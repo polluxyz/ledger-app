@@ -14,6 +14,14 @@ const envSchema = z.object({
   GLM_MODEL: z.string().optional(),
   GLM_BASE_URL: z.string().default('https://open.bigmodel.cn/api/paas/v4'),
   /**
+   * GLM 的思考強度（`reasoning_effort`）。glm-5.3 一定會思考、預設 max，太慢；
+   * 設 `low` 才能在逾時內回應（spec 決策 249）。留空就不送這個欄位，其他模型照舊。
+   */
+  GLM_REASONING_EFFORT: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.enum(['low', 'high', 'max']).optional(),
+  ),
+  /**
    * 允許跨來源存取本 API 的前端網址（CORS）。Web 前端與 API 跑在不同的 port／
    * 網域，屬不同來源，瀏覽器預設會擋下請求，必須由後端明示放行。
    * 預設值為 Vite 開發伺服器；正式部署時改成實際的前端網域。

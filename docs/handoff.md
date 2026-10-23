@@ -14,7 +14,7 @@
 | ---------- | ----------------------------- | ------------------------------- | ------------------- | ----------------------------------- |
 | 主工作區   | `main`                        | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調 |
 | `stats-2j` | `feature/phase-2j-stats-impl` | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 已合併（#154），待部署 dev 點測     |
-| `ai-4a`    | `feature/phase-4a-ai`         | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 已合併（#155）並部署，T6 等金鑰     |
+| `ai-4a`    | `feature/phase-4a-ai`         | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 已完成（#155、T6 真的模型）         |
 
 ## 跨工作區的規則
 
