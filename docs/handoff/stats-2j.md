@@ -10,8 +10,8 @@
 - 實作在整合分支 `feature/phase-2j-stats-impl`（從 docs PR 合併後的 `main` 開）。進度看 todo 的勾選與 plan §6 實作紀錄。
 - 產出（不進版控）：`docs/artifacts/stats-ia/`（版面比較頁、圖型切換原型 `claude-4.html`、`advisor/round1.md`、`round2.md`）。
 - Orca run：資訊架構提案 `run_404efb59895f`（已結束）；實作 `run_524feab581d4`。
-- 進行中的 worker：W2 `2j-web-page`（Codex）。S1a、S1b、S2、W1、W3 已合併。
+- D0、S1a、S1b、S2、S3、W1～W5 都已合併到整合分支，沒有進行中的 worker。W5 是 D1 截圖對照時追加的圖表畫面修正。
 
 ## 下一步
 
-照 todo 實作：D0（協調者）→ 第 1 波 S1a、W1、W3 → 第 2 波 S1b、S2、W2 → 第 3 波 S3、W4 → D1。後端派 `backend`；網頁只派 Codex。
+D1 整體驗收（plan §4、todo 的 D1）：整合分支重跑全套檢查與兩套 e2e、重截 390px 與桌面截圖對 W220～W225、開 PR 合併、dev 照 plan §4 點一次、清 worktree 與 worker 測試資料庫。完成後 plan 與 todo 移到 `tasks/archive/`。

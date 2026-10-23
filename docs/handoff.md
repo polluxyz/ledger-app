@@ -13,7 +13,7 @@
 | worktree   | 分支                          | 交接檔                          | 測試資料庫          | 狀態                                |
 | ---------- | ----------------------------- | ------------------------------- | ------------------- | ----------------------------------- |
 | 主工作區   | `main`                        | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調 |
-| `stats-2j` | `feature/phase-2j-stats-impl` | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | spec、plan、todo 已核可，實作中     |
+| `stats-2j` | `feature/phase-2j-stats-impl` | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 實作完成，D1 整體驗收中             |
 | `ai-4a`    | `feature/phase-4a-ai`         | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | plan、todo 已核可，下一步 T0        |
 
 ## 跨工作區的規則
