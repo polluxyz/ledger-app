@@ -1,9 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { TransactionDraft } from '@ledger/shared';
 import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
 import { ApiError } from '../../lib/api-client';
 import { toDateInputValue } from '../../lib/format';
 import { Button } from '../../components/Button';
+import { usePageToolbarSlot } from '../../app/PageToolbarSlotContext';
 import { useAiParse } from './use-ai-parse';
 import styles from './AiDraftInput.module.css';
 
@@ -14,6 +16,7 @@ interface AiDraftInputProps {
 
 /** 交易頁的 AI 輸入列；只負責送出句子並把解析草稿交回頁面暫存。 */
 export function AiDraftInput({ ledgerId, onParsed }: AiDraftInputProps) {
+  const { element } = usePageToolbarSlot();
   const [text, setText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const submitting = useRef(false);
@@ -41,34 +44,51 @@ export function AiDraftInput({ ledgerId, onParsed }: AiDraftInputProps) {
   }
 
   return (
-    <section className={styles.section} aria-labelledby="ai-draft-input-title">
-      <h2 id="ai-draft-input-title" className={styles.title}>
-        AI 記帳
-      </h2>
-      <form className={styles.form} onSubmit={(event) => void handleSubmit(event)}>
-        <label className={styles.visuallyHidden} htmlFor="ai-transaction-text">
-          用一句話記帳
-        </label>
-        <input
-          id="ai-transaction-text"
-          className={styles.input}
-          type="text"
-          value={text}
-          maxLength={AI_TEXT_MAX_LENGTH}
-          placeholder="例如：早餐 60 現金、午餐 120 刷卡"
-          disabled={isPending}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <Button type="submit" disabled={isPending || text.trim() === ''}>
-          {isPending ? '處理中…' : '送出'}
-        </Button>
-      </form>
+    <>
+      {element &&
+        createPortal(
+          <form
+            className={styles.form}
+            aria-busy={isPending}
+            onSubmit={(event) => void handleSubmit(event)}
+          >
+            <label className={styles.visuallyHidden} htmlFor="ai-transaction-text">
+              用一句話記帳
+            </label>
+            <input
+              id="ai-transaction-text"
+              className={styles.input}
+              type="text"
+              value={text}
+              maxLength={AI_TEXT_MAX_LENGTH}
+              placeholder="例如：早餐 60 現金、午餐 120 刷卡"
+              disabled={isPending}
+              onChange={(event) => setText(event.target.value)}
+            />
+            <Button
+              type="submit"
+              aria-label={isPending ? '處理中…' : undefined}
+              aria-busy={isPending}
+              disabled={isPending || text.trim() === ''}
+            >
+              {isPending ? (
+                <>
+                  <span className={styles.spinner} aria-hidden="true" />
+                  <span className={styles.visuallyHidden}>處理中…</span>
+                </>
+              ) : (
+                '送出'
+              )}
+            </Button>
+          </form>,
+          element,
+        )}
       {message !== null && (
         <p className={styles.message} role="alert">
           {message}
         </p>
       )}
-    </section>
+    </>
   );
 }
 
