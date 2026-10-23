@@ -11,7 +11,11 @@ export interface DonutChartProps {
   title?: string;
   theme?: ChartTheme;
   data:
-    | { kind: 'groups'; items: readonly StatisticsGroup[] }
+    | {
+        kind: 'groups';
+        items: readonly StatisticsGroup[];
+        onSelect?: (group: StatisticsGroup) => void;
+      }
     | { kind: 'people'; items: readonly StatisticsPerson[]; denominator: Cents };
 }
 
@@ -21,6 +25,7 @@ interface DonutSlice {
   amount: Cents;
   color: string;
   percentageBps: number;
+  group?: StatisticsGroup;
 }
 
 const RADIUS = 84;
@@ -42,6 +47,7 @@ export function DonutChart({
           amount: group.amount,
           color: getStatisticsGroupColor(group, theme),
           percentageBps: group.percentageBps,
+          group,
         }))
       : data.items.map((person) => ({
           id: person.personId,
@@ -86,9 +92,18 @@ export function DonutChart({
 
   return (
     <section className={styles.wrapper} aria-label={title}>
-      <div className={styles.chart} role="img" aria-label={chartLabel}>
+      <div
+        className={styles.chart}
+        role={data.kind === 'groups' && data.onSelect ? 'group' : 'img'}
+        aria-label={chartLabel}
+      >
         {hasVisibleData && (
-          <svg className={styles.svg} viewBox="0 0 220 220" aria-hidden="true" focusable="false">
+          <svg
+            className={styles.svg}
+            viewBox="0 0 220 220"
+            aria-hidden={!(data.kind === 'groups' && data.onSelect)}
+            focusable={data.kind === 'groups' && data.onSelect ? undefined : 'false'}
+          >
             <circle
               cx={CENTER}
               cy={CENTER}
@@ -96,16 +111,43 @@ export function DonutChart({
               className={styles.track}
               strokeWidth={STROKE_WIDTH}
             />
-            {arcPaths.map((slice) => (
-              <path
-                key={slice.id}
-                d={slice.path}
-                fill="none"
-                stroke={slice.color}
-                strokeWidth={STROKE_WIDTH}
-                className={styles.slice}
-              />
-            ))}
+            {arcPaths.map((slice) => {
+              const selectable =
+                data.kind === 'groups' &&
+                data.onSelect !== undefined &&
+                slice.group?.kind === 'CATEGORY';
+              const activate = () => {
+                if (selectable && slice.group) {
+                  data.onSelect?.(slice.group);
+                }
+              };
+              return (
+                <path
+                  key={slice.id}
+                  d={slice.path}
+                  fill="none"
+                  stroke={slice.color}
+                  strokeWidth={STROKE_WIDTH}
+                  className={selectable ? `${styles.slice} ${styles.selectable}` : styles.slice}
+                  role={selectable ? 'button' : undefined}
+                  tabIndex={selectable ? 0 : undefined}
+                  aria-label={
+                    selectable ? `${slice.label} ${formatMoney(slice.amount)}` : undefined
+                  }
+                  onClick={selectable ? activate : undefined}
+                  onKeyDown={
+                    selectable
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            activate();
+                          }
+                        }
+                      : undefined
+                  }
+                />
+              );
+            })}
           </svg>
         )}
         <div className={styles.center}>

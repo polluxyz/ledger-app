@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import type { LedgerSummary, Transaction } from '@ledger/shared';
+import {
+  MANUAL_TRANSACTION_TYPES,
+  type LedgerSummary,
+  type ManualTransactionType,
+  type Transaction,
+} from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
@@ -10,6 +15,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { useCategories } from '../features/categories/use-categories';
 import { DebtHistoryView } from '../features/debts/DebtHistoryView';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
@@ -50,7 +56,39 @@ import styles from './TransactionsPage.module.css';
  * 可以記帳，留一張記不進去的表單只會讓人以為壞了。
  */
 export default function TransactionsPage() {
-  const { ledger, isLoading: ledgerLoading, error: ledgerError } = useActiveLedger();
+  const {
+    ledger,
+    ledgers,
+    setActiveLedgerId,
+    isLoading: ledgerLoading,
+    error: ledgerError,
+  } = useActiveLedger();
+  const location = useLocation();
+  const routeParams = new URLSearchParams(location.search);
+  const routeFiltersPresent = hasRouteFilterParams(routeParams);
+  const requestedLedgerId = routeParams.get('ledger')?.trim();
+  const requestedLedger = requestedLedgerId
+    ? ledgers.find((item) => item.id === requestedLedgerId)
+    : undefined;
+  const switchToRouteLedger =
+    routeFiltersPresent && requestedLedger !== undefined && requestedLedger.id !== ledger?.id;
+
+  useEffect(() => {
+    if (switchToRouteLedger && requestedLedger) {
+      setActiveLedgerId(requestedLedger.id);
+    }
+  }, [requestedLedger, setActiveLedgerId, switchToRouteLedger]);
+
+  if (switchToRouteLedger) {
+    return (
+      <PageContent>
+        <PageHeader title="交易" />
+        <p className={styles.note} role="status">
+          載入中…
+        </p>
+      </PageContent>
+    );
+  }
 
   if (ledger) {
     return <LedgerTransactions key={ledger.id} ledger={ledger} />;
@@ -100,6 +138,33 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const requestedView = searchParams.get('view');
   const requestedTab = searchParams.get('tab');
   const routeState: unknown = location.state;
+  const routeFilters = getRouteFilters(location.search);
+  const [appliedImportLocationKey, setAppliedImportLocationKey] = useState<string | null>(null);
+  const pendingImport = routeFilters !== null && appliedImportLocationKey !== location.key;
+  const routeCategoryId = pendingImport ? routeFilters.categoryId : null;
+  const routeCategories = useCategories(routeCategoryId ? ledger.id : null);
+  const routeCategoryResolved =
+    routeCategoryId === null ||
+    routeCategories.data !== undefined ||
+    routeCategories.error !== null;
+  if (pendingImport && routeFilters !== null && routeCategoryResolved) {
+    const categoryIsValid =
+      routeFilters.categoryId !== '' &&
+      routeCategories.data?.some((category) => category.id === routeFilters.categoryId) === true;
+    const fromIsValid = isValidRouteDate(routeFilters.from);
+    const toIsValid =
+      isValidRouteDate(routeFilters.to) && !(fromIsValid && routeFilters.to < routeFilters.from);
+
+    setFilters({
+      type: routeFilters.type,
+      categoryId: categoryIsValid ? routeFilters.categoryId : '',
+      from: fromIsValid ? routeFilters.from : '',
+      to: toIsValid ? routeFilters.to : '',
+    });
+    setPage(1);
+    setFiltersOpen(true);
+    setAppliedImportLocationKey(location.key);
+  }
   const routeToShared = requestedView === 'settle' || settleIntent !== null;
   const view: TransactionsView = requestedView === 'debts' || routeToShared ? 'debts' : 'details';
   const debtsTab: DebtsTab = routeToShared
@@ -110,7 +175,10 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const sharedSettleIntent =
     requestedView === 'debts' && requestedTab === 'shared' ? settleIntent : null;
 
-  const transactions = useTransactions(ledger.id, toListQuery(filters, page));
+  const transactions = useTransactions(
+    pendingImport ? null : ledger.id,
+    toListQuery(filters, page),
+  );
   const setTransactionMark = useSetTransactionMark();
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
@@ -375,7 +443,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
             <section className={styles.listCard}>
               <TransactionList
                 transactions={transactions.data?.items ?? []}
-                isLoading={transactions.isLoading}
+                isLoading={transactions.isLoading || pendingImport}
                 error={transactions.error}
                 isFiltered={hasAnyFilter(filters)}
                 onEdit={startEditing}
@@ -402,5 +470,44 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
       <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
+  );
+}
+
+function hasRouteFilterParams(params: URLSearchParams): boolean {
+  return ['type', 'categoryId', 'from', 'to'].some((name) => params.has(name));
+}
+
+function getRouteFilters(search: string): TransactionFilters | null {
+  const params = new URLSearchParams(search);
+  if (!hasRouteFilterParams(params)) {
+    return null;
+  }
+
+  const requestedType = params.get('type');
+  return {
+    type: isManualTransactionType(requestedType) ? requestedType : '',
+    categoryId: params.get('categoryId') ?? '',
+    from: params.get('from') ?? '',
+    to: params.get('to') ?? '',
+  };
+}
+
+function isManualTransactionType(value: string | null): value is ManualTransactionType {
+  return MANUAL_TRANSACTION_TYPES.some((type) => type === value);
+}
+
+function isValidRouteDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined || year < 1) {
+    return false;
+  }
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }

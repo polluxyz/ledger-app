@@ -17,6 +17,7 @@ import { AccountBalances } from '../features/accounts/AccountBalances';
 import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
 import { useBalanceTrend } from '../features/statistics/use-balance-trend';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
+import { currentTaiwanMonthRange } from '../features/statistics/stats-url';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
@@ -589,25 +590,4 @@ function StatLink({
       {shared && <span className={styles.statMine}>我 {formatMoney(mine)}</span>}
     </Link>
   );
-}
-
-/** 組成目前台灣月份的起迄日，供統計 API 與後續導覽共用。 */
-function currentTaiwanMonthRange(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-  }).formatToParts(now);
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-
-  if (!year || !month) {
-    throw new Error('無法取得台灣時區的目前月份。');
-  }
-
-  const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
-  return {
-    from: `${year}-${month}-01`,
-    to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
-  };
 }

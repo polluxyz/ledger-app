@@ -28,6 +28,15 @@
   stroke-linecap: butt;
 }
 
+.selectable {
+  cursor: pointer;
+}
+
+.selectable:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
 .center {
   position: absolute;
   display: flex;

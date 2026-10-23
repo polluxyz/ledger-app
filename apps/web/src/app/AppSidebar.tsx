@@ -206,6 +206,12 @@ export function AppSidebar({ panel, isOpen, onNavigate }: AppSidebarProps) {
             </span>
             <span className={styles.collapsibleLabel}>交易</span>
           </NavLink>
+          <NavLink to="/stats" className={navLinkClass} onClick={handleNavigate}>
+            <span className={styles.rowIcon}>
+              <Icon name="receipt" />
+            </span>
+            <span className={styles.collapsibleLabel}>統計</span>
+          </NavLink>
           <NavLink to="/counterparties" className={navLinkClass} onClick={handleNavigate}>
             <span className={styles.rowIcon}>
               <Icon name="user" />

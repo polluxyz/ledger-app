@@ -11,7 +11,11 @@ export interface HorizontalBarChartProps {
   title?: string;
   theme?: ChartTheme;
   data:
-    | { kind: 'groups'; items: readonly StatisticsGroup[] }
+    | {
+        kind: 'groups';
+        items: readonly StatisticsGroup[];
+        onSelect?: (group: StatisticsGroup) => void;
+      }
     | { kind: 'people'; items: readonly StatisticsPerson[] };
 }
 
@@ -20,6 +24,7 @@ interface BarRow {
   label: string;
   amount: Cents;
   color: string;
+  group?: StatisticsGroup;
 }
 
 export function HorizontalBarChart({
@@ -35,6 +40,7 @@ export function HorizontalBarChart({
           label: group.category?.name ?? fixedGroupLabel(group.kind),
           amount: group.amount,
           color: getStatisticsGroupColor(group, theme),
+          group,
         }))
       : data.items.map((person) => ({
           id: person.personId,
@@ -50,16 +56,43 @@ export function HorizontalBarChart({
         {rows.map((row) => {
           const width = maximumAmount > 0 ? (row.amount / maximumAmount) * 100 : 0;
           return (
-            <li className={styles.row} key={row.id}>
-              <span className={styles.name}>{row.label}</span>
-              <span
-                aria-hidden="true"
-                className={styles.track}
-                style={{ '--bar-color': row.color } as CSSProperties}
-              >
-                <span className={styles.bar} style={{ width: `${width}%` }} />
-              </span>
-              <span className={styles.amount}>{formatMoney(row.amount)}</span>
+            <li key={row.id}>
+              {data.kind === 'groups' &&
+              data.onSelect !== undefined &&
+              row.group?.kind === 'CATEGORY' ? (
+                <button
+                  type="button"
+                  className={`${styles.row} ${styles.rowButton}`}
+                  aria-label={`${row.label} ${formatMoney(row.amount)}`}
+                  onClick={() => {
+                    if (row.group) {
+                      data.onSelect?.(row.group);
+                    }
+                  }}
+                >
+                  <span className={styles.name}>{row.label}</span>
+                  <span
+                    aria-hidden="true"
+                    className={styles.track}
+                    style={{ '--bar-color': row.color } as CSSProperties}
+                  >
+                    <span className={styles.bar} style={{ width: `${width}%` }} />
+                  </span>
+                  <span className={styles.amount}>{formatMoney(row.amount)}</span>
+                </button>
+              ) : (
+                <div className={styles.row}>
+                  <span className={styles.name}>{row.label}</span>
+                  <span
+                    aria-hidden="true"
+                    className={styles.track}
+                    style={{ '--bar-color': row.color } as CSSProperties}
+                  >
+                    <span className={styles.bar} style={{ width: `${width}%` }} />
+                  </span>
+                  <span className={styles.amount}>{formatMoney(row.amount)}</span>
+                </div>
+              )}
             </li>
           );
         })}
