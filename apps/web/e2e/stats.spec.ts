@@ -24,6 +24,112 @@ import { switchLedger } from './ui';
 const LONG_CATEGORY_NAME = '超長分類名稱驗證文字'.repeat(4);
 const LONG_MEMBER_NAME = '測試共享帳本成員名稱完整顯示確認'.repeat(3);
 
+async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
+  const count = await labels.count();
+  expect(count).toBe(12);
+  await expect(controls).toHaveCount(count);
+
+  for (let index = 0; index < count; index += 1) {
+    const label = labels.nth(index);
+    const accessibleName = await controls.nth(index).getAttribute('aria-label');
+    const monthMatch = accessibleName?.match(/^(\d{4})年(\d{1,2})月/);
+    expect(monthMatch).not.toBeNull();
+    if (!monthMatch) {
+      continue;
+    }
+
+    const [, year, monthNumber] = monthMatch;
+    const month = Number(monthNumber);
+    const expected = `${month}月${index === 0 || month === 1 ? year : ''}`;
+    expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
+    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+  }
+}
+
+async function expectResponsiveLineMonthLabels(
+  labels: Locator,
+  controls: Locator,
+  expectedVisibleCount: number,
+): Promise<void> {
+  const count = await labels.count();
+  expect(count).toBe(12);
+  await expect(controls).toHaveCount(count);
+
+  const visibleIndices: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    if (await labels.nth(index).isVisible()) {
+      visibleIndices.push(index);
+    }
+  }
+  expect(visibleIndices.length).toBeGreaterThan(0);
+  expect(visibleIndices.length).toBe(expectedVisibleCount);
+
+  let previousVisibleYear: string | null = null;
+  for (const index of visibleIndices) {
+    const accessibleName = await controls.nth(index).getAttribute('aria-label');
+    const monthMatch = accessibleName?.match(/^(\d{4})\D+(\d{1,2})\D/);
+    expect(monthMatch).not.toBeNull();
+    if (!monthMatch) {
+      continue;
+    }
+
+    const [, year, monthNumber] = monthMatch;
+    const showYear = previousVisibleYear === null || previousVisibleYear !== year;
+    const expectedDigits = [Number(monthNumber), ...(showYear ? [Number(year)] : [])];
+    const label = labels.nth(index);
+    const labelDigits = (await label.innerText()).match(/\d+/g) ?? [];
+    expect(labelDigits.map(Number)).toEqual(expectedDigits);
+    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+    expect(await label.evaluate((element) => element.children.length)).toBe(2);
+    previousVisibleYear = year!;
+  }
+}
+
+async function expectResponsiveLineMonthPositions(labels: Locator, points: Locator): Promise<void> {
+  const count = await labels.count();
+  await expect(points).toHaveCount(count * 2);
+
+  for (let index = 0; index < count; index += 1) {
+    const label = labels.nth(index);
+    if (!(await label.isVisible())) {
+      continue;
+    }
+
+    const labelRect = await label.evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return { left, right };
+    });
+    const pointRect = await points.nth(index * 2).evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return { left, right };
+    });
+    const alignedLabelX =
+      index === 0
+        ? labelRect.left
+        : index === count - 1
+          ? labelRect.right
+          : (labelRect.left + labelRect.right) / 2;
+    const incomePointX = (pointRect.left + pointRect.right) / 2;
+    expect(Math.abs(alignedLabelX - incomePointX)).toBeLessThanOrEqual(6);
+  }
+}
+
+async function expectMonthLabelGaps(labels: Locator): Promise<void> {
+  const visibleLabels = labels.filter({ visible: true });
+  const count = await visibleLabels.count();
+  expect(count).toBeGreaterThan(0);
+  const gaps = await visibleLabels.evaluateAll((elements) =>
+    elements.slice(1).map((element, index) => {
+      const current = element.getBoundingClientRect();
+      const previous = elements[index]!.getBoundingClientRect();
+      return current.left - previous.right;
+    }),
+  );
+  for (const gap of gaps) {
+    expect(gap).toBeGreaterThanOrEqual(4);
+  }
+}
+
 interface TaiwanMonth {
   value: string;
   from: string;
@@ -675,17 +781,56 @@ test.describe('2j 統計頁端對端', () => {
 
       await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '長條' }).click();
-      await expect(page.getByRole('list', { name: '每月收支' }).getByRole('listitem')).toHaveCount(
-        12,
+      const trendBarMonths = page.getByRole('list', { name: '每月收支' });
+      await expect(trendBarMonths.getByRole('listitem')).toHaveCount(12);
+      await expectCompactMonthLabels(
+        trendBarMonths.locator('button > span:nth-of-type(2)'),
+        trendBarMonths.getByRole('button'),
       );
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
-      await expect(page.getByRole('region', { name: '趨勢折線圖' })).toBeVisible();
+      const lineChart = page.getByRole('region', { name: '趨勢折線圖' });
+      await expect(lineChart).toBeVisible();
+      const polylines = lineChart.locator('svg polyline');
+      await expect(polylines).toHaveCount(2);
+      expect(
+        await polylines.evaluateAll((elements) =>
+          elements.map((element) => getComputedStyle(element).fill),
+        ),
+      ).toEqual(['none', 'none']);
+      const pointFills = await lineChart
+        .locator('svg circle')
+        .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill));
+      expect(pointFills.length).toBeGreaterThan(0);
+      expect(pointFills).not.toContain('none');
+      const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
+      const linePoints = lineChart.locator('svg circle');
+      await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 6);
+      await expectResponsiveLineMonthPositions(lineLabels, linePoints);
+      await expectMonthLabelGaps(lineLabels);
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
+      if (theme === 'light') {
+        await page.setViewportSize({ width: 1280, height: 844 });
+        await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 12);
+        await expectResponsiveLineMonthPositions(lineLabels, linePoints);
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();
-      await expect(page.getByRole('table', { name: '趨勢表格' })).toBeVisible();
+      const trendTable = page.getByRole('table', { name: '趨勢表格' });
+      await expect(trendTable).toBeVisible();
+      const monthCells = trendTable.getByRole('rowheader');
+      await expect(monthCells).toHaveCount(12);
+      for (const cell of await monthCells.all()) {
+        const parts = await cell.evaluate((element) =>
+          Array.from(element.children, (child) => child.textContent?.trim() ?? ''),
+        );
+        expect(parts).toHaveLength(2);
+        expect(parts[0]).toMatch(/^\d{4}年$/);
+        expect(parts[1]).toMatch(/^\d{1,2}月$/);
+        expect((await cell.innerText()).replace(/\s/g, '')).toBe(`${parts[0]}${parts[1]}`);
+      }
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
 

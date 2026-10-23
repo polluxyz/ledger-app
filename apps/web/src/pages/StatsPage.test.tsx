@@ -15,6 +15,7 @@ import {
   ActiveLedgerContext,
   type ActiveLedgerContextValue,
 } from '../features/ledgers/active-ledger-context';
+import { getChartColorForId } from '../features/statistics/charts/chart-colors';
 import StatsPage from './StatsPage';
 
 const statisticsApi = vi.hoisted(() => ({
@@ -518,6 +519,50 @@ describe('StatsPage', () => {
       'true',
     );
     expect(screen.queryByRole('button', { name: '成員' })).not.toBeInTheDocument();
+  });
+
+  it('matches member color swatches to both charts and updates them with the theme', async () => {
+    const user = userEvent.setup();
+    document.documentElement.setAttribute('data-theme', 'dark');
+    renderPage('/stats?tab=member&ledger=family&month=2026-10&chart=bar');
+
+    const memberList = await screen.findByRole('list', { name: '成員收支' });
+    const me = within(memberList).getByRole('listitem', { name: '我，支出 $450，收入 $200' });
+    const swatch = me.querySelector('[aria-hidden="true"]');
+    if (!(swatch instanceof HTMLElement)) {
+      throw new Error('成員清單應有裝飾性色塊。');
+    }
+    const darkColor = getChartColorForId('me', 'dark');
+    expect(swatch.style.getPropertyValue('--swatch-color')).toBe(darkColor);
+
+    const barChart = screen.getByRole('region', { name: '成員支出長條圖' });
+    const barRow = within(barChart).getByText('我').closest('li');
+    const barTrack = barRow?.querySelector('[style*="--bar-color"]');
+    if (!(barTrack instanceof HTMLElement)) {
+      throw new Error('成員長條圖應有對應的色條。');
+    }
+    expect(barTrack.style.getPropertyValue('--bar-color')).toBe(darkColor);
+
+    document.documentElement.setAttribute('data-theme', 'light');
+    const lightColor = getChartColorForId('me', 'light');
+    await waitFor(() => {
+      expect(swatch.style.getPropertyValue('--swatch-color')).toBe(lightColor);
+      expect(barTrack.style.getPropertyValue('--bar-color')).toBe(lightColor);
+    });
+
+    await user.click(
+      within(screen.getByRole('group', { name: '成員圖型' })).getByRole('button', { name: '圓餅' }),
+    );
+    const donutChart = await screen.findByRole('img', { name: /成員支出圓餅圖/ });
+    const donutSlice = donutChart.querySelector('path');
+    expect(donutSlice?.getAttribute('stroke')).toBe(lightColor);
+    expect(swatch.style.getPropertyValue('--swatch-color')).toBe(lightColor);
+
+    document.documentElement.setAttribute('data-theme', 'dark');
+    await waitFor(() => {
+      expect(swatch.style.getPropertyValue('--swatch-color')).toBe(darkColor);
+      expect(donutSlice?.getAttribute('stroke')).toBe(darkColor);
+    });
   });
 
   it('keeps summary and category data visible when trend fails, and hides zero totals when statistics fail', async () => {

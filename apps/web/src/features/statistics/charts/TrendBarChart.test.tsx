@@ -5,6 +5,29 @@ import { TrendBarChart } from './TrendBarChart';
 
 /** 驗證趨勢長條圖摘要與月份選擇都呈現 API 的精確金額並能用鍵盤操作。 */
 describe('TrendBarChart', () => {
+  it('uses compact visible month labels and retains full dates for assistive technology', () => {
+    const { container } = render(
+      <TrendBarChart
+        selectedMonth="2026-02"
+        onSelectMonth={vi.fn()}
+        months={[
+          { month: '2025-11', income: 10_000, expense: 20_000, net: -10_000 },
+          { month: '2025-12', income: 30_000, expense: 5_000, net: 25_000 },
+          { month: '2026-01', income: 30_000, expense: 5_000, net: 25_000 },
+          { month: '2026-02', income: 30_000, expense: 5_000, net: 25_000 },
+        ]}
+      />,
+    );
+
+    const monthButtons = [...container.querySelectorAll('button')];
+    expect(
+      monthButtons.map((button) =>
+        button.querySelector(':scope > span:nth-of-type(2)')?.textContent?.replace(/\s/g, ''),
+      ),
+    ).toEqual(['11月2025', '12月', '1月2026', '2月']);
+    expect(monthButtons[0]).toHaveAccessibleName('2025年11月，收入 $100，支出 $200，結餘 -$100');
+  });
+
   it('shows the selected month totals and selects a month with the keyboard', async () => {
     const user = userEvent.setup();
     const onSelectMonth = vi.fn();

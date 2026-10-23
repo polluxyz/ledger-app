@@ -2,9 +2,54 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TrendLineChart } from './TrendLineChart';
+import styles from './TrendLineChart.module.css';
 
 /** 驗證折線點位可處理零、常數與負值序列，且月份互動與無障礙標籤正確。 */
 describe('TrendLineChart', () => {
+  it('uses compact axis labels while keeping full month names available to assistive technology', () => {
+    const { container } = render(
+      <TrendLineChart
+        selectedMonth="2026-02"
+        onSelectMonth={vi.fn()}
+        months={[
+          { month: '2025-11', income: 10_000, expense: 20_000, net: -10_000 },
+          { month: '2025-12', income: 30_000, expense: 5_000, net: 25_000 },
+          { month: '2026-01', income: 30_000, expense: 5_000, net: 25_000 },
+          { month: '2026-02', income: 30_000, expense: 5_000, net: 25_000 },
+        ]}
+      />,
+    );
+
+    const labels = [...container.querySelectorAll('ol[aria-hidden="true"] li')];
+    const monthLabels = labels.map((label) =>
+      `${label.children[0]?.textContent ?? ''}${label.querySelector(`.${styles.yearPrimary}`)?.textContent ?? ''}`.replace(
+        /\s/g,
+        '',
+      ),
+    );
+    expect(monthLabels).toEqual(['11月2025', '12月', '1月2026', '2月']);
+    expect(labels.map((label) => label.children.length)).toEqual([2, 2, 2, 2]);
+    const labelPositions = labels.map((label) =>
+      Number.parseFloat((label as HTMLElement).style.left),
+    );
+    expect(labelPositions).toHaveLength(4);
+    expect(labelPositions[0]).toBe(0);
+    expect(labelPositions[1]).toBeCloseTo(100 / 3);
+    expect(labelPositions[2]).toBeCloseTo(200 / 3);
+    expect(labelPositions[3]).toBe(100);
+    expect(labels.map((label) => (label as HTMLElement).style.transform)).toEqual([
+      '',
+      'translateX(-50%)',
+      'translateX(-50%)',
+      'translateX(-100%)',
+    ]);
+    expect(labels[3]?.querySelector(`.${styles.yearAfterJanuary}`)).toHaveTextContent('2026');
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('2025年11月'),
+    );
+  });
+
   it('renders finite coordinates for all-zero and constant values and draws the zero line', () => {
     const { container, rerender } = render(
       <TrendLineChart

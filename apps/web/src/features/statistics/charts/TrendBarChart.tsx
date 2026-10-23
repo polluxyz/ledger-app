@@ -45,8 +45,10 @@ export function TrendBarChart({
       )}
       {months.length > 0 ? (
         <ol className={styles.months} aria-label="每月收支">
-          {months.map((month) => {
+          {months.map((month, index) => {
             const monthLabel = formatMonth(month.month);
+            const [year, monthNumber] = month.month.split('-');
+            const showYear = index === 0 || monthNumber === '01';
             const ariaLabel = `${monthLabel}，收入 ${formatMoney(month.income)}，支出 ${formatMoney(month.expense)}，結餘 ${formatMoney(month.net)}`;
             const incomeHeight = maximumAmount > 0 ? (month.income / maximumAmount) * 100 : 0;
             const expenseHeight = maximumAmount > 0 ? (month.expense / maximumAmount) * 100 : 0;
@@ -67,7 +69,10 @@ export function TrendBarChart({
                     <span className={styles.incomeBar} style={{ height: `${incomeHeight}%` }} />
                     <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
                   </span>
-                  <span className={styles.monthLabel}>{monthLabel}</span>
+                  <span className={styles.monthLabel}>
+                    <span>{Number(monthNumber)}月</span>
+                    <span className={styles.year}>{showYear ? year : '\u00a0'}</span>
+                  </span>
                 </button>
               </li>
             );

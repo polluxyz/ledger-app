@@ -22,7 +22,11 @@ describe('TrendTable', () => {
     }
     expect(rows).toHaveLength(3);
     expect(within(oldestRow).getByRole('rowheader')).toHaveTextContent('2026年4月');
+    expect(within(oldestRow).getByRole('rowheader')).toHaveAccessibleName('2026年4月');
     expect(within(newestRow).getByRole('rowheader')).toHaveTextContent('2026年5月');
+    expect(
+      [...within(oldestRow).getByRole('rowheader').children].map((part) => part.textContent),
+    ).toEqual(['2026年', '4月']);
     expect(within(oldestRow).getByText('$123.45')).toBeInTheDocument();
     expect(within(newestRow).getByText('-$123.45')).toBeInTheDocument();
   });
