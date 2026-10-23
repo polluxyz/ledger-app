@@ -3,6 +3,29 @@
   width: 100%;
 }
 
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-lg);
+  margin: 0 0 var(--space-md);
+}
+
+.summary div {
+  min-width: 0;
+}
+
+.summary dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -34,6 +57,43 @@
   width: 100%;
   height: auto;
   overflow: visible;
+}
+
+.plot {
+  position: relative;
+  min-height: 44px;
+}
+
+.targets {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.monthTarget {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.monthTarget[aria-pressed='true'] {
+  border-color: var(--color-accent);
+}
+
+.monthTarget:hover,
+.monthTarget:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.monthTarget:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .incomeLine,
