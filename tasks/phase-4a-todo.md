@@ -14,7 +14,7 @@ plan：`tasks/phase-4a-plan.md`；spec：`docs/specs/phase-4a-ai-text.md`。
       驗收：`ai-draft.spec.ts` 的三個斷言通過；兩套 Web e2e 全綠；Playwright 明設 `LLM_PROVIDER=fake`；跑之前確認埠沒被 2j 占用。
 - [x] **T3b 版面修正**（依賴 T3、T4；沿用 `ai4a-e2e` worktree、分支 `feature/ai4a-layout`，Codex）：plan §1.4.1。
       驗收：SC-24.3 轉綠；完整 Web e2e 全綠；輸入框在頂端橫條、其他頁橫條高度不變；錯誤與草稿在「明細」上方；送出中轉圈。
-- [ ] **T5 整合、文件、PR、部署**（依賴 T1～T4；協調者）：plan §1.6、§4。
+- [x] **T5 整合、文件、PR、部署**（依賴 T1～T4；協調者）：plan §1.6、§4。
       驗收：GLM provider 接進 factory；隔離測試紅轉綠；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；spec §9 的文件都改了；PR 依模板、CI 全綠、squash merge；dev 用假 provider 走過 spec §1 第 1～4、8、9 步；worker 的 worktree、分支、測試資料庫清掉。只宣稱假 provider 範圍驗收完。
 - [ ] **T6 真的模型**（依賴 T5、開發者給金鑰；協調者）：plan §1.7。
       驗收：plan §1.7 的表 15 格全對，失敗也照記；模型、指示版本、token 用量記進實作紀錄。
