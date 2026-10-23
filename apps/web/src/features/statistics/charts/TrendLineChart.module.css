@@ -104,13 +104,19 @@
   stroke-linecap: round;
 }
 
-.incomeLine,
+.incomeLine {
+  stroke: var(--color-income);
+}
+
 .incomePoint {
   stroke: var(--color-income);
   fill: var(--color-income);
 }
 
-.expenseLine,
+.expenseLine {
+  stroke: var(--color-expense);
+}
+
 .expensePoint {
   stroke: var(--color-expense);
   fill: var(--color-expense);
@@ -124,6 +130,7 @@
 
 .months {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-xs);
   margin: var(--space-xs) 0 0;
@@ -134,9 +141,18 @@
 }
 
 .months li {
+  display: flex;
+  flex: 1 1 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  flex-direction: column;
   text-align: center;
+  white-space: nowrap;
+}
+
+.year {
+  min-height: 1.1em;
+  font-size: 0.625rem;
+  line-height: 1.1;
 }
 
 .empty {

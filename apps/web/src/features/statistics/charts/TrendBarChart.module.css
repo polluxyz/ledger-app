@@ -89,10 +89,19 @@
 }
 
 .monthLabel {
+  display: flex;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  flex-direction: column;
   font-size: var(--text-xs);
+  line-height: 1.1;
   text-align: center;
+  white-space: nowrap;
+}
+
+.year {
+  min-height: 1.1em;
+  font-size: 0.625rem;
+  line-height: 1.1;
 }
 
 .empty {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { StatisticsGroup, StatisticsPerson, StatisticsPerspective } from '@ledger/shared';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageContent } from '../components/PageContent';
@@ -19,7 +19,7 @@ import { HorizontalBarChart } from '../features/statistics/charts/HorizontalBarC
 import { TrendBarChart } from '../features/statistics/charts/TrendBarChart';
 import { TrendLineChart } from '../features/statistics/charts/TrendLineChart';
 import { TrendTable } from '../features/statistics/charts/TrendTable';
-import type { ChartTheme } from '../features/statistics/charts/chart-colors';
+import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
 import type { ChartType } from '../features/statistics/charts/chart-types';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import {
@@ -502,7 +502,7 @@ export default function StatsPage() {
                     />
                   )}
                 </div>
-                <MemberTotals people={people} />
+                <MemberTotals people={people} theme={chartTheme} />
               </>
             )}
           </>
@@ -638,19 +638,33 @@ function PeriodControls({
   );
 }
 
-function MemberTotals({ people }: { people: readonly StatisticsPerson[] }) {
+function MemberTotals({
+  people,
+  theme,
+}: {
+  people: readonly StatisticsPerson[];
+  theme: ChartTheme;
+}) {
   return (
     <ul className={styles.memberTotals} aria-label="成員收支">
-      {people.map((person) => (
-        <li
-          key={person.personId}
-          aria-label={`${person.name}，支出 ${formatMoney(person.expense)}，收入 ${formatMoney(person.income)}`}
-        >
-          <strong>{person.name}</strong>
-          <span>支出 {formatMoney(person.expense)}</span>
-          <span>收入 {formatMoney(person.income)}</span>
-        </li>
-      ))}
+      {people.map((person) => {
+        const color = getChartColorForId(person.personId, theme);
+        return (
+          <li
+            key={person.personId}
+            aria-label={`${person.name}，支出 ${formatMoney(person.expense)}，收入 ${formatMoney(person.income)}`}
+          >
+            <span
+              className={styles.memberSwatch}
+              style={{ '--swatch-color': color } as CSSProperties}
+              aria-hidden="true"
+            />
+            <strong>{person.name}</strong>
+            <span>支出 {formatMoney(person.expense)}</span>
+            <span>收入 {formatMoney(person.income)}</span>
+          </li>
+        );
+      })}
       {people.length === 0 && <li className={styles.status}>沒有資料</li>}
     </ul>
   );

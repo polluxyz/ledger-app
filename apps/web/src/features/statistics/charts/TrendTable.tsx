@@ -24,7 +24,10 @@ export function TrendTable({ months, title = '趨勢表格' }: TrendTableProps) 
           {months.length > 0 ? (
             months.map((month) => (
               <tr key={month.month}>
-                <th scope="row">{formatMonth(month.month)}</th>
+                <th scope="row" aria-label={formatMonth(month.month)}>
+                  <span className={styles.monthYear}>{formatMonthYear(month.month)}年</span>
+                  <span className={styles.monthNumber}>{formatMonthNumber(month.month)}月</span>
+                </th>
                 <td>{formatMoney(month.income)}</td>
                 <td>{formatMoney(month.expense)}</td>
                 <td>{formatMoney(month.net)}</td>
@@ -43,7 +46,15 @@ export function TrendTable({ months, title = '趨勢表格' }: TrendTableProps) 
   );
 }
 
+function formatMonthYear(month: string): string {
+  const [year] = month.split('-');
+  return year ?? '';
+}
+
+function formatMonthNumber(month: string): number {
+  return Number(month.split('-')[1]);
+}
+
 function formatMonth(month: string): string {
-  const [year, monthNumber] = month.split('-');
-  return `${year}年${Number(monthNumber)}月`;
+  return `${formatMonthYear(month)}年${formatMonthNumber(month)}月`;
 }

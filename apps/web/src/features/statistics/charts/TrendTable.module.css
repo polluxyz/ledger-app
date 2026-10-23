@@ -24,6 +24,12 @@
   text-align: left;
 }
 
+.monthYear,
+.monthNumber {
+  display: block;
+  white-space: nowrap;
+}
+
 .table thead th {
   color: var(--color-text-muted);
   font-size: var(--text-xs);

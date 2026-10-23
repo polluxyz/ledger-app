@@ -143,9 +143,16 @@ export function TrendLineChart({
             </div>
           </div>
           <ol className={styles.months} aria-hidden="true">
-            {months.map((month) => (
-              <li key={month.month}>{formatMonth(month.month)}</li>
-            ))}
+            {months.map((month, index) => {
+              const [year, monthNumber] = month.month.split('-');
+              const showYear = index === 0 || monthNumber === '01';
+              return (
+                <li key={month.month}>
+                  <span>{Number(monthNumber)}月</span>
+                  <span className={styles.year}>{showYear ? year : '\u00a0'}</span>
+                </li>
+              );
+            })}
           </ol>
         </>
       ) : (

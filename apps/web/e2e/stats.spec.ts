@@ -1,3 +1,6 @@
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import {
   addMember,
@@ -23,6 +26,38 @@ import { switchLedger } from './ui';
 
 const LONG_CATEGORY_NAME = '超長分類名稱驗證文字'.repeat(4);
 const LONG_MEMBER_NAME = '測試共享帳本成員名稱完整顯示確認'.repeat(3);
+
+function artifactPath(fileName: string): string {
+  const path = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../docs/artifacts',
+    fileName,
+  );
+  mkdirSync(dirname(path), { recursive: true });
+  return path;
+}
+
+async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
+  const count = await labels.count();
+  expect(count).toBe(12);
+  await expect(controls).toHaveCount(count);
+
+  for (let index = 0; index < count; index += 1) {
+    const label = labels.nth(index);
+    const accessibleName = await controls.nth(index).getAttribute('aria-label');
+    const monthMatch = accessibleName?.match(/^(\d{4})年(\d{1,2})月/);
+    expect(monthMatch).not.toBeNull();
+    if (!monthMatch) {
+      continue;
+    }
+
+    const [, year, monthNumber] = monthMatch;
+    const month = Number(monthNumber);
+    const expected = `${month}月${index === 0 || month === 1 ? year : ''}`;
+    expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
+    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+  }
+}
 
 interface TaiwanMonth {
   value: string;
@@ -675,17 +710,56 @@ test.describe('2j 統計頁端對端', () => {
 
       await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '長條' }).click();
-      await expect(page.getByRole('list', { name: '每月收支' }).getByRole('listitem')).toHaveCount(
-        12,
+      const trendBarMonths = page.getByRole('list', { name: '每月收支' });
+      await expect(trendBarMonths.getByRole('listitem')).toHaveCount(12);
+      await expectCompactMonthLabels(
+        trendBarMonths.locator('button > span:nth-of-type(2)'),
+        trendBarMonths.getByRole('button'),
       );
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
+      if (theme === 'light') {
+        await page.screenshot({ path: artifactPath('2j-trend-bar-390-light.png'), fullPage: true });
+      }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
-      await expect(page.getByRole('region', { name: '趨勢折線圖' })).toBeVisible();
+      const lineChart = page.getByRole('region', { name: '趨勢折線圖' });
+      await expect(lineChart).toBeVisible();
+      const polylines = lineChart.locator('svg polyline');
+      await expect(polylines).toHaveCount(2);
+      expect(
+        await polylines.evaluateAll((elements) =>
+          elements.map((element) => getComputedStyle(element).fill),
+        ),
+      ).toEqual(['none', 'none']);
+      const pointFills = await lineChart
+        .locator('svg circle')
+        .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill));
+      expect(pointFills.length).toBeGreaterThan(0);
+      expect(pointFills).not.toContain('none');
+      const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
+      await expectCompactMonthLabels(lineLabels, lineChart.locator('button'));
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
+      if (theme === 'light') {
+        await page.screenshot({
+          path: artifactPath('2j-trend-line-390-light.png'),
+          fullPage: true,
+        });
+      }
       await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();
-      await expect(page.getByRole('table', { name: '趨勢表格' })).toBeVisible();
+      const trendTable = page.getByRole('table', { name: '趨勢表格' });
+      await expect(trendTable).toBeVisible();
+      const monthCells = trendTable.getByRole('rowheader');
+      await expect(monthCells).toHaveCount(12);
+      for (const cell of await monthCells.all()) {
+        const parts = await cell.evaluate((element) =>
+          Array.from(element.children, (child) => child.textContent?.trim() ?? ''),
+        );
+        expect(parts).toHaveLength(2);
+        expect(parts[0]).toMatch(/^\d{4}年$/);
+        expect(parts[1]).toMatch(/^\d{1,2}月$/);
+        expect((await cell.innerText()).replace(/\s/g, '')).toBe(`${parts[0]}${parts[1]}`);
+      }
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
 
