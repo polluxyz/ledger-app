@@ -16,7 +16,7 @@ plan：`tasks/phase-2j-plan.md`；spec：`docs/specs/phase-2j-stats.md`。
       驗收：餘額只透過 `calculateBalances` 算；`calculateBalances` 每一步都檢查安全整數，另有中間值溢位的單元測試；SC-R16、R17（退出用真的 API）、R29 的 API e2e 通過；隔離測試 SC-R11（§4.3）轉綠；既有帳戶 e2e 全綠。
 - [ ] **W2 統計頁**（依賴 W1、W3；`2j-web-page`，Codex）：plan §1.8。
       驗收：`stats-url.ts` 的單元測試涵蓋優先順序、無效值、決策 265 的正規化；元件測試涵蓋 W202～W205、W222、W225、SC-R19（切圖型不重打 API）、R20、R22 的頁面部分（單一端點失敗只影響那一區）、R24～R26、決策 236；交易頁讀網址篩選的測試涵蓋再次導入、返回鍵、無效值、手動改篩選後不被覆寫；既有交易頁測試全綠；Web 檢查全綠。
-- [ ] **S3 效能腳本**（依賴 S1b、S2；`2j-perf`，`default`）：plan §1.5。
+- [x] **S3 效能腳本**（依賴 S1b、S2；`2j-perf`，`default`）：plan §1.5。
       驗收：`test:perf` 能跑，輸出三個端點的 p95（排序後索引 94）與 commit、Node、PostgreSQL、機器資訊；`test:e2e -- --listTests` 的清單裡沒有這個檔；資料庫名稱不以 `_test` 結尾時直接失敗、不灌資料。
 - [ ] **W4 Web e2e**（依賴 S1b、S2、W1、W2；`2j-web-e2e`，Codex）：plan §1.9。
       派工前：確認 ai-4a 沒有正在跑 Web e2e 的 worker。
