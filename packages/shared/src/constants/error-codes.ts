@@ -148,6 +148,10 @@ export const ErrorCode = {
   TRANSACTION_ALREADY_MERGED: 'TRANSACTION_ALREADY_MERGED',
   /** 用沒連動的對象加入帳本成員（3f §4.3）。400。 */
   COUNTERPARTY_NOT_LINKED: 'COUNTERPARTY_NOT_LINKED',
+  /** AI 記帳沒設定好：`LLM_PROVIDER=glm` 卻缺金鑰或模型（4a 決策 249）。503。 */
+  AI_NOT_CONFIGURED: 'AI_NOT_CONFIGURED',
+  /** AI 的 provider 回錯誤、連不上或逾時（4a 決策 248）。不帶 provider 的原始錯誤。503。 */
+  AI_UNAVAILABLE: 'AI_UNAVAILABLE',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

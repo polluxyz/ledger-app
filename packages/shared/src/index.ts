@@ -26,3 +26,4 @@ export * from './types/ledger-pointer';
 export * from './types/ledger-leave';
 export * from './ledger-debts';
 export * from './entry-labels';
+export * from './types/ai';

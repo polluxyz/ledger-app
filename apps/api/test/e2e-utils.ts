@@ -1,6 +1,6 @@
 import { Server } from 'node:http';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { Account, AuthTokenResponse, AuthUser } from '@ledger/shared';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -29,11 +29,18 @@ export function httpServer(app: INestApplication): Server {
  * 用與 main.ts 相同的方式啟動真正的應用程式（全域前綴、pipe、filter），讓 e2e
  * 驗證的是正式環境的行為。限流在 NODE_ENV=test 下停用（見 ThrottlerModule 設定），
  * 以免密集的 auth 呼叫被限流。
+ *
+ * `configure` 讓個別測試在編譯前換掉某個 provider（例如 4a 用 stub 取代 `LLM_PROVIDER`），
+ * 其餘設定照舊。不傳就是原本的行為。
  */
-export async function createE2EApp(): Promise<E2EContext> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+export async function createE2EApp(
+  configure: (builder: TestingModuleBuilder) => TestingModuleBuilder = (builder) => builder,
+): Promise<E2EContext> {
+  const moduleRef = await configure(
+    Test.createTestingModule({
+      imports: [AppModule],
+    }),
+  ).compile();
 
   const app = moduleRef.createNestApplication();
   app.setGlobalPrefix('api');
