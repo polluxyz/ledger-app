@@ -14,6 +14,24 @@ describe('validateEnv', () => {
     JWT_SECRET: 'a'.repeat(32),
   };
 
+  it('defaults AI to fake without requiring external credentials', () => {
+    expect(validateEnv(base)).toMatchObject({
+      LLM_PROVIDER: 'fake',
+      GLM_BASE_URL: 'https://open.bigmodel.cn/api/paas/v4',
+    });
+  });
+
+  it('allows missing or blank GLM credentials at startup', () => {
+    expect(validateEnv({ ...base, LLM_PROVIDER: 'glm' }).LLM_PROVIDER).toBe('glm');
+    expect(
+      validateEnv({ ...base, LLM_PROVIDER: 'glm', GLM_API_KEY: '', GLM_MODEL: '' }).GLM_API_KEY,
+    ).toBe('');
+  });
+
+  it('rejects unknown providers instead of silently selecting fake', () => {
+    expect(() => validateEnv({ ...base, LLM_PROVIDER: 'unknown' })).toThrow(/LLM_PROVIDER/);
+  });
+
   it('keeps a single origin as a one-item list', () => {
     const env = validateEnv({ ...base, CORS_ORIGIN: 'https://app.example.com' });
 
