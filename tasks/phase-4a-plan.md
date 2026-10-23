@@ -341,3 +341,14 @@ T4 跑完整 Web e2e 時，既有的 SC-24.3（1440×900 交易頁首屏至少 1
 ### T5
 
 - 合併 T1～T4、T3b 後，在 `feature/phase-4a-ai` 重跑：format:check、lint、typecheck、build 通過；單元測試 shared 122、API 728、Web 827 全過；API e2e 458/458（`ledger_ai_test`）；完整 Web e2e 71/71（含 layout 與 ai-draft）。
+- 併入 main 的 #154（2j）後再跑一次（`a1ff740`）：shared 122、API 825、Web 891；API e2e 520/520；Web e2e 第 1 次 75/76，`debts.spec.ts:258`（還款）找不到「你還小華」，單獨重跑 3 輪 12/12、完整重跑 76/76。這條與 4a 無關，記錄不修。
+- PR #155 CI 全綠，squash merge 成 `f35485b`。沒有 migration、沒有新套件。
+- 部署：主工作區 `git pull`、build shared 與 API。dev 的 `.env` 沒設 `LLM_PROVIDER`，所以是假 provider。
+- dev 驗證用暫時的 API（埠 3200）以 a@a.com 打 API，沒有點畫面（畫面由 Web e2e 涵蓋）：
+  - a@a.com 原本沒有「早餐」「午餐」「信用卡」，第 1 步的句子回 500（假 provider 對不到劇本）。在「test 的帳本」補了 2 個支出分類與 1 個帳戶，保留給開發者試用。
+  - 第 1、2 步：2 筆草稿，$60 早餐／現金、$120 午餐／信用卡，日期是今天。
+  - 第 3、4 步：照草稿新增第 1 筆、金額改 $125 新增第 2 筆，都 201；之後刪掉，交易數 17 → 19 → 17。
+  - 第 5 步：「昨天計程車 250」→ 日期是昨天、分類交通、帳戶帶入。
+  - 第 8 步：「今天天氣很好」→ `drafts: []`。
+  - 第 9 步（×）只在前端，不打 API。
+  - API 日誌沒有出現使用者的句子。
