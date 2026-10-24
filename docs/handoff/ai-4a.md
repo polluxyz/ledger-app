@@ -10,9 +10,9 @@
 - dev 的 a@a.com 在「test 的帳本」多了「早餐」「午餐」分類與「信用卡」帳戶，給假 provider 的固定句子用。
 - 預覽頁（不進版控）：`docs/artifacts/step-4a-ai-draft-preview.html`。
 
-## 新分類提議（2026-10-24 核可，實作中）
+## 新分類提議（2026-10-24 核可，#161 已完成）
 
-- spec `docs/specs/phase-4a-ai-new-category.md`，plan 與 todo 在 `tasks/ai-new-category-*.md`。整合分支 `feature/ai-new-category`。
+- spec `docs/specs/phase-4a-ai-new-category.md`，plan 與 todo 在 `tasks/ai-new-category-*.md`。T0～T4 已做完並合併（#161）；實作紀錄見 plan §7。
 - 會改 API：草稿與新增交易都多一個 `newCategoryName`。不改 schema。
 - 開發者原話：「z.ai只會用到28號 之後就會換其他模型喔 先暫時用這個」。所以：
   - 不做 z.ai 專屬的工作。`GLM_BASE_URL` 的預設值（bigmodel.cn）先不改。`advisor` 建議現在改成 `https://api.z.ai/api/paas/v4`，開發者核可 spec §10 第 5 項時同意延到換模型那次處理。
@@ -22,8 +22,9 @@
 
 ## 下一步
 
-1. 依 `tasks/ai-new-category-todo.md` 做 T0～T6。
-2. 費用控管與 `max_tokens` 之後再設。
+1. T5：部署 dev（沒有 migration），用假 provider 走 spec §1 第 2、3、6、7 步。dev 使用者要有最近一筆交易，草稿才會帶預設帳戶。
+2. T6：2026-10-28 前在主工作區用真的模型跑 SC-P17（5 句各 3 次）與 4a SC-P10 第 5、6、8 步各 3 次，結果記進 `tasks/ai-new-category-plan.md` §7。來不及就等換模型後跑。
+3. 費用控管與 `max_tokens` 之後再設。
 
 ## 已知問題
 
@@ -31,3 +32,4 @@
 - glm-5.3 關不掉思考。`low` 時轉帳句偶爾要 16～19 秒，超過 25 秒回 503，使用者重送。
 - `low` 時名稱（title）常是 null，使用者要自己補。
 - `apps/web/e2e/debts.spec.ts:258`（還款）合併後失敗過 1 次，重跑都過。與 4a 無關。
+- `TransactionForm.tsx` 共享帳本送出路徑（約 1209 行）沒有帶 `newCategoryName` 的元件測試；API e2e 有覆蓋共享帳本寫入。
