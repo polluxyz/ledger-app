@@ -16,6 +16,7 @@ import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 import { COUNTERPARTIES_KEY } from '../debts/use-debts';
 import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import { settlementSummaryKey } from '../settlements/use-settlements';
+import { categoriesKey } from '../categories/use-categories';
 import { apiRequest } from '../../lib/api-client';
 
 /**
@@ -115,7 +116,10 @@ export function useCreateTransactionForLedger() {
         method: 'POST',
         body: input,
       }),
-    onSuccess: (_transaction, { ledgerId }) => invalidateAfterWrite(queryClient, ledgerId),
+    onSuccess: (_transaction, { ledgerId }) => {
+      invalidateAfterWrite(queryClient, ledgerId);
+      void queryClient.invalidateQueries({ queryKey: categoriesKey(ledgerId) });
+    },
   });
 }
 
