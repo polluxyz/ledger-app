@@ -41,6 +41,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  aiParseDailyUsages   AiParseDailyUsage[]
   memberships          LedgerMember[]
   ledgerPeople         LedgerPerson[]
   ledgerPersonPointers LedgerPersonPointer[]
@@ -632,4 +633,34 @@ enum SplitMethod {
 enum SplitPrecision {
   CENT
   YUAN
+}
+
+/// 每人每日的 AI 記帳解析用量（4a 額度，決策 294、298）。
+/// 同一天第一次呼叫才建列；舊列不自動刪除（決策 299）。
+model AiParseDailyUsage {
+  userId            String
+  /// 台灣時間的日曆日（決策 295）。
+  day               DateTime @db.Date
+  calls             Int      @default(0)
+  promptTokens      BigInt   @default(0)
+  completionTokens  BigInt   @default(0)
+  /// 還沒拿到合格 usage 的次數：扣額度時加 1，回寫合格 usage 時減 1；這些次數的 token 不在合計裡（決策 298 (b)）。
+  usageUnknownCalls Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+}
+
+/// 全站每日的 AI 用量，當保險絲（決策 292 (b)、299 (b)）。不連使用者。
+model AiDailyUsage {
+  day               DateTime @id @db.Date
+  calls             Int      @default(0)
+  promptTokens      BigInt   @default(0)
+  completionTokens  BigInt   @default(0)
+  usageUnknownCalls Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

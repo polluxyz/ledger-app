@@ -12,6 +12,9 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['glm', 'fake']).default('fake'),
   GLM_API_KEY: z.string().optional(),
   GLM_MODEL: z.string().optional(),
+  AI_PARSE_DAILY_LIMIT_PER_USER: quotaNumber(0, 10000, 50),
+  AI_DAILY_LIMIT_GLOBAL: quotaNumber(0, 1000000, 500),
+  AI_PARSE_MAX_OUTPUT_TOKENS: quotaNumber(256, 32768, 2048),
   GLM_BASE_URL: z.string().default('https://open.bigmodel.cn/api/paas/v4'),
   /**
    * GLM 的思考強度（`reasoning_effort`）。glm-5.3 一定會思考、預設 max，太慢；
@@ -48,6 +51,14 @@ const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+/** 空白代表未設定，不能讓數值轉型把它當成停用的 0。 */
+function quotaNumber(min: number, max: number, fallback: number) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number().int().min(min).max(max).default(fallback),
+  );
+}
 
 /**
  * 傳給 ConfigModule.forRoot({ validate })。驗證失敗時，拋出一段可讀的錯誤訊息，
