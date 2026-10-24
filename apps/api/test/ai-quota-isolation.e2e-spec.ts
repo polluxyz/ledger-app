@@ -86,6 +86,14 @@ describe('AI parse daily quota — isolation (e2e)', () => {
     return rows[0]!.calls;
   }
 
+  /** 某人在個人表裡的所有列（含 token 欄位與 updatedAt），用來斷言「完全沒有變化」。 */
+  async function userRows(userId: string): Promise<string> {
+    const rows = await prisma.$queryRaw<{ rows: string }[]>`
+      SELECT coalesce(jsonb_agg(to_jsonb(u) ORDER BY u."day"), '[]'::jsonb)::text AS "rows"
+      FROM "AiParseDailyUsage" u WHERE u."userId" = ${userId}`;
+    return rows[0]!.rows;
+  }
+
   async function globalCalls(): Promise<number> {
     const rows = await prisma.$queryRaw<{ calls: number }[]>`
       SELECT coalesce(sum("calls"), 0)::int AS "calls" FROM "AiDailyUsage"`;
@@ -142,18 +150,41 @@ describe('AI parse daily quota — isolation (e2e)', () => {
       expect(await userCalls(bob.userId)).toBe(2);
     });
 
-    it('3: another user is unaffected', async () => {
+    it('3: another user is unaffected and cannot read or change the first user usage', async () => {
       limits.perUserDaily = 2;
       const bob = await person(app, 'bob@example.com', 'Bob');
       const eve = await person(app, 'eve@example.com', 'Eve');
+      complete.mockResolvedValue({
+        truncated: false,
+        content: { drafts: [] },
+        usage: { promptTokens: 17, completionTokens: 5 },
+      });
       await parse(bob.token, bob.ledgerId).expect(200);
       await parse(bob.token, bob.ledgerId).expect(200);
       await parse(bob.token, bob.ledgerId).expect(429);
+      const bobBefore = await userRows(bob.userId);
 
+      // Eve 的 usage 換成別的數字：回寫若寫錯人，Bob 的 token 欄位就會變。
+      complete.mockResolvedValue({
+        truncated: false,
+        content: { drafts: [] },
+        usage: { promptTokens: 1000, completionTokens: 300 },
+      });
+      // 額度只認 token 裡的使用者；body 帶 userId 會被 DTO 擋下，不能把用量算到別人頭上。
+      await request(server())
+        .post('/api/ai/parse-transaction')
+        .set(auth(eve.token))
+        .send({ text: TEXT, ledgerId: eve.ledgerId, today: TODAY, userId: bob.userId })
+        .expect(400);
+      // 回應只有草稿，不帶任何用量。
+      const res = await parse(eve.token, eve.ledgerId).expect(200);
+      expect(res.body).toEqual({ drafts: [] });
       await parse(eve.token, eve.ledgerId).expect(200);
-      expect(complete).toHaveBeenCalledTimes(3);
-      expect(await userCalls(bob.userId)).toBe(2);
-      expect(await userCalls(eve.userId)).toBe(1);
+      await parse(eve.token, eve.ledgerId).expect(429);
+
+      expect(complete).toHaveBeenCalledTimes(4);
+      expect(await userRows(bob.userId)).toEqual(bobBefore);
+      expect(await userCalls(eve.userId)).toBe(2);
     });
   });
 

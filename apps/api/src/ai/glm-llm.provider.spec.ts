@@ -149,6 +149,18 @@ describe('GlmLlmProvider', () => {
       expect(JSON.stringify({ ...init, headers: {} })).not.toContain(API_KEY);
     });
 
+    // 上面只用 2048；換幾個非預設值，確認 max_tokens 是照 request 傳，不是寫死。
+    it.each([256, 3072, 4096])('sends max_tokens %i from the request', async (maxOutputTokens) => {
+      const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}'));
+
+      await createProvider(fetchMock).complete({ ...BASE_REQUEST, maxOutputTokens });
+
+      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
+        max_tokens: number;
+      };
+      expect(body.max_tokens).toBe(maxOutputTokens);
+    });
+
     it('adds reasoning_effort only when it is configured', async () => {
       const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}'));
 
