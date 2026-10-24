@@ -380,6 +380,7 @@ test.describe('2k 首頁改版端對端', () => {
     const bottomGap = cardBox.y + cardBox.height - (box.y + box.height);
     expect(bottomGap).toBeLessThanOrEqual(32);
     const labels = await expectTrendLabelsReadable(svg);
+    const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
     const children = await expectSvgChildrenInside(svg);
     await writeMeasurement(testInfo, {
       scenario: 'SC-H13',
@@ -388,6 +389,7 @@ test.describe('2k 首頁改版端對端', () => {
       svg: box,
       bottomGap,
       labels,
+      segmentLabelDistances,
       children,
     });
   });
@@ -715,6 +717,46 @@ test.describe('2k 首頁改版端對端', () => {
       measurements,
     });
   });
+  test('W7：最近卡桌機維持最小高度，390px 依內容收合', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }, testInfo) => {
+    const setup = await getHomeSetup(request, userA);
+    for (let index = 0; index < 2; index += 1) {
+      await createTransaction(request, userA.token, setup.ledger.id, {
+        type: 'EXPENSE',
+        amount: (index + 1) * 1_000,
+        date: currentTaiwanDate(),
+        categoryId: setup.expenseCategory.id,
+        accountId: setup.account.id,
+        title: `最近卡測試 ${index + 1}`,
+      });
+    }
+
+    const activityCard = page.locator('section[aria-label="最近與標註"]');
+    const recentRows = page.getByRole('tabpanel').locator('li');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await expect(recentRows).toHaveCount(2);
+    const desktopCard = await getRect(activityCard);
+    expect(desktopCard.height).toBeGreaterThanOrEqual(256);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(recentRows).toHaveCount(2);
+    const mobileCard = await getRect(activityCard);
+    const lastRow = await getRect(recentRows.last());
+    const bottomGap = mobileCard.y + mobileCard.height - (lastRow.y + lastRow.height);
+    expect(bottomGap).toBeLessThanOrEqual(32);
+    await writeMeasurement(testInfo, {
+      scenario: 'W7-recent-card',
+      desktopCard,
+      mobileCard,
+      lastRow,
+      bottomGap,
+    });
+  });
 });
 
 async function getHomeSetup(
@@ -742,6 +784,7 @@ async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {
   expect(trendBox.y + trendBox.height - (activityBox.y + activityBox.height)).toBeLessThanOrEqual(
     1,
   );
+  expect(activityBox.height).toBeGreaterThanOrEqual(256);
 
   const svg = page.locator('svg[role="group"][aria-label^="每月資產"]');
   const svgBox = await getRect(svg);
@@ -749,8 +792,9 @@ async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {
   expect(svgBox.height).toBeLessThanOrEqual(320);
   await expect(svg.locator('circle[role="button"]')).toHaveCount(12);
   const labels = await expectTrendLabelsReadable(svg);
+  const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
   const children = await expectSvgChildrenInside(svg);
-  return { activityBox, trendBox, svg: svgBox, labels, children };
+  return { activityBox, trendBox, svg: svgBox, labels, segmentLabelDistances, children };
 }
 
 async function expectTrendLabelsReadable(svg: Locator) {
@@ -764,6 +808,116 @@ async function expectTrendLabelsReadable(svg: Locator) {
   expect(month.height).toBeGreaterThanOrEqual(10);
   expect(hovered.height).toBeGreaterThanOrEqual(13);
   return { value, month, hovered };
+}
+
+async function expectFinalSegmentClearOfLabels(svg: Locator) {
+  const distances = await svg.evaluate((element) => {
+    type Point = { x: number; y: number };
+    type Box = { x: number; y: number; width: number; height: number };
+
+    const points = Array.from(element.querySelectorAll('circle[role="button"]'));
+    const labels = Array.from(element.querySelectorAll('text')).slice(0, 2);
+    const previous = points.at(-2);
+    const final = points.at(-1);
+    if (!previous || !final || labels.length !== 2) {
+      throw new Error('資產趨勢圖缺少最後一段折線或標籤。');
+    }
+
+    const start = {
+      x: Number(previous.getAttribute('cx')),
+      y: Number(previous.getAttribute('cy')),
+    };
+    const end = { x: Number(final.getAttribute('cx')), y: Number(final.getAttribute('cy')) };
+    const segmentIntersectsRect = (rect: Box) => {
+      const deltaX = end.x - start.x;
+      const deltaY = end.y - start.y;
+      let minimumRatio = 0;
+      let maximumRatio = 1;
+      const clipping: Array<[number, number]> = [
+        [-deltaX, start.x - rect.x],
+        [deltaX, rect.x + rect.width - start.x],
+        [-deltaY, start.y - rect.y],
+        [deltaY, rect.y + rect.height - start.y],
+      ];
+
+      for (const [direction, distance] of clipping) {
+        if (direction === 0) {
+          if (distance < 0) return false;
+          continue;
+        }
+        const ratio = distance / direction;
+        if (direction < 0) minimumRatio = Math.max(minimumRatio, ratio);
+        else maximumRatio = Math.min(maximumRatio, ratio);
+        if (minimumRatio > maximumRatio) return false;
+      }
+      return true;
+    };
+    const pointToSegmentDistance = (point: Point, segmentStart: Point, segmentEnd: Point) => {
+      const deltaX = segmentEnd.x - segmentStart.x;
+      const deltaY = segmentEnd.y - segmentStart.y;
+      const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+      const ratio =
+        lengthSquared === 0
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                ((point.x - segmentStart.x) * deltaX + (point.y - segmentStart.y) * deltaY) /
+                  lengthSquared,
+              ),
+            );
+      return Math.hypot(
+        point.x - (segmentStart.x + ratio * deltaX),
+        point.y - (segmentStart.y + ratio * deltaY),
+      );
+    };
+    const segmentToSegmentDistance = (
+      firstStart: Point,
+      firstEnd: Point,
+      secondStart: Point,
+      secondEnd: Point,
+    ) =>
+      Math.min(
+        pointToSegmentDistance(firstStart, secondStart, secondEnd),
+        pointToSegmentDistance(firstEnd, secondStart, secondEnd),
+        pointToSegmentDistance(secondStart, firstStart, firstEnd),
+        pointToSegmentDistance(secondEnd, firstStart, firstEnd),
+      );
+    return labels.map((label) => {
+      const rect = label.getBBox();
+      const rectangleEdges: Array<[Point, Point]> = [
+        [
+          { x: rect.x, y: rect.y },
+          { x: rect.x + rect.width, y: rect.y },
+        ],
+        [
+          { x: rect.x + rect.width, y: rect.y },
+          { x: rect.x + rect.width, y: rect.y + rect.height },
+        ],
+        [
+          { x: rect.x + rect.width, y: rect.y + rect.height },
+          { x: rect.x, y: rect.y + rect.height },
+        ],
+        [
+          { x: rect.x, y: rect.y + rect.height },
+          { x: rect.x, y: rect.y },
+        ],
+      ];
+      const distance = segmentIntersectsRect(rect)
+        ? 0
+        : Math.min(
+            ...rectangleEdges.map(([edgeStart, edgeEnd]) =>
+              segmentToSegmentDistance(start, end, edgeStart, edgeEnd),
+            ),
+          );
+      return { label: label.textContent, distance };
+    });
+  });
+  for (const { label, distance } of distances) {
+    expect(distance, `最後一段折線與「${label ?? ''}」標籤的距離`).toBeGreaterThan(0);
+  }
+  return distances;
 }
 
 async function expectSvgChildrenInside(svg: Locator) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BalanceTrend } from '@ledger/shared';
 import { formatMoney } from '../../lib/format';
+import { getFinalLabelYPositions } from './balance-trend-chart-layout';
 import styles from './BalanceTrendChart.module.css';
 
 /** 首頁資產區只畫後端回傳的月末總額，座標換算不會改變或推導金額。 */
@@ -16,8 +17,8 @@ const WIDTH = 640;
 const HEIGHT = 230;
 const FALLBACK_SIZE = { width: WIDTH, height: HEIGHT };
 const HORIZONTAL_INSET = 32;
-const TOP_INSET = 34;
-const BOTTOM_INSET = 38;
+const TOP_INSET = 44;
+const BOTTOM_INSET = 44;
 
 export function BalanceTrendChart({ months, isLoading, error, className }: BalanceTrendChartProps) {
   const chartRef = useRef<SVGSVGElement>(null);
@@ -95,6 +96,11 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
   const areaPath = `${linePath} L ${points[lastIndex]!.x} ${fillBaseline} L ${points[0]!.x} ${fillBaseline} Z`;
   const crossesZero = minimum < 0 && maximum > 0;
   const finalPoint = points[lastIndex]!;
+  const previousPoint = points[lastIndex - 1];
+  const finalLabelPositions = getFinalLabelYPositions(previousPoint, finalPoint, {
+    top: 0,
+    bottom: height,
+  });
   const activePoint = points[activeIndex] ?? finalPoint;
   const accessibleValues = values
     .map((item) => `${formatMonth(item.month)}：${formatMoney(item.total)}`)
@@ -147,10 +153,10 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
             }}
           />
         ))}
-        <text className={styles.valueLabel} x={right - 4} y={Math.max(top - 10, finalPoint.y - 13)}>
+        <text className={styles.valueLabel} x={right - 4} y={finalLabelPositions.valueY}>
           {formatMoney(finalPoint.total)}
         </text>
-        <text className={styles.monthLabel} x={right - 4} y={Math.max(top + 4, finalPoint.y + 3)}>
+        <text className={styles.monthLabel} x={right - 4} y={finalLabelPositions.monthY}>
           {formatMonth(finalPoint.month)}
         </text>
         {activeIndex !== lastIndex && (

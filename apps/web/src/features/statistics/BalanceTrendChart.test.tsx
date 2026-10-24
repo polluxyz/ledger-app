@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { BalanceTrend } from '@ledger/shared';
+import { getFinalLabelYPositions } from './balance-trend-chart-layout';
 import { BalanceTrendChart } from './BalanceTrendChart';
 
 /**
@@ -15,6 +16,48 @@ describe('BalanceTrendChart', () => {
       month: `2026-${String(index + 8).padStart(2, '0')}`,
       total,
     }));
+
+  it.each([
+    {
+      name: '最後一段從上方進來時放在點下方',
+      previous: { x: 0, y: 80 },
+      expected: { valueY: 123, monthY: 140 },
+    },
+    {
+      name: '最後一段從下方進來時放在點上方',
+      previous: { x: 0, y: 120 },
+      expected: { valueY: 71, monthY: 88 },
+    },
+    {
+      name: '最後一段水平時放在點上方',
+      previous: { x: 0, y: 100 },
+      expected: { valueY: 71, monthY: 88 },
+    },
+    {
+      name: '只有一個點時放在點上方',
+      previous: undefined,
+      expected: { valueY: 71, monthY: 88 },
+    },
+  ])('$name', ({ previous, expected }) => {
+    expect(getFinalLabelYPositions(previous, { x: 200, y: 100 }, { top: 0, bottom: 200 })).toEqual(
+      expected,
+    );
+  });
+
+  it('keeps both label boxes inside the chart when the final point is near either edge', () => {
+    const bounds = { top: 0, bottom: 100 };
+    const upperPoint = { x: 200, y: 14 };
+    const upper = getFinalLabelYPositions({ x: 0, y: 40 }, upperPoint, bounds);
+    expect(upper.valueY - 14).toBeGreaterThanOrEqual(bounds.top);
+    expect(upper.monthY + 3).toBeLessThanOrEqual(bounds.bottom);
+    expect(upper.valueY - 14).toBeGreaterThan(upperPoint.y + 7);
+
+    const lowerPoint = { x: 200, y: 86 };
+    const lower = getFinalLabelYPositions({ x: 0, y: 60 }, lowerPoint, bounds);
+    expect(lower.valueY - 14).toBeGreaterThanOrEqual(bounds.top);
+    expect(lower.monthY + 3).toBeLessThanOrEqual(bounds.bottom);
+    expect(lower.monthY + 3).toBeLessThan(lowerPoint.y - 7);
+  });
 
   it('keeps the latest value and month visible and exposes every month to screen readers', () => {
     const months = series([10000, 15000, 30000]);
