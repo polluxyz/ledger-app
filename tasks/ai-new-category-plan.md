@@ -165,4 +165,14 @@ spec：`docs/specs/phase-4a-ai-new-category.md`（決策 280～291、W240～W244
 
 ## 7. 實作紀錄
 
-（開工後填。）
+整合分支 `feature/ai-new-category` 的 commit 依序：`ab34d90`（T0 契約）、`da802e3`（T0 隔離 e2e）、`b8b3a16`（T3）、`ee55a00`（T1，cherry-pick 自 `2173b42`）、`0f2e625`（T2，cherry-pick 自 `a537ae1`）。
+
+- **T0**：隔離 e2e 原本斷言回應的 `categoryId`，但 `Transaction` 回的是 `category: {id,name,icon}`，改成斷言 `category.id`。紅燈 5 個，T1 後轉綠。
+- **T1**（`backend`）：計畫外多改了 `categories.module.ts`、`transactions.module.ts`，協調者核可。兩個 module 互相引用，Nest 啟動時循環相依，所以 `CategoriesModule` 用 `forwardRef`。錯誤沿用 `VALIDATION_FAILED`，沒加新代碼。DTO 與 service 都用 `Array.from` 算長度，50 個 emoji 的測試通過。worker 回報：新分類 e2e 25/25、API e2e 545/545、API 單元 838。
+- **T2**（`default`）：提示詞第 2 行改成「不能新增帳本或帳戶。」，第 3 行是決策 280、281 的規則（高鐵→交通、機票≠住宿、轉帳兩者皆 null）。worker 回報：驗證單元 71/71、AI 解析 e2e 43/43、API 單元 840。
+- **T3**（Codex）：表單在共享帳本路徑（`TransactionForm.tsx` 約 1209 行）送 `newCategoryName` 的分支沒有元件測試，只有個人帳本路徑有。T4 的 e2e 也只走個人帳本。留作已知缺口。
+- **T4**：plan §6 寫新開 `ainc-e2e`，實際重用 `ainc-web` worktree（已 fast-forward 到 `0f2e625`），省一次 `pnpm install`。第一輪回報阻擋：提議草稿的 ✓ 是灰的。原因是測試資料，不是程式：假 provider 的新句子不帶帳戶，API 用「最近一筆交易的帳戶」補，e2e 新使用者沒有交易，帳戶留空，草稿本來就不完整。改成測試前先用 API 記一筆現金交易。另外 T2 改了「旅行基金 機票 8000 刷卡」的劇本，既有的跨帳本測試從「分類未提供、✓ 灰」改成「＋交通、✓ 可按」，改選機票後再斷言旅行基金沒有多出「交通」。新帳本預設有「交通」，會被決策 283 (c) 換成既有分類，所以這條測試先刪掉旅行基金的「交通」。commit `f6e554a`，fast-forward 進整合分支。worker 回報：`ai-draft.spec.ts` 6/6、Web e2e 79/79。
+- **協調者 handle 換過**：上一個 session 的 run 綁舊 handle，所以 T4 起用新的 run `run_8381cfd25ab7`。
+- **文件衝突**：docs PR #160 與 #159 改到同一份交接檔，合併前已解掉。
+- **整合後協調者重跑**（T1～T3）：API e2e 54 個 suite 548/548、API 單元 850/850、Web 897/897、shared 126；typecheck、lint、format:check 通過。
+- **T4 合入後協調者重跑**：Web e2e 79/79（含 CSP）；單元 shared 126、API 850、Web 897；lint、typecheck、build 通過。
