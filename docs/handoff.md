@@ -10,11 +10,11 @@
 
 開發者 2026-10-21 決定：2j 統計與 4a AI 文字記帳**各開一條分支、各由一個 session 負責**，開發者分別到各工作區對話；需要管理時才回 main。
 
-| worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                       |
-| ---------- | ----------------- | ------------------------------- | ------------------- | ------------------------------------------ |
-| 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調        |
-| `stats-2j` | （待命）          | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2j（#154）、2k 首頁改版已合併              |
-| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 4a、新分類提議都已完成並部署（#155、#161） |
+| worktree   | 分支                                             | 交接檔                          | 測試資料庫          | 狀態                                          |
+| ---------- | ------------------------------------------------ | ------------------------------- | ------------------- | --------------------------------------------- |
+| 主工作區   | `main`                                           | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調           |
+| `stats-2j` | `feature/phase-2k-home-redesign-impl`（PR #163） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2j（#154）已合併；2k 首頁改版在 PR #163 等 CI |
+| `ai-4a`    | 無（停在 `main`）                                | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 4a、新分類提議都已完成並部署（#155、#161）    |
 
 ## 跨工作區的規則
 
