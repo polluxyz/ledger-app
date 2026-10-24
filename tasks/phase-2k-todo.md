@@ -15,7 +15,7 @@ plan：`tasks/phase-2k-plan.md`；spec：`docs/specs/phase-2k-home-redesign.md`�
 - [x] **W5 Web e2e**（依賴 W3；`2k-web-e2e`）：plan §1.5。
       派工前：確認沒有別的 worktree 正在跑 Web e2e，3100、5273、5274 沒有被佔。
       驗收：`home.spec.ts` 涵蓋 SC-H1、H3、H8 的寬度（439／440px、右側欄打開）、H13（含標註超過 10 筆展開、量 SVG 本身與點位方框）、H14（390px 淺色與深色）、H18（含統計頁不變）；既有 e2e 跟著新版面改了選擇器，沒刪掉驗證的行為；兩套 Web e2e 全綠。
-- [ ] **W6 截圖驗收修正**（依賴 W5；`2k-home-fixes`）：plan §6 實作紀錄 2026-10-24 W5 截圖驗收、決策 310～312。
+- [x] **W6 截圖驗收修正**（依賴 W5；`2k-home-fixes`）：plan §6 實作紀錄 2026-10-24 W5 截圖驗收、決策 310～312。W7（標籤擺放、一欄最近卡高度）併在同一分支。
       驗收：趨勢圖量實際寬高、viewBox 用實際像素，1280px 與 390px 的金額標籤實際字高不小於 13px、月份不小於 10px；兩欄時圖面填滿 180～320px、沒有上下留白；一欄時卡片沒有多餘空白，圖面不超過 260px；點位與標籤不被裁切；趨勢卡標題「資產趨勢」（載入、失敗、成功、沒有帳本四種）；「最近」面板沒有可見小標題、region 名稱「最近交易」；首頁兩個分頁的交易列左右沒有內距、交易頁不變；元件測試與 e2e 跟著改；兩套 Web e2e 全綠；新截圖逐張看過。
 - [ ] **D1 整體驗收、PR、部署**（協調者）：plan §4。
       驗收：diff 沒有 `apps/api`、`packages/shared`、相依套件的改動；自己重跑 SC-H2、SC-H3 並看請求增量；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；390px 與 1280px、淺色與深色、三種配色的截圖逐項對過 W260～W271；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；dev 照 plan §4 點過一次；worker 都 `worker-release`，worktree、子分支、`ledger_2k_web_e2e_test` 清掉；plan 與 todo 移到 `tasks/archive/`。

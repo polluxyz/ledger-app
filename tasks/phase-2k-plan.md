@@ -287,3 +287,7 @@ spec：`docs/specs/phase-2k-home-redesign.md`（決策 300～309、W260～W271�
   4. 「最近」分頁內重複的「最近交易」→ 決策 311。
   5. 390px 名稱截斷、列多縮排 16px（3d 既有行為）→ 決策 312。
   - advisor 指出 `BalanceTrendChart` 只有首頁用，統計頁用的是 `TrendLineChart`，改它不影響統計頁。
+- 2026-10-24 W6 驗收：5 件問題都修好（我重跑 lint、typecheck、format:check 全綠，122 檔 994 個測試通過，Web e2e 88 passed）。390px 截圖還有 2 件，都在核可範圍內，同一個 worktree 追加 W7（Codex）：
+  1. 最後一點的金額與月份標籤壓到最後一段折線。2j 原本把金額放左上、月份放左邊同高；W6 字變大後更明顯。改成兩個標籤疊在一起，放在最後一段折線的另一側，仍不可被裁切（W261）。
+  2. `.dataCard` 的 `min-height: 16rem`（W3 加的，spec 沒要求）讓一欄時只有 2 列的「最近」卡多出約 80px 空白。一欄時拿掉，兩欄維持。
+- 2026-10-24 W7 驗收：第一版的標籤擺放函式放不下時會 throw，render 中丟錯會讓首頁白屏，退回改成夾在邊界內（696dcf3）。我重跑 lint、typecheck、format:check 全綠，122 檔 1000 個測試通過，Web e2e 89 passed（3.4m）。實測：最後一段折線與標籤最短距離桌機 9.60px、390px 9px；390px 最近卡列底空白 25px；1280px 卡高 256px。W6／W7 合併進整合分支 351a1b8。
