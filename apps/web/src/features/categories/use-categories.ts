@@ -6,6 +6,7 @@ import type {
   UpdateCategoryRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 某帳本分類快取的**前綴** key。`useCategories` 依型別篩選會在後面接出多份快取
@@ -79,7 +80,10 @@ export function useUpdateCategory(ledgerId: string | null) {
         method: 'PATCH',
         body: input,
       }),
-    onSuccess: () => invalidateCategories(queryClient, ledgerId),
+    onSuccess: () => {
+      invalidateCategories(queryClient, ledgerId);
+      invalidateAfterMoneyWrite(queryClient);
+    },
   });
 }
 
@@ -94,6 +98,9 @@ export function useDeleteCategory(ledgerId: string | null) {
     // 成功時後端回 204 無 body，`apiRequest` 會回 undefined。
     mutationFn: (categoryId: string) =>
       apiRequest<void>(`/ledgers/${ledgerId!}/categories/${categoryId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidateCategories(queryClient, ledgerId),
+    onSuccess: () => {
+      invalidateCategories(queryClient, ledgerId);
+      invalidateAfterMoneyWrite(queryClient);
+    },
   });
 }

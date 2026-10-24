@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Account, CreateAccountRequest, UpdateAccountRequest } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 帳戶的伺服器狀態。
@@ -8,10 +9,8 @@ import { apiRequest } from '../../lib/api-client';
  * 與分類不同，這裡**不需要帳本 id**——帳戶屬於使用者、跨帳本共用，端點也在頂層。
  * 因此 query key 不帶帳本，切換帳本時也不必重新請求。
  *
- * ⚠️ **餘額是算出來的，任何會改變交易的操作都必須讓 `ACCOUNTS_KEY` 失效**
- * （新增 / 編輯 / 刪除交易皆是）。少做這件事不會拋錯、不會讓測試變紅，畫面上的
- * 餘額只會停在舊數字直到重整——那種問題很難被發現，也很難聯想到原因。
- * 交易那側的實作見 `features/transactions/use-transactions.ts`。
+ * 餘額由後端隨交易計算；任何會影響首頁金額或顯示的寫入，都透過
+ * `invalidateAfterMoneyWrite` 一併更新相關快取。
  */
 export const ACCOUNTS_KEY = ['accounts'] as const;
 
@@ -37,9 +36,7 @@ export function useCreateAccount() {
   return useMutation({
     mutationFn: (input: CreateAccountRequest) =>
       apiRequest<Account>('/accounts', { method: 'POST', body: input }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-    },
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -55,9 +52,7 @@ export function useUpdateAccount() {
   return useMutation({
     mutationFn: ({ id, ...input }: UpdateAccountRequest & { id: string }) =>
       apiRequest<Account>(`/accounts/${id}`, { method: 'PATCH', body: input }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-    },
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -68,9 +63,7 @@ export function useDeleteAccount() {
   return useMutation({
     // 成功時後端回 204 無 body，`apiRequest` 會回 undefined。
     mutationFn: (id: string) => apiRequest<void>(`/accounts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-    },
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 

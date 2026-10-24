@@ -12,7 +12,6 @@ import {
   useCreateTransactionForLedger,
   useDeleteTransaction,
   useUpdateTransaction,
-  transactionsKey,
 } from './use-transactions';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 
@@ -289,7 +288,7 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
     expectDebtTotalsInvalidated();
   });
 
-  it('writes an AI draft to its supplied ledger and invalidates that ledger and account balances', async () => {
+  it('writes an AI draft to its supplied ledger and invalidates shared unscoped prefixes', async () => {
     invalidate.mockClear();
     const create = renderHook(() => useCreateTransactionForLedger(), { wrapper });
     await act(() =>
@@ -307,8 +306,14 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
       ([filters]) => filters.queryKey,
     );
     expect(keys).toEqual(
-      expect.arrayContaining([transactionsKey('ledger-2'), ACCOUNTS_KEY]) as unknown,
+      expect.arrayContaining([
+        ['transactions'],
+        ACCOUNTS_KEY,
+        ['ledger-statistics'],
+        ['balance-trend'],
+      ]) as unknown,
     );
-    expect(keys).not.toContain(transactionsKey('ledger-1'));
+    expect(keys).not.toContain(['transactions', 'ledger-1']);
+    expect(keys).not.toContain(['transactions', 'ledger-2']);
   });
 });

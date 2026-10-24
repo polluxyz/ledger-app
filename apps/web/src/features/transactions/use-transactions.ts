@@ -1,10 +1,4 @@
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateTransactionRequest,
   ListTransactionsQuery,
@@ -12,11 +6,8 @@ import type {
   Transaction,
   UpdateTransactionRequest,
 } from '@ledger/shared';
-import { ACCOUNTS_KEY } from '../accounts/use-accounts';
-import { COUNTERPARTIES_KEY } from '../debts/use-debts';
-import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
-import { settlementSummaryKey } from '../settlements/use-settlements';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 某帳本交易快取的**前綴** key。實際的 key 還會接上查詢參數（見 `useTransactions`），
@@ -62,29 +53,7 @@ export function useTransactions(ledgerId: string | null, query: ListTransactions
   });
 }
 
-/**
- * 任何會改變交易的操作，成功後都要跑這一段。
- *
- * **帳戶快取也要一起失效**：餘額是後端依交易算出來的，新增、改金額、刪掉一筆，
- * 餘額就變了。少了這一行不會拋錯、不會讓任何測試變紅，只會讓首頁的餘額停在舊
- * 數字直到重整——那種問題很難被發現，也很難聯想到原因，所以
- * `use-transactions.test.tsx` 為新增、編輯、刪除各有一條專屬測試釘住它。
- *
- * 共享帳本的淨額與借還頁總額也依交易算，同一個理由一起失效。個人帳本沒有這些快取，
- * 失效不存在的 key 不會發出請求。
- */
-function invalidateAfterWrite(queryClient: QueryClient, ledgerId: string | null): void {
-  void queryClient.invalidateQueries({ queryKey: transactionsKey(ledgerId) });
-  void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-  void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
-  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-  void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
-}
-
-/**
- * 新增交易。成功後讓該帳本的交易快取失效，react-query 會自動重取，
- * 因此畫面不必重整就會出現新的一筆。
- */
+/** 新增交易。成功後使用共用失效函式，讓相關畫面不必重整就能載入新資料。 */
 export function useCreateTransaction(ledgerId: string | null) {
   const mutation = useCreateTransactionForLedger();
 
@@ -97,8 +66,7 @@ export function useCreateTransaction(ledgerId: string | null) {
 }
 
 /**
- * 新增交易時由呼叫端指定帳本，供 AI 草稿寫入它所屬的帳本；成功後仍沿用一般新增的
- * 失效範圍，避免切換目前帳本才能看到新交易或更新後的餘額。
+ * 新增交易時由呼叫端指定帳本，供 AI 草稿寫入它所屬的帳本；成功後沿用共用失效清單。
  */
 export function useCreateTransactionForLedger() {
   const queryClient = useQueryClient();
@@ -115,7 +83,7 @@ export function useCreateTransactionForLedger() {
         method: 'POST',
         body: input,
       }),
-    onSuccess: (_transaction, { ledgerId }) => invalidateAfterWrite(queryClient, ledgerId),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -140,7 +108,7 @@ export function useUpdateTransaction(ledgerId: string | null) {
         method: 'PATCH',
         body: input,
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient, ledgerId),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -156,6 +124,6 @@ export function useDeleteTransaction(ledgerId: string | null) {
       apiRequest<void>(`/ledgers/${ledgerId!}/transactions/${transactionId}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient, ledgerId),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
