@@ -218,8 +218,7 @@ function Dashboard({
   const { close, isOpen, open, requestFocus } = useRightPanel();
   const period = currentTaiwanMonthRange();
   const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
-  const { mode: storedMode } = useHomeCategoryColors();
-  const mode = storedMode;
+  const { mode } = useHomeCategoryColors();
   const chartTheme = useChartTheme();
   const [panelTargetState, setPanelTargetState] = useState(() => ({
     ledgerId: ledger.id,
