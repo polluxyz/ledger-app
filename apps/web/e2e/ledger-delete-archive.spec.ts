@@ -16,6 +16,7 @@ import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   expandDebtRow,
   expectBalanceTransition,
+  homeActivityRow,
   newTransactionForm,
   openDashboard,
   openDebtsTab,
@@ -60,7 +61,7 @@ test('刪除私人帳本會先顯示 API 餘額預覽，刪除後還原現金並
   await expenseForm.getByLabel('金額').fill('120');
   await selectCategory(expenseForm, '餐飲');
   await expenseForm.getByRole('button', { name: '新增', exact: true }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: '-$120' })).toBeVisible();
+  await expect(homeActivityRow(page, '-$120')).toBeVisible();
 
   await openDebtsTab(page, '個人');
   const counterpartyRow = await expandDebtRow(page, new RegExp(`^${COUNTERPARTY_NAME}`));
@@ -174,7 +175,7 @@ test('封存不用輸入名稱；取消封存後帳本回到切換器並可再�
   await form.getByLabel('金額').fill('25');
   await selectCategory(form, '餐飲');
   await form.getByRole('button', { name: '新增', exact: true }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: '-$25' })).toBeVisible();
+  await expect(homeActivityRow(page, '-$25')).toBeVisible();
   await expect
     .poll(async () => {
       const account = (await listAccounts(request, userA.token)).find(
