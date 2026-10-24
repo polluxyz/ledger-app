@@ -105,6 +105,7 @@ describe('AI parse transaction (e2e)', () => {
     date: today,
     title: '早餐',
     categoryId: categoryId('早餐'),
+    newCategoryName: null,
     accountId: bob.cashId,
     toAccountId: null,
     ...overrides,
@@ -130,6 +131,7 @@ describe('AI parse transaction (e2e)', () => {
       date: null,
       title: '早餐',
       category: null,
+      newCategory: null,
       account: null,
       toAccount: null,
       ...overrides,
@@ -230,16 +232,94 @@ describe('AI parse transaction (e2e)', () => {
       }),
     ]);
   });
-  it('SC-P6: named writable ledger is selected without inventing a category', async () => {
+  it('SC-P6: named writable ledger proposes a fitting category that is not present', async () => {
+    const tripCategories = (
+      await request(httpServer(app))
+        .get(`/api/ledgers/${tripId}/categories`)
+        .set(auth(bob.token))
+        .expect(200)
+    ).body as Category[];
+    for (const category of tripCategories.filter(
+      (row) => row.name === '交通' && row.type === 'EXPENSE',
+    ))
+      await request(httpServer(app))
+        .delete(`/api/ledgers/${tripId}/categories/${category.id}`)
+        .set(auth(bob.token))
+        .expect(204);
+    const categoryCountBefore = await prisma.category.count();
     expect(responseDrafts((await parse('旅行基金 機票 8000 刷卡').expect(200)).body)).toEqual([
       expected({
         ledgerId: tripId,
         amount: 800000,
         title: '機票',
         categoryId: null,
+        newCategoryName: '交通',
         accountId: cardId,
       }),
     ]);
+    expect(await prisma.category.count()).toBe(categoryCountBefore);
+  });
+  it('proposes 日用品 for 衛生紙 without creating a category during parsing', async () => {
+    await transaction(bob.ledgerId, bob.cashId, categoryId('早餐'));
+    const categoryCountBefore = await prisma.category.count();
+    expect(responseDrafts((await parse('衛生紙 189').expect(200)).body)).toEqual([
+      expected({
+        amount: 18900,
+        title: '衛生紙',
+        categoryId: null,
+        newCategoryName: '日用品',
+        accountId: bob.cashId,
+      }),
+    ]);
+    expect(await prisma.category.count()).toBe(categoryCountBefore);
+  });
+  it('reuses an existing 日用品 category for repeated proposals without creating it during parsing', async () => {
+    await transaction(bob.ledgerId, bob.cashId, categoryId('早餐'));
+    const firstParseCategoryCount = await prisma.category.count();
+    const firstParse = responseDrafts((await parse('洗碗精 99、垃圾袋 60').expect(200)).body);
+    expect(firstParse).toEqual([
+      expected({
+        amount: 9900,
+        title: '洗碗精',
+        categoryId: null,
+        newCategoryName: '日用品',
+        accountId: bob.cashId,
+      }),
+      expected({
+        amount: 6000,
+        title: '垃圾袋',
+        categoryId: null,
+        newCategoryName: '日用品',
+        accountId: bob.cashId,
+      }),
+    ]);
+    expect(await prisma.category.count()).toBe(firstParseCategoryCount);
+
+    const createdCategory = (
+      await request(httpServer(app))
+        .post(`/api/ledgers/${bob.ledgerId}/categories`)
+        .set(auth(bob.token))
+        .send({ name: '日用品', type: 'EXPENSE' })
+        .expect(201)
+    ).body as Category;
+    const secondParseCategoryCount = await prisma.category.count();
+    expect(responseDrafts((await parse('洗碗精 99、垃圾袋 60').expect(200)).body)).toEqual([
+      expected({
+        amount: 9900,
+        title: '洗碗精',
+        categoryId: createdCategory.id,
+        newCategoryName: null,
+        accountId: bob.cashId,
+      }),
+      expected({
+        amount: 6000,
+        title: '垃圾袋',
+        categoryId: createdCategory.id,
+        newCategoryName: null,
+        accountId: bob.cashId,
+      }),
+    ]);
+    expect(await prisma.category.count()).toBe(secondParseCategoryCount);
   });
   it('SC-P6: viewer, archived and left ledger names are absent and fall back to current ledger', async () => {
     const carol = await person(app, 'carol@example.com', 'Carol');
@@ -312,6 +392,26 @@ describe('AI parse transaction (e2e)', () => {
       expected({ categoryId: null, amount: null, date: null }),
       expected({ categoryId: null }),
     ]);
+  });
+  it('SC-P13(b)/(e): suppresses proposals after an invalid category or unresolved ledger', async () => {
+    await transaction(bob.ledgerId, bob.cashId, categoryId('早餐'));
+    const categoryCountBefore = await prisma.category.count();
+    complete.mockImplementationOnce((input) => {
+      dataOf(input);
+      return Promise.resolve({
+        content: {
+          drafts: [
+            wire({ category: 'C999', newCategory: '日用品' }),
+            wire({ ledger: 'L999', category: null, newCategory: '日用品' }),
+          ],
+        },
+      });
+    });
+    expect(responseDrafts((await parse('惡意輸出').expect(200)).body)).toEqual([
+      expected({ categoryId: null, newCategoryName: null }),
+      expected({ categoryId: null, newCategoryName: null }),
+    ]);
+    expect(await prisma.category.count()).toBe(categoryCountBefore);
   });
   it.each([null, { drafts: [] }, { drafts: 'bad' }, { drafts: [null, 1] }])(
     'SC-P8: malformed content %p is empty with 200',

@@ -31,6 +31,7 @@ describe('AI draft validation', () => {
     date: null,
     title: ' 早餐 ',
     category: 'C1',
+    newCategory: null,
     account: null,
     toAccount: null,
   };
@@ -47,6 +48,7 @@ describe('AI draft validation', () => {
       date: '2040-03-01',
       title: '早餐',
       categoryId: 'food',
+      newCategoryName: null,
       accountId: 'cash',
       toAccountId: null,
     });
@@ -95,6 +97,80 @@ describe('AI draft validation', () => {
     expect(one({ ledger: 'L2', category: 'C3' }).categoryId).toBe('tripFood');
     expect(one({ category: 'C2' }).categoryId).toBeNull();
     expect(one({ type: 'INCOME', category: 'C2' }).categoryId).toBe('salary');
+  });
+  it('SC-P13(a): a valid category code wins and clears a proposed name', () => {
+    expect(one({ category: 'C1', newCategory: '另一分類' })).toMatchObject({
+      categoryId: 'food',
+      newCategoryName: null,
+    });
+  });
+  it.each(['C999', 'C2', 'C3', 123])(
+    'SC-P13(b): invalid category %p clears both category fields',
+    (category) => {
+      expect(one({ category, newCategory: '日用品' })).toMatchObject({
+        categoryId: null,
+        newCategoryName: null,
+      });
+    },
+  );
+  it('SC-P13(c): a null category accepts a valid proposed name', () => {
+    expect(one({ category: null, newCategory: '日用品' })).toMatchObject({
+      categoryId: null,
+      newCategoryName: '日用品',
+    });
+  });
+  it('SC-P13(d): transfers clear both category fields', () => {
+    expect(one({ type: 'TRANSFER', category: 'C1', newCategory: '日用品' })).toMatchObject({
+      categoryId: null,
+      newCategoryName: null,
+    });
+  });
+  it('SC-P13(e): an unresolved named ledger falls back without category fields', () => {
+    expect(one({ ledger: 'L999', category: null, newCategory: '日用品' })).toMatchObject({
+      ledgerId: 'daily',
+      categoryId: null,
+      newCategoryName: null,
+    });
+  });
+  it('converts a trimmed proposal to an existing same-ledger, same-type category', () => {
+    expect(one({ category: null, newCategory: ' 餐飲 ' })).toMatchObject({
+      categoryId: 'food',
+      newCategoryName: null,
+    });
+  });
+  it('keeps a same-name category proposal when its existing category has another type', () => {
+    expect(one({ category: null, newCategory: '薪資' })).toMatchObject({
+      categoryId: null,
+      newCategoryName: '薪資',
+    });
+  });
+  it('keeps a proposal when the same name exists only in another ledger', () => {
+    const otherLedgerCatalog = buildAiCatalog(
+      [
+        { id: 'daily', name: '日常' },
+        { id: 'trip', name: '旅行' },
+      ],
+      [{ id: 'tripHousehold', name: '日用品', ledgerId: 'trip', type: 'EXPENSE' }],
+      [],
+      'daily',
+      '2040-03-01',
+    );
+    const [draft] = validateAiDrafts(
+      { drafts: [{ ...base, category: null, newCategory: '日用品' }] },
+      otherLedgerCatalog,
+      new Map(),
+      '2040-03-01',
+    ).drafts;
+    expect(draft).toMatchObject({ ledgerId: 'daily', categoryId: null, newCategoryName: '日用品' });
+  });
+  it('trims proposed names and rejects empty, overlong, or non-string values', () => {
+    expect(one({ category: null, newCategory: '   ' }).newCategoryName).toBeNull();
+    expect(one({ category: null, newCategory: '字'.repeat(50) }).newCategoryName).toBe(
+      '字'.repeat(50),
+    );
+    expect(one({ category: null, newCategory: '字'.repeat(51) }).newCategoryName).toBeNull();
+    expect(one({ category: null, newCategory: '  日用品  ' }).newCategoryName).toBe('日用品');
+    expect(one({ category: null, newCategory: 123 }).newCategoryName).toBeNull();
   });
   it.each(['?', 'A1x', 'A01', 'cash', undefined, 1, '__proto__'])(
     'does not default explicit invalid account %p',

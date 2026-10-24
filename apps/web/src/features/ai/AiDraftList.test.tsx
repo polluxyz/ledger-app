@@ -36,6 +36,7 @@ function draft(overrides: Partial<TransactionDraft> = {}): TransactionDraft {
     date: '2026-10-23',
     title: '早餐',
     categoryId: category.id,
+    newCategoryName: null,
     accountId: 'acc-cash',
     toAccountId: null,
     ...overrides,
@@ -161,5 +162,18 @@ describe('AI draft list', () => {
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onConfirmAll).not.toHaveBeenCalled();
     expect(requestApi).not.toHaveBeenCalledWith(expect.stringContaining('/transactions'));
+  });
+
+  it('W240 shows a proposed category as a dashed chip and keeps the draft confirmable', () => {
+    renderList([
+      {
+        key: 'proposal',
+        draft: draft({ title: '衛生紙', categoryId: null, newCategoryName: '日用品' }),
+      },
+    ]);
+
+    const chip = screen.getByRole('note', { name: '變更分類：日用品，確認時新增' });
+    expect(chip).toHaveTextContent('＋日用品');
+    expect(screen.getByRole('button', { name: '確認草稿：衛生紙' })).toBeEnabled();
   });
 });

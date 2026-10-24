@@ -2,6 +2,7 @@ import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from './transactions.service';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
+import { CategoriesService } from '../categories/categories.service';
 
 /**
  * TransactionsService 的單元測試（Prisma 全程 mock）：分類一致性、列表的預設值／
@@ -10,6 +11,7 @@ import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
  */
 describe('TransactionsService', () => {
   let service: TransactionsService;
+  let categories: { findOrCreateByName: jest.Mock };
   let prisma: {
     ledger: { findUnique: jest.Mock };
     category: { findUnique: jest.Mock };
@@ -72,6 +74,7 @@ describe('TransactionsService', () => {
   }
 
   beforeEach(() => {
+    categories = { findOrCreateByName: jest.fn().mockResolvedValue('new-category') };
     prisma = {
       ledger: {
         findUnique: jest.fn().mockResolvedValue({ kind: 'PERSONAL' }),
@@ -106,6 +109,7 @@ describe('TransactionsService', () => {
     service = new TransactionsService(
       prisma as unknown as PrismaService,
       {} as LedgerPeopleService,
+      categories as unknown as CategoriesService,
     );
   });
 
@@ -134,6 +138,51 @@ describe('TransactionsService', () => {
       merge: null,
       marked: false,
       createdAt: joined.createdAt.toISOString(),
+    });
+  });
+
+  /** 從公開 create 入口驗證分類二擇一、轉帳限制，以及名稱去空白後的邊界。 */
+  describe('new category rules', () => {
+    it.each(['EXPENSE', 'INCOME'] as const)(
+      'resolves a trimmed new category for %s on the write client',
+      async (type) => {
+        allowEverything();
+        await service.create(ledgerId, creatorId, {
+          ...input,
+          type,
+          categoryId: undefined,
+          newCategoryName: '  日用品  ',
+        });
+        expect(categories.findOrCreateByName).toHaveBeenCalledWith(
+          prisma,
+          ledgerId,
+          type,
+          '日用品',
+        );
+        expect(prisma.transaction.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ categoryId: 'new-category' }) as unknown,
+          }),
+        );
+      },
+    );
+
+    it.each([
+      { categoryId: 'cat-1', newCategoryName: '日用品' },
+      { categoryId: undefined },
+      { categoryId: undefined, newCategoryName: '   ' },
+      { categoryId: undefined, newCategoryName: 'a'.repeat(51) },
+      { type: 'TRANSFER' as const, categoryId: undefined, newCategoryName: '日用品', toAccountId },
+    ])('rejects invalid category selection %j', async (change) => {
+      allowEverything();
+      await expect(
+        service.create(ledgerId, creatorId, { ...input, ...change }),
+      ).rejects.toMatchObject({
+        status: 400,
+        errorCode: 'VALIDATION_FAILED',
+      });
+      expect(categories.findOrCreateByName).not.toHaveBeenCalled();
+      expect(prisma.transaction.create).not.toHaveBeenCalled();
     });
   });
 
@@ -702,7 +751,11 @@ describe('TransactionsService', () => {
   describe('createPaidForMeExpense', () => {
     it('writes an EXPENSE with the category and no account', async () => {
       prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', ledgerId, type: 'EXPENSE' });
-      const client = { transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-7' }) } };
+      const client = {
+        ledger: prisma.ledger,
+        category: prisma.category,
+        transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-7' }) },
+      };
 
       const id = await service.createPaidForMeExpense(client as never, {
         ledgerId,
@@ -728,7 +781,11 @@ describe('TransactionsService', () => {
 
     it('rejects an income category', async () => {
       prisma.category.findUnique.mockResolvedValue({ id: 'cat-2', ledgerId, type: 'INCOME' });
-      const client = { transaction: { create: jest.fn() } };
+      const client = {
+        ledger: prisma.ledger,
+        category: prisma.category,
+        transaction: { create: jest.fn() },
+      };
 
       await expect(
         service.createPaidForMeExpense(client as never, {
@@ -752,6 +809,7 @@ describe('TransactionsService', () => {
     ] as const)('accepts %s with a %s category and keeps its type', async (type, categoryType) => {
       allowEverything();
       const client = {
+        ledger: prisma.ledger,
         account: prisma.account,
         category: { findFirst: jest.fn().mockResolvedValue({ type: categoryType }) },
         transaction: { create: jest.fn().mockResolvedValue({ id: 'debt' }) },
@@ -808,6 +866,7 @@ describe('TransactionsService', () => {
       prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
       prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: false });
       const client = {
+        ledger: prisma.ledger,
         account: prisma.account,
         transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-9' }) },
       };
@@ -837,7 +896,11 @@ describe('TransactionsService', () => {
 
     it('requires an account for a debt transaction', async () => {
       prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
-      const client = { transaction: { create: jest.fn() } };
+      const client = {
+        ledger: prisma.ledger,
+        category: prisma.category,
+        transaction: { create: jest.fn() },
+      };
 
       await expect(
         service.createDebtTransaction(client as never, {
@@ -854,7 +917,11 @@ describe('TransactionsService', () => {
     it("refuses someone else's account with 404", async () => {
       prisma.ledger.findUnique.mockResolvedValue({ kind: 'PERSONAL' });
       prisma.account.findUnique.mockResolvedValue({ userId: otherUserId });
-      const client = { account: prisma.account, transaction: { create: jest.fn() } };
+      const client = {
+        ledger: prisma.ledger,
+        account: prisma.account,
+        transaction: { create: jest.fn() },
+      };
 
       await expect(
         service.createDebtTransaction(client as never, {
@@ -1043,6 +1110,7 @@ describe('TransactionsService', () => {
             findCallerPerson: jest.fn().mockResolvedValue({ id: 'payer', userId: creatorId }),
             lockPeople: jest.fn().mockResolvedValue(new Map([['payer', { userId: creatorId }]])),
           } as unknown as LedgerPeopleService,
+          categories as unknown as CategoriesService,
         );
         jest.spyOn(service, 'getById').mockResolvedValue({ id: 'original' } as never);
         await service.setAccount(ledgerId, 'original', creatorId, accountId);
@@ -1074,6 +1142,7 @@ describe('TransactionsService', () => {
             listPeople: jest.fn().mockResolvedValue([payer]),
             toView: jest.fn().mockReturnValue(payer),
           } as unknown as LedgerPeopleService,
+          categories as unknown as CategoriesService,
         );
         expect(await service.getById(ledgerId, joined.id, creatorId)).toMatchObject({
           accountPending: !merged,

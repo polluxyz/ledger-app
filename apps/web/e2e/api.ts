@@ -209,6 +209,22 @@ export async function createCategory(
   return readJson<Category>(response, `建立分類「${body.name}」`);
 }
 
+/** 刪除分類，供 e2e 準備缺少特定分類的帳本情境。 */
+export async function deleteCategory(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+  categoryId: string,
+): Promise<void> {
+  const response = await request.delete(
+    `${API_BASE_URL}/ledgers/${ledgerId}/categories/${categoryId}`,
+    { headers: authHeaders(token) },
+  );
+  if (!response.ok()) {
+    throw new Error(`刪除分類失敗：${response.status()} ${await response.text()}`);
+  }
+}
+
 /** 列出使用者的帳戶。註冊時會自動建立一個「現金」帳戶。 */
 export async function listAccounts(request: APIRequestContext, token: string): Promise<Account[]> {
   const response = await request.get(`${API_BASE_URL}/accounts`, {

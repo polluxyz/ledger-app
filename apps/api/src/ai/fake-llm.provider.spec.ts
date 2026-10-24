@@ -38,10 +38,42 @@ describe('FakeLlmProvider', () => {
       drafts: [{ date: '2040-02-29', category: 'C5' }],
     });
     expect((await send('從儲蓄轉 5000 到現金')).content).toMatchObject({
-      drafts: [{ type: 'TRANSFER', account: 'A6', toAccount: 'A8' }],
+      drafts: [{ type: 'TRANSFER', account: 'A6', toAccount: 'A8', newCategory: null }],
     });
     expect((await send('旅行基金 機票 8000 刷卡')).content).toMatchObject({
-      drafts: [{ ledger: 'L8', category: null, account: 'A7' }],
+      drafts: [{ ledger: 'L8', category: null, newCategory: '交通', account: 'A7' }],
+    });
+    expect((await send('旅行基金 機票 8000')).content).toMatchObject({
+      drafts: [{ ledger: 'L8', category: null, newCategory: null }],
+    });
+    expect((await send('衛生紙 189')).content).toMatchObject({
+      drafts: [
+        {
+          type: 'EXPENSE',
+          amountYuan: '189',
+          title: '衛生紙',
+          category: null,
+          newCategory: '日用品',
+        },
+      ],
+    });
+    expect((await send('洗碗精 99、垃圾袋 60')).content).toMatchObject({
+      drafts: [
+        {
+          type: 'EXPENSE',
+          amountYuan: '99',
+          title: '洗碗精',
+          category: null,
+          newCategory: '日用品',
+        },
+        {
+          type: 'EXPENSE',
+          amountYuan: '60',
+          title: '垃圾袋',
+          category: null,
+          newCategory: '日用品',
+        },
+      ],
     });
   });
   it('returns empty for unknown and out of scope sentences', async () => {

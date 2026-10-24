@@ -3,7 +3,13 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LedgerPerson, LedgerSummary, Split, Transaction } from '@ledger/shared';
+import type {
+  LedgerPerson,
+  LedgerSummary,
+  Split,
+  Transaction,
+  TransactionDraft,
+} from '@ledger/shared';
 import App from '../../App';
 import { AuthContext, type AuthContextValue } from '../auth/auth-context';
 import { TransactionForm } from './TransactionForm';
@@ -275,6 +281,19 @@ describe('TransactionForm', () => {
         <QueryClientProvider client={queryClient}>
           <AuthContext.Provider value={authValue}>
             <TransactionForm ledger={sharedLedger} transaction={transaction} />
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  function renderTrackingForm(draft?: TransactionDraft) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider value={authValue}>
+            <TransactionForm ledger={trackingLedger} draft={draft} />
           </AuthContext.Provider>
         </QueryClientProvider>
       </MemoryRouter>,
@@ -614,6 +633,76 @@ describe('TransactionForm', () => {
     await user.click(screen.getByRole('button', { name: /^新增$/ }));
 
     expect(await postedTransactionBody()).toMatchObject({ amount: 33333 });
+  });
+
+  it('W243 preselects and submits the proposed category in draft mode', async () => {
+    const otherCategory = { id: 'cat-other', name: '其他', type: 'EXPENSE', icon: null };
+    const draft: TransactionDraft = {
+      ledgerId: trackingLedger.id,
+      type: 'EXPENSE',
+      amount: 12000,
+      date: '2026-10-05',
+      title: '衛生紙',
+      categoryId: null,
+      newCategoryName: '日用品',
+      accountId: 'acc-1',
+      toAccountId: null,
+    };
+    routeFetch(trackingLedger, { categories: [category, otherCategory] });
+    const user = userEvent.setup();
+    renderTrackingForm(draft);
+
+    const picker = await screen.findByRole('combobox', { name: '分類' }, WAIT);
+    expect(picker).toHaveAttribute('aria-valuetext', '＋日用品');
+    await user.click(picker);
+    const options = within(screen.getByRole('listbox', { name: '分類' })).getAllByRole('option');
+    expect(options.at(-1)).toHaveTextContent('＋日用品');
+
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const body = await postedTransactionBody();
+    expect(body).toHaveProperty('newCategoryName', '日用品');
+    expect(body).not.toHaveProperty('categoryId');
+  });
+
+  it('W243 sends the chosen existing category instead of the draft proposal', async () => {
+    const otherCategory = { id: 'cat-other', name: '其他', type: 'EXPENSE', icon: null };
+    const draft: TransactionDraft = {
+      ledgerId: trackingLedger.id,
+      type: 'EXPENSE',
+      amount: 12000,
+      date: '2026-10-05',
+      title: '衛生紙',
+      categoryId: null,
+      newCategoryName: '日用品',
+      accountId: 'acc-1',
+      toAccountId: null,
+    };
+    routeFetch(trackingLedger, { categories: [category, otherCategory] });
+    const user = userEvent.setup();
+    renderTrackingForm(draft);
+
+    const picker = await screen.findByRole('combobox', { name: '分類' }, WAIT);
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: '其他' }, WAIT));
+    expect(picker).toHaveAttribute('aria-valuetext', '其他');
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+
+    const body = await postedTransactionBody();
+    expect(body).toHaveProperty('categoryId', 'cat-other');
+    expect(body).not.toHaveProperty('newCategoryName');
+  });
+
+  it('W243 does not offer a proposed category in the manual form', async () => {
+    routeFetch(trackingLedger);
+    const user = userEvent.setup();
+    renderTrackingForm();
+
+    await user.click(await screen.findByRole('combobox', { name: '分類' }, WAIT));
+
+    expect(
+      within(screen.getByRole('listbox', { name: '分類' })).queryByRole('option', { name: /＋/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('does not submit an amount with more than two decimal places', async () => {

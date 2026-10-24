@@ -51,6 +51,7 @@ function makeDraft(overrides: Partial<TransactionDraft> = {}): TransactionDraft 
     date: '2026-10-23',
     title: '早餐',
     categoryId: 'cat-food',
+    newCategoryName: null,
     accountId: 'acc-cash',
     toAccountId: null,
     ...overrides,
@@ -169,6 +170,56 @@ describe('AI drafts on the transactions page', () => {
     );
     expect(transactionRequests).toHaveLength(1);
     expect(transactionRequests[0]?.path).toBe('/ledgers/ledger-1/transactions');
+  });
+
+  it('W242 confirms proposal, existing-category, and transfer drafts with only their applicable category fields', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await parseDrafts(user, [
+      makeDraft({ title: '衛生紙', categoryId: null, newCategoryName: '日用品' }),
+      makeDraft({ title: '早餐' }),
+      makeDraft({
+        title: '轉帳',
+        type: 'TRANSFER',
+        categoryId: null,
+        accountId: 'acc-cash',
+        toAccountId: 'acc-bank',
+      }),
+    ]);
+
+    for (const title of ['衛生紙', '早餐', '轉帳']) {
+      await user.click(screen.getByRole('button', { name: `確認草稿：${title}` }));
+      await waitFor(
+        () =>
+          expect(transactionRequests).toHaveLength(['衛生紙', '早餐', '轉帳'].indexOf(title) + 1),
+        WAIT,
+      );
+    }
+
+    expect(transactionRequests[0]?.body).toHaveProperty('newCategoryName', '日用品');
+    expect(transactionRequests[0]?.body).not.toHaveProperty('categoryId');
+    expect(transactionRequests[1]?.body).toHaveProperty('categoryId', 'cat-food');
+    expect(transactionRequests[1]?.body).not.toHaveProperty('newCategoryName');
+    expect(transactionRequests[2]?.body).not.toHaveProperty('categoryId');
+    expect(transactionRequests[2]?.body).not.toHaveProperty('newCategoryName');
+  });
+
+  it('W242 confirm-all writes one request per draft using either categoryId or newCategoryName', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await parseDrafts(user, [
+      makeDraft({ title: '衛生紙', categoryId: null, newCategoryName: '日用品' }),
+      makeDraft({ title: '早餐' }),
+    ]);
+
+    await user.click(screen.getByRole('button', { name: '全部確認' }));
+    await waitFor(() => expect(transactionRequests).toHaveLength(2), WAIT);
+
+    expect(transactionRequests.map(({ body }) => body.title)).toEqual(['衛生紙', '早餐']);
+    expect(transactionRequests[0]?.body).toHaveProperty('newCategoryName', '日用品');
+    expect(transactionRequests[0]?.body).not.toHaveProperty('categoryId');
+    expect(transactionRequests[1]?.body).toHaveProperty('categoryId', 'cat-food');
+    expect(transactionRequests[1]?.body).not.toHaveProperty('newCategoryName');
   });
 
   it('W210 keeps a failed single confirmation and shows its row error', async () => {

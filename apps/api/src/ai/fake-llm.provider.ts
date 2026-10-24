@@ -39,6 +39,7 @@ export class FakeLlmProvider implements LLMProvider {
       date: null,
       title: null,
       category: null,
+      newCategory: null,
       account: null,
       toAccount: null,
       ...overrides,
@@ -91,6 +92,7 @@ export class FakeLlmProvider implements LLMProvider {
             ledger: find(data.ledgers, (row) => row.name === '旅行基金'),
             amountYuan: '8000',
             title: '機票',
+            newCategory: '交通',
             account: account('信用卡'),
           }),
         ];
@@ -102,6 +104,15 @@ export class FakeLlmProvider implements LLMProvider {
             amountYuan: '8000',
             title: '機票',
           }),
+        ];
+        break;
+      case '衛生紙 189':
+        drafts = [draft({ amountYuan: '189', title: '衛生紙', newCategory: '日用品' })];
+        break;
+      case '洗碗精 99、垃圾袋 60':
+        drafts = [
+          draft({ amountYuan: '99', title: '洗碗精', newCategory: '日用品' }),
+          draft({ amountYuan: '60', title: '垃圾袋', newCategory: '日用品' }),
         ];
         break;
       case '早餐 60':

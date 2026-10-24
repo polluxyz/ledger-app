@@ -2,7 +2,10 @@ import {
   createAccount,
   createCategory,
   createLedger,
+  createTransaction,
+  deleteCategory,
   listAccounts,
+  listCategories,
   listLedgerTransactions,
   personalLedger,
 } from './api';
@@ -85,19 +88,26 @@ test.describe('AI 文字記帳草稿', () => {
     ).toBe(true);
   });
 
-  test('補上別本帳本的分類後，交易只出現在所屬帳本', async ({
+  test('改選別本帳本的既有分類後，交易只出現在所屬帳本', async ({
     signedInPage: page,
     userA,
     request,
   }) => {
     const { personal, travel, flightCategory } = await createAiDraftCatalog(request, userA.token);
+    // 移除旅行帳本預設的交通分類，讓固定劇本走「＋交通」提議路徑。
+    const travelCategories = await listCategories(request, userA.token, travel.id);
+    for (const category of travelCategories.filter(
+      (row) => row.type === 'EXPENSE' && row.name === '交通',
+    )) {
+      await deleteCategory(request, userA.token, travel.id, category.id);
+    }
     await submitAiText(page, '旅行基金 機票 8000 刷卡');
 
     const editFlight = page.getByRole('button', { name: '編輯草稿：機票', exact: true });
     const flightRow = page.getByRole('listitem').filter({ has: editFlight });
     await expect(flightRow).toContainText('旅行基金');
-    await expect(flightRow).toContainText('分類未提供');
-    await expect(page.getByRole('button', { name: '確認草稿：機票', exact: true })).toBeDisabled();
+    await expect(flightRow).toContainText('＋交通');
+    await expect(page.getByRole('button', { name: '確認草稿：機票', exact: true })).toBeEnabled();
 
     await editFlight.click();
     const form = newTransactionForm(page);
@@ -121,9 +131,164 @@ test.describe('AI 文字記帳草稿', () => {
           transaction.amount === 800000 && transaction.category?.id === flightCategory.id,
       ),
     ).toBe(true);
+    expect(
+      (await listCategories(request, userA.token, travel.id)).some(
+        (category) => category.type === 'EXPENSE' && category.name === '交通',
+      ),
+    ).toBe(false);
 
     await switchLedger(page, personal.name);
     await expect(transactionRow(page, '-$8,000')).toHaveCount(0);
+  });
+
+  test('確認提議的新分類後，交易與分類頁都能看見結果', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const { personal, cash, breakfastCategory } = await createAiDraftCatalog(request, userA.token);
+    // 先記一筆現金交易，讓現金成為 AI 草稿的預設帳戶。
+    await createTransaction(request, userA.token, personal.id, {
+      type: 'EXPENSE',
+      amount: 100,
+      date: new Date().toISOString().slice(0, 10),
+      title: '預設帳戶測試前置',
+      categoryId: breakfastCategory.id,
+      accountId: cash.id,
+    });
+    await submitAiText(page, '衛生紙 189');
+
+    const proposedCategory = page.getByRole('note', {
+      name: '變更分類：日用品，確認時新增',
+      exact: true,
+    });
+    await expect(proposedCategory).toHaveText('＋日用品');
+    await expect(page.getByRole('button', { name: '確認草稿：衛生紙', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: '確認草稿：衛生紙', exact: true }).click();
+
+    const paperRow = transactionRow(page, '-$189');
+    await expect(paperRow).toContainText('衛生紙');
+    await expect(paperRow).toContainText('日用品');
+
+    const categories = await listCategories(request, userA.token, personal.id);
+    const dailyGoodsCategories = categories.filter(
+      (category) => category.type === 'EXPENSE' && category.name === '日用品',
+    );
+    expect(dailyGoodsCategories).toHaveLength(1);
+    const dailyGoodsCategory = dailyGoodsCategories[0]!;
+    const expenseCategories = categories.filter((category) => category.type === 'EXPENSE');
+    expect(dailyGoodsCategory.sortOrder).toBe(
+      Math.max(...expenseCategories.map((category) => category.sortOrder)),
+    );
+
+    const savedTransactions = await listLedgerTransactions(request, userA.token, personal.id);
+    expect(
+      savedTransactions.items.some(
+        (transaction) =>
+          transaction.title === '衛生紙' &&
+          transaction.amount === 18900 &&
+          transaction.category?.id === dailyGoodsCategory.id,
+      ),
+    ).toBe(true);
+
+    await page.getByRole('link', { name: '分類', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '分類' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: '日用品' })).toBeVisible();
+  });
+
+  test('全部確認多筆同名提議分類時只建立一個分類', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const { personal, cash, breakfastCategory } = await createAiDraftCatalog(request, userA.token);
+    // 先記一筆現金交易，讓現金成為 AI 草稿的預設帳戶。
+    await createTransaction(request, userA.token, personal.id, {
+      type: 'EXPENSE',
+      amount: 100,
+      date: new Date().toISOString().slice(0, 10),
+      title: '預設帳戶測試前置',
+      categoryId: breakfastCategory.id,
+      accountId: cash.id,
+    });
+    await submitAiText(page, '洗碗精 99、垃圾袋 60');
+
+    await page.getByRole('button', { name: '全部確認', exact: true }).click();
+    await expect(transactionRow(page, '-$99')).toContainText('洗碗精');
+    await expect(transactionRow(page, '-$60')).toContainText('垃圾袋');
+
+    const categories = await listCategories(request, userA.token, personal.id);
+    const dailyGoodsCategories = categories.filter(
+      (category) => category.type === 'EXPENSE' && category.name === '日用品',
+    );
+    expect(dailyGoodsCategories).toHaveLength(1);
+    const dailyGoodsCategory = dailyGoodsCategories[0]!;
+
+    const savedTransactions = await listLedgerTransactions(request, userA.token, personal.id);
+    const proposedCategoryTransactions = savedTransactions.items.filter(
+      (transaction) =>
+        (transaction.title === '洗碗精' || transaction.title === '垃圾袋') &&
+        transaction.category?.id === dailyGoodsCategory.id,
+    );
+    expect(proposedCategoryTransactions).toHaveLength(2);
+  });
+
+  test('編輯提議分類草稿改選其他後不建立日用品', async ({ signedInPage: page, userA, request }) => {
+    const { personal, cash, breakfastCategory } = await createAiDraftCatalog(request, userA.token);
+    const categoriesBefore = await listCategories(request, userA.token, personal.id);
+    const otherCategory =
+      categoriesBefore.find(
+        (category) => category.type === 'EXPENSE' && category.name === '其他',
+      ) ??
+      (await createCategory(request, userA.token, personal.id, {
+        name: '其他',
+        type: 'EXPENSE',
+      }));
+
+    // 先記一筆現金交易，讓現金成為 AI 草稿的預設帳戶。
+    await createTransaction(request, userA.token, personal.id, {
+      type: 'EXPENSE',
+      amount: 100,
+      date: new Date().toISOString().slice(0, 10),
+      title: '預設帳戶測試前置',
+      categoryId: breakfastCategory.id,
+      accountId: cash.id,
+    });
+    await submitAiText(page, '衛生紙 189');
+    await page.getByRole('button', { name: '編輯草稿：衛生紙', exact: true }).click();
+
+    const form = newTransactionForm(page);
+    const categoryPicker = form.getByRole('combobox', { name: '分類' });
+    await expect(categoryPicker).toHaveAttribute('aria-valuetext', '＋日用品');
+    await categoryPicker.click();
+    const categoryOptions = form.getByRole('listbox', { name: '分類' });
+    await expect(
+      categoryOptions.getByRole('option', { name: '＋日用品', exact: true }),
+    ).toHaveAttribute('aria-selected', 'true');
+    await categoryOptions.getByRole('option', { name: '其他', exact: true }).click();
+    await form.getByRole('button', { name: '新增', exact: true }).click();
+
+    await expect(transactionRow(page, '-$189')).toContainText('衛生紙');
+    const categoriesAfter = await listCategories(request, userA.token, personal.id);
+    expect(
+      categoriesAfter.filter(
+        (category) => category.type === 'EXPENSE' && category.name === '日用品',
+      ),
+    ).toHaveLength(0);
+    expect(
+      categoriesAfter.some(
+        (category) => category.id === otherCategory.id && category.name === '其他',
+      ),
+    ).toBe(true);
+
+    const savedTransactions = await listLedgerTransactions(request, userA.token, personal.id);
+    const paperTransaction = savedTransactions.items.find(
+      (transaction) => transaction.title === '衛生紙' && transaction.amount === 18900,
+    );
+    expect(paperTransaction?.category).toMatchObject({
+      id: otherCategory.id,
+      name: '其他',
+    });
   });
 });
 
@@ -137,14 +302,17 @@ async function createAiDraftCatalog(request: Parameters<typeof personalLedger>[0
   if (!cash) throw new Error('測試帳號缺少預設的「現金」帳戶。');
 
   await createAccount(request, token, { name: '信用卡' });
-  await createCategory(request, token, personal.id, { name: '早餐', type: 'EXPENSE' });
+  const breakfastCategory = await createCategory(request, token, personal.id, {
+    name: '早餐',
+    type: 'EXPENSE',
+  });
   await createCategory(request, token, personal.id, { name: '午餐', type: 'EXPENSE' });
   const flightCategory = await createCategory(request, token, travel.id, {
     name: '機票',
     type: 'EXPENSE',
   });
 
-  return { personal, travel, cash, flightCategory };
+  return { personal, travel, cash, breakfastCategory, flightCategory };
 }
 
 async function submitAiText(page: import('@playwright/test').Page, text: string): Promise<void> {
