@@ -9,11 +9,16 @@ import {
   IsUUID,
   Max,
   MaxLength,
+  MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { MANUAL_TRANSACTION_TYPES, MAX_AMOUNT_CENTS } from '@ledger/shared';
+import { Transform, Type } from 'class-transformer';
+import {
+  CATEGORY_NAME_MAX_LENGTH,
+  MANUAL_TRANSACTION_TYPES,
+  MAX_AMOUNT_CENTS,
+} from '@ledger/shared';
 import type { CreateTransactionRequest, ManualTransactionType } from '@ledger/shared';
 import { LedgerSplitDto } from './ledger-split.dto';
 
@@ -60,12 +65,27 @@ export class CreateTransactionDto implements CreateTransactionRequest {
   //
   // | 型別       | categoryId | accountId       | toAccountId |
   // | ---------- | ---------- | --------------- | ----------- |
-  // | 支出／收入 | 必填       | 本人付時必填    | 不可填      |
+  // | 支出／收入 | 與新分類擇一 | 本人付時必填    | 不可填      |
   // | 轉帳       | 不可填     | 必填            | 必填        |
-  @ApiPropertyOptional({ format: 'uuid', description: 'Required unless the type is TRANSFER.' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'For expense/income, choose this or newCategoryName.',
+  })
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'For expense/income, choose this or categoryId. Trimmed before validation.',
+    minLength: 1,
+    maxLength: CATEGORY_NAME_MAX_LENGTH,
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @MinLength(1)
+  @MaxLength(CATEGORY_NAME_MAX_LENGTH)
+  newCategoryName?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
