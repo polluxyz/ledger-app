@@ -32,39 +32,40 @@
 
 ## 規格（`docs/specs/`）
 
-| 文件                                                                               | 內容                                          | 狀態      |
-| ---------------------------------------------------------------------------------- | --------------------------------------------- | --------- |
-| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)                           | 階段一：認證、帳本、成員、分類、交易          | 已完成    |
-| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)                                   | 階段二：Web 前端，含 Slice 0–4 的拆分         | 已完成    |
-| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)                               | 帳戶與即時餘額、轉帳型別、帳本連動設定        | 已完成    |
-| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md)                         | 帳本類型（`PERSONAL` / `SHARED`）             | 已完成    |
-| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)                                 | Playwright 端對端測試                         | 已完成    |
-| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)                           | 版面重整為 dashboard shell                    | 已完成    |
-| [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)                                 | 收尾：CSP、錯誤訊息在地化、分類排序           | 已完成    |
-| [`phase-2h-web-visual.md`](specs/phase-2h-web-visual.md)                           | 視覺改版：黑金主題、三欄工作台、深淺色        | 已完成    |
-| [`phase-2i-web-layout-v2.md`](specs/phase-2i-web-layout-v2.md)                     | 版面第二輪：側欄動畫、dashboard、交易分頁     | 已完成    |
-| [`phase-3a-friends.md`](specs/phase-3a-friends.md)                                 | 階段三：好友邀請、邀請連結、好友清單          | 已完成    |
-| [`phase-3b-debts.md`](specs/phase-3b-debts.md)                                     | 階段三：借還帳（往來帳版；連動見 3b-2）       | 3b-1 完成 |
-| [`phase-3b1-web.md`](specs/phase-3b1-web.md)                                       | 階段三：3b-1 的借還畫面（往來帳版）           | 已完成    |
-| [`phase-3b2-linking.md`](specs/phase-3b2-linking.md)                               | 階段三：3b-2 往來帳連動（含修訂 1）           | 已完成    |
-| [`phase-3b2-web.md`](specs/phase-3b2-web.md)                                       | 階段三：3b-2 連動的畫面（含修訂 1～3）        | 已完成    |
-| [`phase-3c0-money-cents.md`](specs/phase-3c0-money-cents.md)                       | 階段三：3c-0 金額單位改成分                   | 已完成    |
-| [`phase-3c-split.md`](specs/phase-3c-split.md)                                     | 階段三：3c 代墊與分帳（後端）                 | 已完成    |
-| [`phase-3c-web.md`](specs/phase-3c-web.md)                                         | 階段三：3c 代墊與分帳的畫面                   | 已完成    |
-| [`phase-3d-tx-list.md`](specs/phase-3d-tx-list.md)                                 | 階段三：3d 交易頁版面整理與分類圖示           | 已完成    |
-| [`phase-3e-shared-split.md`](specs/phase-3e-shared-split.md)                       | 階段三：3e 共享帳本的分帳與結清（後端）       | 已完成    |
-| [`phase-3e-web.md`](specs/phase-3e-web.md)                                         | 階段三：3e 共享帳本分帳與結清的畫面           | 已完成    |
-| [`phase-3f-unified-debts.md`](specs/phase-3f-unified-debts.md)                     | 階段三：3f 共享帳本的人併入對象頁與借還       | 已完成    |
-| [`phase-3g-debts-inline.md`](specs/phase-3g-debts-inline.md)                       | 階段三：3g 借還頁列內展開與四個子分頁         | 已完成    |
-| [`phase-3h-every-entry-has-account.md`](specs/phase-3h-every-entry-has-account.md) | 階段三：3h 每一筆帳都要對到帳戶               | 已完成    |
-| [`phase-3i-debt-entry-edit.md`](specs/phase-3i-debt-entry-edit.md)                 | 階段三：3i 借還紀錄可改名稱、帳戶、分類       | 已完成    |
-| [`phase-3j-ledger-delete-archive.md`](specs/phase-3j-ledger-delete-archive.md)     | 階段三：3j 帳本刪除、封存、取消封存           | 已完成    |
-| [`phase-3k-leave-and-merge.md`](specs/phase-3k-leave-and-merge.md)                 | 階段三：3k 退出共享帳本並合併到別的帳本       | 已完成    |
-| [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易 | 已完成    |
-| [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢           | 已完成    |
-| [`phase-4a-ai-text.md`](specs/phase-4a-ai-text.md)                                 | 階段四：4a AI 文字記帳（一句話變成交易草稿）  | 已完成    |
-| [`phase-4a-ai-new-category.md`](specs/phase-4a-ai-new-category.md)                 | 4a 補充：AI 先挑現有分類，沒有才提議新分類    | 實作中    |
-| [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                              | 長期有效  |
+| 文件                                                                               | 內容                                              | 狀態      |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------- | --------- |
+| [`phase-1-core-ledger.md`](specs/phase-1-core-ledger.md)                           | 階段一：認證、帳本、成員、分類、交易              | 已完成    |
+| [`phase-2-web-mvp.md`](specs/phase-2-web-mvp.md)                                   | 階段二：Web 前端，含 Slice 0–4 的拆分             | 已完成    |
+| [`phase-2c-accounts.md`](specs/phase-2c-accounts.md)                               | 帳戶與即時餘額、轉帳型別、帳本連動設定            | 已完成    |
+| [`phase-2d-ledger-kind.md`](specs/phase-2d-ledger-kind.md)                         | 帳本類型（`PERSONAL` / `SHARED`）                 | 已完成    |
+| [`phase-2e-web-e2e.md`](specs/phase-2e-web-e2e.md)                                 | Playwright 端對端測試                             | 已完成    |
+| [`phase-2f-web-layout.md`](specs/phase-2f-web-layout.md)                           | 版面重整為 dashboard shell                        | 已完成    |
+| [`phase-2g-wrap-up.md`](specs/phase-2g-wrap-up.md)                                 | 收尾：CSP、錯誤訊息在地化、分類排序               | 已完成    |
+| [`phase-2h-web-visual.md`](specs/phase-2h-web-visual.md)                           | 視覺改版：黑金主題、三欄工作台、深淺色            | 已完成    |
+| [`phase-2i-web-layout-v2.md`](specs/phase-2i-web-layout-v2.md)                     | 版面第二輪：側欄動畫、dashboard、交易分頁         | 已完成    |
+| [`phase-3a-friends.md`](specs/phase-3a-friends.md)                                 | 階段三：好友邀請、邀請連結、好友清單              | 已完成    |
+| [`phase-3b-debts.md`](specs/phase-3b-debts.md)                                     | 階段三：借還帳（往來帳版；連動見 3b-2）           | 3b-1 完成 |
+| [`phase-3b1-web.md`](specs/phase-3b1-web.md)                                       | 階段三：3b-1 的借還畫面（往來帳版）               | 已完成    |
+| [`phase-3b2-linking.md`](specs/phase-3b2-linking.md)                               | 階段三：3b-2 往來帳連動（含修訂 1）               | 已完成    |
+| [`phase-3b2-web.md`](specs/phase-3b2-web.md)                                       | 階段三：3b-2 連動的畫面（含修訂 1～3）            | 已完成    |
+| [`phase-3c0-money-cents.md`](specs/phase-3c0-money-cents.md)                       | 階段三：3c-0 金額單位改成分                       | 已完成    |
+| [`phase-3c-split.md`](specs/phase-3c-split.md)                                     | 階段三：3c 代墊與分帳（後端）                     | 已完成    |
+| [`phase-3c-web.md`](specs/phase-3c-web.md)                                         | 階段三：3c 代墊與分帳的畫面                       | 已完成    |
+| [`phase-3d-tx-list.md`](specs/phase-3d-tx-list.md)                                 | 階段三：3d 交易頁版面整理與分類圖示               | 已完成    |
+| [`phase-3e-shared-split.md`](specs/phase-3e-shared-split.md)                       | 階段三：3e 共享帳本的分帳與結清（後端）           | 已完成    |
+| [`phase-3e-web.md`](specs/phase-3e-web.md)                                         | 階段三：3e 共享帳本分帳與結清的畫面               | 已完成    |
+| [`phase-3f-unified-debts.md`](specs/phase-3f-unified-debts.md)                     | 階段三：3f 共享帳本的人併入對象頁與借還           | 已完成    |
+| [`phase-3g-debts-inline.md`](specs/phase-3g-debts-inline.md)                       | 階段三：3g 借還頁列內展開與四個子分頁             | 已完成    |
+| [`phase-3h-every-entry-has-account.md`](specs/phase-3h-every-entry-has-account.md) | 階段三：3h 每一筆帳都要對到帳戶                   | 已完成    |
+| [`phase-3i-debt-entry-edit.md`](specs/phase-3i-debt-entry-edit.md)                 | 階段三：3i 借還紀錄可改名稱、帳戶、分類           | 已完成    |
+| [`phase-3j-ledger-delete-archive.md`](specs/phase-3j-ledger-delete-archive.md)     | 階段三：3j 帳本刪除、封存、取消封存               | 已完成    |
+| [`phase-3k-leave-and-merge.md`](specs/phase-3k-leave-and-merge.md)                 | 階段三：3k 退出共享帳本並合併到別的帳本           | 已完成    |
+| [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易     | 已完成    |
+| [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢               | 已完成    |
+| [`phase-4a-ai-text.md`](specs/phase-4a-ai-text.md)                                 | 階段四：4a AI 文字記帳（一句話變成交易草稿）      | 已完成    |
+| [`phase-4a-ai-new-category.md`](specs/phase-4a-ai-new-category.md)                 | 4a 補充：AI 先挑現有分類，沒有才提議新分類        | 實作中    |
+| [`phase-2k-home-redesign.md`](specs/phase-2k-home-redesign.md)                     | 2k 首頁改版：卡片版面、資產卡、借還卡、分類條配色 | 實作中    |
+| [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                                  | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
 
