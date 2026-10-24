@@ -1,5 +1,6 @@
 import {
   AI_MAX_DRAFTS,
+  CATEGORY_NAME_MAX_LENGTH,
   MAX_AMOUNT_CENTS,
   parseMoneyInput,
   type ParseTransactionResponse,
@@ -37,11 +38,10 @@ export function validateAiDrafts(
       (item.type !== 'EXPENSE' && item.type !== 'INCOME' && item.type !== 'TRANSFER')
     )
       continue;
-    const ledgerId =
-      (typeof item.ledger === 'string' && catalog.ledgers.get(item.ledger)?.id) ||
-      catalog.currentLedgerId;
-    const category =
-      typeof item.category === 'string' ? catalog.categories.get(item.category) : undefined;
+    const requestedLedger =
+      typeof item.ledger === 'string' ? catalog.ledgers.get(item.ledger) : undefined;
+    const ledgerId = requestedLedger?.id ?? catalog.currentLedgerId;
+    const unresolvedLedger = typeof item.ledger === 'string' && requestedLedger === undefined;
     const account =
       typeof item.account === 'string' ? catalog.accounts.get(item.account)?.id : null;
     const defaultAccount = defaults.get(ledgerId) ?? null;
@@ -53,19 +53,40 @@ export function validateAiDrafts(
       typeof item.amountYuan === 'string' && /^\d+(\.\d{1,2})?$/.test(item.amountYuan)
         ? parseMoneyInput(item.amountYuan)
         : null;
+    const date = item.date === null ? today : isRealDate(item.date) ? item.date : null;
     const title = typeof item.title === 'string' ? item.title.trim() : '';
+    const category =
+      typeof item.category === 'string' ? catalog.categories.get(item.category) : undefined;
+    const categoryIsValid =
+      category?.ledgerId === ledgerId && category.type === item.type && item.type !== 'TRANSFER';
+    let categoryId: string | null = null;
+    let newCategoryName: string | null = null;
+    if (item.type !== 'TRANSFER' && !unresolvedLedger) {
+      if (categoryIsValid) {
+        categoryId = category.id;
+      } else if (item.category === null && typeof item.newCategory === 'string') {
+        const proposedName = item.newCategory.trim();
+        if (
+          proposedName.length > 0 &&
+          Array.from(proposedName).length <= CATEGORY_NAME_MAX_LENGTH
+        ) {
+          const existingCategory = [...catalog.categories.values()].find(
+            (row) =>
+              row.ledgerId === ledgerId && row.type === item.type && row.name === proposedName,
+          );
+          if (existingCategory) categoryId = existingCategory.id;
+          else newCategoryName = proposedName;
+        }
+      }
+    }
     drafts.push({
       ledgerId,
       type: item.type,
       amount: amount !== null && amount > 0 && amount <= MAX_AMOUNT_CENTS ? amount : null,
-      date: item.date === null ? today : isRealDate(item.date) ? item.date : null,
+      date,
       title: title.length > 0 && Array.from(title).length <= 100 ? title : null,
-      categoryId:
-        item.type !== 'TRANSFER' && category?.ledgerId === ledgerId && category.type === item.type
-          ? category.id
-          : null,
-      // 4a 補充決策 283 由 T2 實作；在那之前一律不提議。
-      newCategoryName: null,
+      categoryId,
+      newCategoryName,
       accountId: item.account === null ? validDefault : (account ?? null),
       toAccountId:
         item.type === 'TRANSFER' && typeof item.toAccount === 'string'

@@ -27,6 +27,10 @@ describe('AI catalog', () => {
     expect(catalog.system).toContain('"currentLedger":"L1"');
     expect(catalog.system).not.toContain('uuid');
     expect(catalog.system).toContain('借還、查詢、修改、別人付款、分帳都不要轉成交易');
+    expect(catalog.system).toContain('不能新增帳本或帳戶');
+    expect(catalog.system).not.toContain('不能新增帳本、分類或帳戶');
+    expect(catalog.system).not.toContain('不要硬選相近的');
+    expect(catalog.system).toContain('newCategory');
     expect(make().ledgers).not.toBe(catalog.ledgers);
     expect(
       buildAiCatalog([{ id: 'id', name: 'a"</ai-data>\n' }], [], [], 'id', '2040-01-01').system,
