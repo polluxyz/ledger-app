@@ -64,6 +64,7 @@ async function expectSafeProviderError(
     expect(serialized).not.toContain(USER_SENTENCE);
     expect(serialized).not.toContain(MODEL_RESPONSE);
     expect(serialized).not.toContain(API_KEY);
+    expect(serialized).not.toContain('https://');
   }
   expect(error.cause).toBeUndefined();
   expect(Object.hasOwn(error, 'cause')).toBe(false);
@@ -74,6 +75,14 @@ async function expectSafeProviderError(
  * 驗證 GLM provider 的 HTTP 契約、錯誤隔離與不可信回應處理；所有網路互動都以 mock fetch 控制。
  */
 describe('GlmLlmProvider', () => {
+  it('describes the configured GLM model without exposing the API key', () => {
+    expect(createProvider(createFetchMock(createCompletionResponse(''))).descriptor).toEqual({
+      configured: true,
+      provider: 'glm',
+      model: 'glm-test-model',
+    });
+  });
+
   describe('request format', () => {
     it.each([
       [
@@ -117,12 +126,14 @@ describe('GlmLlmProvider', () => {
       const requestBody = init?.body as string;
       const body = JSON.parse(requestBody) as {
         model: string;
+        max_tokens: number;
         messages: Array<{ role: string; content: string }>;
         stream: boolean;
         response_format: { type: string };
       };
       expect(body).toEqual({
         model: 'glm-test-model',
+        max_tokens: BASE_REQUEST.maxOutputTokens,
         messages: [
           {
             role: 'system',
@@ -256,13 +267,57 @@ describe('GlmLlmProvider', () => {
 
   describe('response parsing', () => {
     it.each([
-      ['empty choices', createCompletionResponse('', { choices: [] })],
-      ['null content', createCompletionResponse(null)],
-      ['non-string content', createCompletionResponse({ not: 'a string' })],
-      ['invalid JSON content', createCompletionResponse('this is not JSON')],
-      ['truncated JSON content', createCompletionResponse('{"drafts":')],
+      [
+        'empty choices',
+        createCompletionResponse('', {
+          choices: [],
+          usage: { prompt_tokens: 23, completion_tokens: 11 },
+        }),
+      ],
+      [
+        'missing content field',
+        createCompletionResponse('', {
+          choices: [{ message: {} }],
+          usage: { prompt_tokens: 23, completion_tokens: 11 },
+        }),
+      ],
+      [
+        'null content',
+        createCompletionResponse(null, { usage: { prompt_tokens: 23, completion_tokens: 11 } }),
+      ],
+      [
+        'non-string content',
+        createCompletionResponse(
+          { not: 'a string' },
+          {
+            usage: { prompt_tokens: 23, completion_tokens: 11 },
+          },
+        ),
+      ],
+      [
+        'invalid JSON content',
+        createCompletionResponse('this is not JSON', {
+          usage: { prompt_tokens: 23, completion_tokens: 11 },
+        }),
+      ],
+      [
+        'truncated JSON content',
+        createCompletionResponse('{"drafts":', {
+          usage: { prompt_tokens: 23, completion_tokens: 11 },
+        }),
+      ],
     ])('returns null content for %s', async (_label, response) => {
       const fetchMock = createFetchMock(response);
+
+      await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
+        content: null,
+        usage: { promptTokens: 23, completionTokens: 11 },
+      });
+    });
+
+    it('does not return usage when the outer response is not JSON', async () => {
+      const fetchMock = createFetchMock(new Response('{not JSON'));
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
         truncated: false,
@@ -273,6 +328,7 @@ describe('GlmLlmProvider', () => {
     it('returns null content and aborts when the response body exceeds the size limit', async () => {
       let requestSignal: AbortSignal | undefined;
       const oversizedResponse = JSON.stringify({
+        usage: { prompt_tokens: 23, completion_tokens: 11 },
         choices: [{ message: { content: 'x'.repeat(70 * 1024) } }],
       });
       const fetchMock = jest.fn<Promise<Response>, FetchMockArguments>((_input, init) => {
@@ -285,6 +341,21 @@ describe('GlmLlmProvider', () => {
         content: null,
       });
       expect(requestSignal?.aborted).toBe(true);
+    });
+
+    it('marks a complete JSON content as truncated when finish_reason is length', async () => {
+      const fetchMock = createFetchMock(
+        createCompletionResponse('', {
+          choices: [{ finish_reason: 'length', message: { content: '{"drafts":[]}' } }],
+          usage: { prompt_tokens: 23, completion_tokens: 11 },
+        }),
+      );
+
+      await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: true,
+        content: { drafts: [] },
+        usage: { promptTokens: 23, completionTokens: 11 },
+      });
     });
 
     it('returns usage when both token counts are numbers', async () => {
@@ -301,16 +372,66 @@ describe('GlmLlmProvider', () => {
       });
     });
 
-    it('omits usage when token counts are missing or not numbers', async () => {
+    it.each([
+      ['negative token count', { prompt_tokens: -1, completion_tokens: 11 }],
+      ['fractional token count', { prompt_tokens: 23, completion_tokens: 11.5 }],
+      ['string token count', { prompt_tokens: 23, completion_tokens: '11' }],
+      ['missing token count', { prompt_tokens: 23 }],
+      [
+        'unsafe integer token count',
+        { prompt_tokens: Number.MAX_SAFE_INTEGER + 1, completion_tokens: 11 },
+      ],
+    ])('omits usage for a %s', async (_label, usage) => {
+      const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}', { usage }));
+
+      await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
+        content: { drafts: [] },
+      });
+    });
+
+    it('omits usage when JSON parsing yields an infinite token count', async () => {
+      const body = JSON.stringify({
+        choices: [{ message: { content: '{"drafts":[]}' } }],
+        usage: { prompt_tokens: 23, completion_tokens: 11 },
+      }).replace('"completion_tokens":11', '"completion_tokens":1e400');
+      const fetchMock = createFetchMock(new Response(body));
+
+      await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
+        content: { drafts: [] },
+      });
+    });
+
+    it('omits usage if the parsed payload contains a NaN token count', async () => {
+      const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}'));
+      // JSON 本身無法表示 NaN；注入 parse 後的值直接驗證 usage 防線仍會拒絕它。
+      const parseSpy = jest.spyOn(JSON, 'parse').mockReturnValueOnce({
+        choices: [{ message: { content: '{"drafts":[]}' } }],
+        usage: { prompt_tokens: Number.NaN, completion_tokens: 11 },
+      });
+
+      try {
+        await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+          truncated: false,
+          content: { drafts: [] },
+        });
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('keeps valid zero token counts distinct from missing usage', async () => {
       const fetchMock = createFetchMock(
         createCompletionResponse('{"drafts":[]}', {
-          usage: { prompt_tokens: 23, completion_tokens: '11' },
+          usage: { prompt_tokens: 0, completion_tokens: 0 },
         }),
       );
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
         truncated: false,
         content: { drafts: [] },
+        usage: { promptTokens: 0, completionTokens: 0 },
       });
     });
 
