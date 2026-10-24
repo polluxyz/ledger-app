@@ -13,7 +13,6 @@ import {
   useCreateTransactionForLedger,
   useDeleteTransaction,
   useUpdateTransaction,
-  transactionsKey,
 } from './use-transactions';
 import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 
@@ -108,6 +107,31 @@ describe('Writing a transaction refreshes account balances', () => {
         balance = 512000;
         return Promise.resolve(new Response(null, { status: 204 }));
       }
+      if (url.includes('/transactions/marked')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 10, total: 0 }));
+      }
+      if (url.includes('/counterparties?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 100, total: 0 }));
+      }
+      if (url.includes('/ledger-groups?unpointed=true')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (url.includes('/friend-requests?') || url.includes('/debt-proposals?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+      }
+      if (url.includes('/statistics?')) {
+        return Promise.resolve(
+          jsonResponse(200, {
+            ledgerId: ledger.id,
+            from: '2026-10-01',
+            to: '2026-10-31',
+            ledger: { income: 0, expense: 0, net: 0 },
+            mine: { income: 0, expense: 0, net: 0 },
+            expenseGroups: [],
+            incomeGroups: [],
+          }),
+        );
+      }
       if (url.includes('/transactions')) {
         return Promise.resolve(
           jsonResponse(200, { items, page: 1, limit: 20, total: items.length }),
@@ -118,6 +142,9 @@ describe('Writing a transaction refreshes account balances', () => {
       }
       if (url.includes('/users/me/record-defaults')) {
         return Promise.resolve(jsonResponse(200, { ledgerId: ledger.id, accountId: account.id }));
+      }
+      if (url.includes('/accounts/balance-trend')) {
+        return Promise.resolve(jsonResponse(200, { months: [] }));
       }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, [{ ...account, balance }]));
@@ -290,7 +317,7 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
     expectDebtTotalsInvalidated();
   });
 
-  it('W244 writes a draft with a new category and invalidates that ledger category prefix', async () => {
+  it('W244 writes an AI draft with a new category and invalidates shared prefixes plus that ledger category prefix', async () => {
     invalidate.mockClear();
     const create = renderHook(() => useCreateTransactionForLedger(), { wrapper });
     await act(() =>
@@ -314,11 +341,14 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
     );
     expect(keys).toEqual(
       expect.arrayContaining([
-        transactionsKey('ledger-2'),
+        ['transactions'],
         ACCOUNTS_KEY,
+        ['ledger-statistics'],
+        ['balance-trend'],
         categoriesKey('ledger-2'),
       ]) as unknown,
     );
-    expect(keys).not.toContain(transactionsKey('ledger-1'));
+    expect(keys).not.toContain(['transactions', 'ledger-1']);
+    expect(keys).not.toContain(['transactions', 'ledger-2']);
   });
 });

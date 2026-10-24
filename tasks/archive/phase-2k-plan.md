@@ -280,3 +280,21 @@ spec：`docs/specs/phase-2k-home-redesign.md`（決策 300～309、W260～W271�
   2. 右側欄目標的重設寫清楚：切帳本時在 render 中清掉舊目標，待處理動作先寫入目標再清除，同帳本重抓不重設（§1.4.1）。
   3. 帳戶 context 的邊界：hook 一律呼叫、`LedgerView` 在 context 外呼叫並常駐、提供整個 query 結果、載入與錯誤以 owner 為準；§1.1 的 active 定義改成「至少一個啟用中的 observer」（§1.1、§1.4.1、§1.4.4）。
   4. 矩陣：`useAddMember`、`useAddMemberTo` 呼叫；`useUpdateMemberRole` 不呼叫；封存與取消封存的理由改成「帳本可見性與標註的帳本狀態需同步」。
+- 2026-10-24 W5 截圖驗收發現 5 件產品問題，另派 W6（Codex）修：
+  1. 一欄時趨勢卡保留 16rem 最小高度，但 SVG 依 viewBox 比例只有約 111px 高，下面空 130px。
+  2. SVG 依 viewBox 等比縮放，標籤字跟著縮：1280px 約 9px，390px 約 7px，違反 W269「可讀」。兩欄時圖面還會上下留白（640:230 的比例放進 214～320px 高的框）。改成量實際寬高、viewBox 用實際像素，字維持 14px／11px。這在 W261「沿用畫法」的範圍內。
+  3. 兩個「資產」標題 → 決策 310（開發者核可，advisor 同意）。
+  4. 「最近」分頁內重複的「最近交易」→ 決策 311。
+  5. 390px 名稱截斷、列多縮排 16px（3d 既有行為）→ 決策 312。
+  - advisor 指出 `BalanceTrendChart` 只有首頁用，統計頁用的是 `TrendLineChart`，改它不影響統計頁。
+- 2026-10-24 W6 驗收：5 件問題都修好（我重跑 lint、typecheck、format:check 全綠，122 檔 994 個測試通過，Web e2e 88 passed）。390px 截圖還有 2 件，都在核可範圍內，同一個 worktree 追加 W7（Codex）：
+  1. 最後一點的金額與月份標籤壓到最後一段折線。2j 原本把金額放左上、月份放左邊同高；W6 字變大後更明顯。改成兩個標籤疊在一起，放在最後一段折線的另一側，仍不可被裁切（W261）。
+  2. `.dataCard` 的 `min-height: 16rem`（W3 加的，spec 沒要求）讓一欄時只有 2 列的「最近」卡多出約 80px 空白。一欄時拿掉，兩欄維持。
+- 2026-10-24 W7 驗收：第一版的標籤擺放函式放不下時會 throw，render 中丟錯會讓首頁白屏，退回改成夾在邊界內（696dcf3）。我重跑 lint、typecheck、format:check 全綠，122 檔 1000 個測試通過，Web e2e 89 passed（3.4m）。實測：最後一段折線與標籤最短距離桌機 9.60px、390px 9px；390px 最近卡列底空白 25px；1280px 卡高 256px。W6／W7 合併進整合分支 351a1b8。
+- 2026-10-24 D1 整體驗收（程式 commit 1e203e0）：
+  - diff 沒有改到 `apps/api`、`packages/shared`、`package.json`、`pnpm-lock.yaml`、`.github`。68 個檔，+5713／−1427。
+  - 協調者重跑：shared build、lint、typecheck、format:check、build 全部 exit 0；單元測試 API 828 個、Web 122 檔 1000 個通過；API e2e 52 個 suite、520 個通過；Web e2e 89 passed（3.6m）。
+  - SC-H2、SC-H3 在 `HomePage.test.tsx`：切帳本前後個人端點請求增量 0；新增一筆交易後請求增量 9（POST 1 加 8 個首頁端點各重抓 1 次），重抓期間舊數字留著。
+  - 截圖（W7 重產的 12 張，390px 與 1280px × 淺色與深色 × 三種配色）抽看 light-color-390、dark-gold-1280、light-gray-1280、dark-gray-390，對過 W260～W269、W271 的版面與配色。
+  - spec §9 文件影響：2j W215 與 SC-R18 加註被取代；`docs/README.md` 標 2k 已完成；`CLAUDE.md` §4、`docs/handoff.md`、`docs/handoff/stats-2j.md` 更新。各寫入入口的註解已指向 `invalidateAfterMoneyWrite`。
+  - 測試資料庫 `ledger_2k_*` 都已刪除，只剩 `ledger_stats_test`。

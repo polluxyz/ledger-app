@@ -16,6 +16,7 @@ import {
   openNewTransaction,
   openTransactions,
   expectRightPanelClosedWithoutAddForm,
+  homeActivityRow,
   selectCategory,
   switchLedger,
   transactionRow,
@@ -76,14 +77,14 @@ test('情境 7：編輯金額後帳戶餘額跟著變', async ({ signedInPage: p
   await expect(page.getByLabel('現金餘額')).toHaveText('-$120');
 
   // 首頁的最近交易沒有鉛筆鈕，點整列就進入編輯（spec 2i SC-35.4）。
-  await transactionRow(page, '-$120').click();
+  await homeActivityRow(page, '-$120').click();
 
   const dialog = page.getByRole('dialog', { name: '編輯交易' });
   await dialog.getByLabel('金額').fill('200');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
   // 列表與餘額都要跟著變。只驗其中一個的話，漏掉快取失效仍然會綠。
-  await expect(transactionRow(page, '-$200')).toBeVisible();
+  await expect(homeActivityRow(page, '-$200')).toBeVisible();
   await expect(page.getByLabel('現金餘額')).toHaveText('-$200');
 });
 
@@ -140,7 +141,7 @@ test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   // 錢只是換了帳戶：不加正負號，也不屬於任何分類。
-  const entry = transactionRow(page, '$500');
+  const entry = homeActivityRow(page, '$500');
   await expect(entry).toContainText('轉帳');
   await expect(entry).not.toContainText('國泰世華');
   await expect(entry).not.toContainText('現金');
@@ -162,14 +163,14 @@ test('3c-0：列表將小數金額顯示到分、整數金額不補小數', asyn
   await form.getByLabel('金額').fill('333.33');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
-  await expect(transactionRow(page, '-$333.33')).toBeVisible();
+  await expect(homeActivityRow(page, '-$333.33')).toBeVisible();
   await expect(page.getByLabel('現金餘額')).toHaveText('-$333.33');
 
   await form.getByLabel('金額').fill('3000');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
-  await expect(transactionRow(page, '-$3,000')).toBeVisible();
-  await expect(transactionRow(page, '-$3,000.00')).toHaveCount(0);
+  await expect(homeActivityRow(page, '-$3,000')).toBeVisible();
+  await expect(homeActivityRow(page, '-$3,000.00')).toHaveCount(0);
 });
 
 test('情境 10：篩選只留下符合條件的交易', async ({ signedInPage: page, userA, request }) => {
@@ -271,7 +272,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   await page.reload();
   await switchLedger(page, '家庭開銷');
 
-  const row = transactionRow(page, '-$120');
+  const row = homeActivityRow(page, '-$120');
   await expect(row).toBeVisible();
   // 別人的帳戶名稱不該出現在畫面上。
   await expect(row).not.toContainText('現金');
@@ -287,7 +288,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   await dialog.getByLabel('金額').fill('200');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
-  await expect(transactionRow(page, '-$200')).toBeVisible();
+  await expect(homeActivityRow(page, '-$200')).toBeVisible();
 
   // 這才是重點：錢還是記在乙的戶頭，甲的餘額一毛都沒動。
   const [bCashAfter] = await listAccounts(request, userB.token);

@@ -4,7 +4,6 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from '@tanstack/react-query';
 import type {
   Counterparty,
@@ -20,20 +19,18 @@ import type {
   Paginated,
   UpdateDebtEntryRequest,
 } from '@ledger/shared';
-import { ACCOUNTS_KEY } from '../accounts/use-accounts';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 借還（3b-1 往來帳版）的伺服器狀態。規格見 `docs/specs/phase-3b1-web.md`。
  *
  * 往來帳屬於使用者、不屬於帳本（`phase-3b-debts.md` 決策 17），所以 query key 不帶帳本。
  *
- * ## 寫入之後要失效的東西比交易多
+ * ## 寫入後更新相關快取
  *
- * 一次往來寫入可能同時改到：對象清單與餘額、那個對象的往來紀錄、**任何一本帳本**的交易
- * 列表（紀錄可以記進不同帳本），以及帳戶餘額。所以對象與往來紀錄共用 `['counterparties']`
- * 前綴一次失效，交易失效的是整個 `['transactions']` 前綴。少失效一個不會拋錯，只會讓畫面
- * 停在舊數字直到重整——`use-debts.test.tsx` 為每個 mutation 釘住這一整組。
+ * 往來寫入可能影響對象餘額、往來紀錄、不同帳本的交易與帳戶餘額，成功後一律呼叫
+ * `invalidateAfterMoneyWrite`。解除連動另外保留邀請與提議的前綴；測試逐一核對共用與自有清單。
  *
  * ## 前端不算往來餘額
  *
@@ -53,9 +50,6 @@ const entryPagesKey = (id: string, section: DebtEntrySection) =>
 
 /** 「載入更多」每次多拿幾筆往來紀錄（3g 決策 155）。 */
 export const DEBT_ENTRY_PAGE_SIZE = 20;
-
-/** 交易快取的前綴（見 `use-transactions.ts` 的 `transactionsKey`），不分帳本。 */
-const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 
 function toQueryString(query: ListCounterpartiesQuery | ListDebtEntriesQuery): string {
   const params = new URLSearchParams();
@@ -127,13 +121,6 @@ export function useCounterpartyEntryPages(
   });
 }
 
-/** 任何往來寫入成功後都跑這一段。理由見檔頭「寫入之後要失效的東西比交易多」。 */
-function invalidateAfterWrite(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-  void queryClient.invalidateQueries({ queryKey: ALL_TRANSACTIONS_KEY });
-  void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-}
-
 /**
  * 記一筆往來。`record` 一定要提供帳本與帳戶（3h 決策 163）。
  */
@@ -142,7 +129,7 @@ export function useCreateDebtEntry() {
   return useMutation({
     mutationFn: (input: CreateDebtEntryRequest) =>
       apiRequest<CreateDebtEntryResponse>('/debt-entries', { method: 'POST', body: input }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -152,7 +139,7 @@ export function useUpdateDebtEntry() {
   return useMutation({
     mutationFn: ({ entryId, input }: { entryId: string; input: UpdateDebtEntryRequest }) =>
       apiRequest<DebtEntry>(`/debt-entries/${entryId}`, { method: 'PATCH', body: input }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -162,7 +149,7 @@ export function useDeleteDebtEntry() {
   return useMutation({
     mutationFn: (entryId: string) =>
       apiRequest<void>(`/debt-entries/${entryId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -178,7 +165,7 @@ export function useRenameCounterparty() {
         method: 'PATCH',
         body: { name },
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -188,7 +175,7 @@ export function useDeleteCounterparty() {
   return useMutation({
     mutationFn: (counterpartyId: string) =>
       apiRequest<void>(`/counterparties/${counterpartyId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -204,7 +191,7 @@ export function useForgiveCounterparty() {
         method: 'POST',
         body: input,
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -222,13 +209,13 @@ export function useCreateCounterparty() {
   return useMutation({
     mutationFn: (input: CreateCounterpartyRequest) =>
       apiRequest<Counterparty>('/counterparties', { method: 'POST', body: input }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY }),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
 /**
  * 解除連動（決策 70、71）。對象、名字與紀錄都保留；待確認的提議與邀請由後端一併取消，
- * 所以除了往來相關的快取，待確認也要失效。
+ * 所以共用金額快取以外，也要失效待確認邀請與提議。
  */
 export function useUnlinkCounterparty() {
   const queryClient = useQueryClient();
@@ -236,7 +223,7 @@ export function useUnlinkCounterparty() {
     mutationFn: (counterpartyId: string) =>
       apiRequest<void>(`/counterparties/${counterpartyId}/link`, { method: 'DELETE' }),
     onSuccess: () => {
-      invalidateAfterWrite(queryClient);
+      invalidateAfterMoneyWrite(queryClient);
       void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
       void queryClient.invalidateQueries({ queryKey: DEBT_PROPOSALS_KEY });
     },
@@ -245,7 +232,7 @@ export function useUnlinkCounterparty() {
 
 /**
  * 合併之前的紀錄（決策 76）：把 `sourceId`（未連動）併進 `counterpartyId`（已連動）。
- * 紀錄與餘額搬過去、名字可能改變，也會清掉待詢問，所以往來相關與交易一起失效。
+ * 紀錄與餘額搬過去、名字可能改變，也會清掉待詢問，所以使用共用金額失效清單。
  */
 export function useMergeCounterparty() {
   const queryClient = useQueryClient();
@@ -258,7 +245,7 @@ export function useMergeCounterparty() {
         method: 'POST',
         body: { sourceId },
       }),
-    onSuccess: () => invalidateAfterWrite(queryClient),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
 
@@ -268,6 +255,6 @@ export function useDismissMergePrompt() {
   return useMutation({
     mutationFn: (counterpartyId: string) =>
       apiRequest<void>(`/counterparties/${counterpartyId}/merge-prompt`, { method: 'DELETE' }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY }),
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }

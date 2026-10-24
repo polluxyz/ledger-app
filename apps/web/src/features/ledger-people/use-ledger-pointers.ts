@@ -6,7 +6,7 @@ import type {
   SetLedgerPointerRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 共享帳本的人與「指向」（3f）：`GET /ledger-groups` 與 `PUT`／`DELETE …/pointer`。
@@ -16,9 +16,8 @@ import { COUNTERPARTIES_KEY } from '../debts/use-debts';
  *
  * ## 失效範圍
  *
- * 指向一改，同一筆金額會從「帳本群組」搬到某個對象的 `ledgerParts`／`totalBalance`，
- * 所以對象（`COUNTERPARTIES_KEY`）與帳本群組（`LEDGER_GROUPS_KEY`）一起失效。
- * 反過來，任何會改變共享帳本結清轉帳的寫入（交易、結清），也要失效這兩組。
+ * 指向一改，同一筆金額會從「帳本群組」搬到某個對象的 `ledgerParts`／`totalBalance`。
+ * 指向寫入呼叫 `invalidateAfterMoneyWrite`，它也由交易與結清寫入共用。
  */
 
 /** 帳本群組的共同前綴，`unpointed` 與完整版一次失效。 */
@@ -47,10 +46,7 @@ export function useLedgerGroups(query: ListLedgerGroupsQuery = {}) {
 
 function useInvalidatePointers() {
   const queryClient = useQueryClient();
-  return () => {
-    void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-    void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
-  };
+  return () => invalidateAfterMoneyWrite(queryClient);
 }
 
 interface PointerTarget {

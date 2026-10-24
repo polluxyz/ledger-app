@@ -5,10 +5,7 @@ import type {
   UpdateLedgerPersonRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { COUNTERPARTIES_KEY } from '../debts/use-debts';
-import { LEDGER_GROUPS_KEY } from './use-ledger-pointers';
-import { settlementSummaryKey } from '../settlements/use-settlements';
-import { transactionsKey } from '../transactions/use-transactions';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 共享帳本裡的人（3e：成員、虛擬成員、已離開的成員），端點是 `/ledgers/:ledgerId/people`。
@@ -32,16 +29,13 @@ export function useLedgerPeople(ledgerId: string | null, enabled = true) {
 
 /**
  * 人的名字會出現在交易回應（`payer`、名單）與結清檢視裡，所以新增、改名、刪除之後
- * 三份快取一起失效，畫面才不會留著舊名字。
+ * 先失效帳本專屬人員清單，再呼叫共用失效函式更新其他相關資料。
  */
 function useInvalidatePeople(ledgerId: string) {
   const queryClient = useQueryClient();
   return () => {
     void queryClient.invalidateQueries({ queryKey: ledgerPeopleKey(ledgerId) });
-    void queryClient.invalidateQueries({ queryKey: transactionsKey(ledgerId) });
-    void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
-    void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
-    void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
+    invalidateAfterMoneyWrite(queryClient);
   };
 }
 

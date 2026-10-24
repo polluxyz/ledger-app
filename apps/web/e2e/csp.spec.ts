@@ -8,7 +8,7 @@ import {
   TEST_PASSWORD,
 } from './api';
 import { PREVIEW_ORIGIN } from './env';
-import { openUserMenu, transactionRow } from './ui';
+import { homeActivityRow, openUserMenu } from './ui';
 
 /**
  * CSP（Content Security Policy）的 e2e：政策由 `vite.config.ts` 的插件注入
@@ -79,7 +79,7 @@ test('在 CSP 之下登入並讀得到資料，過程沒有任何 CSP 違規', a
   await openUserMenu(page);
   await expect(page.getByRole('button', { name: '登出' })).toBeVisible();
   // 交易列不顯示備註（3d T1），所以只確認那一列有畫出來——資料拉得到就代表 connect-src 沒擋。
-  await expect(transactionRow(page, '-$120')).toBeVisible();
+  await expect(homeActivityRow(page, '-$120')).toBeVisible();
 
   const violations = consoleTexts.filter((text) => text.includes('Content Security Policy'));
   expect(violations, `出現 CSP 違規：${violations.join('｜')}`).toEqual([]);

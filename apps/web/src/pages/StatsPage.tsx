@@ -19,6 +19,7 @@ import { HorizontalBarChart } from '../features/statistics/charts/HorizontalBarC
 import { TrendBarChart } from '../features/statistics/charts/TrendBarChart';
 import { TrendLineChart } from '../features/statistics/charts/TrendLineChart';
 import { TrendTable } from '../features/statistics/charts/TrendTable';
+import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
 import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
 import type { ChartType } from '../features/statistics/charts/chart-types';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
@@ -668,40 +669,6 @@ function MemberTotals({
       {people.length === 0 && <li className={styles.status}>沒有資料</li>}
     </ul>
   );
-}
-
-function useChartTheme(): ChartTheme {
-  const [theme, setTheme] = useState<ChartTheme>(readChartTheme);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const media =
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia('(prefers-color-scheme: dark)')
-        : null;
-    const update = () => setTheme(readChartTheme());
-    const observer = new MutationObserver(update);
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
-    media?.addEventListener?.('change', update);
-    return () => {
-      observer.disconnect();
-      media?.removeEventListener?.('change', update);
-    };
-  }, []);
-
-  return theme;
-}
-
-function readChartTheme(): ChartTheme {
-  const explicit = document.documentElement.getAttribute('data-theme');
-  if (explicit === 'light' || explicit === 'dark') {
-    return explicit;
-  }
-  try {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  } catch {
-    return 'light';
-  }
 }
 
 function shiftMonth(month: string, amount: number): string {

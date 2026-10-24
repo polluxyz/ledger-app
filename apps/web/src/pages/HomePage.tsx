@@ -1,27 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
 import { Link } from 'react-router-dom';
 import type {
-  BalanceTrend,
   LedgerSummary,
   MarkedTransaction,
+  StatisticsGroup,
   StatisticsTotals,
   Transaction,
 } from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
+import { homeCategoryColor, useHomeCategoryColors } from '../app/use-home-category-colors';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
 import { Icon } from '../components/Icon';
 import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
-import { AccountBalances } from '../features/accounts/AccountBalances';
-import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
-import { useBalanceTrend } from '../features/statistics/use-balance-trend';
-import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
-import { currentTaiwanMonthRange } from '../features/statistics/stats-url';
+import { AccountsQueryProvider, useAccounts } from '../features/accounts/use-accounts';
+import { AssetCard } from '../features/accounts/AssetCard';
+import { useCounterparties } from '../features/debts/use-debts';
+import { DebtsCard } from '../features/debts/DebtsCard';
+import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
+import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
+import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
+import { currentTaiwanMonthRange } from '../features/statistics/stats-url';
+import { useBalanceTrend } from '../features/statistics/use-balance-trend';
+import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import {
   TransactionWorkbench,
   type PanelTarget,
@@ -33,20 +47,20 @@ import { PendingCard } from '../features/linking/PendingCard';
 import { formatMoney } from '../lib/format';
 import styles from './HomePage.module.css';
 
-/** dashboard 的「最近交易」要幾筆（spec 2i §4.7）。排序與截斷都由後端負責。 */
+/** 首頁最近交易由後端排序與截斷，前端只指定要看的五筆。 */
 const RECENT_LIMIT = 5;
 
+type HomeActivityTab = 'recent' | 'marked';
+type MarkedActionIntent = 'edit' | 'fillAccount';
+
+interface PendingMarkedAction {
+  transaction: MarkedTransaction;
+  intent: MarkedActionIntent;
+}
+
 /**
- * 首頁，有兩種狀態：
- *
- * - **未登入**：顯示介面預覽——統計卡片是純粹的空狀態（固定 0，不做任何計算），
- *   讓人先看懂這個 app 長什麼樣，再引導去登入 / 註冊。不保存任何訪客資料，
- *   因此前端毋須實作任何業務邏輯。
- * - **已登入**：dashboard（spec 2i SC-34.1）——統計卡、最近 5 筆交易、帳戶餘額。
- *   完整的交易表格（篩選、分頁、刪除）搬到 `/transactions`。
- *
- * 登入後的資產與收支摘要都只呈現後端回傳的數字；最近交易、帳戶餘額與標註卡沿用
- * 各自的領域 hook，不在首頁重算任何帳務資料。
+ * 首頁把帳本摘要、最近交易、標註與資產卡組在一起；數字、分類與排序都直接呈現 API 回應。
+ * 只有登入首頁提供帳戶 query context，讓右側表單和待處理卡共用同一份使用者帳戶資料。
  */
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
@@ -78,16 +92,8 @@ export default function HomePage() {
 }
 
 /**
- * 已登入者的 dashboard。這一層只負責找出「記進哪一本帳本」
- * （由 `ActiveLedgerProvider` 決定），其餘交給 `Dashboard`。
- *
- * `key={ledger.id}` 是刻意的：換一本帳本就換一組「編輯中的那一筆」。用 key 讓
- * React 整個重建那棵子樹，比自己在 effect 裡把每個 state 歸零可靠。
- *
- * 帳本還沒好的三種狀態（載入中 / 失敗 / 一本都沒有）走下面那條路。它們仍然看得到
- * **帳戶餘額**，因為餘額不受帳本狀態影響：帳戶屬於使用者、跨帳本共用，就算一本
- * 帳本都沒有，「我現在有多少錢」仍然該看得到。那時不渲染 `TransactionWorkbench`，
- * 右側欄沒有頁面登記，寬度自然是 0——沒有帳本就沒有地方可以記帳。
+ * 登入後維持帳戶、借還、標註與資產趨勢 query；切帳本只換帳本相關資料。
+ * 帳戶 query 在 Provider 外建立，首頁的表單與待處理卡因此共用同一個 observer。
  */
 function LedgerView() {
   const {
@@ -96,43 +102,59 @@ function LedgerView() {
     isLoading: ledgerLoading,
     error: ledgerError,
   } = useActiveLedger();
-  // 帳戶跨帳本共用；hook 留在切帳本時不會卸載的這一層，資產圖不會因帳本 id 改變而重抓。
-  const balanceTrend = useBalanceTrend();
-  const [pendingMarkedTransaction, setPendingMarkedTransaction] =
-    useState<MarkedTransaction | null>(null);
-  const clearPendingMarkedTransaction = useCallback(() => setPendingMarkedTransaction(null), []);
+  const accountsQuery = useAccounts();
+  const balanceTrendQuery = useBalanceTrend();
+  const counterpartiesQuery = useCounterparties({ nonZero: true, limit: 5 });
+  const unpointedLedgersQuery = useLedgerGroups({ unpointed: true });
+  const [markedExpanded, setMarkedExpanded] = useState(false);
+  const markedQuery = useMarkedTransactions(markedExpanded);
+  const [activityTab, setActivityTab] = useState<HomeActivityTab>('recent');
+  const [pendingMarkedAction, setPendingMarkedAction] = useState<PendingMarkedAction | null>(null);
+  const recentTabRef = useRef<HTMLButtonElement>(null);
+  const markedTabRef = useRef<HTMLButtonElement>(null);
+  const hasMarkedTab = Boolean(markedQuery.error) || (markedQuery.data?.total ?? 0) > 0;
+
+  const clearPendingMarkedAction = useCallback(() => setPendingMarkedAction(null), []);
   const switchToMarkedLedger = useCallback(
-    (transaction: MarkedTransaction) => {
-      setPendingMarkedTransaction(transaction);
+    (transaction: MarkedTransaction, intent: MarkedActionIntent) => {
+      setPendingMarkedAction({ transaction, intent });
       setActiveLedgerId(transaction.ledger.id);
     },
     [setActiveLedgerId],
   );
 
-  if (ledger) {
-    return (
-      <Dashboard
-        key={ledger.id}
-        ledger={ledger}
-        pendingMarkedTransaction={pendingMarkedTransaction}
-        onPendingMarkedTransactionHandled={clearPendingMarkedTransaction}
-        onSwitchToMarkedLedger={switchToMarkedLedger}
-        balanceTrendMonths={balanceTrend.data?.months}
-        balanceTrendLoading={balanceTrend.isLoading}
-        balanceTrendError={balanceTrend.error}
-      />
-    );
-  }
-
-  return (
+  const page = ledger ? (
+    <Dashboard
+      ledger={ledger}
+      accountsQuery={accountsQuery}
+      balanceTrendQuery={balanceTrendQuery}
+      counterpartiesQuery={counterpartiesQuery}
+      unpointedLedgersQuery={unpointedLedgersQuery}
+      markedQuery={markedQuery}
+      markedExpanded={markedExpanded}
+      onExpandMarked={() => setMarkedExpanded(true)}
+      activityTab={activityTab}
+      onActivityTabChange={setActivityTab}
+      hasMarkedTab={hasMarkedTab}
+      recentTabRef={recentTabRef}
+      markedTabRef={markedTabRef}
+      pendingMarkedAction={pendingMarkedAction}
+      onPendingMarkedActionHandled={clearPendingMarkedAction}
+      onSwitchToMarkedLedger={switchToMarkedLedger}
+    />
+  ) : (
     <PageContent>
       <PageHeader title="總覽" />
-      <BalanceTrendChart
-        months={balanceTrend.data?.months}
-        isLoading={balanceTrend.isLoading}
-        error={balanceTrend.error}
-      />
-      <PendingCard />
+      <div className={styles.trendOnly}>
+        <BalanceTrendChart
+          months={balanceTrendQuery.data?.months}
+          isLoading={balanceTrendQuery.isLoading}
+          error={balanceTrendQuery.error}
+          className={styles.trendChart}
+        />
+      </div>
+      {/* 等帳本查詢完成後再掛載，避免切入首頁時重抓待處理資料。 */}
+      {!ledgerLoading && <PendingCard />}
       {ledgerLoading && <p className={styles.note}>載入中…</p>}
       {ledgerError && <FormError error={ledgerError} />}
       {!ledgerLoading && !ledgerError && (
@@ -140,97 +162,153 @@ function LedgerView() {
           <p className={styles.note}>找不到任何帳本。</p>
         </section>
       )}
+      <h2 className={styles.myHeading}>我的</h2>
       <div className={styles.cards}>
-        <AccountBalances />
+        <AssetCard totalQuery={balanceTrendQuery} accountsQuery={accountsQuery} />
+        <DebtsCard
+          counterpartiesQuery={counterpartiesQuery}
+          unpointedLedgersQuery={unpointedLedgersQuery}
+          showAllLink={false}
+        />
       </div>
     </PageContent>
   );
+
+  return <AccountsQueryProvider query={accountsQuery}>{page}</AccountsQueryProvider>;
 }
 
-/**
- * dashboard 本體（spec 2i §4.7）：頁首、資產趨勢、三張收支卡與既有摘要卡。
- * 資產資料由外層持有，換帳本時 dashboard 子樹會重建，但不會重抓資產趨勢。
- *
- * `editing` 放在這一層的理由與交易頁相同（D25）：最近交易在頁面裡、編輯面板在
- * 右側欄（portal 過去），兩者只有這個共同的父層。
- */
+/** 首頁區域以 LedgerView 持有的 query 與狀態組裝，切帳本不會重建個人資料或待處理表單。 */
 interface DashboardProps {
   ledger: LedgerSummary;
-  pendingMarkedTransaction: MarkedTransaction | null;
-  onPendingMarkedTransactionHandled: () => void;
-  onSwitchToMarkedLedger: (transaction: MarkedTransaction) => void;
-  balanceTrendMonths: BalanceTrend['months'] | undefined;
-  balanceTrendLoading: boolean;
-  balanceTrendError: unknown;
+  accountsQuery: ReturnType<typeof useAccounts>;
+  balanceTrendQuery: ReturnType<typeof useBalanceTrend>;
+  counterpartiesQuery: ReturnType<typeof useCounterparties>;
+  unpointedLedgersQuery: ReturnType<typeof useLedgerGroups>;
+  markedQuery: ReturnType<typeof useMarkedTransactions>;
+  markedExpanded: boolean;
+  onExpandMarked: () => void;
+  activityTab: HomeActivityTab;
+  onActivityTabChange: (tab: HomeActivityTab) => void;
+  hasMarkedTab: boolean;
+  recentTabRef: RefObject<HTMLButtonElement | null>;
+  markedTabRef: RefObject<HTMLButtonElement | null>;
+  pendingMarkedAction: PendingMarkedAction | null;
+  onPendingMarkedActionHandled: () => void;
+  onSwitchToMarkedLedger: (transaction: MarkedTransaction, intent: MarkedActionIntent) => void;
 }
 
 function Dashboard({
   ledger,
-  pendingMarkedTransaction,
-  onPendingMarkedTransactionHandled,
+  accountsQuery,
+  balanceTrendQuery,
+  counterpartiesQuery,
+  unpointedLedgersQuery,
+  markedQuery,
+  markedExpanded,
+  onExpandMarked,
+  activityTab,
+  onActivityTabChange,
+  hasMarkedTab,
+  recentTabRef,
+  markedTabRef,
+  pendingMarkedAction,
+  onPendingMarkedActionHandled,
   onSwitchToMarkedLedger,
-  balanceTrendMonths,
-  balanceTrendLoading,
-  balanceTrendError,
 }: DashboardProps) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
-  const [panelTarget, setPanelTarget] = useState<PanelTarget>(() =>
-    pendingMarkedTransaction?.ledger.id === ledger.id
-      ? editTargetOf(pendingMarkedTransaction)
-      : { kind: 'new' },
-  );
-  const [markedExpanded, setMarkedExpanded] = useState(false);
+  const period = currentTaiwanMonthRange();
+  const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
+  const { mode } = useHomeCategoryColors();
+  const chartTheme = useChartTheme();
+  const [panelTargetState, setPanelTargetState] = useState(() => ({
+    ledgerId: ledger.id,
+    target: targetForPendingAction(pendingMarkedAction, ledger.id),
+  }));
 
-  // 排序與「只要 5 筆」都交給後端，前端不做任何排序、截斷或加總。
+  // 這一層不再依帳本 key 重建；在 render 時同步清掉舊目標，避免 A→B→A 還原舊表單。
+  if (panelTargetState.ledgerId !== ledger.id) {
+    setPanelTargetState({
+      ledgerId: ledger.id,
+      target: targetForPendingAction(pendingMarkedAction, ledger.id),
+    });
+  }
+  const panelTarget =
+    panelTargetState.ledgerId === ledger.id
+      ? panelTargetState.target
+      : targetForPendingAction(pendingMarkedAction, ledger.id);
+
   const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
-  const marked = useMarkedTransactions(markedExpanded);
   const setTransactionMark = useSetTransactionMark();
-  const markedTransactions = marked.data?.items?.filter((item) => item.ledger != null) ?? [];
+  const markedTransactions = markedQuery.data?.items ?? [];
+
+  function setCurrentPanelTarget(target: PanelTarget) {
+    setPanelTargetState({ ledgerId: ledger.id, target });
+  }
 
   function startEditing(transaction: Transaction) {
-    setPanelTarget(editTargetOf(transaction));
+    setCurrentPanelTarget(editTargetOf(transaction));
     // 使用者收起過右側欄時，點了一筆卻沒反應是最糟的情況。
     open();
   }
 
   function fillAccount(transaction: Transaction) {
-    setPanelTarget({ kind: 'fillAccount', transaction });
+    setCurrentPanelTarget({ kind: 'fillAccount', transaction });
     open();
   }
 
   function startCopying(transaction: Transaction) {
-    setPanelTarget({ kind: 'copy', transaction });
+    setCurrentPanelTarget({ kind: 'copy', transaction });
     open();
   }
 
   function startDeleting(transaction: Transaction) {
-    setPanelTarget({ kind: 'transaction', transaction, initialDeleteOpen: true });
+    setCurrentPanelTarget({ kind: 'transaction', transaction, initialDeleteOpen: true });
     open();
   }
 
   function toggleMark(transaction: Transaction, sourceLedgerId = ledger.id) {
-    setTransactionMark.mutate({
-      ledgerId: sourceLedgerId,
-      transactionId: transaction.id,
-      currentlyMarked: transaction.marked,
-    });
+    setTransactionMark.mutate(
+      {
+        ledgerId: sourceLedgerId,
+        transactionId: transaction.id,
+        currentlyMarked: transaction.marked,
+      },
+      {
+        onSuccess: () => {
+          if (activityTab !== 'marked' || !transaction.marked || markedQuery.data?.total !== 1)
+            return;
+          onActivityTabChange('recent');
+          recentTabRef.current?.focus();
+        },
+      },
+    );
   }
 
-  function startEditingMarked(transaction: Transaction) {
-    const markedTransaction = marked.data?.items.find((item) => item.id === transaction.id);
+  function startMarkedAction(transaction: Transaction, intent: MarkedActionIntent) {
+    const markedTransaction = markedTransactions.find((item) => item.id === transaction.id);
     if (!markedTransaction) return;
     if (markedTransaction.ledger.id !== ledger.id) {
-      onSwitchToMarkedLedger(markedTransaction);
+      onSwitchToMarkedLedger(markedTransaction, intent);
       return;
     }
-    startEditing(transaction);
+    if (intent === 'fillAccount') {
+      fillAccount(transaction);
+    } else {
+      startEditing(transaction);
+    }
   }
 
   useEffect(() => {
-    if (pendingMarkedTransaction?.ledger.id !== ledger.id) return;
+    if (pendingMarkedAction?.transaction.ledger.id !== ledger.id) return;
+    // 依跨帳本流程先寫入表單目標，再清掉待處理動作，避免切帳本後落回新增表單。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPanelTargetState({
+      ledgerId: ledger.id,
+      target: targetForPendingAction(pendingMarkedAction, ledger.id),
+    });
     open();
-    onPendingMarkedTransactionHandled();
-  }, [ledger.id, onPendingMarkedTransactionHandled, open, pendingMarkedTransaction]);
+    onPendingMarkedActionHandled();
+  }, [ledger.id, onPendingMarkedActionHandled, open, pendingMarkedAction]);
 
   /*
    * 關閉只收起右側欄，不清掉正在編輯的那一筆（W57）：收起有滑出動畫，這時換成新增表單，
@@ -242,7 +320,7 @@ function Dashboard({
 
   /** 「＋ 新增交易」：回到新增表單，打開右側欄並把焦點送到金額欄（SC-35.3）。 */
   function startAdding() {
-    setPanelTarget({ kind: 'new' });
+    setCurrentPanelTarget({ kind: 'new' });
     requestFocus();
   }
 
@@ -256,63 +334,238 @@ function Dashboard({
         ? (panelTarget.settlement?.id ?? null)
         : null;
 
+  function focusActivityTab(tab: HomeActivityTab) {
+    onActivityTabChange(tab);
+    (tab === 'recent' ? recentTabRef : markedTabRef).current?.focus();
+  }
+
+  function moveActivityTab(event: KeyboardEvent<HTMLButtonElement>, current: HomeActivityTab) {
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      focusActivityTab(event.key === 'Home' || !hasMarkedTab ? 'recent' : 'marked');
+      return;
+    }
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    event.preventDefault();
+    const next = hasMarkedTab ? (current === 'recent' ? 'marked' : 'recent') : 'recent';
+    focusActivityTab(next);
+  }
+
+  const statisticsData = statistics.data;
+  const categorySection =
+    statisticsData?.ledger && statisticsData.mine ? (
+      <HomeCategorySection
+        expenseGroups={statisticsData.expenseGroups}
+        ledgerName={ledger.kind === 'SHARED' ? ledger.name : null}
+        statisticsHref={`/stats?tab=cat&ledger=${encodeURIComponent(ledger.id)}&month=${period.from.slice(0, 7)}`}
+        colorOf={(group: StatisticsGroup) => homeCategoryColor(group, mode, chartTheme)}
+      />
+    ) : undefined;
+
   return (
     <>
-      {/*
-        帳本切換與「＋ 新增交易」在標題同一排的右邊（開發者 2026-10-07）：最上排
-        的橫條清空留給之後的 AI 功能，記進哪一本帳本就近放在記帳的按鈕旁邊。
-      */}
       <PageContent>
-        <PageHeader
-          title="總覽"
-          actions={
-            <>
-              <LedgerSwitcher />
-              <Button onClick={startAdding}>
-                <Icon name="plus" />
-                新增交易
-              </Button>
-            </>
-          }
-        />
-        <BalanceTrendChart
-          months={balanceTrendMonths}
-          isLoading={balanceTrendLoading}
-          error={balanceTrendError}
-        />
-        <LedgerStatsRow ledger={ledger} />
-        <PendingCard />
-
-        <div className={styles.cards}>
-          {marked.data && marked.data.total > 0 && markedTransactions.length > 0 && (
-            <MarkedTransactionsCard
-              transactions={markedTransactions}
-              total={marked.data.total}
-              expanded={markedExpanded}
-              onExpand={() => setMarkedExpanded(true)}
-              selectedId={selectedId}
-              onSelect={startEditingMarked}
-              onFillAccount={fillAccount}
-              onToggleMark={toggleMark}
-            />
-          )}
-          <RecentTransactions
-            transactions={recent.data?.items ?? []}
-            isLoading={recent.isLoading}
-            error={recent.error}
-            selectedId={selectedId}
-            onSelect={startEditing}
-            onFillAccount={fillAccount}
-            onCopy={startCopying}
-            onDelete={startDeleting}
-            onToggleMark={(transaction) => toggleMark(transaction)}
+        <div className={styles.dashboard}>
+          <PageHeader
+            title="總覽"
+            actions={
+              <>
+                <LedgerSwitcher />
+                <Button onClick={startAdding}>
+                  <Icon name="plus" />
+                  新增交易
+                </Button>
+              </>
+            }
           />
-          <AccountBalances />
+          <LedgerStatsRow ledger={ledger} statistics={statistics} period={period} />
+          <PendingCard />
+
+          <div className={styles.activityAndTrend}>
+            <ActivityCard
+              activityTab={activityTab}
+              onActivityTabChange={onActivityTabChange}
+              hasMarkedTab={hasMarkedTab}
+              recentTabRef={recentTabRef}
+              markedTabRef={markedTabRef}
+              onTabKeyDown={moveActivityTab}
+              markedQuery={markedQuery}
+              markedTransactions={markedTransactions}
+              markedExpanded={markedExpanded}
+              onExpandMarked={onExpandMarked}
+              recentTransactions={recent.data?.items ?? []}
+              recentLoading={recent.isLoading || recent.isPlaceholderData}
+              recentError={recent.error}
+              onSelectRecent={startEditing}
+              onFillRecent={fillAccount}
+              onCopyRecent={startCopying}
+              onDeleteRecent={startDeleting}
+              onToggleRecentMark={(transaction) => toggleMark(transaction)}
+              onSelectMarked={(transaction) => startMarkedAction(transaction, 'edit')}
+              onFillMarked={(transaction) => startMarkedAction(transaction, 'fillAccount')}
+              onToggleMarked={(transaction, ledgerId) => toggleMark(transaction, ledgerId)}
+              selectedId={selectedId}
+            />
+            <BalanceTrendChart
+              months={balanceTrendQuery.data?.months}
+              isLoading={balanceTrendQuery.isLoading}
+              error={balanceTrendQuery.error}
+              className={styles.trendChart}
+            />
+          </div>
+
+          <h2 className={styles.myHeading}>我的</h2>
+          <div className={styles.cards}>
+            <AssetCard
+              totalQuery={balanceTrendQuery}
+              accountsQuery={accountsQuery}
+              categorySection={categorySection}
+            />
+            <DebtsCard
+              counterpartiesQuery={counterpartiesQuery}
+              unpointedLedgersQuery={unpointedLedgersQuery}
+              showAllLink
+            />
+          </div>
         </div>
       </PageContent>
 
       <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
+  );
+}
+
+interface ActivityCardProps {
+  activityTab: HomeActivityTab;
+  onActivityTabChange: (tab: HomeActivityTab) => void;
+  hasMarkedTab: boolean;
+  recentTabRef: RefObject<HTMLButtonElement | null>;
+  markedTabRef: RefObject<HTMLButtonElement | null>;
+  onTabKeyDown: (event: KeyboardEvent<HTMLButtonElement>, current: HomeActivityTab) => void;
+  markedQuery: ReturnType<typeof useMarkedTransactions>;
+  markedTransactions: MarkedTransaction[];
+  markedExpanded: boolean;
+  onExpandMarked: () => void;
+  recentTransactions: Transaction[];
+  recentLoading: boolean;
+  recentError: unknown;
+  selectedId: string | null;
+  onSelectRecent: (transaction: Transaction) => void;
+  onFillRecent: (transaction: Transaction) => void;
+  onCopyRecent: (transaction: Transaction) => void;
+  onDeleteRecent: (transaction: Transaction) => void;
+  onToggleRecentMark: (transaction: Transaction) => void;
+  onSelectMarked: (transaction: Transaction) => void;
+  onFillMarked: (transaction: Transaction) => void;
+  onToggleMarked: (transaction: Transaction, ledgerId?: string) => void;
+}
+
+/** 「最近｜標註」共用一張卡，分頁與焦點留在 LedgerView，不隨帳本切換重設。 */
+function ActivityCard({
+  activityTab,
+  onActivityTabChange,
+  hasMarkedTab,
+  recentTabRef,
+  markedTabRef,
+  onTabKeyDown,
+  markedQuery,
+  markedTransactions,
+  markedExpanded,
+  onExpandMarked,
+  recentTransactions,
+  recentLoading,
+  recentError,
+  selectedId,
+  onSelectRecent,
+  onFillRecent,
+  onCopyRecent,
+  onDeleteRecent,
+  onToggleRecentMark,
+  onSelectMarked,
+  onFillMarked,
+  onToggleMarked,
+}: ActivityCardProps) {
+  const visibleTab: HomeActivityTab = hasMarkedTab ? activityTab : 'recent';
+
+  return (
+    <section className={styles.dataCard} aria-label="最近與標註">
+      <div className={styles.activityHeader}>
+        <div className={styles.activityTabs} role="tablist" aria-label="最近與標註">
+          <button
+            ref={recentTabRef}
+            id="home-recent-tab"
+            type="button"
+            role="tab"
+            aria-selected={visibleTab === 'recent'}
+            aria-controls="home-activity-panel"
+            tabIndex={visibleTab === 'recent' ? 0 : -1}
+            className={visibleTab === 'recent' ? styles.activeTab : styles.tab}
+            onClick={() => onActivityTabChange('recent')}
+            onKeyDown={(event) => onTabKeyDown(event, 'recent')}
+          >
+            最近
+          </button>
+          {hasMarkedTab && (
+            <button
+              ref={markedTabRef}
+              id="home-marked-tab"
+              type="button"
+              role="tab"
+              aria-selected={visibleTab === 'marked'}
+              aria-controls="home-activity-panel"
+              tabIndex={visibleTab === 'marked' ? 0 : -1}
+              className={visibleTab === 'marked' ? styles.activeTab : styles.tab}
+              onClick={() => onActivityTabChange('marked')}
+              onKeyDown={(event) => onTabKeyDown(event, 'marked')}
+            >
+              標註{markedQuery.data?.total ? ` ${markedQuery.data.total}` : ''}
+            </button>
+          )}
+        </div>
+        {visibleTab === 'recent' && (
+          <Link className={styles.cardLink} to="/transactions">
+            查看全部
+          </Link>
+        )}
+      </div>
+
+      <div
+        id="home-activity-panel"
+        className={styles.activityPanel}
+        role="tabpanel"
+        aria-labelledby={visibleTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
+        tabIndex={0}
+      >
+        {visibleTab === 'recent' ? (
+          <section className={styles.activityContent} aria-label="最近交易">
+            <RecentBody
+              transactions={recentTransactions}
+              isLoading={recentLoading}
+              error={recentError}
+              selectedId={selectedId}
+              onSelect={onSelectRecent}
+              onFillAccount={onFillRecent}
+              onCopy={onCopyRecent}
+              onDelete={onDeleteRecent}
+              onToggleMark={onToggleRecentMark}
+            />
+          </section>
+        ) : (
+          <MarkedTransactionsCard
+            transactions={markedTransactions}
+            total={markedQuery.data?.total ?? 0}
+            expanded={markedExpanded}
+            isLoading={markedQuery.isLoading}
+            error={markedQuery.error}
+            onExpand={onExpandMarked}
+            selectedId={selectedId}
+            onSelect={onSelectMarked}
+            onFillAccount={onFillMarked}
+            onToggleMark={onToggleMarked}
+          />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -329,51 +582,7 @@ interface RecentTransactionsProps {
   onToggleMark: (transaction: Transaction) => void;
 }
 
-/**
- * 「最近交易」卡（SC-34.1、假設 8）。
- *
- * 最近交易沿用交易頁的單列元件，版面與名稱規則只有一份；這裡只保留摘要卡的
- * 載入、錯誤與空狀態，並由呼叫端提供五筆資料。
- */
-function RecentTransactions({
-  transactions,
-  isLoading,
-  error,
-  selectedId,
-  onSelect,
-  onFillAccount,
-  onCopy,
-  onDelete,
-  onToggleMark,
-}: RecentTransactionsProps) {
-  return (
-    <section className={styles.dataCard} aria-labelledby="recent-transactions">
-      <div className={styles.cardHead}>
-        <h2 className={styles.cardHeading} id="recent-transactions">
-          最近交易
-        </h2>
-        {/* 四種狀態下都留著這個入口：交易載不出來時，使用者至少走得到交易頁。 */}
-        <Link className={styles.cardLink} to="/transactions">
-          查看全部
-        </Link>
-      </div>
-
-      <RecentBody
-        transactions={transactions}
-        isLoading={isLoading}
-        error={error}
-        selectedId={selectedId}
-        onSelect={onSelect}
-        onFillAccount={onFillAccount}
-        onCopy={onCopy}
-        onDelete={onDelete}
-        onToggleMark={onToggleMark}
-      />
-    </section>
-  );
-}
-
-/** 載入中 / 失敗 / 沒有交易 / 有資料，四種呈現。 */
+/** 最近交易沿用交易頁的單列元件，這裡只負責載入、錯誤與空狀態。 */
 function RecentBody({
   transactions,
   isLoading,
@@ -388,8 +597,7 @@ function RecentBody({
   if (isLoading) {
     return <p className={styles.status}>載入中…</p>;
   }
-  // 失敗時不用紅框：這是 dashboard 的一張卡，記帳表單並沒有壞掉，
-  // 一塊紅框會讓人以為整頁掛了。
+  // 失敗時不用紅框：記帳表單沒有壞掉，一塊紅框會讓人以為整頁掛了。
   if (error) {
     return <p className={styles.status}>交易暫時無法載入</p>;
   }
@@ -418,6 +626,8 @@ interface MarkedTransactionsCardProps {
   transactions: MarkedTransaction[];
   total: number;
   expanded: boolean;
+  isLoading: boolean;
+  error: unknown;
   onExpand: () => void;
   selectedId: string | null;
   onSelect: (transaction: Transaction) => void;
@@ -425,11 +635,13 @@ interface MarkedTransactionsCardProps {
   onToggleMark: (transaction: Transaction, ledgerId?: string) => void;
 }
 
-/** 所有帳本的標註交易；點「再 N 筆」後由 hook 逐頁載入全部資料。 */
+/** 所有帳本的標註交易；點「再 N 筆」後由 hook 依 API 上限逐頁載入。 */
 function MarkedTransactionsCard({
   transactions,
   total,
   expanded,
+  isLoading,
+  error,
   onExpand,
   selectedId,
   onSelect,
@@ -439,16 +651,27 @@ function MarkedTransactionsCard({
   const ledgerNames = new Map(transactions.map((item) => [item.id, item.ledger.name]));
   const ledgerIds = new Map(transactions.map((item) => [item.id, item.ledger.id]));
 
+  if (isLoading) {
+    return (
+      <section className={styles.activityContent} aria-label="標註">
+        <p className={styles.status} role="status">
+          載入中…
+        </p>
+      </section>
+    );
+  }
+  if (error) {
+    return (
+      <section className={styles.activityContent} aria-label="標註">
+        <p className={styles.status} role="alert">
+          標註暫時無法載入
+        </p>
+      </section>
+    );
+  }
+
   return (
-    <section
-      className={`${styles.dataCard} ${styles.markedCard}`}
-      aria-labelledby="marked-transactions"
-    >
-      <div className={styles.cardHead}>
-        <h2 className={styles.cardHeading} id="marked-transactions">
-          標註
-        </h2>
-      </div>
+    <section className={styles.activityContent} aria-label="標註">
       <TransactionList
         transactions={transactions}
         isLoading={false}
@@ -468,6 +691,13 @@ function MarkedTransactionsCard({
       )}
     </section>
   );
+}
+
+function targetForPendingAction(action: PendingMarkedAction | null, ledgerId: string): PanelTarget {
+  if (action?.transaction.ledger.id !== ledgerId) return { kind: 'new' };
+  return action.intent === 'fillAccount'
+    ? { kind: 'fillAccount', transaction: action.transaction }
+    : editTargetOf(action.transaction);
 }
 
 function editTargetOf(transaction: Transaction): PanelTarget {
@@ -499,11 +729,16 @@ function GuestStat({ label }: { label: string }) {
   );
 }
 
-/** 目前帳本與台灣時間當月的摘要；數字全由統計端點提供。 */
-function LedgerStatsRow({ ledger }: { ledger: LedgerSummary }) {
-  const period = currentTaiwanMonthRange();
-  const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
-
+/** 目前帳本與台灣時間當月的摘要；數字全由共用的統計 query 提供。 */
+function LedgerStatsRow({
+  ledger,
+  statistics,
+  period,
+}: {
+  ledger: LedgerSummary;
+  statistics: ReturnType<typeof useLedgerStatistics>;
+  period: ReturnType<typeof currentTaiwanMonthRange>;
+}) {
   if (statistics.error) {
     return (
       <div className={styles.statsMessage} role="alert">

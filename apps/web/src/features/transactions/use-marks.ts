@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MarkedTransaction, Paginated } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /** 首頁標註卡的查詢 key；標註或取消標註後以前綴失效所有顯示模式。 */
 export const MARKED_TRANSACTIONS_KEY = ['marked-transactions'] as const;
@@ -55,10 +56,6 @@ export function useSetTransactionMark() {
       apiRequest<void>(`/ledgers/${ledgerId}/transactions/${transactionId}/mark`, {
         method: currentlyMarked ? 'DELETE' : 'PUT',
       }),
-    onSuccess: (_data, { ledgerId, transactionId }) => {
-      void queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      void queryClient.invalidateQueries({ queryKey: ['transaction', ledgerId, transactionId] });
-      void queryClient.invalidateQueries({ queryKey: MARKED_TRANSACTIONS_KEY });
-    },
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }
