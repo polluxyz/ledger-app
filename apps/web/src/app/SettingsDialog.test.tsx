@@ -1,13 +1,42 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { StatisticsGroup } from '@ledger/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NEUTRAL_CHART_COLORS } from '../features/statistics/charts/chart-colors';
 import { SettingsDialog } from './SettingsDialog';
+import {
+  HOME_CATEGORY_COLORS_STORAGE_KEY,
+  homeCategoryColor,
+  resetHomeCategoryColorsForTests,
+} from './use-home-category-colors';
+
+const HOME_CATEGORY_COLOR_PREVIEW_GROUPS: readonly StatisticsGroup[] = [
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-food', name: '示意分類一', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-home', name: '示意分類二', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-books', name: '示意分類三', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  { kind: 'UNCATEGORIZED', category: null, amount: 0, percentageBps: 0 },
+];
 
 /**
  * 設定彈窗（2i · SC-32.2、SC-32.3，第二輪修訂）。
  *
- * 第三輪多了「動畫」這一組（SC-39），驗法與外觀相同：按下去要真的改到
- * `<html data-motion>` 與 localStorage。
+ * 「動畫」與「首頁分類條配色」都要保留各自的選擇；分類配色使用可訂閱 store，並以
+ * 示意分類確認三種預覽色由目前圖表主題計算。
  *
  * 驗四件事：彈窗是名稱「設定」的 modal `dialog`、外觀是三張 `role="radio"` 的卡片
  * 且 `aria-checked` 跟著偏好走、選了之後**真的換主題**（`<html data-theme>` 與
@@ -23,14 +52,24 @@ import { SettingsDialog } from './SettingsDialog';
 describe('SettingsDialog', () => {
   beforeEach(() => {
     localStorage.clear();
+    resetHomeCategoryColorsForTests();
     document.documentElement.removeAttribute('data-theme');
     // 動畫開關與深淺色一樣，唯一真相是 `<html>` 上的屬性——一個測試關掉之後
     // 不清掉，下一個測試就會從「已經關了」開始。
     document.documentElement.removeAttribute('data-motion');
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   function appearanceGroup(): HTMLElement {
     return screen.getByRole('radiogroup', { name: '外觀' });
+  }
+
+  function homeCategoryColorGroup(): HTMLElement {
+    return screen.getByRole('radiogroup', { name: '首頁分類條配色' });
   }
 
   it('opens as a modal dialog named 設定', () => {
@@ -85,6 +124,85 @@ describe('SettingsDialog', () => {
     expect(light).toHaveAttribute('tabindex', '0');
     expect(screen.getByRole('radio', { name: '跟隨系統' })).toHaveAttribute('tabindex', '-1');
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+  });
+
+  it('renders three home category color cards with only the selected card in the Tab order', () => {
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    const group = homeCategoryColorGroup();
+    expect(within(group).getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getByRole('radio', { name: '彩色' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '彩色' })).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('radio', { name: '金色' })).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('radio', { name: '灰色' })).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('changes home category color with the arrow keys and persists the selection', async () => {
+    const user = userEvent.setup();
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    screen.getByRole('radio', { name: '彩色' }).focus();
+    await user.keyboard('{ArrowRight}');
+
+    const gold = screen.getByRole('radio', { name: '金色' });
+    expect(gold).toHaveFocus();
+    expect(gold).toBeChecked();
+    expect(gold).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('radio', { name: '彩色' })).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('radio', { name: '灰色' })).toHaveAttribute('tabindex', '-1');
+    expect(localStorage.getItem(HOME_CATEGORY_COLORS_STORAGE_KEY)).toBe('gold');
+  });
+
+  it('shows every preview segment using its mode and the current chart theme', () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    const options = [
+      { mode: 'color' as const, label: '彩色' },
+      { mode: 'gold' as const, label: '金色' },
+      { mode: 'gray' as const, label: '灰色' },
+    ];
+
+    for (const option of options) {
+      const preview = within(screen.getByRole('radio', { name: option.label })).getByTestId(
+        'category-color-preview',
+      );
+      expect(preview).toHaveAttribute('aria-hidden', 'true');
+      const segments = Array.from(preview.querySelectorAll<HTMLElement>('[data-color-segment]'));
+      const colors = segments.map((segment) => segment.style.backgroundColor);
+      const expectedColors = HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => {
+        const expected = document.createElement('span');
+        expected.style.backgroundColor = homeCategoryColor(group, option.mode, 'dark');
+        return expected.style.backgroundColor;
+      });
+
+      expect(colors).toHaveLength(4);
+      expect(colors).toEqual(expectedColors);
+      if (option.mode === 'color') {
+        expect(new Set(colors.slice(0, 3)).size).toBe(3);
+      } else if (option.mode === 'gold') {
+        expect(colors.slice(0, 3)).toEqual(Array(3).fill('var(--color-accent)'));
+        const neutral = document.createElement('span');
+        neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
+        expect(colors[3]).toBe(neutral.style.backgroundColor);
+      } else {
+        const neutral = document.createElement('span');
+        neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
+        expect(colors).toEqual(Array(4).fill(neutral.style.backgroundColor));
+      }
+    }
+  });
+
+  it('switches color mode without making API requests', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SettingsDialog open onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole('radio', { name: '灰色' }));
+
+    expect(localStorage.getItem(HOME_CATEGORY_COLORS_STORAGE_KEY)).toBe('gray');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('wraps around from the last card back to the first', async () => {

@@ -1,19 +1,26 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Dialog } from '../components/Dialog';
+import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
+import type { StatisticsGroup } from '@ledger/shared';
+import {
+  homeCategoryColor,
+  useHomeCategoryColors,
+  type HomeCategoryColorMode,
+} from './use-home-category-colors';
 import { useMotion } from './use-motion';
 import { useTheme, type ThemePreference } from './use-theme';
 import styles from './SettingsDialog.module.css';
 
 /**
- * 設定彈窗（2i · SC-32.2，第二輪修訂）。
+ * 設定彈窗（2i · SC-32.2、2k W271）。
  *
  * 第一輪把「外觀」做成使用者選單往右浮出的第二層，開發者看過畫面後改掉了：
  * 設定要跳出彈窗。所以這裡用 `components/Dialog` 的 modal 變體——焦點鎖定、
  * 背景遮罩、Esc 關閉都由原生 `<dialog>` 提供，不必自己實作也不必多一個相依。
  *
- * 第三輪加了第二組「動畫」（SC-39）。版面（群組標題 ＋ 底部說明）本來就是為了
- * 「之後還會加東西」而留的，這次就照原樣多疊一組，不必改結構。
+ * 後續加上的「動畫」與「首頁分類條配色」沿用同一種簡單群組；分類配色與首頁共用
+ * 模組 store，示意條則依目前圖表主題與各自模式即時取色。
  *
  * 三件事值得先說明：
  *
@@ -37,6 +44,34 @@ const APPEARANCE_OPTIONS: readonly { value: ThemePreference; label: string }[] =
   { value: 'dark', label: '深色' },
 ];
 
+const HOME_CATEGORY_COLOR_OPTIONS: readonly { value: HomeCategoryColorMode; label: string }[] = [
+  { value: 'color', label: '彩色' },
+  { value: 'gold', label: '金色' },
+  { value: 'gray', label: '灰色' },
+];
+
+const HOME_CATEGORY_COLOR_PREVIEW_GROUPS: readonly StatisticsGroup[] = [
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-food', name: '示意分類一', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-home', name: '示意分類二', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-books', name: '示意分類三', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  { kind: 'UNCATEGORIZED', category: null, amount: 0, percentageBps: 0 },
+];
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
     <Dialog open={open} title="設定" onClose={onClose}>
@@ -52,7 +87,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 function SettingsBody({ onClose }: { onClose: () => void }) {
   const { preference, choose } = useTheme();
   const { enabled: motionEnabled, setEnabled: setMotionEnabled } = useMotion();
+  const { mode: homeCategoryColorMode, choose: chooseHomeCategoryColor } = useHomeCategoryColors();
+  const chartTheme = useChartTheme();
   const groupRef = useRef<HTMLDivElement | null>(null);
+  const homeCategoryColorGroupRef = useRef<HTMLDivElement | null>(null);
 
   /** 選一張卡並把焦點留在它身上（roving tabindex 的另一半）。 */
   const select = useCallback(
@@ -61,6 +99,17 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       groupRef.current?.querySelector<HTMLElement>(`[data-value="${next}"]`)?.focus();
     },
     [choose],
+  );
+
+  /** 選一張首頁配色卡並將焦點留在該卡，維持方向鍵與 Tab 的位置一致。 */
+  const selectHomeCategoryColor = useCallback(
+    (next: HomeCategoryColorMode) => {
+      chooseHomeCategoryColor(next);
+      homeCategoryColorGroupRef.current
+        ?.querySelector<HTMLElement>(`[data-value="${next}"]`)
+        ?.focus();
+    },
+    [chooseHomeCategoryColor],
   );
 
   /*
@@ -105,6 +154,25 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       APPEARANCE_OPTIONS[(index + step + APPEARANCE_OPTIONS.length) % APPEARANCE_OPTIONS.length];
     if (next) {
       select(next.value);
+    }
+  }
+
+  function handleHomeCategoryColorKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = stepOf(event.key);
+    if (step === 0) {
+      return;
+    }
+    event.preventDefault();
+    const current = HOME_CATEGORY_COLOR_OPTIONS.findIndex(
+      (option) => option.value === homeCategoryColorMode,
+    );
+    const index = current === -1 ? 0 : current;
+    const next =
+      HOME_CATEGORY_COLOR_OPTIONS[
+        (index + step + HOME_CATEGORY_COLOR_OPTIONS.length) % HOME_CATEGORY_COLOR_OPTIONS.length
+      ];
+    if (next) {
+      selectHomeCategoryColor(next.value);
     }
   }
 
@@ -176,6 +244,53 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
           </span>
         </button>
         <p className={styles.hint}>關閉後，側欄與右側欄的開合會直接切換。</p>
+      </section>
+
+      <section className={styles.group}>
+        <h3 className={styles.groupLabel}>首頁分類條配色</h3>
+        <div
+          ref={homeCategoryColorGroupRef}
+          role="radiogroup"
+          aria-label="首頁分類條配色"
+          className={styles.cards}
+          onKeyDown={handleHomeCategoryColorKeyDown}
+        >
+          {HOME_CATEGORY_COLOR_OPTIONS.map((option) => {
+            const checked = homeCategoryColorMode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                tabIndex={checked ? 0 : -1}
+                data-value={option.value}
+                className={[styles.card, checked ? styles.cardSelected : '']
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => chooseHomeCategoryColor(option.value)}
+              >
+                <span
+                  className={styles.categoryColorPreview}
+                  data-testid="category-color-preview"
+                  aria-hidden="true"
+                >
+                  {HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => (
+                    <span
+                      key={group.category?.id ?? group.kind}
+                      className={styles.categoryColorPreviewSegment}
+                      data-color-segment=""
+                      style={{
+                        backgroundColor: homeCategoryColor(group, option.value, chartTheme),
+                      }}
+                    />
+                  ))}
+                </span>
+                <span className={styles.cardLabel}>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       <p className={styles.hint}>之後的設定也會放在這裡。</p>
