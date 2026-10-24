@@ -88,6 +88,11 @@ export function transactionRow(page: Page, hasText: string): Locator {
   return page.getByRole('listitem').filter({ hasText });
 }
 
+/** 首頁交易列位於目前分頁中，限定查找範圍以避開我的帳戶清單項目。 */
+export function homeActivityRow(page: Page, hasText: string): Locator {
+  return page.getByRole('tabpanel').getByRole('listitem').filter({ hasText });
+}
+
 /**
  * 從側欄走到交易頁（spec 2i：交易表格從首頁搬到 `/transactions`）。
  *

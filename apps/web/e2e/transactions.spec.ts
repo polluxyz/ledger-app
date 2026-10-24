@@ -16,6 +16,7 @@ import {
   openNewTransaction,
   openTransactions,
   expectRightPanelClosedWithoutAddForm,
+  homeActivityRow,
   selectCategory,
   switchLedger,
   transactionRow,
@@ -76,14 +77,14 @@ test('情境 7：編輯金額後帳戶餘額跟著變', async ({ signedInPage: p
   await expect(page.getByLabel('現金餘額')).toHaveText('-$120');
 
   // 首頁的最近交易沒有鉛筆鈕，點整列就進入編輯（spec 2i SC-35.4）。
-  await transactionRow(page, '-$120').click();
+  await homeActivityRow(page, '-$120').click();
 
   const dialog = page.getByRole('dialog', { name: '編輯交易' });
   await dialog.getByLabel('金額').fill('200');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
   // 列表與餘額都要跟著變。只驗其中一個的話，漏掉快取失效仍然會綠。
-  await expect(transactionRow(page, '-$200')).toBeVisible();
+  await expect(homeActivityRow(page, '-$200')).toBeVisible();
   await expect(page.getByLabel('現金餘額')).toHaveText('-$200');
 });
 
@@ -140,7 +141,7 @@ test('情境 9：轉帳讓兩個帳戶的餘額都變動', async ({ signedInPage
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   // 錢只是換了帳戶：不加正負號，也不屬於任何分類。
-  const entry = transactionRow(page, '$500');
+  const entry = homeActivityRow(page, '$500');
   await expect(entry).toContainText('轉帳');
   await expect(entry).not.toContainText('國泰世華');
   await expect(entry).not.toContainText('現金');

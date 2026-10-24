@@ -380,12 +380,13 @@ test.describe('3l 刪除搬移、複製與標註', () => {
 
     await switchLedger(page, DAILY_LEDGER_NAME);
     await openDashboard(page);
+    await page.getByRole('tab', { name: '標註 1', exact: true }).click();
     const markedCard = page.getByRole('region', { name: '標註' });
     const markedTaxiRow = markedCard.getByRole('listitem').filter({ hasText: '計程車' });
     await expect(markedTaxiRow).toContainText(HOUSEHOLD_LEDGER_NAME);
     await markedTaxiRow.getByRole('button', { name: /更多交易動作/ }).click();
     await page.getByRole('menuitem', { name: '取消標註', exact: true }).click();
-    await expect(page.getByRole('region', { name: '標註' })).toHaveCount(0);
+    await expect(markedCard.getByRole('listitem').filter({ hasText: '計程車' })).toHaveCount(0);
 
     const xiaomeiPage = await openAs(xiaomei);
     await switchLedger(xiaomeiPage, HOUSEHOLD_LEDGER_NAME);

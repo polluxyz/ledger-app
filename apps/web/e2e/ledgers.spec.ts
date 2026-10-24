@@ -2,6 +2,7 @@ import { addMember, createLedger, createTransaction, listAccounts, listCategorie
 import { expect, test, USER_B_EMAIL } from './fixtures';
 import {
   newTransactionForm,
+  homeActivityRow,
   openDashboard,
   openNewTransaction,
   selectCategory,
@@ -59,7 +60,7 @@ test('情境 1：建立帳本不設定計入餘額；共享帳本交易仍記入
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
   // 限定在交易列表的那一列裡找。整頁搜尋「餐飲」會同時對到分類下拉的選項。
-  const entry = page.getByRole('listitem').filter({ hasText: '-$1,200' });
+  const entry = homeActivityRow(page, '-$1,200');
   await expect(entry).toBeVisible();
   await expect(entry).toContainText('餐飲');
   await expect
