@@ -13,7 +13,13 @@ import {
 } from './api';
 import { API_BASE_URL } from './env';
 import { expect, test } from './fixtures';
-import { newTransactionForm, openNewTransaction, openUserMenu, selectCategory } from './ui';
+import {
+  expectHomeSectionOrder,
+  newTransactionForm,
+  openNewTransaction,
+  openUserMenu,
+  selectCategory,
+} from './ui';
 
 interface HomeSetup {
   ledger: Awaited<ReturnType<typeof personalLedger>>;
@@ -632,53 +638,6 @@ async function getHomeSetup(
   const expenseCategory = categories.find((item) => item.type === 'EXPENSE');
   if (!expenseCategory) throw new Error('測試帳本缺少預設的支出分類。');
   return { ledger, account, expenseCategory };
-}
-
-async function expectHomeSectionOrder(page: Page, width: number): Promise<void> {
-  const heading = page.getByRole('heading', { level: 2, name: '總覽' });
-  const summary = page.locator('[aria-label="本月收支"]');
-  const pending = page.locator('section[aria-labelledby="pending-card-heading"]');
-  const activity = page.locator('section[aria-label="最近與標註"]');
-  const trend = page.locator('section[aria-labelledby="balance-trend-heading"]');
-  const myHeading = page.getByRole('heading', { level: 2, name: '我的' });
-  const asset = page.locator('section[aria-labelledby="home-asset-heading"]');
-  const debts = page.locator('section[aria-labelledby="home-debts-heading"]');
-  for (const section of [heading, summary, activity, trend, myHeading, asset, debts]) {
-    await expect(section).toBeVisible();
-  }
-  const pendingExists = (await pending.count()) > 0;
-
-  const [headingBox, summaryBox, pendingBox, activityBox, trendBox, myBox, assetBox, debtsBox] =
-    await Promise.all([
-      getRect(heading),
-      getRect(summary),
-      pendingExists ? getRect(pending) : Promise.resolve(null),
-      getRect(activity),
-      getRect(trend),
-      getRect(myHeading),
-      getRect(asset),
-      getRect(debts),
-    ]);
-  expect(summaryBox.y).toBeGreaterThanOrEqual(headingBox.y);
-  if (pendingBox) {
-    expect(pendingBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
-    expect(activityBox.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 1);
-  } else {
-    expect(activityBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
-  }
-  expect(myBox.y).toBeGreaterThanOrEqual(
-    Math.max(activityBox.y + activityBox.height, trendBox.y + trendBox.height) - 1,
-  );
-  expect(assetBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
-  expect(debtsBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
-
-  if (width >= 1024) {
-    expect(Math.abs(activityBox.y - trendBox.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(assetBox.y - debtsBox.y)).toBeLessThanOrEqual(1);
-  } else {
-    expect(trendBox.y).toBeGreaterThanOrEqual(activityBox.y + activityBox.height - 1);
-    expect(debtsBox.y).toBeGreaterThanOrEqual(assetBox.y + assetBox.height - 1);
-  }
 }
 
 async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {

@@ -93,6 +93,72 @@ export function homeActivityRow(page: Page, hasText: string): Locator {
   return page.getByRole('tabpanel').getByRole('listitem').filter({ hasText });
 }
 
+/** 共用首頁區塊順序與響應式排列驗收，依視窗寬度檢查卡片方框的位置。 */
+export async function expectHomeSectionOrder(page: Page, viewportWidth: number): Promise<void> {
+  const pageHeading = page.getByRole('heading', { level: 2, name: '總覽' });
+  const summary = page.locator('[aria-label="本月收支"]');
+  const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
+  const activityCard = page.locator('section[aria-label="最近與標註"]');
+  const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
+  const myHeading = page.getByRole('heading', { level: 2, name: '我的' });
+  const assetCard = page.locator('section[aria-labelledby="home-asset-heading"]');
+  const debtsCard = page.locator('section[aria-labelledby="home-debts-heading"]');
+
+  for (const section of [
+    pageHeading,
+    summary,
+    activityCard,
+    trendCard,
+    myHeading,
+    assetCard,
+    debtsCard,
+  ]) {
+    await expect(section).toBeVisible();
+  }
+
+  const pendingBox =
+    (await pendingCard.count()) > 0 ? await requiredBoundingBox(pendingCard) : null;
+  const [headingBox, summaryBox, activityBox, trendBox, myBox, assetBox, debtsBox] =
+    await Promise.all([
+      requiredBoundingBox(pageHeading),
+      requiredBoundingBox(summary),
+      requiredBoundingBox(activityCard),
+      requiredBoundingBox(trendCard),
+      requiredBoundingBox(myHeading),
+      requiredBoundingBox(assetCard),
+      requiredBoundingBox(debtsCard),
+    ]);
+
+  expect(summaryBox.y).toBeGreaterThanOrEqual(headingBox.y);
+  if (pendingBox) {
+    expect(pendingBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
+    expect(activityBox.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 1);
+  } else {
+    expect(activityBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
+  }
+  expect(trendBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
+  expect(myBox.y).toBeGreaterThanOrEqual(
+    Math.max(activityBox.y + activityBox.height, trendBox.y + trendBox.height) - 1,
+  );
+  expect(assetBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
+  expect(debtsBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
+
+  if (viewportWidth >= 1024) {
+    expect(Math.abs(activityBox.y - trendBox.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(assetBox.y - debtsBox.y)).toBeLessThanOrEqual(1);
+  } else {
+    expect(trendBox.y).toBeGreaterThanOrEqual(activityBox.y + activityBox.height - 1);
+    expect(debtsBox.y).toBeGreaterThanOrEqual(assetBox.y + assetBox.height - 1);
+  }
+}
+
+async function requiredBoundingBox(locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) throw new Error('首頁版面驗收找不到區塊方框。');
+  return box;
+}
+
 /**
  * 從側欄走到交易頁（spec 2i：交易表格從首頁搬到 `/transactions`）。
  *

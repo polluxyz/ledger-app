@@ -163,14 +163,14 @@ test('3c-0：列表將小數金額顯示到分、整數金額不補小數', asyn
   await form.getByLabel('金額').fill('333.33');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
-  await expect(transactionRow(page, '-$333.33')).toBeVisible();
+  await expect(homeActivityRow(page, '-$333.33')).toBeVisible();
   await expect(page.getByLabel('現金餘額')).toHaveText('-$333.33');
 
   await form.getByLabel('金額').fill('3000');
   await form.getByRole('button', { name: '新增', exact: true }).click();
 
-  await expect(transactionRow(page, '-$3,000')).toBeVisible();
-  await expect(transactionRow(page, '-$3,000.00')).toHaveCount(0);
+  await expect(homeActivityRow(page, '-$3,000')).toBeVisible();
+  await expect(homeActivityRow(page, '-$3,000.00')).toHaveCount(0);
 });
 
 test('情境 10：篩選只留下符合條件的交易', async ({ signedInPage: page, userA, request }) => {
@@ -272,7 +272,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   await page.reload();
   await switchLedger(page, '家庭開銷');
 
-  const row = transactionRow(page, '-$120');
+  const row = homeActivityRow(page, '-$120');
   await expect(row).toBeVisible();
   // 別人的帳戶名稱不該出現在畫面上。
   await expect(row).not.toContainText('現金');
@@ -288,7 +288,7 @@ test('情境 12：編輯別人的交易時改不到他的帳戶', async ({
   await dialog.getByLabel('金額').fill('200');
   await dialog.getByRole('button', { name: '儲存' }).click();
 
-  await expect(transactionRow(page, '-$200')).toBeVisible();
+  await expect(homeActivityRow(page, '-$200')).toBeVisible();
 
   // 這才是重點：錢還是記在乙的戶頭，甲的餘額一毛都沒動。
   const [bCashAfter] = await listAccounts(request, userB.token);

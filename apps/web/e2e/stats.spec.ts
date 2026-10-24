@@ -14,7 +14,7 @@ import {
   type TestUser,
 } from './api';
 import { expect, test } from './fixtures';
-import { switchLedger } from './ui';
+import { expectHomeSectionOrder, switchLedger } from './ui';
 
 /**
  * 統計頁的端對端驗收：測試資料只透過正式 API 建立，首頁、統計頁與交易頁都用瀏覽器操作。
@@ -378,62 +378,6 @@ async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
     clientWidth: document.documentElement.clientWidth,
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
-}
-
-async function expectHomeSectionOrder(page: Page, viewportWidth: number): Promise<void> {
-  const pageHeading = page.getByRole('heading', { level: 2, name: '總覽' });
-  const summary = page.locator('[aria-label="本月收支"]');
-  const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
-  const activityCard = page.locator('section[aria-label="最近與標註"]');
-  const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
-  const myHeading = page.getByRole('heading', { level: 2, name: '我的' });
-  const assetCard = page.locator('section[aria-labelledby="home-asset-heading"]');
-  const debtsCard = page.locator('section[aria-labelledby="home-debts-heading"]');
-  await expect(pageHeading).toBeVisible();
-  await expect(summary).toBeVisible();
-  await expect(activityCard).toBeVisible();
-  await expect(trendCard).toBeVisible();
-  await expect(myHeading).toBeVisible();
-  await expect(assetCard).toBeVisible();
-  await expect(debtsCard).toBeVisible();
-
-  const [headingBox, summaryBox, activityBox, trendBox, myBox, assetBox, debtsBox] =
-    await Promise.all([
-      pageHeading.boundingBox(),
-      summary.boundingBox(),
-      activityCard.boundingBox(),
-      trendCard.boundingBox(),
-      myHeading.boundingBox(),
-      assetCard.boundingBox(),
-      debtsCard.boundingBox(),
-    ]);
-  const pendingBox = (await pendingCard.count()) > 0 ? await pendingCard.boundingBox() : null;
-  expect(headingBox).not.toBeNull();
-  expect(summaryBox).not.toBeNull();
-  expect(activityBox).not.toBeNull();
-  expect(trendBox).not.toBeNull();
-  expect(myBox).not.toBeNull();
-  expect(assetBox).not.toBeNull();
-  expect(debtsBox).not.toBeNull();
-
-  expect(summaryBox!.y).toBeGreaterThanOrEqual(headingBox!.y);
-  if (pendingBox) {
-    expect(pendingBox.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height - 1);
-    expect(activityBox!.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 1);
-  } else {
-    expect(activityBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height - 1);
-  }
-  expect(trendBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height - 1);
-  expect(myBox!.y).toBeGreaterThanOrEqual(
-    Math.max(activityBox!.y + activityBox!.height, trendBox!.y + trendBox!.height) - 1,
-  );
-  expect(assetBox!.y).toBeGreaterThanOrEqual(myBox!.y + myBox!.height - 1);
-  expect(debtsBox!.y).toBeGreaterThanOrEqual(myBox!.y + myBox!.height - 1);
-
-  if (viewportWidth < 1024) {
-    expect(trendBox!.y).toBeGreaterThanOrEqual(activityBox!.y + activityBox!.height - 1);
-    expect(debtsBox!.y).toBeGreaterThanOrEqual(assetBox!.y + assetBox!.height - 1);
-  }
 }
 
 async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
