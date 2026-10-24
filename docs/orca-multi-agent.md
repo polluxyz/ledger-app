@@ -41,7 +41,10 @@ orca orchestration worker-start --spec "<task spec>" --terminal <handle> --json
 
 - Claude Code 是 coordinator（協調者），負責規劃、拆工、派工、驗收、開 PR。實作預設派給 worker，能平行的一次全部派出去。
 - 協調者自己做的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
-- 網頁（`apps/web`）的實作只派 Codex（`default` 的 Codex 那一層），協調者連小修也不自己做，驗收不過就退回 Codex（開發者 2026-10-21）。Codex 用完時網頁任務不換層，見 §4「派工前檢查」。
+- 網頁（`apps/web`）的設計與實作都由 Codex（`default` 的 Codex 那一層）全權負責（開發者 2026-10-21 定實作、10-24 擴大到設計）。
+  - 設計：版面、樣式、方案比較、`docs/artifacts/` 的預覽頁都派 Codex 做。協調者可以看設計，但只提建議，不自己出設計稿或改預覽頁。
+  - 實作：協調者連小修也不自己做，驗收不過就退回 Codex。
+  - Codex 用完時網頁任務不換層，見 §4「派工前檢查」。
 - 動到 schema、API、授權的產出，不管哪個角色做，協調者驗收時都要逐行看 diff（授權條件、交易邊界、migration SQL），並自己重跑隔離測試與兩套 e2e。
 - 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它只開得了 Claude，指定不了其他 agent。
 - 不需要監督的單純交接用 `orca-cli`，不要建 Run。
