@@ -1,197 +1,379 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GetLedgerStatisticsQuery, LedgerStatistics } from '@ledger/shared';
 import App from '../App';
-
-const statisticsApi = vi.hoisted(() => ({
-  getLedgerStatistics: vi.fn<(path: string) => Promise<unknown>>(),
-  getBalanceTrend: vi.fn<(path: string) => Promise<unknown>>(),
-}));
-
-vi.mock('../lib/api-client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/api-client')>();
-  return {
-    ...actual,
-    apiRequest: <T,>(path: string, options?: Parameters<typeof actual.apiRequest>[1]) => {
-      if (path.includes('/statistics?')) {
-        return statisticsApi.getLedgerStatistics(path) as Promise<T>;
-      }
-      if (path.startsWith('/accounts/balance-trend?')) {
-        return statisticsApi.getBalanceTrend(path) as Promise<T>;
-      }
-      return actual.apiRequest<T>(path, options);
-    },
-  };
-});
+import { resetHomeCategoryColorsForTests } from '../app/use-home-category-colors';
 
 /**
- * 首頁 dashboard（spec 2i SC-34.1、假設 8、9、13）。
- *
- * 這一檔驗的是「首頁變成摘要」這件事：統計卡、最近 5 筆、兩個入口連結，以及
- * **不該出現的東西**——篩選列與分頁都搬到 `/transactions` 了。面板本身的行為
- * 由 `features/transactions/TransactionWorkbench.test.tsx` 負責。
- *
- * 訪客狀態刻意一併釘住：2i 只改登入後的版面，未登入的首頁一個字都不該變
- * （假設 13）。
- *
- * 策略：從真實的 `App` 出發，只把 `fetch` 換成 mock。右側欄的內容是 portal 進
- * 外殼的，第一次 render 可能晚一拍，所以一律用 `findBy*`。
+ * 首頁（phase 2k W260～W270、SC-H2～SC-H18）。從真實 App 與 QueryClient 出發，
+ * 只替換 fetch；待處理卡、記帳表單、各 query 與右側欄都使用正式實作。
  */
 describe('Home dashboard', () => {
   const fetchMock = vi.fn();
 
   const ledger = {
     id: 'ledger-1',
-    name: '我的帳本',
+    name: '日常',
     currency: 'TWD',
     kind: 'PERSONAL',
     tracksBalance: true,
     archivedAt: null,
     role: 'OWNER',
   };
-  const otherLedger = { ...ledger, id: 'ledger-2', name: '共享帳本', kind: 'SHARED' };
-  const expenseCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
-  const account = { id: 'acc-1', name: '現金', initialBalance: 0, balance: 88000 };
-  let incomingLinkInvites: unknown[] = [];
-  let incomingProposals: unknown[] = [];
-  let availableLedgers = [ledger];
-  let markedTransactions: Record<string, unknown>[] = [];
+  const otherLedger = { ...ledger, id: 'ledger-2', name: '家用', kind: 'SHARED' };
+  const foodCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
+  const newCategory = { id: 'cat-new', name: '新增類', type: 'EXPENSE', icon: null };
+  const account = {
+    id: 'acc-1',
+    name: '現金',
+    initialBalance: 0,
+    balance: 88000,
+    isTemporary: false,
+    hasTransactions: true,
+  };
+  let availableLedgers: Array<typeof ledger> = [ledger];
+  let markedTransactions: Array<Record<string, unknown>> = [];
   let markedTotal = 0;
+  let emptyMarksAfterCreate = false;
   let statisticsFailure = false;
   let balanceTrendFailure = false;
+  let accountsFailure = false;
+  let accountsPending = false;
+  let accountsEmpty = false;
+  let afterCreate = false;
+  let createdTransaction: Record<string, unknown> | null = null;
+  let accountBalance = account.balance;
+  let counterpartBalance = 10000;
+  let holdRefetches: Promise<void> | null = null;
+  let releaseRefetches: (() => void) | null = null;
+  let delayedRecentLedgerId: string | null = null;
+  let delayedRecentResponse: Promise<Response> | null = null;
+  let recentTransactionOverride: Array<Record<string, unknown>> | null = null;
+  const createdRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const accountWriteRequests: string[] = [];
 
-  function ledgerStatistics(ledgerId: string, query: GetLedgerStatisticsQuery): LedgerStatistics {
+  function makeTransaction(
+    ledgerId: string,
+    index: number,
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    const isHome = ledgerId === otherLedger.id;
+    return {
+      id: `${isHome ? 'home' : 'daily'}-txn-${index}`,
+      type: 'EXPENSE',
+      amount: (100 + index) * 100,
+      date: '2026-08-12T04:00:00.000Z',
+      note: `備註 ${index}`,
+      title: `交易 ${index}`,
+      category: isHome ? { ...foodCategory, id: 'cat-home', name: '家用分類' } : foodCategory,
+      account: { id: account.id, name: account.name },
+      toAccount: null,
+      creator: { id: 'u1', name: 'Alice' },
+      debt: null,
+      split: null,
+      ledgerSplit: null,
+      createdAt: '2026-08-12T04:00:00.000Z',
+      marked: false,
+      accountPending: false,
+      ...overrides,
+    };
+  }
+
+  const dailyTransactions = Array.from({ length: 7 }, (_, index) =>
+    makeTransaction(ledger.id, index + 1),
+  );
+  const homeTransactions = Array.from({ length: 3 }, (_, index) =>
+    makeTransaction(otherLedger.id, index + 1),
+  );
+
+  function response(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  function endpointOf(input: unknown) {
+    const url = new URL(String(input), 'http://localhost');
+    return {
+      url,
+      path: url.pathname.replace(/^\/api/, ''),
+    };
+  }
+
+  function countRequest(pathSuffix: string, params: Record<string, string> = {}) {
+    return fetchMock.mock.calls.filter(([input]) => {
+      const { url, path } = endpointOf(input);
+      return (
+        path.endsWith(pathSuffix) &&
+        Object.entries(params).every(([key, value]) => url.searchParams.get(key) === value)
+      );
+    }).length;
+  }
+
+  function homeRequestSnapshot(ledgerId = ledger.id) {
+    return {
+      accounts: countRequest('/accounts'),
+      balanceTrend: countRequest('/accounts/balance-trend'),
+      counterparties: countRequest('/counterparties', { nonZero: 'true', limit: '5' }),
+      mergePrompts: countRequest('/counterparties', { askMerge: 'true' }),
+      ledgerGroups: countRequest('/ledger-groups', { unpointed: 'true' }),
+      marked: countRequest('/transactions/marked'),
+      recent: countRequest(`/ledgers/${ledgerId}/transactions`, { page: '1', limit: '5' }),
+      statistics: countRequest(`/ledgers/${ledgerId}/statistics`),
+    };
+  }
+
+  function statisticsFor(ledgerId: string) {
     const shared = ledgerId === otherLedger.id;
+    const multiplier = afterCreate && !shared ? 1 : 0;
     return {
       ledgerId,
-      from: query.from,
-      to: query.to,
+      from: '2026-10-01',
+      to: '2026-10-31',
       ledger: shared
         ? { expense: 120000, income: 20000, net: -100000 }
-        : { expense: 70300, income: 5000000, net: 4929700 },
+        : {
+            expense: 70300 + multiplier * 10000,
+            income: 5000000,
+            net: 4929700 + multiplier * 10000,
+          },
       mine: shared
         ? { expense: 45000, income: 20000, net: -25000 }
-        : { expense: 70300, income: 5000000, net: 4929700 },
-      expenseGroups: [],
+        : {
+            expense: 70300 + multiplier * 10000,
+            income: 5000000,
+            net: 4929700 + multiplier * 10000,
+          },
+      expenseGroups: [
+        {
+          kind: 'CATEGORY',
+          category: shared
+            ? { id: 'cat-home', name: '家用分類', icon: null }
+            : { id: foodCategory.id, name: foodCategory.name, icon: null },
+          amount: shared ? 120000 : 70300 + multiplier * 10000,
+          percentageBps: 10000,
+        },
+      ],
       incomeGroups: [],
       people: shared ? [] : null,
     };
   }
 
-  /** 七筆交易：後端若多給了，卡片仍然只顯示 5 筆。 */
-  const transactions = Array.from({ length: 7 }, (_, index) => ({
-    id: `txn-${index + 1}`,
-    type: 'EXPENSE',
-    amount: (100 + index) * 100,
-    date: '2026-08-12T04:00:00.000Z',
-    note: `第 ${index + 1} 筆`,
-    category: expenseCategory,
-    account: { id: account.id, name: account.name },
-    toAccount: null,
-    creator: { id: 'u1', name: 'Alice' },
-    debt: null,
-    createdAt: '2026-08-12T04:00:00.000Z',
-    marked: false,
-  }));
+  function balanceTrend() {
+    return {
+      months: Array.from({ length: 12 }, (_, index) => ({
+        month: `2025-${String(index + 1).padStart(2, '0')}`,
+        total: 1000000 + index * 10000 + (afterCreate ? 500000 : 0),
+      })),
+    };
+  }
+
+  function transactionPage(ledgerId: string) {
+    const items =
+      recentTransactionOverride ??
+      (ledgerId === otherLedger.id ? homeTransactions : dailyTransactions);
+    return {
+      items: createdTransaction && ledgerId === ledger.id ? [createdTransaction, ...items] : items,
+      page: 1,
+      limit: 5,
+      total: items.length + (createdTransaction && ledgerId === ledger.id ? 1 : 0),
+    };
+  }
+
+  function isRefreshEndpoint(path: string, url: URL) {
+    return (
+      path === '/accounts' ||
+      path === '/accounts/balance-trend' ||
+      path.endsWith('/statistics') ||
+      (path === '/counterparties' &&
+        (url.searchParams.has('nonZero') || url.searchParams.has('askMerge'))) ||
+      path === '/ledger-groups' ||
+      path === '/transactions/marked' ||
+      /^\/ledgers\/[^/]+\/transactions$/.test(path)
+    );
+  }
 
   beforeEach(() => {
     localStorage.clear();
     window.history.pushState({}, '', '/');
+    resetHomeCategoryColorsForTests();
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
-    incomingLinkInvites = [];
-    incomingProposals = [];
-    transactions.forEach((transaction) => {
-      transaction.marked = false;
-    });
-    ledger.role = 'OWNER';
     availableLedgers = [ledger];
     markedTransactions = [];
     markedTotal = 0;
+    emptyMarksAfterCreate = false;
     statisticsFailure = false;
     balanceTrendFailure = false;
-    statisticsApi.getLedgerStatistics.mockReset();
-    statisticsApi.getBalanceTrend.mockReset();
-    statisticsApi.getLedgerStatistics.mockImplementation((path) => {
-      if (statisticsFailure) return Promise.reject(new Error('statistics failed'));
-      const url = new URL(path, 'http://localhost');
-      const ledgerId = url.pathname.split('/')[2] ?? ledger.id;
-      return Promise.resolve(
-        ledgerStatistics(ledgerId, {
-          from: url.searchParams.get('from') ?? '',
-          to: url.searchParams.get('to') ?? '',
-          perspective: (url.searchParams.get('perspective') ?? undefined) as
-            GetLedgerStatisticsQuery['perspective'] | undefined,
-        }),
-      );
-    });
-    statisticsApi.getBalanceTrend.mockImplementation(() => {
-      if (balanceTrendFailure) return Promise.reject(new Error('balance trend failed'));
-      return Promise.resolve({
-        months: Array.from({ length: 12 }, (_, index) => ({
-          month: `2025-${String(index + 1).padStart(2, '0')}`,
-          total: 1000000 + index * 10000,
-        })),
-      });
+    accountsFailure = false;
+    accountsPending = false;
+    accountsEmpty = false;
+    afterCreate = false;
+    createdTransaction = null;
+    accountBalance = account.balance;
+    counterpartBalance = 10000;
+    holdRefetches = null;
+    releaseRefetches = null;
+    delayedRecentLedgerId = null;
+    delayedRecentResponse = null;
+    recentTransactionOverride = null;
+    createdRequests.length = 0;
+    accountWriteRequests.length = 0;
+    dailyTransactions.forEach((transaction, index) => {
+      Object.assign(transaction, makeTransaction(ledger.id, index + 1));
     });
 
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      const json = (body: unknown) =>
-        Promise.resolve(
-          new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-      if (url.endsWith('/mark')) {
-        if (init?.method === 'DELETE') {
-          markedTransactions = markedTransactions.filter((item) => item.id !== 'txn-marked');
-          markedTotal = markedTransactions.length;
-        }
-        return Promise.resolve(new Response(null, { status: 204 }));
+    fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
+      const { url, path } = endpointOf(input);
+      const method = init?.method ?? 'GET';
+      if (holdRefetches && method === 'GET' && isRefreshEndpoint(path, url)) {
+        await holdRefetches;
       }
-      if (url.includes('/transactions/marked')) {
-        const parsed = new URL(url, 'http://localhost');
-        const page = Number(parsed.searchParams.get('page') ?? 1);
-        const limit = Number(parsed.searchParams.get('limit') ?? 10);
+      if (
+        method === 'GET' &&
+        delayedRecentLedgerId !== null &&
+        path === `/ledgers/${delayedRecentLedgerId}/transactions` &&
+        delayedRecentResponse !== null
+      ) {
+        return delayedRecentResponse;
+      }
+
+      if (method === 'POST' && /^\/ledgers\/[^/]+\/transactions$/.test(path)) {
+        const body =
+          typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
+        const ledgerId = path.split('/')[2] ?? ledger.id;
+        createdRequests.push({ path, body });
+        afterCreate = true;
+        createdTransaction = makeTransaction(ledgerId, 99, {
+          id: 'created-1',
+          title: '剛新增',
+          note: '剛新增',
+          category: newCategory,
+          amount: body.amount,
+          createdAt: '2026-10-24T00:00:00.000Z',
+        });
+        if (emptyMarksAfterCreate) {
+          markedTransactions = [];
+          markedTotal = 0;
+        } else {
+          markedTransactions = [
+            { ...createdTransaction, marked: true, ledger: { id: ledgerId, name: ledger.name } },
+          ];
+          markedTotal = 1;
+        }
+        accountBalance = 99000;
+        counterpartBalance = 20000;
+        return response(createdTransaction, 201);
+      }
+
+      if (path.endsWith('/mark') && (method === 'PUT' || method === 'DELETE')) {
+        if (method === 'DELETE') {
+          markedTransactions = [];
+          markedTotal = 0;
+        }
+        return new Response(null, { status: 204 });
+      }
+
+      if (path.endsWith('/account') && method === 'PUT') {
+        accountWriteRequests.push(path);
+        return response({ transactionId: path.split('/').at(-2), account });
+      }
+
+      if (path.endsWith('/statistics')) {
+        if (statisticsFailure) {
+          return response(
+            { statusCode: 400, errorCode: 'TEST', message: 'statistics failed' },
+            400,
+          );
+        }
+        const ledgerId = path.split('/')[2] ?? ledger.id;
+        return response(statisticsFor(ledgerId));
+      }
+      if (path === '/accounts/balance-trend') {
+        if (balanceTrendFailure) {
+          return response(
+            { statusCode: 400, errorCode: 'TEST', message: 'balance trend failed' },
+            400,
+          );
+        }
+        return response(balanceTrend());
+      }
+      if (path === '/accounts') {
+        if (accountsFailure) {
+          return response({ statusCode: 400, errorCode: 'TEST', message: 'accounts failed' }, 400);
+        }
+        if (accountsPending) return new Promise<Response>(() => {});
+        if (accountsEmpty) return response([]);
+        return response([{ ...account, balance: accountBalance }]);
+      }
+      if (path === '/counterparties') {
+        if (url.searchParams.has('askMerge')) {
+          return response({ items: [], page: 1, limit: 20, total: 0 });
+        }
+        return response({
+          items: [
+            {
+              id: 'counterparty-1',
+              displayName: '小明',
+              balance: counterpartBalance,
+              totalBalance: counterpartBalance,
+            },
+          ],
+          page: 1,
+          limit: 5,
+          total: 1,
+        });
+      }
+      if (path === '/ledger-groups') {
+        return response(
+          afterCreate
+            ? [
+                {
+                  ledger: { id: otherLedger.id, name: otherLedger.name },
+                  people: [{ person: { id: 'person-1', name: '小王' }, amount: 5000 }],
+                },
+              ]
+            : [],
+        );
+      }
+      if (path === '/transactions/marked') {
+        const page = Number(url.searchParams.get('page') ?? 1);
+        const limit = Number(url.searchParams.get('limit') ?? 10);
         const start = (page - 1) * limit;
-        return json({
+        return response({
           items: markedTransactions.slice(start, start + limit),
           page,
           limit,
           total: markedTotal,
         });
       }
-      if (url.includes('/transactions')) {
-        return json({ items: transactions, page: 1, limit: 5, total: 7 });
+      if (path === '/friend-requests') {
+        return response({ items: [], page: 1, limit: 20, total: 0 });
       }
-      if (url.includes('/friend-requests?')) {
-        return json({
-          items: incomingLinkInvites,
-          page: 1,
-          limit: 20,
-          total: incomingLinkInvites.length,
-        });
+      if (path === '/debt-proposals') {
+        return response({ items: [], page: 1, limit: 20, total: 0 });
       }
-      if (url.includes('/debt-proposals?')) {
-        return json({
-          items: incomingProposals,
-          page: 1,
-          limit: 20,
-          total: incomingProposals.length,
-        });
+      if (path === '/users/me/record-defaults') {
+        return response({ ledgerId: ledger.id, accountId: account.id });
       }
-      if (url.includes('/counterparties?')) {
-        return json({ items: [], page: 1, limit: 100, total: 0 });
+      if (path === '/users/me') {
+        return response({ id: 'u1', email: 'alice@example.test', name: 'Alice' });
       }
-      if (url.includes('/categories')) {
-        return json([expenseCategory]);
+      if (path === '/ledgers') {
+        return response(availableLedgers);
       }
-      if (url.includes('/accounts')) {
-        return json([account]);
+      if (/^\/ledgers\/[^/]+\/transactions$/.test(path)) {
+        const ledgerId = path.split('/')[2] ?? ledger.id;
+        return response(transactionPage(ledgerId));
       }
-      return json(availableLedgers);
+      if (/^\/ledgers\/[^/]+\/categories$/.test(path)) {
+        return response([foodCategory, newCategory]);
+      }
+      if (path.endsWith('/people')) {
+        return response([]);
+      }
+      return response({});
     });
   });
 
@@ -206,606 +388,730 @@ describe('Home dashboard', () => {
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
   }
 
-  /**
-   * 最近交易卡自成一個 region，查詢限定在它裡面才不會抓到帳戶餘額那張卡。
-   *
-   * 卡片本身比交易資料先出現（先畫「載入中…」）。只等卡片的話，後面的同步查詢
-   * 可能撞上還在載入的那一瞬間——CPU 忙時大約六次錯一次（2i W6 找到的偶發失敗）。
-   * 所以一併等到「載入中…」消失才交出去。
-   */
-  const recentCard = async () => {
+  async function recentRegion() {
     const region = await screen.findByRole('region', { name: '最近交易' }, WAIT);
     await waitFor(
       () => expect(within(region).queryByText('載入中…')).not.toBeInTheDocument(),
       WAIT,
     );
     return within(region);
-  };
+  }
 
-  // ── 訪客（假設 13：一個字都不變） ─────────────────────────────────────────
+  async function waitForInitialHome() {
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
+    await recentRegion();
+    await waitFor(() => {
+      expect(countRequest('/accounts')).toBe(1);
+      expect(countRequest('/accounts/balance-trend')).toBe(1);
+      expect(countRequest('/counterparties', { nonZero: 'true', limit: '5' })).toBe(1);
+      expect(countRequest('/counterparties', { askMerge: 'true' })).toBe(1);
+      expect(countRequest('/ledger-groups', { unpointed: 'true' })).toBe(1);
+      expect(countRequest('/transactions/marked')).toBe(1);
+      expect(countRequest(`/ledgers/${ledger.id}/transactions`, { page: '1', limit: '5' })).toBe(1);
+      expect(countRequest(`/ledgers/${ledger.id}/statistics`)).toBe(1);
+    }, WAIT);
+  }
 
-  it('keeps the guest home page exactly as it was', async () => {
+  async function switchLedger(user: ReturnType<typeof userEvent.setup>, name: string) {
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    await user.click(within(switcher).getByRole('button'));
+    await user.click(within(switcher).getByRole('option', { name: new RegExp(name) }));
+  }
+
+  async function chooseCategory(
+    user: ReturnType<typeof userEvent.setup>,
+    form: HTMLElement,
+    name: string,
+  ) {
+    await user.click(within(form).getByRole('combobox', { name: '分類' }));
+    await user.click(
+      await within(within(form).getByRole('listbox', { name: '分類' })).findByRole('option', {
+        name,
+      }),
+    );
+  }
+
+  it('keeps the guest home and avoids authenticated data requests', async () => {
     const user = userEvent.setup();
-
     render(<App />);
 
-    // 訪客只看示意數字，未登入不呼叫統計或資產端點。
     expect(screen.getAllByText('$0')).toHaveLength(3);
-    expect(statisticsApi.getLedgerStatistics).not.toHaveBeenCalled();
-    expect(statisticsApi.getBalanceTrend).not.toHaveBeenCalled();
     expect(screen.getByText(/登入後即可開始記帳/)).toBeInTheDocument();
-    // dashboard 的東西一樣都不該出現。
     expect(screen.queryByRole('region', { name: '最近交易' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: '帳戶餘額' })).not.toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(0);
+    expect(countRequest('/accounts/balance-trend')).toBe(0);
+    expect(countRequest('/counterparties')).toBe(0);
+    expect(countRequest('/transactions/marked')).toBe(0);
 
     await user.click(screen.getByRole('button', { name: '註冊' }));
     expect(await screen.findByRole('dialog', { name: '註冊' }, WAIT)).toBeInTheDocument();
   });
 
-  // ── 登入後的 dashboard ───────────────────────────────────────────────────
-
-  it('shows monthly totals returned by the statistics endpoint', async () => {
+  it('uses one statistics response for the three totals and the category section', async () => {
     signIn();
-
     render(<App />);
 
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    await waitFor(() => expect(statisticsApi.getLedgerStatistics).toHaveBeenCalled(), WAIT);
-    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    expect(expense).toHaveTextContent('$703');
+    await waitForInitialHome();
+    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
     expect(screen.getByRole('link', { name: /本月收入/ })).toHaveTextContent('$50,000');
     expect(screen.getByRole('link', { name: /結餘/ })).toHaveTextContent('$49,297');
-    expect(screen.queryByText('即將推出')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /本月支出/ })).not.toHaveTextContent('我 ');
+    expect(screen.getByRole('list', { name: '支出分類' })).toHaveTextContent('餐飲');
+    expect(countRequest(`/ledgers/${ledger.id}/statistics`)).toBe(1);
   });
 
-  it('shows ledger totals and mine totals only for a shared ledger', async () => {
-    const user = userEvent.setup();
-    signIn();
-    availableLedgers = [ledger, otherLedger];
-    render(<App />);
-
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    const switcher = screen.getByRole('group', { name: '作用中帳本' });
-    await user.click(within(switcher).getByRole('button'));
-    await user.click(within(switcher).getByRole('option', { name: /共享帳本/ }));
-
-    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    const income = screen.getByRole('link', { name: /本月收入/ });
-    const net = screen.getByRole('link', { name: /結餘/ });
-    expect(expense).toHaveTextContent('$1,200');
-    expect(expense).toHaveTextContent('我 $450');
-    expect(income).toHaveTextContent('$200');
-    expect(income).toHaveTextContent('我 $200');
-    expect(net).toHaveTextContent('-$1,000');
-    expect(net).toHaveTextContent('我 -$250');
-    expect(screen.queryByText('我 $703')).not.toBeInTheDocument();
-  });
-
-  it('uses the Taiwan calendar month for the statistics request and card link', async () => {
+  it('uses the Taiwan calendar month for the statistics request and stat links', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-31T16:30:00.000Z'));
+    vi.setSystemTime(new Date('2026-03-31T16:30:00.000Z'));
     signIn();
     render(<App />);
 
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    const expense = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    expect(expense).toHaveAttribute('href', '/stats?tab=cat&ledger=ledger-1&month=2026-11');
-    const statisticsRequest = statisticsApi.getLedgerStatistics.mock.calls
-      .map(([path]) => path)
-      .find((path) => path.includes('/ledgers/ledger-1/statistics'));
-    expect(statisticsRequest).toContain('from=2026-11-01');
-    expect(statisticsRequest).toContain('to=2026-11-30');
+    await waitForInitialHome();
+
+    const request = fetchMock.mock.calls.find(([input]) =>
+      endpointOf(input).path.endsWith('/statistics'),
+    );
+    expect(request).toBeDefined();
+    const requestUrl = endpointOf(request?.[0]).url;
+    expect(requestUrl.searchParams.get('from')).toBe('2026-04-01');
+    expect(requestUrl.searchParams.get('to')).toBe('2026-04-30');
+
+    for (const label of [/本月支出/, /本月收入/, /結餘/]) {
+      const link = screen.getByRole('link', { name: label });
+      expect(
+        new URL(link.getAttribute('href')!, 'http://localhost').searchParams.get('month'),
+      ).toBe('2026-04');
+    }
   });
 
-  it('shows a statistics error without zero values while keeping the asset chart available', async () => {
-    signIn();
-    statisticsFailure = true;
-    render(<App />);
-
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('統計暫時無法載入');
-    expect(screen.getByRole('heading', { name: '資產' })).toBeInTheDocument();
-    expect(screen.queryByText('$0')).not.toBeInTheDocument();
-  });
-
-  it('limits an asset error to the chart area', async () => {
-    signIn();
-    balanceTrendFailure = true;
-    render(<App />);
-
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    const chart = await screen.findByRole('region', { name: '資產' }, WAIT);
-    expect(await within(chart).findByText('資產暫時無法載入', {}, WAIT)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
-  });
-
-  it('keeps the asset request stable when switching ledgers and fetches new statistics', async () => {
+  it('shows shared-ledger totals and category names after switching while personal queries stay cached', async () => {
     const user = userEvent.setup();
     signIn();
     availableLedgers = [ledger, otherLedger];
     render(<App />);
 
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    await screen.findByRole('group', { name: /每月資產/ }, WAIT);
-    const assetRequestCount = statisticsApi.getBalanceTrend.mock.calls.length;
-    expect(assetRequestCount).toBe(1);
-
-    const switcher = screen.getByRole('group', { name: '作用中帳本' });
-    await user.click(within(switcher).getByRole('button'));
-    await user.click(within(switcher).getByRole('option', { name: /共享帳本/ }));
+    await waitForInitialHome();
+    const personalCounts = homeRequestSnapshot();
+    await switchLedger(user, '家用');
 
     expect(await screen.findByRole('link', { name: /本月支出.*1,200/ }, WAIT)).toBeInTheDocument();
-    expect(statisticsApi.getLedgerStatistics).toHaveBeenCalledWith(
-      expect.stringContaining('/ledgers/ledger-2/statistics'),
+    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('我 $450');
+    expect(screen.getByRole('heading', { name: '家用 · 本月支出' })).toBeInTheDocument();
+    const recent = await recentRegion();
+    expect(recent.getAllByRole('button', { name: /編輯.*家用分類/ })).toHaveLength(3);
+    expect(countRequest(`/ledgers/${otherLedger.id}/statistics`)).toBe(1);
+    expect(countRequest(`/ledgers/${otherLedger.id}/transactions`, { page: '1', limit: '5' })).toBe(
+      1,
     );
-    expect(statisticsApi.getBalanceTrend).toHaveBeenCalledTimes(assetRequestCount);
+    expect(homeRequestSnapshot()).toEqual(personalCounts);
   });
 
-  it('shows the asset chart, stat cards, then the pending card', async () => {
-    signIn();
-    incomingLinkInvites = [
-      {
-        id: 'invite-1',
-        direction: 'incoming',
-        status: 'PENDING',
-        counterpart: { userId: 'user-2', name: '王小明', email: null },
-        createdAt: '2026-09-25T00:00:00.000Z',
-        respondedAt: null,
-      },
-    ];
-
-    render(<App />);
-
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    const card = await screen.findByRole('region', { name: '待確認' }, WAIT);
-    const chartHeading = await screen.findByRole('heading', { name: '資產' }, WAIT);
-    const firstStat = await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    expect(
-      chartHeading.compareDocumentPosition(firstStat) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).not.toBe(0);
-    expect(firstStat.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-  });
-
-  it('does not place an empty pending card on the home page', async () => {
-    signIn();
-
-    render(<App />);
-
-    await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    await screen.findByRole('link', { name: /本月支出/ }, WAIT);
-    await waitFor(
-      () => expect(screen.queryByRole('region', { name: '待確認' })).not.toBeInTheDocument(),
-      WAIT,
-    );
-  });
-
-  it('shows only the five most recent transactions', async () => {
-    signIn();
-
-    render(<App />);
-
-    const card = await recentCard();
-    expect(card.getAllByRole('listitem')).toHaveLength(5);
-    expect(card.getAllByText('餐飲')).toHaveLength(5);
-    expect(card.queryByText('第 1 筆')).not.toBeInTheDocument();
-    expect(card.queryByText('第 6 筆')).not.toBeInTheDocument();
-
-    // 「最近」是後端的事，所以請求要把 5 帶過去。
-    const listCall = fetchMock.mock.calls
-      .map((call) => String(call[0]))
-      .find((url) => url.includes('/transactions'));
-    expect(listCall).toContain('limit=5');
-  });
-
-  it('shows marked transactions above recent activity with ledger names and lets a viewer unmark', async () => {
+  it('keeps real PendingCard and TransactionWorkbench mounted without refetching personal data on ledger switch', async () => {
     const user = userEvent.setup();
     signIn();
-    ledger.role = 'VIEWER';
-    transactions[1]!.marked = true;
     availableLedgers = [ledger, otherLedger];
-    markedTransactions = [
-      {
-        ...transactions[0],
-        id: 'txn-marked',
-        marked: true,
-        ledger: { id: otherLedger.id, name: otherLedger.name },
-      },
-    ];
-    markedTotal = 1;
-
     render(<App />);
 
-    const markedCard = await screen.findByRole('region', { name: '標註' }, WAIT);
-    const recent = await screen.findByRole('region', { name: '最近交易' }, WAIT);
-    expect(markedCard.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+    await waitForInitialHome();
+    expect(await screen.findByRole('group', { name: '新增一筆交易' }, WAIT)).toBeInTheDocument();
+    const before = homeRequestSnapshot();
+    await switchLedger(user, '家用');
+    await screen.findByRole('link', { name: /本月支出.*1,200/ }, WAIT);
+    await recentRegion();
+    await waitFor(() => {
+      expect(countRequest(`/ledgers/${otherLedger.id}/statistics`)).toBe(1);
+      expect(
+        countRequest(`/ledgers/${otherLedger.id}/transactions`, { page: '1', limit: '5' }),
+      ).toBe(1);
+    }, WAIT);
+
+    expect(homeRequestSnapshot()).toEqual(before);
+    expect(screen.getByRole('group', { name: '新增一筆交易' })).toBeInTheDocument();
+  });
+
+  it('keeps the W260 section order and puts the trend beside recent activity', async () => {
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    const stats = screen.getByLabelText('本月收支');
+    const activity = screen.getByRole('region', { name: '最近與標註' });
+    const trendChart = screen.getByRole('group', { name: /每月資產/ }).closest('section');
+    const myHeading = screen.getByRole('heading', { name: '我的' });
+
+    expect(trendChart).not.toBeNull();
+    expect(stats.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(
+      activity.compareDocumentPosition(trendChart!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    expect(
+      trendChart!.compareDocumentPosition(myHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it('does not leave an empty pending card on the home page', async () => {
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    expect(screen.queryByRole('heading', { name: '待確認' })).not.toBeInTheDocument();
+  });
+
+  it('shows at most five compact rows in recent activity', async () => {
+    signIn();
+    render(<App />);
+
+    const recent = await recentRegion();
+    const rows = recent.getAllByRole('listitem');
+
+    expect(rows).toHaveLength(5);
+    expect(within(rows[0]!).getByText('交易 1')).toBeInTheDocument();
+    expect(within(rows[0]!).getByText('餐飲')).toBeInTheDocument();
+    expect(rows[0]).not.toHaveTextContent('備註 1');
+    expect(rows[0]).not.toHaveTextContent('現金');
+    expect(recent.getByText('交易 5')).toBeInTheDocument();
+    expect(recent.queryByText('交易 6')).not.toBeInTheDocument();
+  });
+
+  it('keeps home links and title actions while leaving filters and paging to the transactions page', async () => {
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+
+    await recentRegion();
+    expect(screen.getByRole('link', { name: '查看全部' })).toHaveAttribute('href', '/transactions');
+    const accountSection = screen.getByRole('heading', { name: '帳戶' }).closest('section');
+    expect(accountSection).not.toBeNull();
+    expect(within(accountSection!).getByRole('link', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+
+    const heading = screen.getByRole('heading', { name: '總覽' });
+    const header = heading.closest('header');
+    const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    expect(addButton.closest('header')).toBe(header);
+    expect(switcher.closest('header')).toBe(header);
+    expect(heading.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
       0,
     );
-    expect(within(markedCard).getByText('共享帳本')).toBeInTheDocument();
-    expect(within(recent).getAllByRole('listitem')[1]!.className).toMatch(/marked/);
-    const recentRow = within(recent).getAllByRole('listitem')[0]!;
-    await user.click(within(recentRow).getByRole('button', { name: /更多交易動作/ }));
-    const recentMenu = within(recentRow).getByRole('menu', { name: '交易動作' });
-    await user.click(within(recentMenu).getByRole('menuitem', { name: '標註' }));
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/ledgers/ledger-1/transactions/txn-1/mark'),
-        expect.objectContaining({ method: 'PUT' }),
-      ),
-    );
-
-    const listRow = within(markedCard).getByRole('listitem');
-    expect(listRow.className).toMatch(/marked/);
-    await user.click(within(listRow).getByRole('button', { name: /更多交易動作/ }));
-    const menu = within(listRow).getByRole('menu', { name: '交易動作' });
-    expect(within(menu).getByRole('menuitem', { name: '取消標註' })).toBeInTheDocument();
-    await user.click(within(menu).getByRole('menuitem', { name: '取消標註' }));
-
-    await waitFor(() =>
-      expect(screen.queryByRole('region', { name: '標註' })).not.toBeInTheDocument(),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/ledgers/ledger-2/transactions/txn-marked/mark'),
-      expect.objectContaining({ method: 'DELETE' }),
-    );
+    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '分頁' })).not.toBeInTheDocument();
   });
 
-  it('hides the marked card when empty and expands more than ten entries', async () => {
+  it('shares the account query when the workbench form unmounts and mounts again', async () => {
     const user = userEvent.setup();
     signIn();
-    const firstRender = render(<App />);
-    await recentCard();
-    await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some((call) => String(call[0]).includes('/transactions/marked')),
-      ).toBe(true),
-    );
-    expect(screen.queryByRole('region', { name: '標註' })).not.toBeInTheDocument();
-
-    markedTransactions = Array.from({ length: 12 }, (_, index) => {
-      const transaction = transactions[index % transactions.length]!;
-      return {
-        ...transaction,
-        id: `txn-marked-${index + 1}`,
-        marked: true,
-        ledger: { id: ledger.id, name: ledger.name },
-      };
-    });
-    markedTotal = 12;
-    const markedQuery = fetchMock.mock.calls.find((call) =>
-      String(call[0]).includes('/transactions/marked'),
-    );
-    expect(markedQuery).toBeDefined();
-    // 重新掛載後以最新的標註清單呈現首頁卡片。
-    firstRender.unmount();
     render(<App />);
-    const card = await screen.findByRole('region', { name: '標註' }, WAIT);
-    expect(within(card).getAllByRole('listitem')).toHaveLength(10);
-    await user.click(within(card).getByRole('button', { name: '再 2 筆' }));
-    await waitFor(() => expect(within(card).getAllByRole('listitem')).toHaveLength(12), WAIT);
-    expect(within(card).queryByRole('button', { name: '再 2 筆' })).not.toBeInTheDocument();
+
+    await waitForInitialHome();
+    expect(await screen.findByRole('group', { name: '新增一筆交易' }, WAIT)).toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(1);
+
+    const recent = await recentRegion();
+    await user.click(recent.getAllByRole('button', { name: /^編輯/ })[0]!);
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '新增交易' }));
+    expect(await screen.findByRole('group', { name: '新增一筆交易' }, WAIT)).toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(1);
   });
 
-  it('switches to the marked transaction ledger before opening its editor', async () => {
+  it('uses the LedgerView account query loading and error states', async () => {
+    signIn();
+    accountsFailure = true;
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    expect(await screen.findByText('帳戶暫時無法載入', {}, WAIT)).toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(1);
+    expect(screen.queryByRole('list', { name: '帳戶清單' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the account loading state inside the asset card', async () => {
+    signIn();
+    accountsPending = true;
+    render(<App />);
+
+    const accountHeading = await screen.findByRole('heading', { name: '帳戶' }, WAIT);
+    const assets = accountHeading.closest('section');
+    expect(assets).not.toBeNull();
+    expect(within(accountHeading.parentElement!).getByText('載入中…')).toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(1);
+  });
+
+  it('keeps the account page link available when the account list is empty', async () => {
+    signIn();
+    accountsEmpty = true;
+    render(<App />);
+
+    await waitForInitialHome();
+    const assets = screen.getByRole('heading', { name: '帳戶' }).closest('section');
+    expect(assets).not.toBeNull();
+    expect(within(assets!).getByText('還沒有帳戶。')).toBeInTheDocument();
+    expect(within(assets!).getByRole('link', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+  });
+
+  it('does not show the old ledger recent rows while the new ledger request is pending', async () => {
     const user = userEvent.setup();
     signIn();
     availableLedgers = [ledger, otherLedger];
-    markedTransactions = [
-      {
-        ...transactions[0],
-        id: 'txn-other-ledger',
-        amount: 9900,
-        marked: true,
-        ledger: { id: otherLedger.id, name: otherLedger.name },
-      },
-    ];
-    markedTotal = 1;
-
+    let resolveRecent!: (value: Response) => void;
+    const delayedRecent = new Promise<Response>((resolve) => {
+      resolveRecent = resolve;
+    });
     render(<App />);
 
-    const card = await screen.findByRole('region', { name: '標註' }, WAIT);
-    await user.click(within(card).getByRole('button', { name: /^編輯/ }));
-    const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(panel).getByLabelText('金額')).toHaveValue(99);
-    await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some((call) =>
-          String(call[0]).includes('/ledgers/ledger-2/transactions'),
-        ),
-      ).toBe(true),
+    const recent = await recentRegion();
+    expect(recent.getAllByRole('button', { name: /編輯.*餐飲/ })).toHaveLength(5);
+    delayedRecentLedgerId = otherLedger.id;
+    delayedRecentResponse = delayedRecent;
+    await switchLedger(user, '家用');
+
+    await waitFor(
+      () => expect(countRequest(`/ledgers/${otherLedger.id}/transactions`)).toBe(1),
+      WAIT,
     );
+    expect(
+      within(screen.getByRole('region', { name: '最近交易' })).getByText('載入中…'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: '最近交易' })).queryByRole('button', {
+        name: /編輯.*餐飲/,
+      }),
+    ).not.toBeInTheDocument();
+
+    resolveRecent(response(transactionPage(otherLedger.id)));
+    delayedRecentLedgerId = null;
+    delayedRecentResponse = null;
+    expect(await screen.findAllByRole('button', { name: /編輯.*家用分類/ }, WAIT)).toHaveLength(3);
   });
 
-  it('links on to the full transaction list and to the accounts page', async () => {
-    signIn();
-
-    render(<App />);
-
-    expect((await recentCard()).getByRole('link', { name: '查看全部' })).toHaveAttribute(
-      'href',
-      '/transactions',
-    );
-    const balances = within(screen.getByRole('region', { name: '帳戶餘額' }));
-    expect(balances.getByRole('link', { name: '管理' })).toHaveAttribute('href', '/accounts');
-  });
-
-  it('opens the edit panel when clicked and collapses the dashboard side panel on close', async () => {
-    // 摘要卡上沒有鉛筆與垃圾桶（假設 8）：整列就是「編輯這一筆」，刪除要到交易頁。
+  it('clears a right-panel target across A to B to A switches', async () => {
     const user = userEvent.setup();
     signIn();
-
+    availableLedgers = [ledger, otherLedger];
     render(<App />);
 
-    const card = await recentCard();
-    expect(card.getAllByRole('button', { name: /^編輯/ })).toHaveLength(5);
-    expect(card.queryByRole('button', { name: /^刪除/ })).not.toBeInTheDocument();
+    const recent = await recentRegion();
+    await user.click(recent.getAllByRole('button', { name: /^編輯/ })[0]!);
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
 
-    await user.click(card.getAllByRole('button', { name: /^編輯/ })[0]!);
+    await switchLedger(user, '家用');
+    expect(await screen.findByRole('group', { name: '新增一筆交易' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    await switchLedger(user, '日常');
+    expect(await screen.findByRole('group', { name: '新增一筆交易' }, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+  });
 
+  it('opens an editor from a recent row and only collapses it when closed', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    const recent = await recentRegion();
+    await user.click(recent.getAllByRole('button', { name: /^編輯/ })[0]!);
     const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(panel).getByLabelText('金額')).toHaveValue(100);
+    expect(within(panel).getByLabelText('金額')).toHaveValue(101);
+
     await user.click(within(panel).getByRole('button', { name: '關閉' }));
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
-    // 收起時內容留著讓滑出動畫顯示同一個面板（W57）：它在 inert 裡，而且沒有換成新增表單。
     expect(screen.getByRole('dialog', { name: '編輯交易' }).closest('[inert]')).not.toBeNull();
     expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
   });
 
-  it('opens the edit panel from the keyboard as well', async () => {
-    // 整列是一顆真正的 `<button>`，所以 Enter 就能開——不必自己補 tabIndex 與
-    // keydown，也不會漏掉 Space。
+  it('opens a recent row editor with the keyboard', async () => {
     const user = userEvent.setup();
     signIn();
-
     render(<App />);
 
-    const card = await recentCard();
-    const row = card.getAllByRole('button', { name: /^編輯.*餐飲/ })[0]!;
+    const recent = await recentRegion();
+    const row = recent.getAllByRole('button', { name: /^編輯.*餐飲/ })[0]!;
     row.focus();
     await user.keyboard('{Enter}');
 
     expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
   });
 
-  it('edits linked debt transactions from recent activity while leaving other peoples debt rows read-only', async () => {
-    /*
-     * 自己的往來紀錄可從首頁直接編輯；其他人的借還交易沒有 entryId，維持純展示。
-     */
+  it('edits linked debt rows from recent activity and leaves another persons debt read-only', async () => {
     const user = userEvent.setup();
     signIn();
-    const lend = {
-      ...transactions[0],
-      id: 'txn-lend',
-      type: 'LEND',
-      amount: 100000,
-      category: null,
-      note: '借小明',
-      debt: {
-        entryId: 'entry-1',
-        counterpartyId: 'counterparty-1',
-        counterpartyName: '小明',
-        paired: false,
-        note: null,
-      },
-    };
-    const otherLend = {
-      ...lend,
-      id: 'txn-other-lend',
-      amount: 50000,
-      note: '他人借出',
-      debt: null,
-    };
-    const expense = { ...transactions[1], id: 'txn-expense', note: '午餐' };
-    const paidExpense = {
-      ...transactions[2],
-      id: 'txn-paid',
-      note: '代付晚餐',
-      debt: {
-        entryId: 'entry-paid',
-        counterpartyId: 'counterparty-1',
-        counterpartyName: '小明',
-        paired: false,
-        note: null,
-      },
-    };
-    fetchMock.mockImplementation((url: string) => {
-      const json = (body: unknown) =>
-        Promise.resolve(
-          new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-      if (url.includes('/transactions')) {
-        return json({
-          items: [lend, otherLend, expense, paidExpense],
-          page: 1,
-          limit: 5,
-          total: 4,
-        });
-      }
-      if (url.includes('/categories')) {
-        return json([expenseCategory]);
-      }
-      if (url.includes('/accounts')) {
-        return json([account]);
-      }
-      return json([ledger]);
-    });
-
+    recentTransactionOverride = [
+      makeTransaction(ledger.id, 1, {
+        id: 'linked-debt',
+        type: 'LEND',
+        title: '借小明',
+        category: null,
+        debt: {
+          entryId: 'entry-1',
+          kind: 'LEND',
+          counterpartyId: 'counterparty-1',
+          counterpartyName: '小明',
+          paired: false,
+          note: null,
+        },
+      }),
+      makeTransaction(ledger.id, 2, {
+        id: 'other-debt',
+        type: 'LEND',
+        title: '他人借出',
+        category: null,
+        debt: null,
+      }),
+    ];
     render(<App />);
 
-    const card = await recentCard();
-    // 借出的錢從帳戶出去，記負號；名稱是「借出」，不是沒有分類就寫的「轉帳」。
-    expect(card.getByText('-$1,000')).toBeInTheDocument();
-    expect(card.getByText('借出 · 小明')).toBeInTheDocument();
-    expect(card.getByText('借出', { exact: true })).toBeInTheDocument();
-    expect(card.queryByText('轉帳')).not.toBeInTheDocument();
-    expect(card.getByRole('button', { name: /^編輯.*借出/ })).toBeInTheDocument();
-
-    await user.click(card.getByText('借出 · 小明'));
-    const debtEditor = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(debtEditor).getByText('借出 · 小明')).toBeInTheDocument();
-    expect(within(debtEditor).getByLabelText('金額')).toHaveValue(1000);
-    await user.click(within(debtEditor).getByRole('button', { name: '關閉' }));
+    const recent = await recentRegion();
+    await user.click(recent.getByRole('button', { name: /^編輯.*借出/ }));
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => {
       expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
     }, WAIT);
 
-    expect(card.queryByText('他人借出')).not.toBeInTheDocument();
-    await user.click(card.getByText('借出', { exact: true }));
-    // 別人的借還列不可點：右側欄維持收起（收起的面板裡仍留著上一筆，見 W57）。
+    await user.click(recent.getByText('借出', { exact: true }));
     expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
-
-    expect(card.getAllByText('餐飲')).toHaveLength(2);
-    await user.click(card.getAllByRole('button', { name: /編輯.*餐飲/ })[1]!);
-    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '關閉' }));
-
-    await user.click(card.getAllByRole('button', { name: /編輯.*餐飲/ })[0]!);
-    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
   });
 
-  it('uses the same compact transaction rows as the transactions page', async () => {
+  it('switches to a marked transaction ledger before editing and keeps the target after a rerender', async () => {
+    const user = userEvent.setup();
     signIn();
-    fetchMock.mockImplementation((url: string) => {
-      const json = (body: unknown) =>
-        Promise.resolve(
-          new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-      if (url.includes('/transactions')) {
-        return json({
-          items: [
-            transactions[0],
-            { ...transactions[1], type: 'INCOME', amount: 500000, note: '薪水' },
-            {
-              ...transactions[2],
-              type: 'TRANSFER',
-              amount: 50000,
-              category: null,
-              note: '提款',
-              toAccount: { id: 'acc-2', name: '國泰世華' },
-            },
-            {
-              ...transactions[3],
-              id: 'txn-split-other-payer',
-              title: '晚餐',
-              note: '朋友聚餐',
-              account: null,
-              split: {
-                id: 'split-other-payer',
-                type: 'EXPENSE',
-                total: 300000,
-                myShare: 75000,
-                payer: { counterpartyId: 'cp-ming', name: '小明' },
-                counterparts: [],
-              },
-            },
-            {
-              ...transactions[4],
-              id: 'txn-split-me',
-              title: '露營',
-              split: {
-                id: 'split-me',
-                type: 'EXPENSE',
-                total: 300000,
-                myShare: 75000,
-                payer: null,
-                counterparts: [],
-              },
-            },
-          ],
-          page: 1,
-          limit: 5,
-          total: 5,
-        });
-      }
-      if (url.includes('/accounts')) {
-        return json([account]);
-      }
-      if (url.includes('/categories')) {
-        return json([expenseCategory]);
-      }
-      return json([ledger]);
+    availableLedgers = [ledger, otherLedger];
+    markedTransactions = [
+      {
+        ...makeTransaction(otherLedger.id, 8, { id: 'marked-home', amount: 9900, marked: true }),
+        ledger: { id: otherLedger.id, name: otherLedger.name },
+      },
+    ];
+    markedTotal = 1;
+    render(<App />);
+
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    const marked = screen.getByRole('region', { name: '標註' });
+    expect(within(marked).getByText('家用')).toBeInTheDocument();
+    await user.click(within(marked).getByRole('button', { name: /^編輯/ }));
+    const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue(99);
+    expect(localStorage.getItem('ledger.activeLedgerId')).toBe(otherLedger.id);
+
+    await user.click(screen.getByRole('tab', { name: '最近' }));
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    expect(screen.getByRole('dialog', { name: '編輯交易' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('dialog', { name: '編輯交易' })).getByLabelText('金額'),
+    ).toHaveValue(99);
+  });
+
+  it('keeps a cross-ledger fill-account intent and submits against the marked ledger', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    markedTransactions = [
+      {
+        ...makeTransaction(otherLedger.id, 9, {
+          id: 'marked-pending-account',
+          amount: 12000,
+          marked: true,
+          account: null,
+          accountPending: true,
+        }),
+        ledger: { id: otherLedger.id, name: otherLedger.name },
+      },
+    ];
+    markedTotal = 1;
+    render(<App />);
+
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    await user.click(
+      within(screen.getByRole('region', { name: '標註' })).getByRole('button', {
+        name: '臨時帳戶',
+      }),
+    );
+    const fillDialog = await screen.findByRole('dialog', { name: '補帳戶' }, WAIT);
+    expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
+    expect(localStorage.getItem('ledger.activeLedgerId')).toBe(otherLedger.id);
+
+    await user.click(screen.getByRole('tab', { name: '最近' }));
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    expect(screen.getByRole('dialog', { name: '補帳戶' })).toBeInTheDocument();
+    await user.selectOptions(within(fillDialog).getByLabelText('帳戶'), account.id);
+    await user.click(within(fillDialog).getByRole('button', { name: '儲存' }));
+
+    await waitFor(() => expect(accountWriteRequests).toHaveLength(1), WAIT);
+    expect(accountWriteRequests[0]).toContain(
+      `/ledgers/${otherLedger.id}/transactions/marked-pending-account/account`,
+    );
+  });
+
+  it('keeps the add form contents through a same-ledger background refetch', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    const accountRequests = countRequest('/accounts');
+    const form = screen.getByRole('group', { name: '新增一筆交易' });
+    const amount = within(form).getByLabelText('金額');
+    const note = within(form).getByLabelText('備註');
+    await user.type(amount, '321');
+    await user.type(note, '保留內容');
+    const recent = await recentRegion();
+    await user.click(
+      within(recent.getAllByRole('listitem')[0] as HTMLElement).getByRole('button', {
+        name: /更多交易動作/,
+      }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: '標註' }));
+
+    await waitFor(
+      () =>
+        expect(countRequest(`/ledgers/${ledger.id}/transactions`, { page: '1', limit: '5' })).toBe(
+          2,
+        ),
+      WAIT,
+    );
+    expect(
+      within(screen.getByRole('group', { name: '新增一筆交易' })).getByLabelText('金額'),
+    ).toHaveValue(321);
+    expect(
+      within(screen.getByRole('group', { name: '新增一筆交易' })).getByLabelText('備註'),
+    ).toHaveValue('保留內容');
+    expect(countRequest('/accounts')).toBe(accountRequests + 1);
+  });
+
+  it('refetches each affected home endpoint once after a transaction write and keeps old values until responses arrive', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    const before = homeRequestSnapshot();
+    const totalBefore = fetchMock.mock.calls.length;
+    holdRefetches = new Promise<void>((resolve) => {
+      releaseRefetches = resolve;
     });
 
-    render(<App />);
-
-    const card = await recentCard();
-    const rows = card.getAllByRole('listitem');
-    // 整頁的 `<li>` 只有這五列以內的交易，e2e 才數得準。
-    expect(screen.getAllByRole('listitem')).toHaveLength(rows.length);
-
-    // 首頁與交易頁共用名稱、分帳膠囊與金額列，備註和帳戶不出現在列上。
-    expect(within(rows[0] as HTMLElement).getByText('-$100')).toBeInTheDocument();
-    expect(within(rows[0] as HTMLElement).getByText('餐飲')).toBeInTheDocument();
-    expect(within(rows[0] as HTMLElement).queryByText('第 1 筆')).not.toBeInTheDocument();
-    expect(rows[0]).not.toHaveTextContent('現金');
-
-    expect(within(rows[1] as HTMLElement).getByText('+$5,000')).toBeInTheDocument();
-
-    const transferRow = rows[2] as HTMLElement;
-    expect(within(transferRow).getByText('$500')).toBeInTheDocument();
-    expect(within(transferRow).getByText('轉帳')).toBeInTheDocument();
-    expect(transferRow).not.toHaveTextContent('現金');
-    expect(transferRow).not.toHaveTextContent('國泰世華');
-
-    // 分帳列只加膠囊與「›」展開入口，不在名稱旁放付款人或備註。
-    const otherPayerRow = rows[3] as HTMLElement;
-    expect(within(otherPayerRow).getByText('晚餐')).toBeInTheDocument();
-    expect(within(otherPayerRow).getByText('分帳')).toBeInTheDocument();
-    expect(within(otherPayerRow).getByRole('button', { name: '展開分帳明細' })).toBeInTheDocument();
-    expect(within(otherPayerRow).getByText('-$750')).toBeInTheDocument();
-    expect(otherPayerRow).not.toHaveTextContent('現金');
-    expect(otherPayerRow).not.toHaveTextContent('朋友聚餐');
-
-    const mePayerRow = rows[4] as HTMLElement;
-    expect(within(mePayerRow).getByText('露營')).toBeInTheDocument();
-    expect(within(mePayerRow).getByText('-$3,000')).toBeInTheDocument();
-  });
-
-  it('puts the ledger switcher and the add button on the title row of the content', async () => {
-    // 開發者 2026-10-07：最上排橫條清空留給 AI 功能，切換器與「＋ 新增交易」
-    // 移到標題同一排的右邊。判準刻意不看 CSS 類名：兩者都在頁首的 `<header>`
-    // 裡、標題後面，就是「標題那一排右邊」。
-    signIn();
-
-    render(<App />);
-
-    // 等載完才出現的「＋ 新增交易」，之後才拿標題——帳本載入前頁首是另一份
-    // （沒有 actions），先抓會抓到卸載前的暫存節點。
-    const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
-    const heading = screen.getByRole('heading', { name: '總覽' });
-    const header = heading.closest('header');
-
-    expect(addButton.closest('header')).toBe(header);
-    expect(heading.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
-      0,
+    await user.type(
+      within(screen.getByRole('group', { name: '新增一筆交易' })).getByLabelText('金額'),
+      '250',
+    );
+    await chooseCategory(user, screen.getByRole('group', { name: '新增一筆交易' }), '新增類');
+    await user.click(
+      within(screen.getByRole('group', { name: '新增一筆交易' })).getByRole('button', {
+        name: '新增',
+      }),
     );
 
-    // 只有一本帳本，切換器是純文字而不是下拉（SC-33.2）。
-    const switcher = screen.getByText('我的帳本');
-    expect(switcher.closest('header')).toBe(header);
-    expect(heading.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
-      0,
-    );
+    await waitFor(() => {
+      expect(createdRequests).toHaveLength(1);
+      const after = homeRequestSnapshot();
+      expect(after.accounts).toBe(before.accounts + 1);
+      expect(after.balanceTrend).toBe(before.balanceTrend + 1);
+      expect(after.counterparties).toBe(before.counterparties + 1);
+      expect(after.mergePrompts).toBe(before.mergePrompts + 1);
+      expect(after.ledgerGroups).toBe(before.ledgerGroups + 1);
+      expect(after.marked).toBe(before.marked + 1);
+      expect(after.recent).toBe(before.recent + 1);
+      expect(after.statistics).toBe(before.statistics + 1);
+    }, WAIT);
 
-    // 標題仍是頁首裡的第一個東西——每一頁的標題高度才會一致。
-    expect(header?.firstElementChild).toBe(heading);
+    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
+    expect(screen.getByLabelText('總額 $11,100')).toBeInTheDocument();
+    expect(screen.getByText('小明欠你 $100')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '最近交易' })).toHaveTextContent('餐飲');
+    expect(screen.queryByRole('tab', { name: '標註 1' })).not.toBeInTheDocument();
+
+    const delta = fetchMock.mock.calls.length - totalBefore;
+    expect(delta).toBe(9);
+    releaseRefetches?.();
+    holdRefetches = null;
+
+    expect(await screen.findByRole('link', { name: /本月支出.*803/ }, WAIT)).toBeInTheDocument();
+    expect(screen.getByLabelText('總額 $16,100')).toBeInTheDocument();
+    expect(await screen.findByText('小明欠你 $200', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '最近交易' })).toHaveTextContent('新增類');
+    expect(await screen.findByRole('tab', { name: '標註 1' }, WAIT)).toBeInTheDocument();
   });
 
-  it('leaves the filters and the pager on the transactions page', async () => {
+  it('returns to Recent and moves focus there when the last mark is cancelled', async () => {
+    const user = userEvent.setup();
     signIn();
-
+    availableLedgers = [{ ...ledger, role: 'VIEWER' }];
+    markedTransactions = [
+      {
+        ...makeTransaction(ledger.id, 1, { id: 'only-mark', marked: true }),
+        ledger: { id: ledger.id, name: ledger.name },
+      },
+    ];
+    markedTotal = 1;
     render(<App />);
 
-    await recentCard();
-    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: '分頁' })).not.toBeInTheDocument();
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    const marked = screen.getByRole('region', { name: '標註' });
+    await user.click(within(marked).getByRole('button', { name: /更多交易動作/ }));
+    await user.click(screen.getByRole('menuitem', { name: '取消標註' }));
+
+    await waitFor(
+      () => expect(screen.queryByRole('tab', { name: /標註/ })).not.toBeInTheDocument(),
+      WAIT,
+    );
+    const recentTab = screen.getByRole('tab', { name: '最近' });
+    expect(recentTab).toHaveAttribute('aria-selected', 'true');
+    expect(recentTab).toHaveFocus();
+  });
+
+  it('shows recent content with a valid tab label when marked disappears after a refetch', async () => {
+    const user = userEvent.setup();
+    signIn();
+    markedTransactions = [
+      {
+        ...makeTransaction(ledger.id, 1, { id: 'only-mark', marked: true }),
+        ledger: { id: ledger.id, name: ledger.name },
+      },
+    ];
+    markedTotal = 1;
+    emptyMarksAfterCreate = true;
+    render(<App />);
+
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    expect(screen.getByRole('tab', { name: '標註 1' })).toHaveAttribute('aria-selected', 'true');
+
+    const form = screen.getByRole('group', { name: '新增一筆交易' });
+    await user.type(within(form).getByLabelText('金額'), '250');
+    await chooseCategory(user, form, '新增類');
+    await user.click(within(form).getByRole('button', { name: '新增' }));
+
+    await waitFor(
+      () => expect(screen.queryByRole('tab', { name: /標註/ })).not.toBeInTheDocument(),
+      WAIT,
+    );
+    const recentTab = screen.getByRole('tab', { name: '最近' });
+    const panel = screen.getByRole('tabpanel');
+    expect(recentTab).toHaveAttribute('aria-selected', 'true');
+    expect(panel).toHaveAttribute('aria-labelledby', 'home-recent-tab');
+    expect(within(panel).getByRole('region', { name: '最近交易' })).toBeInTheDocument();
+  });
+
+  it('supports tablist arrow navigation and roving tabindex', async () => {
+    const user = userEvent.setup();
+    signIn();
+    markedTransactions = [
+      {
+        ...makeTransaction(ledger.id, 2, { id: 'marked-2', marked: true }),
+        ledger: { id: ledger.id, name: ledger.name },
+      },
+    ];
+    markedTotal = 1;
+    render(<App />);
+
+    await waitForInitialHome();
+    const recent = screen.getByRole('tab', { name: '最近' });
+    recent.focus();
+    await user.keyboard('{ArrowRight}');
+    const marked = screen.getByRole('tab', { name: '標註 1' });
+    expect(marked).toHaveFocus();
+    expect(marked).toHaveAttribute('aria-selected', 'true');
+    expect(marked).toHaveAttribute('tabindex', '0');
+    expect(recent).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowLeft}');
+    expect(recent).toHaveFocus();
+  });
+
+  it('shows the marked total, first ten rows, and the remaining page on demand', async () => {
+    const user = userEvent.setup();
+    signIn();
+    markedTransactions = Array.from({ length: 12 }, (_, index) => ({
+      ...makeTransaction(ledger.id, index + 1, { id: `marked-${index + 1}`, marked: true }),
+      ledger: { id: ledger.id, name: ledger.name },
+    }));
+    markedTotal = 12;
+    render(<App />);
+
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 12' }));
+    const marked = screen.getByRole('region', { name: '標註' });
+    expect(within(marked).getAllByRole('listitem')).toHaveLength(10);
+    await user.click(within(marked).getByRole('button', { name: '再 2 筆' }));
+    await waitFor(() => expect(within(marked).getAllByRole('listitem')).toHaveLength(12), WAIT);
+  });
+
+  it('updates category colors immediately from settings without a request or ledger reset', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+
+    await waitForInitialHome();
+    const requestsBefore = fetchMock.mock.calls.length;
+    const swatch = screen
+      .getByRole('list', { name: '支出分類' })
+      .querySelector<HTMLSpanElement>('li span[aria-hidden="true"]');
+    expect(swatch).not.toBeNull();
+    const initialColor = swatch?.getAttribute('style');
+
+    await user.click(await screen.findByRole('button', { name: 'Alice的選單' }, WAIT));
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    const settings = within(screen.getByRole('dialog', { name: '設定' }));
+    await user.click(settings.getByRole('radio', { name: '金色' }));
+
+    expect(swatch?.style.getPropertyValue('--group-color')).toBe('var(--color-accent)');
+    expect(swatch?.getAttribute('style')).not.toBe(initialColor);
+    expect(fetchMock.mock.calls.length).toBe(requestsBefore);
+    expect(localStorage.getItem('ledger.activeLedgerId')).toBe(ledger.id);
+    expect(localStorage.getItem('ledger.homeCategoryColors')).toBe('gold');
+  });
+
+  it('keeps statistics errors local and shows the balance chart independently', async () => {
+    signIn();
+    statisticsFailure = true;
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('統計暫時無法載入');
+    expect(screen.getAllByRole('heading', { name: '資產' })).toHaveLength(2);
+    expect(screen.queryByText('$0')).not.toBeInTheDocument();
+  });
+
+  it('shows a balance trend error without hiding the other home cards', async () => {
+    signIn();
+    balanceTrendFailure = true;
+    render(<App />);
+
+    await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    expect(await screen.findByText('資產暫時無法載入', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
+    expect(screen.getByRole('heading', { name: '借還' })).toBeInTheDocument();
+  });
+
+  it('shows the trend, pending card, and My cards without a ledger, with no ledger-specific query', async () => {
+    signIn();
+    availableLedgers = [];
+    render(<App />);
+
+    expect(await screen.findByText('找不到任何帳本。', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: '資產' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: '借還' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '我的' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: '支出分類' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '全部 →' })).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => endpointOf(input).path.endsWith('/statistics')),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        /^\/ledgers\/[^/]+\/transactions$/.test(endpointOf(input).path),
+      ),
+    ).toBe(false);
   });
 });

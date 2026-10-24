@@ -51,6 +51,10 @@ describe('HomeAccountList', () => {
         .map((item) => item.textContent),
     ).toEqual(['帳戶 1$100', '帳戶 2-$125', '帳戶 3$300', '帳戶 4$400', '帳戶 5$500']);
     expect(screen.getByLabelText('帳戶 2餘額')).toHaveTextContent('-$125');
+    const negativeBalance = within(list).getByText('-$125');
+    const positiveBalance = within(list).getByText('$100');
+    expect(negativeBalance.className).toMatch(/negative/);
+    expect(positiveBalance.className).not.toMatch(/negative/);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 

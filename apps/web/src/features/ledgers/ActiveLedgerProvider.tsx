@@ -26,8 +26,8 @@ import { useLedgers } from './use-ledgers';
  */
 export function ActiveLedgerProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
-  // Provider 掛在路由之上，不能像 AccountBalances 那樣「未登入就不渲染」。
-  // hook 也不能有條件呼叫，所以改由 enabled 擋掉那個註定 401 的請求。
+  // Provider 掛在路由之上；首頁的帳戶 context 只在登入後提供，這裡仍要擋掉訪客請求。
+  // hook 不能有條件呼叫，所以用 enabled 避免打出註定 401 的請求。
   const { data, isLoading, error } = useLedgers(false, isAuthenticated);
   const ledgers = useMemo(() => data ?? [], [data]);
 

@@ -1,13 +1,9 @@
-/*
- * 首頁 dashboard（spec 2i §4.7）。三欄版面由外殼負責，右側欄的內容由
- * `TransactionWorkbench` portal 過去，所以 2h 那組「兩欄 grid ＋ 貼邊面板 ＋
- * 窄螢幕藏起左欄」的規則全部移除。
- */
+/* 首頁摘要卡使用共用設計 token，左右欄在空間不足時自然改排成一欄。 */
 
 /* 本月支出、收入與結餘都可點進目前帳本的分類統計。 */
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-md);
   margin-bottom: var(--space-md);
 }
@@ -71,38 +67,120 @@
   text-align: center;
 }
 
-/*
- * 「最近交易」與「帳戶餘額」並排。2j 要加圖表時只是在這個 grid 裡多一列，
- * 既有的兩張卡不必動（假設 9）。
- *
- * `minmax(0, 1fr)` 不能省：grid 欄的預設最小寬度是內容寬度，少了它，一筆很長的
- * 備註會把那一欄撐開、擠掉另一張卡，並讓整頁出現橫向捲動。
- */
+/* 最近／趨勢與「我的」兩組都沿用至少 20rem 的欄寬。 */
+.dashboard {
+  container-name: home-dashboard;
+  container-type: inline-size;
+}
+
+.activityAndTrend,
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
   gap: var(--space-md);
+  align-items: stretch;
+}
+
+.activityAndTrend {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: var(--space-lg);
+}
+
+.cards {
   align-items: start;
 }
 
-/* dashboard 的一張資料卡。 */
+/* 最近與標註共用一張卡，切換只更換 tab panel 的內容。 */
 .dataCard {
+  display: flex;
+  min-width: 0;
+  min-height: 16rem;
+  flex-direction: column;
   padding: var(--space-md) var(--space-lg) var(--space-lg);
   border: var(--card-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+}
+
+.activityHeader {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.activityTabs {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-md);
+}
+
+.tab,
+.activeTab {
+  min-height: 2.75rem;
+  padding: var(--space-xs) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.activeTab {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.tab:focus-visible,
+.activeTab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.activityPanel,
+.activityContent {
   min-width: 0;
 }
 
-/* 標註卡放在最近交易上方，跨滿兩欄，其他摘要卡仍維持原本並排。 */
-.markedCard {
-  grid-column: 1 / -1;
+.activityContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.cardHeading {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.cardLink {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+/* 載入中、失敗與空狀態共用，交易列載入時保留相近高度。 */
+.status {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .moreMarked {
   display: block;
   width: 100%;
+  min-height: 2.75rem;
   padding: var(--space-sm) var(--space-md);
   border: 0;
   border-bottom: 1px solid var(--color-border);
@@ -118,44 +196,46 @@
   background-color: var(--color-fill);
 }
 
-.cardHead {
+/* 圖表卡與最近列等高；高度設定透過元件的 className 傳入，不選取其內部 DOM。 */
+.trendChart {
+  --balance-trend-chart-max-height: 260px;
+
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-sm);
+  min-width: 0;
+  min-height: 16rem;
+  flex-direction: column;
+  margin-bottom: 0;
 }
 
-.cardHeading {
-  margin: 0;
+/* 兩欄要容納兩個 20rem 欄寬與 1rem 間距；容器變窄時 grid 和圖表同時退回一欄。 */
+@container home-dashboard (min-width: 41rem) {
+  .activityAndTrend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trendChart {
+    --balance-trend-chart-height: 180px;
+    --balance-trend-chart-min-height: 180px;
+    --balance-trend-chart-max-height: 320px;
+    --balance-trend-chart-flex: 1 1 180px;
+  }
+}
+
+.myHeading {
+  margin: 0 0 var(--space-sm);
   font-size: var(--text-sm);
   font-weight: 700;
 }
 
-.cardLink {
-  font-size: var(--text-sm);
-  color: var(--color-accent);
-}
-
-/* 載入中 / 失敗 / 沒有交易共用。高度與一列資料相近，載完不會整頁跳動。 */
-.status {
-  margin: 0;
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius);
-  background-color: var(--color-fill);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
 /* 說明用的單張卡片（訪客引導、找不到帳本）。 */
 .card {
+  margin-bottom: var(--space-md);
   padding: var(--space-lg);
   border: var(--card-border);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
   text-align: center;
-  margin-bottom: var(--space-md);
 }
 
 /* 訪客只有這一張卡，寬螢幕上不要拉成一長條。 */

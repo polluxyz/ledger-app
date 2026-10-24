@@ -68,7 +68,7 @@ export function useHomeCategoryColors() {
   const mode = useSyncExternalStore(
     homeCategoryColorStore.subscribe,
     homeCategoryColorStore.getSnapshot,
-    () => 'color',
+    (): HomeCategoryColorMode => 'color',
   );
   return { mode, choose: homeCategoryColorStore.setMode };
 }
