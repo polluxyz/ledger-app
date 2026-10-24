@@ -94,7 +94,6 @@
 .dataCard {
   display: flex;
   min-width: 0;
-  min-height: 16rem;
   flex-direction: column;
   padding: var(--space-md) var(--space-lg) var(--space-lg);
   border: var(--card-border);
@@ -149,6 +148,11 @@
   min-width: 0;
 }
 
+/* 首頁交易列沿用 TransactionList 元件，只在這張卡把列與日期標頭的左右縮排歸零。 */
+.activityPanel {
+  --transaction-list-inline-padding: 0px;
+}
+
 .activityContent {
   display: flex;
   flex: 1;
@@ -198,11 +202,11 @@
 
 /* 圖表卡與最近列等高；高度設定透過元件的 className 傳入，不選取其內部 DOM。 */
 .trendChart {
+  --balance-trend-chart-height: 200px;
   --balance-trend-chart-max-height: 260px;
 
   display: flex;
   min-width: 0;
-  min-height: 16rem;
   flex-direction: column;
   margin-bottom: 0;
 }
@@ -211,6 +215,10 @@
 @container home-dashboard (min-width: 41rem) {
   .activityAndTrend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dataCard {
+    min-height: 16rem;
   }
 
   .trendChart {

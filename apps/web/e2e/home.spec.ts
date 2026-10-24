@@ -25,6 +25,7 @@ interface HomeSetup {
   ledger: Awaited<ReturnType<typeof personalLedger>>;
   account: Awaited<ReturnType<typeof listAccounts>>[number];
   expenseCategory: Awaited<ReturnType<typeof listCategories>>[number];
+  incomeCategory: Awaited<ReturnType<typeof listCategories>>[number];
 }
 
 interface Rect {
@@ -281,10 +282,10 @@ test.describe('2k 首頁改版端對端', () => {
       if (recentCount > 0) {
         for (let index = 0; index < recentCount; index += 1) {
           await createTransaction(request, userA.token, setup.ledger.id, {
-            type: 'EXPENSE',
+            type: recentCount === 1 ? 'INCOME' : 'EXPENSE',
             amount: (index + 1) * 1_000,
             date: currentTaiwanDate(),
-            categoryId: setup.expenseCategory.id,
+            categoryId: recentCount === 1 ? setup.incomeCategory.id : setup.expenseCategory.id,
             accountId: setup.account.id,
             title: `最近交易 ${index + 1}`,
           });
@@ -300,10 +301,19 @@ test.describe('2k 首頁改版端對端', () => {
         await expect(page.getByRole('tabpanel').locator('li')).toHaveCount(recentCount);
       }
       const measurement = await expectDesktopTrendLayout(page, activityCard);
+      const pointYCoordinates = await page
+        .locator('svg[role="group"][aria-label^="每月資產"] circle[role="button"]')
+        .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cy'))));
+      const finalPointY = pointYCoordinates.at(-1);
+      if (finalPointY === undefined) throw new Error('資產趨勢圖缺少最後一個點位。');
+      if (recentCount === 1) expect(finalPointY).toBe(Math.min(...pointYCoordinates));
+      if (recentCount === 5) expect(finalPointY).toBe(Math.max(...pointYCoordinates));
       await writeMeasurement(testInfo, {
         scenario: 'SC-H13',
         tab: 'recent',
         transactionCount: recentCount,
+        finalPointY,
+        pointYCoordinates,
         ...measurement,
       });
     });
@@ -363,13 +373,23 @@ test.describe('2k 首頁改版端對端', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('svg[role="group"][aria-label^="每月資產"]')).toBeVisible();
     const svg = page.locator('svg[role="group"][aria-label^="每月資產"]');
+    const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
     const box = await getRect(svg);
     expect(box.height).toBeLessThanOrEqual(260);
+    const cardBox = await getRect(trendCard);
+    const bottomGap = cardBox.y + cardBox.height - (box.y + box.height);
+    expect(bottomGap).toBeLessThanOrEqual(32);
+    const labels = await expectTrendLabelsReadable(svg);
+    const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
     const children = await expectSvgChildrenInside(svg);
     await writeMeasurement(testInfo, {
       scenario: 'SC-H13',
       viewportWidth: 390,
+      trendCard: cardBox,
       svg: box,
+      bottomGap,
+      labels,
+      segmentLabelDistances,
       children,
     });
   });
@@ -411,6 +431,17 @@ test.describe('2k 首頁改版端對端', () => {
       });
       if (index === 0) firstTransactionId = transaction.id;
     }
+    const recentRowName = '日常用品';
+    const recentRowCategory = categories[categories.length - 1];
+    if (!recentRowCategory) throw new Error('手機驗收缺少交易分類。');
+    await createTransaction(request, userA.token, setup.ledger.id, {
+      type: 'EXPENSE',
+      amount: 2_000,
+      date: currentTaiwanDate(),
+      categoryId: recentRowCategory.id,
+      accountId: setup.account.id,
+      title: recentRowName,
+    });
     await markTransaction(request, userA.token, setup.ledger.id, firstTransactionId);
 
     const longPersonName = '這是一個非常長的首頁往來對象名稱用來檢查版面是否會超出畫面';
@@ -460,6 +491,44 @@ test.describe('2k 首頁改版端對端', () => {
 
       const markedTab = page.getByRole('tab', { name: '標註 1', exact: true });
       await expect(markedTab).toBeVisible();
+      const recentPanel = page.getByRole('tabpanel');
+      const recentName = recentPanel.getByText(recentRowName, { exact: true });
+      await expect(recentName).toBeVisible();
+      const recentNameWidth = await recentName.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(recentNameWidth.scrollWidth).toBeLessThanOrEqual(recentNameWidth.clientWidth);
+      const recentRow = recentName.locator('xpath=ancestor::li[1]');
+      const recentRowLayout = await recentRow.evaluate((element) => {
+        const style = window.getComputedStyle(element);
+        return {
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+          height: element.getBoundingClientRect().height,
+        };
+      });
+      expect(recentRowLayout).toEqual({ paddingLeft: '0px', paddingRight: '0px', height: 52 });
+
+      await markedTab.click();
+      const markedPanel = page.getByRole('tabpanel');
+      await expect(markedTab).toHaveAttribute('aria-selected', 'true');
+      const markedRow = markedPanel.locator('li').first();
+      await expect(markedRow).toBeVisible();
+      const markedRowPadding = await markedRow.evaluate((element) => {
+        const style = window.getComputedStyle(element);
+        return { left: style.paddingLeft, right: style.paddingRight };
+      });
+      expect(markedRowPadding).toEqual({ left: '0px', right: '0px' });
+      const dateHeading = markedPanel.locator('div[class*="dateGroup"] > p').first();
+      await expect(dateHeading).toBeVisible();
+      const dateHeadingPadding = await dateHeading.evaluate((element) => {
+        const style = window.getComputedStyle(element);
+        return { left: style.paddingLeft, right: style.paddingRight };
+      });
+      expect(dateHeadingPadding).toEqual({ left: '0px', right: '0px' });
+      await expect(markedTab).toHaveAttribute('aria-selected', 'true');
+
       const tabHeights = [];
       for (const tab of await page
         .getByRole('tablist', { name: '最近與標註' })
@@ -487,17 +556,41 @@ test.describe('2k 首頁改版端對端', () => {
       measurements.push({
         theme,
         dimensions,
+        recentNameWidth,
+        recentRowLayout,
+        markedRowPadding,
+        dateHeadingPadding,
         tabHeights,
         categoryToggleHeight,
         accountToggleHeight,
       });
     }
 
+    await page.goto('/transactions');
+    const transactionPageName = page.getByText(recentRowName, { exact: true });
+    await expect(transactionPageName).toBeVisible();
+    const transactionPageRow = transactionPageName.locator('xpath=ancestor::li[1]');
+    const transactionPageRowLayout = await transactionPageRow.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        paddingLeft: style.paddingLeft,
+        paddingRight: style.paddingRight,
+        height: element.getBoundingClientRect().height,
+      };
+    });
+    expect(transactionPageRowLayout).toEqual({
+      paddingLeft: '16px',
+      paddingRight: '16px',
+      height: 52,
+    });
+
     await writeMeasurement(testInfo, {
       scenario: 'SC-H14',
       longAccountName,
       longCategoryName,
       longPersonName,
+      recentRowName,
+      transactionPageRowLayout,
       measurements,
     });
   });
@@ -624,6 +717,46 @@ test.describe('2k 首頁改版端對端', () => {
       measurements,
     });
   });
+  test('W7：最近卡桌機維持最小高度，390px 依內容收合', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }, testInfo) => {
+    const setup = await getHomeSetup(request, userA);
+    for (let index = 0; index < 2; index += 1) {
+      await createTransaction(request, userA.token, setup.ledger.id, {
+        type: 'EXPENSE',
+        amount: (index + 1) * 1_000,
+        date: currentTaiwanDate(),
+        categoryId: setup.expenseCategory.id,
+        accountId: setup.account.id,
+        title: `最近卡測試 ${index + 1}`,
+      });
+    }
+
+    const activityCard = page.locator('section[aria-label="最近與標註"]');
+    const recentRows = page.getByRole('tabpanel').locator('li');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await expect(recentRows).toHaveCount(2);
+    const desktopCard = await getRect(activityCard);
+    expect(desktopCard.height).toBeGreaterThanOrEqual(256);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(recentRows).toHaveCount(2);
+    const mobileCard = await getRect(activityCard);
+    const lastRow = await getRect(recentRows.last());
+    const bottomGap = mobileCard.y + mobileCard.height - (lastRow.y + lastRow.height);
+    expect(bottomGap).toBeLessThanOrEqual(32);
+    await writeMeasurement(testInfo, {
+      scenario: 'W7-recent-card',
+      desktopCard,
+      mobileCard,
+      lastRow,
+      bottomGap,
+    });
+  });
 });
 
 async function getHomeSetup(
@@ -636,8 +769,9 @@ async function getHomeSetup(
   if (!account) throw new Error('測試帳號缺少預設的「現金」帳戶。');
   const categories = await listCategories(request, user.token, ledger.id);
   const expenseCategory = categories.find((item) => item.type === 'EXPENSE');
-  if (!expenseCategory) throw new Error('測試帳本缺少預設的支出分類。');
-  return { ledger, account, expenseCategory };
+  const incomeCategory = categories.find((item) => item.type === 'INCOME');
+  if (!expenseCategory || !incomeCategory) throw new Error('測試帳本缺少預設分類。');
+  return { ledger, account, expenseCategory, incomeCategory };
 }
 
 async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {
@@ -650,14 +784,140 @@ async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {
   expect(trendBox.y + trendBox.height - (activityBox.y + activityBox.height)).toBeLessThanOrEqual(
     1,
   );
+  expect(activityBox.height).toBeGreaterThanOrEqual(256);
 
   const svg = page.locator('svg[role="group"][aria-label^="每月資產"]');
   const svgBox = await getRect(svg);
   expect(svgBox.height).toBeGreaterThanOrEqual(180);
   expect(svgBox.height).toBeLessThanOrEqual(320);
   await expect(svg.locator('circle[role="button"]')).toHaveCount(12);
+  const labels = await expectTrendLabelsReadable(svg);
+  const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
   const children = await expectSvgChildrenInside(svg);
-  return { activityBox, trendBox, svg: svgBox, children };
+  return { activityBox, trendBox, svg: svgBox, labels, segmentLabelDistances, children };
+}
+
+async function expectTrendLabelsReadable(svg: Locator) {
+  await svg.locator('circle[role="button"]').first().hover();
+  const labels = svg.locator('text');
+  await expect(labels).toHaveCount(3);
+  const value = await getRect(labels.nth(0));
+  const month = await getRect(labels.nth(1));
+  const hovered = await getRect(labels.nth(2));
+  expect(value.height).toBeGreaterThanOrEqual(13);
+  expect(month.height).toBeGreaterThanOrEqual(10);
+  expect(hovered.height).toBeGreaterThanOrEqual(13);
+  return { value, month, hovered };
+}
+
+async function expectFinalSegmentClearOfLabels(svg: Locator) {
+  const distances = await svg.evaluate((element) => {
+    type Point = { x: number; y: number };
+    type Box = { x: number; y: number; width: number; height: number };
+
+    const points = Array.from(element.querySelectorAll('circle[role="button"]'));
+    const labels = Array.from(element.querySelectorAll('text')).slice(0, 2);
+    const previous = points.at(-2);
+    const final = points.at(-1);
+    if (!previous || !final || labels.length !== 2) {
+      throw new Error('資產趨勢圖缺少最後一段折線或標籤。');
+    }
+
+    const start = {
+      x: Number(previous.getAttribute('cx')),
+      y: Number(previous.getAttribute('cy')),
+    };
+    const end = { x: Number(final.getAttribute('cx')), y: Number(final.getAttribute('cy')) };
+    const segmentIntersectsRect = (rect: Box) => {
+      const deltaX = end.x - start.x;
+      const deltaY = end.y - start.y;
+      let minimumRatio = 0;
+      let maximumRatio = 1;
+      const clipping: Array<[number, number]> = [
+        [-deltaX, start.x - rect.x],
+        [deltaX, rect.x + rect.width - start.x],
+        [-deltaY, start.y - rect.y],
+        [deltaY, rect.y + rect.height - start.y],
+      ];
+
+      for (const [direction, distance] of clipping) {
+        if (direction === 0) {
+          if (distance < 0) return false;
+          continue;
+        }
+        const ratio = distance / direction;
+        if (direction < 0) minimumRatio = Math.max(minimumRatio, ratio);
+        else maximumRatio = Math.min(maximumRatio, ratio);
+        if (minimumRatio > maximumRatio) return false;
+      }
+      return true;
+    };
+    const pointToSegmentDistance = (point: Point, segmentStart: Point, segmentEnd: Point) => {
+      const deltaX = segmentEnd.x - segmentStart.x;
+      const deltaY = segmentEnd.y - segmentStart.y;
+      const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+      const ratio =
+        lengthSquared === 0
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                ((point.x - segmentStart.x) * deltaX + (point.y - segmentStart.y) * deltaY) /
+                  lengthSquared,
+              ),
+            );
+      return Math.hypot(
+        point.x - (segmentStart.x + ratio * deltaX),
+        point.y - (segmentStart.y + ratio * deltaY),
+      );
+    };
+    const segmentToSegmentDistance = (
+      firstStart: Point,
+      firstEnd: Point,
+      secondStart: Point,
+      secondEnd: Point,
+    ) =>
+      Math.min(
+        pointToSegmentDistance(firstStart, secondStart, secondEnd),
+        pointToSegmentDistance(firstEnd, secondStart, secondEnd),
+        pointToSegmentDistance(secondStart, firstStart, firstEnd),
+        pointToSegmentDistance(secondEnd, firstStart, firstEnd),
+      );
+    return labels.map((label) => {
+      const rect = label.getBBox();
+      const rectangleEdges: Array<[Point, Point]> = [
+        [
+          { x: rect.x, y: rect.y },
+          { x: rect.x + rect.width, y: rect.y },
+        ],
+        [
+          { x: rect.x + rect.width, y: rect.y },
+          { x: rect.x + rect.width, y: rect.y + rect.height },
+        ],
+        [
+          { x: rect.x + rect.width, y: rect.y + rect.height },
+          { x: rect.x, y: rect.y + rect.height },
+        ],
+        [
+          { x: rect.x, y: rect.y + rect.height },
+          { x: rect.x, y: rect.y },
+        ],
+      ];
+      const distance = segmentIntersectsRect(rect)
+        ? 0
+        : Math.min(
+            ...rectangleEdges.map(([edgeStart, edgeEnd]) =>
+              segmentToSegmentDistance(start, end, edgeStart, edgeEnd),
+            ),
+          );
+      return { label: label.textContent, distance };
+    });
+  });
+  for (const { label, distance } of distances) {
+    expect(distance, `最後一段折線與「${label ?? ''}」標籤的距離`).toBeGreaterThan(0);
+  }
+  return distances;
 }
 
 async function expectSvgChildrenInside(svg: Locator) {

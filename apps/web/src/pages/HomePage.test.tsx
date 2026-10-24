@@ -1000,7 +1000,11 @@ describe('Home dashboard', () => {
     const panel = screen.getByRole('tabpanel');
     expect(recentTab).toHaveAttribute('aria-selected', 'true');
     expect(panel).toHaveAttribute('aria-labelledby', 'home-recent-tab');
-    expect(within(panel).getByRole('region', { name: '最近交易' })).toBeInTheDocument();
+    const recentRegion = within(panel).getByRole('region', { name: '最近交易' });
+    expect(recentRegion).toBeInTheDocument();
+    expect(
+      within(recentRegion).queryByRole('heading', { name: '最近交易' }),
+    ).not.toBeInTheDocument();
   });
 
   it('supports tablist arrow navigation and roving tabindex', async () => {
@@ -1079,7 +1083,8 @@ describe('Home dashboard', () => {
 
     await screen.findByRole('button', { name: '新增交易' }, WAIT);
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('統計暫時無法載入');
-    expect(screen.getAllByRole('heading', { name: '資產' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: '資產' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
     expect(screen.queryByText('$0')).not.toBeInTheDocument();
   });
 
@@ -1100,7 +1105,8 @@ describe('Home dashboard', () => {
     render(<App />);
 
     expect(await screen.findByText('找不到任何帳本。', {}, WAIT)).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { name: '資產' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: '資產' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '借還' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '我的' })).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '支出分類' })).not.toBeInTheDocument();
