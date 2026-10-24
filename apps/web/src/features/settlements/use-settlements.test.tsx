@@ -120,8 +120,10 @@ describe('3e data hooks', () => {
     expect(invalidatedKeys()).toEqual(
       expect.arrayContaining([
         ['ledger-people', 'ledger-1'],
-        ['transactions', 'ledger-1'],
-        ['settlement-summary', 'ledger-1'],
+        ['transactions'],
+        ['settlement-summary'],
+        ['ledger-statistics'],
+        ['balance-trend'],
       ]) as unknown,
     );
   });
@@ -155,9 +157,11 @@ describe('3e data hooks', () => {
 
     expect(invalidatedKeys()).toEqual(
       expect.arrayContaining([
-        ['transactions', 'ledger-1'],
-        ['settlement-summary', 'ledger-1'],
+        ['transactions'],
+        ['settlement-summary'],
         ['accounts'],
+        ['ledger-statistics'],
+        ['balance-trend'],
         COUNTERPARTIES_KEY,
         LEDGER_GROUPS_KEY,
       ]) as unknown,
@@ -193,9 +197,11 @@ describe('3e data hooks', () => {
 
     expect(invalidatedKeys()).toEqual(
       expect.arrayContaining([
-        ['transactions', 'ledger-1'],
-        ['settlement-summary', 'ledger-1'],
+        ['transactions'],
+        ['settlement-summary'],
         ['accounts'],
+        ['ledger-statistics'],
+        ['balance-trend'],
         COUNTERPARTIES_KEY,
         LEDGER_GROUPS_KEY,
       ]) as unknown,
