@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ParseTransactionResponse } from '@ledger/shared';
-import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
+import { AI_TEXT_MAX_LENGTH, ErrorCode } from '@ledger/shared';
 import { ApiError, apiRequest } from '../../lib/api-client';
 import { toDateInputValue } from '../../lib/format';
 import { usePageToolbarSlot } from '../../app/PageToolbarSlotContext';
@@ -81,7 +81,9 @@ describe('AI transaction input', () => {
   });
 
   it.each([
-    [new ApiError(429, 'TOO_MANY_REQUESTS', 'ignored'), '太頻繁了，等一分鐘再試。'],
+    [new ApiError(429, ErrorCode.AI_DAILY_LIMIT, 'ignored'), '今天的 AI 次數用完了'],
+    [new ApiError(429, ErrorCode.TOO_MANY_REQUESTS, 'ignored'), '太頻繁了，等一分鐘再試。'],
+    [new ApiError(429, 'UNKNOWN', 'ignored'), '太頻繁了，等一分鐘再試。'],
     [new ApiError(503, 'AI_NOT_CONFIGURED', 'ignored'), 'AI 記帳還沒啟用。'],
     [new ApiError(503, 'AI_UNAVAILABLE', 'ignored'), 'AI 暫時沒有回應，請稍後再試。'],
   ])(
