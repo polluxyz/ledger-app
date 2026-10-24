@@ -291,3 +291,10 @@ spec：`docs/specs/phase-2k-home-redesign.md`（決策 300～309、W260～W271�
   1. 最後一點的金額與月份標籤壓到最後一段折線。2j 原本把金額放左上、月份放左邊同高；W6 字變大後更明顯。改成兩個標籤疊在一起，放在最後一段折線的另一側，仍不可被裁切（W261）。
   2. `.dataCard` 的 `min-height: 16rem`（W3 加的，spec 沒要求）讓一欄時只有 2 列的「最近」卡多出約 80px 空白。一欄時拿掉，兩欄維持。
 - 2026-10-24 W7 驗收：第一版的標籤擺放函式放不下時會 throw，render 中丟錯會讓首頁白屏，退回改成夾在邊界內（696dcf3）。我重跑 lint、typecheck、format:check 全綠，122 檔 1000 個測試通過，Web e2e 89 passed（3.4m）。實測：最後一段折線與標籤最短距離桌機 9.60px、390px 9px；390px 最近卡列底空白 25px；1280px 卡高 256px。W6／W7 合併進整合分支 351a1b8。
+- 2026-10-24 D1 整體驗收（程式 commit 1e203e0）：
+  - diff 沒有改到 `apps/api`、`packages/shared`、`package.json`、`pnpm-lock.yaml`、`.github`。68 個檔，+5713／−1427。
+  - 協調者重跑：shared build、lint、typecheck、format:check、build 全部 exit 0；單元測試 API 828 個、Web 122 檔 1000 個通過；API e2e 52 個 suite、520 個通過；Web e2e 89 passed（3.6m）。
+  - SC-H2、SC-H3 在 `HomePage.test.tsx`：切帳本前後個人端點請求增量 0；新增一筆交易後請求增量 9（POST 1 加 8 個首頁端點各重抓 1 次），重抓期間舊數字留著。
+  - 截圖（W7 重產的 12 張，390px 與 1280px × 淺色與深色 × 三種配色）抽看 light-color-390、dark-gold-1280、light-gray-1280、dark-gray-390，對過 W260～W269、W271 的版面與配色。
+  - spec §9 文件影響：2j W215 與 SC-R18 加註被取代；`docs/README.md` 標 2k 已完成；`CLAUDE.md` §4、`docs/handoff.md`、`docs/handoff/stats-2j.md` 更新。各寫入入口的註解已指向 `invalidateAfterMoneyWrite`。
+  - 測試資料庫 `ledger_2k_*` 都已刪除，只剩 `ledger_stats_test`。

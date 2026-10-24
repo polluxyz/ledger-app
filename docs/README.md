@@ -63,7 +63,7 @@
 | [`phase-3l-move-and-copy.md`](specs/phase-3l-move-and-copy.md)                     | 階段三：3l 刪除私人帳本時搬走、複製、標註交易     | 已完成    |
 | [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢               | 已完成    |
 | [`phase-4a-ai-text.md`](specs/phase-4a-ai-text.md)                                 | 階段四：4a AI 文字記帳（一句話變成交易草稿）      | 已完成    |
-| [`phase-2k-home-redesign.md`](specs/phase-2k-home-redesign.md)                     | 2k 首頁改版：卡片版面、資產卡、借還卡、分類條配色 | 實作中    |
+| [`phase-2k-home-redesign.md`](specs/phase-2k-home-redesign.md)                     | 2k 首頁改版：卡片版面、資產卡、借還卡、分類條配色 | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                                  | 長期有效  |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。
