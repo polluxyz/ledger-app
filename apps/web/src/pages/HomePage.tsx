@@ -531,15 +531,13 @@ function ActivityCard({
 
       <div
         id="home-activity-panel"
+        className={styles.activityPanel}
         role="tabpanel"
         aria-labelledby={visibleTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
         tabIndex={0}
       >
         {visibleTab === 'recent' ? (
-          <section className={styles.activityContent} aria-labelledby="recent-transactions">
-            <h2 className={styles.cardHeading} id="recent-transactions">
-              最近交易
-            </h2>
+          <section className={styles.activityContent} aria-label="最近交易">
             <RecentBody
               transactions={recentTransactions}
               isLoading={recentLoading}

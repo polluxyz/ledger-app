@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { BalanceTrend } from '@ledger/shared';
 import { BalanceTrendChart } from './BalanceTrendChart';
 
@@ -27,6 +27,109 @@ describe('BalanceTrendChart', () => {
     expect(screen.getByText('$300')).toBeInTheDocument();
     expect(screen.getByText('2026年10月')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '2026年8月 $100' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
+  });
+
+  it('uses the measured SVG dimensions as its viewBox', () => {
+    class MockResizeObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element) {
+        const contentRect = {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 320,
+          bottom: 180,
+          left: 0,
+          width: 320,
+          height: 180,
+          toJSON: () => ({}),
+        } as DOMRectReadOnly;
+        this.callback(
+          [
+            {
+              target,
+              contentRect,
+              borderBoxSize: [],
+              contentBoxSize: [],
+              devicePixelContentBoxSize: [],
+            },
+          ],
+          this,
+        );
+      }
+
+      disconnect() {}
+      unobserve() {}
+    }
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    try {
+      render(
+        <BalanceTrendChart months={series([10000, 15000, 30000])} isLoading={false} error={null} />,
+      );
+
+      expect(screen.getByRole('group')).toHaveAttribute('viewBox', '0 0 320 180');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('uses the original viewBox when ResizeObserver is unavailable or measures zero', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    try {
+      const { unmount } = render(
+        <BalanceTrendChart months={series([10000, 15000, 30000])} isLoading={false} error={null} />,
+      );
+      expect(screen.getByRole('group')).toHaveAttribute('viewBox', '0 0 640 230');
+      unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    class ZeroSizeResizeObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element) {
+        const contentRect = {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+          toJSON: () => ({}),
+        } as DOMRectReadOnly;
+        this.callback(
+          [
+            {
+              target,
+              contentRect,
+              borderBoxSize: [],
+              contentBoxSize: [],
+              devicePixelContentBoxSize: [],
+            },
+          ],
+          this,
+        );
+      }
+
+      disconnect() {}
+      unobserve() {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ZeroSizeResizeObserver);
+    try {
+      render(
+        <BalanceTrendChart months={series([10000, 15000, 30000])} isLoading={false} error={null} />,
+      );
+      expect(screen.getByRole('group')).toHaveAttribute('viewBox', '0 0 640 230');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('shows another month on hover, click, and keyboard focus', async () => {
@@ -82,10 +185,18 @@ describe('BalanceTrendChart', () => {
     expect(screen.getByRole('group').querySelector('line')).toBeInTheDocument();
   });
 
+  it('keeps the asset trend title visible while loading', () => {
+    render(<BalanceTrendChart months={undefined} isLoading error={null} />);
+
+    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('載入中…');
+  });
+
   it('shows a local error instead of a zero chart when loading fails', () => {
     render(<BalanceTrendChart months={undefined} isLoading={false} error={new Error('failed')} />);
 
     expect(screen.getByRole('status')).toHaveTextContent('資產暫時無法載入');
+    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
     expect(screen.queryByText('$0')).not.toBeInTheDocument();
   });
 });

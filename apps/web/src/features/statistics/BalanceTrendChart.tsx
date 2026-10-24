@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BalanceTrend } from '@ledger/shared';
 import { formatMoney } from '../../lib/format';
 import styles from './BalanceTrendChart.module.css';
@@ -14,25 +14,41 @@ interface BalanceTrendChartProps {
 
 const WIDTH = 640;
 const HEIGHT = 230;
-const LEFT = 32;
-const RIGHT = WIDTH - LEFT;
-const TOP = 34;
-const BOTTOM = HEIGHT - 38;
+const FALLBACK_SIZE = { width: WIDTH, height: HEIGHT };
+const HORIZONTAL_INSET = 32;
+const TOP_INSET = 34;
+const BOTTOM_INSET = 38;
 
 export function BalanceTrendChart({ months, isLoading, error, className }: BalanceTrendChartProps) {
+  const chartRef = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState(FALLBACK_SIZE);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
 
   const values = months ?? [];
+  const hasChart = !error && !isLoading && values.length > 0;
   const lastIndex = values.length - 1;
   const activeIndex = hoveredIndex ?? focusedIndex ?? pinnedIndex ?? lastIndex;
+
+  useEffect(() => {
+    if (!hasChart || !chartRef.current || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      // jsdom、隱藏中的卡片或尚未完成版面配置時可能量到 0；用舊畫布尺寸維持可測與可畫。
+      setSize(width > 0 && height > 0 ? { width, height } : FALLBACK_SIZE);
+    });
+    observer.observe(chartRef.current);
+    return () => observer.disconnect();
+  }, [hasChart]);
 
   if (error || (!isLoading && values.length === 0)) {
     return (
       <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
         <h2 className={styles.heading} id="balance-trend-heading">
-          資產
+          資產趨勢
         </h2>
         <p className={styles.status} role="status">
           資產暫時無法載入
@@ -45,7 +61,7 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
     return (
       <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
         <h2 className={styles.heading} id="balance-trend-heading">
-          資產
+          資產趨勢
         </h2>
         <p className={styles.status} role="status">
           載入中…
@@ -55,6 +71,11 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
   }
 
   const totals = values.map((item) => item.total);
+  const { width, height } = size;
+  const left = HORIZONTAL_INSET;
+  const right = width - HORIZONTAL_INSET;
+  const top = TOP_INSET;
+  const bottom = height - BOTTOM_INSET;
   const minimum = Math.min(...totals);
   const maximum = Math.max(...totals);
   const coordinateScale = Math.max(Math.abs(minimum), Math.abs(maximum)) || 1;
@@ -63,14 +84,14 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
   // 常數序列（包括全 0）使用圖面中線，避免除以 0。
   const valueRange = scaledMaximum - scaledMinimum || 1;
   const x = (index: number) =>
-    values.length === 1 ? WIDTH / 2 : LEFT + (index / (values.length - 1)) * (RIGHT - LEFT);
+    values.length === 1 ? width / 2 : left + (index / (values.length - 1)) * (right - left);
   const y = (total: number) =>
-    TOP + ((scaledMaximum - total / coordinateScale) / valueRange) * (BOTTOM - TOP);
+    top + ((scaledMaximum - total / coordinateScale) / valueRange) * (bottom - top);
   const points = values.map((item, index) => ({ ...item, x: x(index), y: y(item.total) }));
   const linePath = points
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
     .join(' ');
-  const fillBaseline = minimum < 0 && maximum > 0 ? y(0) : minimum >= 0 ? BOTTOM : TOP;
+  const fillBaseline = minimum < 0 && maximum > 0 ? y(0) : minimum >= 0 ? bottom : top;
   const areaPath = `${linePath} L ${points[lastIndex]!.x} ${fillBaseline} L ${points[0]!.x} ${fillBaseline} Z`;
   const crossesZero = minimum < 0 && maximum > 0;
   const finalPoint = points[lastIndex]!;
@@ -82,11 +103,12 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
   return (
     <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
       <h2 className={styles.heading} id="balance-trend-heading">
-        資產
+        資產趨勢
       </h2>
       <svg
+        ref={chartRef}
         className={styles.chart}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${width} ${height}`}
         role="group"
         aria-label={`每月資產：${accessibleValues}`}
       >
@@ -97,7 +119,7 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
           </linearGradient>
         </defs>
         {crossesZero && (
-          <line className={styles.zeroLine} x1={LEFT} x2={RIGHT} y1={y(0)} y2={y(0)} />
+          <line className={styles.zeroLine} x1={left} x2={right} y1={y(0)} y2={y(0)} />
         )}
         <path className={styles.area} d={areaPath} />
         <path className={styles.line} d={linePath} />
@@ -125,18 +147,18 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
             }}
           />
         ))}
-        <text className={styles.valueLabel} x={RIGHT - 4} y={Math.max(TOP - 10, finalPoint.y - 13)}>
+        <text className={styles.valueLabel} x={right - 4} y={Math.max(top - 10, finalPoint.y - 13)}>
           {formatMoney(finalPoint.total)}
         </text>
-        <text className={styles.monthLabel} x={RIGHT - 4} y={Math.max(TOP + 4, finalPoint.y + 3)}>
+        <text className={styles.monthLabel} x={right - 4} y={Math.max(top + 4, finalPoint.y + 3)}>
           {formatMonth(finalPoint.month)}
         </text>
         {activeIndex !== lastIndex && (
           <text
             className={styles.activeLabel}
-            x={Math.min(WIDTH - LEFT, Math.max(LEFT, activePoint.x))}
-            y={Math.max(TOP - 6, activePoint.y - 12)}
-            textAnchor={activePoint.x > WIDTH / 2 ? 'end' : 'start'}
+            x={Math.min(width - left, Math.max(left, activePoint.x))}
+            y={Math.max(top - 6, activePoint.y - 12)}
+            textAnchor={activePoint.x > width / 2 ? 'end' : 'start'}
           >
             {formatMoney(activePoint.total)} · {formatMonth(activePoint.month)}
           </text>
