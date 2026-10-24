@@ -47,7 +47,11 @@ export class FakeLlmProvider implements LLMProvider {
       ...overrides,
     });
     let drafts: AiWireDraft[] = [];
+    let truncated = false;
     switch (request.user) {
+      case '請截斷測試輸出':
+        truncated = true;
+        break;
       case '早餐 60 現金、午餐 120 刷卡':
         drafts = [
           draft({
@@ -137,6 +141,6 @@ export class FakeLlmProvider implements LLMProvider {
         drafts = [draft({ amountYuan: '60', title: '早餐', category: category('早餐') })];
         break;
     }
-    return Promise.resolve({ content: { drafts }, truncated: false });
+    return Promise.resolve({ content: { drafts }, truncated });
   }
 }
