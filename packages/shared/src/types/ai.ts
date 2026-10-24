@@ -39,6 +39,12 @@ export interface TransactionDraft {
   title: string | null;
   /** 支出／收入用；轉帳恆為 null。 */
   categoryId: string | null;
+  /**
+   * 模型提議的新分類名稱（`phase-4a-ai-new-category.md` 決策 283）。只有支出／收入、
+   * 而且 `categoryId` 是 null 時才可能有值，1～50 字。草稿階段不建立分類；使用者確認時
+   * 由新增交易 API 的 `newCategoryName` 取得或建立（決策 286）。
+   */
+  newCategoryName: string | null;
   /** 支出／收入的帳戶，或轉帳的轉出帳戶。 */
   accountId: string | null;
   /** 只有轉帳用；支出／收入恆為 null。 */
@@ -54,7 +60,7 @@ export interface ParseTransactionResponse {
  * 草稿能不能直接寫入（W210 的 ✓、W211「全部確認」要不要跳過）。
  *
  * - 共同：金額、日期、帳戶都要有。
- * - 支出／收入：要有分類。
+ * - 支出／收入：要有分類，或有提議的新分類名稱（4a 補充 W241）。
  * - 轉帳：要有轉入帳戶，而且和轉出帳戶不同。分類本來就是 null，不算缺。
  *
  * 名稱是選填（3c 決策 84），不影響。放 shared 是為了前後端只有一份規則（spec §4.1）。
@@ -69,5 +75,5 @@ export function isDraftComplete(draft: TransactionDraft): boolean {
     return draft.toAccountId !== null && draft.toAccountId !== draft.accountId;
   }
 
-  return draft.categoryId !== null;
+  return draft.categoryId !== null || draft.newCategoryName !== null;
 }

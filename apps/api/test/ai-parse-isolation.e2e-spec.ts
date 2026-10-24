@@ -264,6 +264,7 @@ describe('AI parse transaction — isolation (e2e)', () => {
         date: '2026-10-20',
         title: '早餐',
         categoryId: null,
+        newCategoryName: null,
         accountId: null,
         toAccountId: null,
         ...overrides,

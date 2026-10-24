@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 import { COUNTERPARTIES_KEY } from '../debts/use-debts';
 import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
+import { categoriesKey } from '../categories/use-categories';
 import {
   useCreateTransaction,
   useCreateTransactionForLedger,
@@ -316,13 +317,18 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
     expectDebtTotalsInvalidated();
   });
 
-  it('writes an AI draft to its supplied ledger and invalidates shared unscoped prefixes', async () => {
+  it('W244 writes an AI draft with a new category and invalidates shared prefixes plus that ledger category prefix', async () => {
     invalidate.mockClear();
     const create = renderHook(() => useCreateTransactionForLedger(), { wrapper });
     await act(() =>
       create.result.current.mutateAsync({
         ledgerId: 'ledger-2',
-        input: { type: 'EXPENSE', amount: 12000, date: '2026-10-05' },
+        input: {
+          type: 'EXPENSE',
+          amount: 12000,
+          date: '2026-10-05',
+          newCategoryName: '日用品',
+        },
       }),
     );
 
@@ -339,6 +345,7 @@ describe('transaction writes refresh shared-ledger debt totals', () => {
         ACCOUNTS_KEY,
         ['ledger-statistics'],
         ['balance-trend'],
+        categoriesKey('ledger-2'),
       ]) as unknown,
     );
     expect(keys).not.toContain(['transactions', 'ledger-1']);

@@ -6,6 +6,7 @@ import type {
   Transaction,
   UpdateTransactionRequest,
 } from '@ledger/shared';
+import { categoriesKey } from '../categories/use-categories';
 import { apiRequest } from '../../lib/api-client';
 import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
@@ -83,7 +84,11 @@ export function useCreateTransactionForLedger() {
         method: 'POST',
         body: input,
       }),
-    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
+    onSuccess: (_transaction, { ledgerId }) => {
+      invalidateAfterMoneyWrite(queryClient);
+      // AI 草稿可能順便建立新分類（4a W244），只有這本帳本的分類清單要重取。
+      void queryClient.invalidateQueries({ queryKey: categoriesKey(ledgerId) });
+    },
   });
 }
 

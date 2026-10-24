@@ -295,7 +295,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
       type: draft.type,
       amount: draft.amount!,
       date: draft.date!,
-      ...(draft.type === 'TRANSFER' ? {} : { categoryId: draft.categoryId! }),
+      ...(draft.type === 'TRANSFER'
+        ? {}
+        : draft.categoryId !== null
+          ? { categoryId: draft.categoryId }
+          : { newCategoryName: draft.newCategoryName! }),
       accountId: draft.accountId!,
       ...(draft.type === 'TRANSFER' ? { toAccountId: draft.toAccountId! } : {}),
       ...(draft.title === null ? {} : { title: draft.title }),

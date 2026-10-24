@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  CATEGORY_NAME_MAX_LENGTH,
   DebtTransactionType,
   ErrorCode,
   computeSharesByKey,
@@ -21,6 +22,7 @@ import {
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CategoriesService } from '../categories/categories.service';
 import { deriveSync } from '../debts/debt-proposal-rules';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
@@ -224,6 +226,7 @@ interface CreateTransactionInput {
   amount: number;
   date: string;
   categoryId?: string;
+  newCategoryName?: string;
   accountId?: string;
   toAccountId?: string;
   note?: string;
@@ -260,6 +263,7 @@ export class TransactionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly people: LedgerPeopleService,
+    private readonly categories: CategoriesService,
   ) {}
 
   /** 標註只改本人的列；代表 id 與單筆讀取共用，代墊 id 也會落在份額上。 */
@@ -413,14 +417,20 @@ export class TransactionsService {
           payerChanged: true,
           currentAccountId: null,
         });
-        await this.assertCategoryRules(ledgerId, input.type, input.categoryId);
+        const categoryId = await this.assertCategoryRules(
+          tx,
+          ledgerId,
+          input.type,
+          input.categoryId,
+          input.newCategoryName,
+        );
         const shares = split ? this.computeShares(split, input.amount, payerId) : null;
         const created = await tx.transaction.create({
           data: {
             ledgerId,
             creatorId,
             payerPersonId: payerId,
-            categoryId: input.categoryId!,
+            categoryId,
             accountId,
             toAccountId: null,
             type: input.type,
@@ -436,24 +446,32 @@ export class TransactionsService {
       });
       return this.getById(ledgerId, createdId, creatorId);
     }
-    // 建立時，「最終值」與「這次指定的值」是同一組。
-    await this.assertAccountRules(ledgerId, creatorId, input.type, input, input);
-    await this.assertCategoryRules(ledgerId, input.type, input.categoryId);
-
-    const transaction = await this.prisma.transaction.create({
-      data: {
+    // 分類與交易一起提交；後續寫入失敗時，不留下使用者尚未成功確認的分類。
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      // 建立時，「最終值」與「這次指定的值」是同一組。
+      await this.assertAccountRules(ledgerId, creatorId, input.type, input, input, tx);
+      const categoryId = await this.assertCategoryRules(
+        tx,
         ledgerId,
-        creatorId,
-        categoryId: input.categoryId ?? null,
-        accountId: input.accountId ?? null,
-        toAccountId: input.toAccountId ?? null,
-        type: input.type,
-        amount: input.amount,
-        date: new Date(input.date),
-        note: input.note ?? null,
-        title: input.title ?? null,
-      },
-      include: transactionInclude(creatorId),
+        input.type,
+        input.categoryId,
+        input.newCategoryName,
+      );
+      return tx.transaction.create({
+        data: {
+          ledgerId,
+          creatorId,
+          categoryId,
+          accountId: input.accountId ?? null,
+          toAccountId: input.toAccountId ?? null,
+          type: input.type,
+          amount: input.amount,
+          date: new Date(input.date),
+          note: input.note ?? null,
+          title: input.title ?? null,
+        },
+        include: transactionInclude(creatorId),
+      });
     });
     return this.toTransaction(transaction, creatorId);
   }
@@ -596,7 +614,7 @@ export class TransactionsService {
         { accountId: finalAccountId, toAccountId: finalToAccountId },
         { accountId: input.accountId, toAccountId: input.toAccountId },
       );
-      await this.assertCategoryRules(ledgerId, finalType, finalCategoryId);
+      await this.assertCategoryRules(tx, ledgerId, finalType, finalCategoryId);
 
       return tx.transaction.update({
         where: { id: transactionId },
@@ -741,7 +759,7 @@ export class TransactionsService {
         currentAccountId: existing.accountId,
       });
       const categoryId = input.categoryId ?? existing.categoryId ?? undefined;
-      await this.assertCategoryRules(ledgerId, finalType, categoryId);
+      await this.assertCategoryRules(tx, ledgerId, finalType, categoryId);
       if (input.toAccountId !== undefined) {
         throw new AppException(
           HttpStatus.BAD_REQUEST,
@@ -841,7 +859,7 @@ export class TransactionsService {
 
     if (input.categoryId !== undefined) {
       if (!this.isIncomeExpense(primary.type)) throw this.invalidMergedChange();
-      await this.assertCategoryRules(ledgerId, primary.type, input.categoryId);
+      await this.assertCategoryRules(tx, ledgerId, primary.type, input.categoryId);
     }
     if (input.toAccountId !== undefined && primary.type !== 'TRANSFER') {
       throw this.invalidMergedChange();
@@ -1264,7 +1282,12 @@ export class TransactionsService {
       splitId?: string;
     },
   ): Promise<string> {
-    await this.assertCategoryRules(input.ledgerId, input.type ?? 'EXPENSE', input.categoryId);
+    await this.assertCategoryRules(
+      client,
+      input.ledgerId,
+      input.type ?? 'EXPENSE',
+      input.categoryId,
+    );
 
     const created = await client.transaction.create({
       data: {
@@ -1301,7 +1324,7 @@ export class TransactionsService {
       splitId: string;
     },
   ): Promise<string> {
-    await this.assertCategoryRules(input.ledgerId, input.type, input.categoryId);
+    await this.assertCategoryRules(client, input.ledgerId, input.type, input.categoryId);
     await this.assertAccountRules(
       input.ledgerId,
       input.creatorId,
@@ -1417,35 +1440,51 @@ export class TransactionsService {
 
   /**
    * 分類的條件必填規則：
-   *   - `EXPENSE` / `INCOME`：必填，且須屬同帳本、型別一致；
+   *   - `EXPENSE` / `INCOME`：現有分類與新名稱恰填一個，且須屬同帳本、型別一致；
    *   - `TRANSFER`：不可填——「從銀行領錢到皮夾」不屬於任何消費類別，
    *     若允許帶分類，這筆錢就會出現在支出統計裡，但它其實沒有離開你。
    */
   private async assertCategoryRules(
+    client: Prisma.TransactionClient,
     ledgerId: string,
     type: TransactionType,
     categoryId: string | undefined,
-  ): Promise<void> {
+    newCategoryName?: string,
+  ): Promise<string | null> {
     if (type === 'TRANSFER') {
-      if (categoryId !== undefined) {
+      if (categoryId !== undefined || newCategoryName !== undefined) {
         throw new AppException(
           HttpStatus.BAD_REQUEST,
           ErrorCode.VALIDATION_FAILED,
           'A transfer cannot have a category.',
         );
       }
-      return;
+      return null;
     }
 
-    if (categoryId === undefined) {
+    if ((categoryId === undefined) === (newCategoryName === undefined)) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.VALIDATION_FAILED,
-        'categoryId is required for expense and income transactions.',
+        'Exactly one of categoryId or newCategoryName is required for expense and income transactions.',
       );
     }
 
-    const category = await this.prisma.category.findUnique({
+    if (newCategoryName !== undefined) {
+      // IsOptional 會略過 null，service 仍擋下非字串，避免在 trim 時變成 500。
+      const name = typeof newCategoryName === 'string' ? newCategoryName.trim() : '';
+      const length = Array.from(name).length;
+      if (!this.isIncomeExpense(type) || length < 1 || length > CATEGORY_NAME_MAX_LENGTH) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          `newCategoryName must be between 1 and ${CATEGORY_NAME_MAX_LENGTH} characters after trimming.`,
+        );
+      }
+      return this.categories.findOrCreateByName(client, ledgerId, type, name);
+    }
+
+    const category = await client.category.findUnique({
       where: { id: categoryId },
     });
     // 分類不屬於此帳本時回 404（而非 400）：不洩漏它是否存在。
@@ -1460,6 +1499,7 @@ export class TransactionsService {
         "The category's type does not match the transaction type.",
       );
     }
+    return category.id;
   }
 
   /**
@@ -1478,7 +1518,7 @@ export class TransactionsService {
     assigned: { accountId?: string; toAccountId?: string },
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<void> {
-    const ledger = await this.prisma.ledger.findUnique({
+    const ledger = await client.ledger.findUnique({
       where: { id: ledgerId },
       select: { id: true },
     });

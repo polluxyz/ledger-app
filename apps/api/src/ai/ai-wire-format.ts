@@ -1,4 +1,8 @@
-import { AI_MAX_DRAFTS, type ManualTransactionType } from '@ledger/shared';
+import {
+  AI_MAX_DRAFTS,
+  CATEGORY_NAME_MAX_LENGTH,
+  type ManualTransactionType,
+} from '@ledger/shared';
 
 /**
  * 模型回應的格式：後端要求模型照這個結構回 JSON（4a plan §1.2「模型回應的格式」）。
@@ -10,7 +14,8 @@ import { AI_MAX_DRAFTS, type ManualTransactionType } from '@ledger/shared';
  * - 金額是「元」的字串（`"60"`、`"12.5"`），不是分的整數。模型算錯 ×100 的機率比較高，
  *   換算交給後端用 `parseMoneyInput` 做，不經過浮點數。
  * - 每個 key 都必填，`null` 表示句子沒提。帳戶另有 `"?"`：提了但對不到。兩者處理不同
- *   （沒提用預設帳戶，對不到留空讓使用者補，決策 242）。
+ *   （沒提用預設帳戶，對不到留空讓使用者補，決策 242）。`newCategory` 只在分類留空時
+ *   提議新名稱，最長 50 字（4a 補充決策 281～283）。
  *
  * 這裡的型別是「模型應該回什麼」，不是「模型實際回了什麼」。實際的回應一律當 `unknown`，
  * 由 `ai-draft-validation.ts` 逐欄檢查，不可直接斷言成這個型別。
@@ -30,6 +35,8 @@ export interface AiWireDraft {
   title: string | null;
   /** 分類代號；`null`＝沒提或對不到。轉帳不用。 */
   category: string | null;
+  /** 新分類名稱；只有 `category` 為 `null` 時才有意義，轉帳不用。 */
+  newCategory: string | null;
   /** 帳戶代號；`null`＝沒提；`"?"`＝提了但對不到。 */
   account: string | null;
   /** 轉入帳戶代號，只有轉帳用；`null`＝沒提；`"?"`＝提了但對不到。 */
@@ -66,6 +73,7 @@ export const AI_WIRE_JSON_SCHEMA: Record<string, unknown> = {
           'date',
           'title',
           'category',
+          'newCategory',
           'account',
           'toAccount',
         ],
@@ -76,6 +84,10 @@ export const AI_WIRE_JSON_SCHEMA: Record<string, unknown> = {
           date: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
           title: nullableString,
           category: nullableString,
+          newCategory: {
+            type: ['string', 'null'],
+            maxLength: CATEGORY_NAME_MAX_LENGTH,
+          },
           account: nullableString,
           toAccount: nullableString,
         },

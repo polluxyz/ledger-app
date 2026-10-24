@@ -7,6 +7,7 @@ import {
   fillRemainingShares,
   isDebtTransactionType,
   parseMoneyInput,
+  type Category,
   type CategoryType,
   type CreateTransactionRequest,
   type CreateSplitRequest,
@@ -66,6 +67,9 @@ import { canDeleteTransactionFromEditor } from './transaction-actions';
 
 /** 新增模式的分段控制多一格「借還」：它不是交易型別，只是改渲染 DebtEntryForm。 */
 type EntryTab = ManualTransactionType | 'DEBT';
+
+/** 此選項只存在於 AI 草稿表單；字串格式不可能與 UUID 分類 id 重複。 */
+const PROPOSED_CATEGORY_OPTION_ID = '__ai_proposed_category__';
 
 interface TransactionFormProps {
   ledger: LedgerSummary;
@@ -503,7 +507,9 @@ function TransactionFormContent({
   );
   const [categoryId, setCategoryId] = useState(
     draft
-      ? (draft.categoryId ?? '')
+      ? draft.categoryId === null && draft.newCategoryName !== null
+        ? PROPOSED_CATEGORY_OPTION_ID
+        : (draft.categoryId ?? '')
       : (split?.category.id ??
           transaction?.category?.id ??
           (copyFrom && ledger.id === copySourceLedgerId ? (copyFrom.category?.id ?? '') : '')),
@@ -607,6 +613,25 @@ function TransactionFormContent({
    */
   const categoryType: CategoryType = type === 'TRANSFER' ? 'EXPENSE' : type;
   const categories = useCategories(ledgerId, categoryType);
+  const proposedCategory: Category | null =
+    draft !== undefined &&
+    draft.type !== 'TRANSFER' &&
+    draft.type === type &&
+    draft.categoryId === null &&
+    draft.newCategoryName !== null
+      ? {
+          id: PROPOSED_CATEGORY_OPTION_ID,
+          name: `＋${draft.newCategoryName}`,
+          type: draft.type,
+          sortOrder: Number.MAX_SAFE_INTEGER,
+          icon: null,
+          createdAt: '1970-01-01T00:00:00.000Z',
+        }
+      : null;
+  const categoryOptions = [
+    ...(categories.data ?? []),
+    ...(proposedCategory === null ? [] : [proposedCategory]),
+  ];
   const copyCategoryType: CategoryType | undefined = copyFrom?.category
     ? copyFrom.type === 'INCOME'
       ? 'INCOME'
@@ -708,6 +733,21 @@ function TransactionFormContent({
   const amountCents = parseMoneyInput(amount);
   const hasSyncedSplitEntries =
     split?.participants.some((person) => person.sync === 'SYNCED') ?? false;
+
+  function createCategoryInput(): Pick<CreateTransactionRequest, 'categoryId' | 'newCategoryName'> {
+    if (type === 'TRANSFER') return {};
+    if (
+      draft !== undefined &&
+      draft.type === type &&
+      draft.categoryId === null &&
+      draft.newCategoryName !== null &&
+      categoryId === PROPOSED_CATEGORY_OPTION_ID
+    ) {
+      return { newCategoryName: draft.newCategoryName };
+    }
+    if (categoryId === PROPOSED_CATEGORY_OPTION_ID) return {};
+    return { categoryId };
+  }
 
   /**
    * 帳戶欄位鎖住＝這筆的帳戶被隱私規則遮住，且不是目前使用者的臨時帳戶。
@@ -1169,7 +1209,7 @@ function TransactionFormContent({
           type,
           amount: amountCents!,
           date: isoDate,
-          categoryId,
+          ...createCategoryInput(),
           ...(payerIsMe ? {} : { payerPersonId }),
           ...(payerIsMe && showAccountField ? { accountId: selectedAccountId } : {}),
           ...(title === '' ? {} : { title }),
@@ -1319,7 +1359,7 @@ function TransactionFormContent({
           type,
           amount: amountCents!,
           date: isoDate,
-          categoryId: type === 'TRANSFER' ? undefined : categoryId,
+          ...createCategoryInput(),
           accountId: selectedAccountId === '' ? undefined : selectedAccountId,
           toAccountId:
             type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
@@ -1428,7 +1468,7 @@ function TransactionFormContent({
             那時這一列只剩日期，auto-fit 會讓它自己撐滿。 */}
         {type !== 'TRANSFER' && (
           <CategoryPicker
-            categories={categories.data ?? []}
+            categories={categoryOptions}
             value={categoryId}
             onChange={setCategoryId}
           />

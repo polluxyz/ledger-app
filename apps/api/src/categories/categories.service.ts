@@ -68,6 +68,27 @@ export class CategoriesService {
     }
   }
 
+  /**
+   * 在新增交易的同一個資料庫交易中取得或建立分類。略過唯一鍵衝突，避免併發同名
+   * 請求讓 PostgreSQL 交易中止；讀回時會取得先完成寫入的那一筆。
+   */
+  async findOrCreateByName(
+    client: Prisma.TransactionClient,
+    ledgerId: string,
+    type: CategoryType,
+    name: string,
+  ): Promise<string> {
+    const sortOrder = await this.nextSortOrder(ledgerId, type, client);
+    await client.category.createMany({
+      data: [{ ledgerId, type, name, icon: null, sortOrder }],
+      skipDuplicates: true,
+    });
+    const category = await client.category.findUniqueOrThrow({
+      where: { ledgerId_type_name: { ledgerId, type, name } },
+    });
+    return category.id;
+  }
+
   /** 僅更新有送出的欄位；空請求沒有可執行的變更，因此回 400。 */
   async update(
     ledgerId: string,
@@ -139,8 +160,12 @@ export class CategoriesService {
    * 次要排序鍵 `name` 會決定先後，順序仍然是確定的。為了一個純顯示用的欄位
    * 上交易鎖，代價不成比例。
    */
-  private async nextSortOrder(ledgerId: string, type: CategoryType): Promise<number> {
-    const last = await this.prisma.category.findFirst({
+  private async nextSortOrder(
+    ledgerId: string,
+    type: CategoryType,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<number> {
+    const last = await client.category.findFirst({
       where: { ledgerId, type },
       orderBy: { sortOrder: 'desc' },
       select: { sortOrder: true },

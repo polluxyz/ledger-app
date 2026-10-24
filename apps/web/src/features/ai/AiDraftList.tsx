@@ -95,10 +95,13 @@ export function AiDraftList({
           const type = draft.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
           const categoryName =
             draft.categoryId === null
-              ? null
+              ? draft.newCategoryName === null
+                ? null
+                : `＋${draft.newCategoryName}`
               : (categoriesByLedger
                   .get(`${draft.ledgerId}:${type}`)
                   ?.find((category) => category.id === draft.categoryId)?.name ?? null);
+          const hasProposedCategory = draft.categoryId === null && draft.newCategoryName !== null;
           const accountName =
             draft.accountId === null
               ? null
@@ -138,7 +141,17 @@ export function AiDraftList({
                     (categoryName === null ? (
                       <span className={styles.missing}>分類未提供</span>
                     ) : (
-                      <span className={styles.chip}>{categoryName}</span>
+                      <span
+                        className={`${styles.chip}${hasProposedCategory ? ` ${styles.proposedCategory}` : ''}`}
+                        role={hasProposedCategory ? 'note' : undefined}
+                        aria-label={
+                          hasProposedCategory
+                            ? `變更分類：${draft.newCategoryName}，確認時新增`
+                            : undefined
+                        }
+                      >
+                        {categoryName}
+                      </span>
                     ))}
                   {draft.type === 'TRANSFER' ? (
                     <span

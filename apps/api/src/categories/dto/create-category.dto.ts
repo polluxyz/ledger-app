@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { CATEGORY_ICONS, CATEGORY_TYPES } from '@ledger/shared';
+import { CATEGORY_ICONS, CATEGORY_NAME_MAX_LENGTH, CATEGORY_TYPES } from '@ledger/shared';
 import type { CategoryIcon, CategoryType, CreateCategoryRequest } from '@ledger/shared';
 
 /**
@@ -10,10 +10,10 @@ import type { CategoryIcon, CategoryType, CreateCategoryRequest } from '@ledger/
  * 而轉帳沒有分類。用寬的那組會讓 API 接受一個我們明文禁止的東西。
  */
 export class CreateCategoryDto implements CreateCategoryRequest {
-  @ApiProperty({ example: '餐飲', minLength: 1, maxLength: 50 })
+  @ApiProperty({ example: '餐飲', minLength: 1, maxLength: CATEGORY_NAME_MAX_LENGTH })
   @IsString()
   @MinLength(1)
-  @MaxLength(50)
+  @MaxLength(CATEGORY_NAME_MAX_LENGTH)
   name!: string;
 
   @ApiProperty({ enum: CATEGORY_TYPES, example: 'EXPENSE' })

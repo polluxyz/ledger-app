@@ -69,6 +69,45 @@ describe('CategoriesService', () => {
     });
   });
 
+  /** 使用獨立交易 client，驗證同名沿用與新分類排序都不落到外層 Prisma。 */
+  describe('findOrCreateByName', () => {
+    it.each([
+      [0, { sortOrder: 7 }, 'existing'],
+      [1, { sortOrder: 7 }, 'new'],
+      [1, null, 'first'],
+    ] as const)('reads back the category after inserting %s rows', async (count, last, id) => {
+      const client = {
+        category: {
+          findFirst: jest.fn().mockResolvedValue(last),
+          createMany: jest.fn().mockResolvedValue({ count }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id }),
+        },
+      };
+      await expect(
+        service.findOrCreateByName(
+          client as unknown as Prisma.TransactionClient,
+          ledgerId,
+          'EXPENSE',
+          '日用品',
+        ),
+      ).resolves.toBe(id);
+      expect(client.category.findFirst).toHaveBeenCalledWith({
+        where: { ledgerId, type: 'EXPENSE' },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      });
+      expect(client.category.createMany).toHaveBeenCalledWith({
+        data: [{ ledgerId, type: 'EXPENSE', name: '日用品', icon: null, sortOrder: last ? 8 : 0 }],
+        skipDuplicates: true,
+      });
+      expect(client.category.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { ledgerId_type_name: { ledgerId, type: 'EXPENSE', name: '日用品' } },
+      });
+      expect(prisma.category.findFirst).not.toHaveBeenCalled();
+      expect(prisma.category.create).not.toHaveBeenCalled();
+    });
+  });
+
   it('maps a duplicate name to 409 CATEGORY_NAME_TAKEN', async () => {
     prisma.category.create.mockRejectedValue(p2002);
 
