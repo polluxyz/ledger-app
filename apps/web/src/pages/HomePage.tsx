@@ -15,11 +15,7 @@ import type {
   Transaction,
 } from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
-import {
-  homeCategoryColor,
-  useHomeCategoryColors,
-  type HomeCategoryColorMode,
-} from '../app/use-home-category-colors';
+import { homeCategoryColor, useHomeCategoryColors } from '../app/use-home-category-colors';
 import { Button } from '../components/Button';
 import { FormError } from '../components/FormError';
 import { Icon } from '../components/Icon';
@@ -154,6 +150,7 @@ function LedgerView() {
           months={balanceTrendQuery.data?.months}
           isLoading={balanceTrendQuery.isLoading}
           error={balanceTrendQuery.error}
+          className={styles.trendChart}
         />
       </div>
       {/* 等帳本查詢完成後再掛載，避免切入首頁時重抓待處理資料。 */}
@@ -167,10 +164,10 @@ function LedgerView() {
       )}
       <h2 className={styles.myHeading}>我的</h2>
       <div className={styles.cards}>
-        <AssetCard totalQuery={assetTrendQuery(balanceTrendQuery)} accountsQuery={accountsQuery} />
+        <AssetCard totalQuery={balanceTrendQuery} accountsQuery={accountsQuery} />
         <DebtsCard
-          counterpartiesQuery={homeCounterpartiesQuery(counterpartiesQuery)}
-          unpointedLedgersQuery={homeLedgerGroupsQuery(unpointedLedgersQuery)}
+          counterpartiesQuery={counterpartiesQuery}
+          unpointedLedgersQuery={unpointedLedgersQuery}
           showAllLink={false}
         />
       </div>
@@ -222,7 +219,7 @@ function Dashboard({
   const period = currentTaiwanMonthRange();
   const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
   const { mode: storedMode } = useHomeCategoryColors();
-  const mode = storedMode as HomeCategoryColorMode;
+  const mode = storedMode;
   const chartTheme = useChartTheme();
   const [panelTargetState, setPanelTargetState] = useState(() => ({
     ledgerId: ledger.id,
@@ -243,9 +240,7 @@ function Dashboard({
 
   const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
   const setTransactionMark = useSetTransactionMark();
-  const markedTransactions = Array.isArray(markedQuery.data?.items)
-    ? markedQuery.data.items.filter((item) => item.ledger != null)
-    : [];
+  const markedTransactions = markedQuery.data?.items ?? [];
 
   function setCurrentPanelTarget(target: PanelTarget) {
     setPanelTargetState({ ledgerId: ledger.id, target });
@@ -371,103 +366,74 @@ function Dashboard({
   return (
     <>
       <PageContent>
-        <PageHeader
-          title="總覽"
-          actions={
-            <>
-              <LedgerSwitcher />
-              <Button onClick={startAdding}>
-                <Icon name="plus" />
-                新增交易
-              </Button>
-            </>
-          }
-        />
-        <LedgerStatsRow ledger={ledger} statistics={statistics} period={period} />
-        <PendingCard />
-
-        <div className={styles.activityAndTrend}>
-          <ActivityCard
-            activityTab={activityTab}
-            onActivityTabChange={onActivityTabChange}
-            hasMarkedTab={hasMarkedTab}
-            recentTabRef={recentTabRef}
-            markedTabRef={markedTabRef}
-            onTabKeyDown={moveActivityTab}
-            markedQuery={markedQuery}
-            markedTransactions={markedTransactions}
-            markedExpanded={markedExpanded}
-            onExpandMarked={onExpandMarked}
-            recentTransactions={recent.data?.items ?? []}
-            recentLoading={recent.isLoading || recent.isPlaceholderData}
-            recentError={recent.error}
-            onSelectRecent={startEditing}
-            onFillRecent={fillAccount}
-            onCopyRecent={startCopying}
-            onDeleteRecent={startDeleting}
-            onToggleRecentMark={(transaction) => toggleMark(transaction)}
-            onSelectMarked={(transaction) => startMarkedAction(transaction, 'edit')}
-            onFillMarked={(transaction) => startMarkedAction(transaction, 'fillAccount')}
-            onToggleMarked={(transaction, ledgerId) => toggleMark(transaction, ledgerId)}
-            selectedId={selectedId}
+        <div className={styles.dashboard}>
+          <PageHeader
+            title="總覽"
+            actions={
+              <>
+                <LedgerSwitcher />
+                <Button onClick={startAdding}>
+                  <Icon name="plus" />
+                  新增交易
+                </Button>
+              </>
+            }
           />
-          <div className={styles.trendChart}>
+          <LedgerStatsRow ledger={ledger} statistics={statistics} period={period} />
+          <PendingCard />
+
+          <div className={styles.activityAndTrend}>
+            <ActivityCard
+              activityTab={activityTab}
+              onActivityTabChange={onActivityTabChange}
+              hasMarkedTab={hasMarkedTab}
+              recentTabRef={recentTabRef}
+              markedTabRef={markedTabRef}
+              onTabKeyDown={moveActivityTab}
+              markedQuery={markedQuery}
+              markedTransactions={markedTransactions}
+              markedExpanded={markedExpanded}
+              onExpandMarked={onExpandMarked}
+              recentTransactions={recent.data?.items ?? []}
+              recentLoading={recent.isLoading || recent.isPlaceholderData}
+              recentError={recent.error}
+              onSelectRecent={startEditing}
+              onFillRecent={fillAccount}
+              onCopyRecent={startCopying}
+              onDeleteRecent={startDeleting}
+              onToggleRecentMark={(transaction) => toggleMark(transaction)}
+              onSelectMarked={(transaction) => startMarkedAction(transaction, 'edit')}
+              onFillMarked={(transaction) => startMarkedAction(transaction, 'fillAccount')}
+              onToggleMarked={(transaction, ledgerId) => toggleMark(transaction, ledgerId)}
+              selectedId={selectedId}
+            />
             <BalanceTrendChart
               months={balanceTrendQuery.data?.months}
               isLoading={balanceTrendQuery.isLoading}
               error={balanceTrendQuery.error}
+              className={styles.trendChart}
             />
           </div>
-        </div>
 
-        <h2 className={styles.myHeading}>我的</h2>
-        <div className={styles.cards}>
-          <AssetCard
-            totalQuery={assetTrendQuery(balanceTrendQuery)}
-            accountsQuery={accountsQuery}
-            categorySection={categorySection}
-          />
-          <DebtsCard
-            counterpartiesQuery={homeCounterpartiesQuery(counterpartiesQuery)}
-            unpointedLedgersQuery={homeLedgerGroupsQuery(unpointedLedgersQuery)}
-            showAllLink
-          />
+          <h2 className={styles.myHeading}>我的</h2>
+          <div className={styles.cards}>
+            <AssetCard
+              totalQuery={balanceTrendQuery}
+              accountsQuery={accountsQuery}
+              categorySection={categorySection}
+            />
+            <DebtsCard
+              counterpartiesQuery={counterpartiesQuery}
+              unpointedLedgersQuery={unpointedLedgersQuery}
+              showAllLink
+            />
+          </div>
         </div>
       </PageContent>
 
       <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
   );
-}
-
-/** 不完整的趨勢回應顯示空狀態，避免首頁資產卡因缺少月份清單而崩潰。 */
-function assetTrendQuery(query: ReturnType<typeof useBalanceTrend>) {
-  return {
-    data: Array.isArray(query.data?.months) ? query.data : undefined,
-    error: query.error,
-    isLoading: query.isLoading,
-  };
-}
-
-/** 首頁借還卡只收到 API 契約完整的資料，避免不完整回應進入 W2 顯示元件。 */
-function homeCounterpartiesQuery(query: ReturnType<typeof useCounterparties>) {
-  const hasItems = query.data == null || Array.isArray(query.data.items);
-  return {
-    ...query,
-    data: hasItems ? query.data : undefined,
-    error: query.error ?? (hasItems ? null : new Error('無法載入借還對象。')),
-  };
-}
-
-function homeLedgerGroupsQuery(query: ReturnType<typeof useLedgerGroups>) {
-  const hasGroups =
-    query.data == null ||
-    (Array.isArray(query.data) && query.data.every((group) => Array.isArray(group.people)));
-  return {
-    ...query,
-    data: hasGroups ? query.data : undefined,
-    error: query.error ?? (hasGroups ? null : new Error('無法載入未指向對象的帳本。')),
-  };
 }
 
 interface ActivityCardProps {
@@ -520,6 +486,8 @@ function ActivityCard({
   onFillMarked,
   onToggleMarked,
 }: ActivityCardProps) {
+  const visibleTab: HomeActivityTab = hasMarkedTab ? activityTab : 'recent';
+
   return (
     <section className={styles.dataCard} aria-label="最近與標註">
       <div className={styles.activityHeader}>
@@ -529,10 +497,10 @@ function ActivityCard({
             id="home-recent-tab"
             type="button"
             role="tab"
-            aria-selected={activityTab === 'recent'}
+            aria-selected={visibleTab === 'recent'}
             aria-controls="home-activity-panel"
-            tabIndex={activityTab === 'recent' ? 0 : -1}
-            className={activityTab === 'recent' ? styles.activeTab : styles.tab}
+            tabIndex={visibleTab === 'recent' ? 0 : -1}
+            className={visibleTab === 'recent' ? styles.activeTab : styles.tab}
             onClick={() => onActivityTabChange('recent')}
             onKeyDown={(event) => onTabKeyDown(event, 'recent')}
           >
@@ -544,10 +512,10 @@ function ActivityCard({
               id="home-marked-tab"
               type="button"
               role="tab"
-              aria-selected={activityTab === 'marked'}
+              aria-selected={visibleTab === 'marked'}
               aria-controls="home-activity-panel"
-              tabIndex={activityTab === 'marked' ? 0 : -1}
-              className={activityTab === 'marked' ? styles.activeTab : styles.tab}
+              tabIndex={visibleTab === 'marked' ? 0 : -1}
+              className={visibleTab === 'marked' ? styles.activeTab : styles.tab}
               onClick={() => onActivityTabChange('marked')}
               onKeyDown={(event) => onTabKeyDown(event, 'marked')}
             >
@@ -555,7 +523,7 @@ function ActivityCard({
             </button>
           )}
         </div>
-        {activityTab === 'recent' && (
+        {visibleTab === 'recent' && (
           <Link className={styles.cardLink} to="/transactions">
             查看全部
           </Link>
@@ -565,10 +533,10 @@ function ActivityCard({
       <div
         id="home-activity-panel"
         role="tabpanel"
-        aria-labelledby={activityTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
+        aria-labelledby={visibleTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
         tabIndex={0}
       >
-        {activityTab === 'recent' ? (
+        {visibleTab === 'recent' ? (
           <section className={styles.activityContent} aria-labelledby="recent-transactions">
             <h2 className={styles.cardHeading} id="recent-transactions">
               最近交易

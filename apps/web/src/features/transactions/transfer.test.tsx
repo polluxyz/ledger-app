@@ -78,6 +78,34 @@ describe('Recording a transfer', () => {
           }),
         );
       }
+      if (url.includes('/transactions/marked')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 10, total: 0 }));
+      }
+      if (url.includes('/counterparties?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 100, total: 0 }));
+      }
+      if (url.includes('/ledger-groups?unpointed=true')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (url.includes('/friend-requests?') || url.includes('/debt-proposals?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+      }
+      if (url.includes('/statistics?')) {
+        const ledgerId =
+          url.split('/ledgers/')[1]?.split('/')[0] ??
+          (typeof overrides.ledger?.id === 'string' ? overrides.ledger.id : ledger.id);
+        return Promise.resolve(
+          jsonResponse(200, {
+            ledgerId,
+            from: '2026-10-01',
+            to: '2026-10-31',
+            ledger: { income: 0, expense: 0, net: 0 },
+            mine: { income: 0, expense: 0, net: 0 },
+            expenseGroups: [],
+            incomeGroups: [],
+          }),
+        );
+      }
       if (url.includes('/transactions')) {
         return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
       }
@@ -86,6 +114,9 @@ describe('Recording a transfer', () => {
       }
       if (url.includes('/users/me/record-defaults')) {
         return Promise.resolve(jsonResponse(200, { ledgerId: ledger.id, accountId: cash.id }));
+      }
+      if (url.includes('/accounts/balance-trend')) {
+        return Promise.resolve(jsonResponse(200, { months: [] }));
       }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, overrides.accounts ?? [cash, bank]));

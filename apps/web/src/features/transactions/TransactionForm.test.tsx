@@ -110,6 +110,24 @@ describe('TransactionForm', () => {
       if (url.includes('/debts/summary')) {
         return json({ items: [] });
       }
+      if (url.includes('/transactions/marked')) {
+        return json({ items: [], page: 1, limit: 10, total: 0 });
+      }
+      if (url.includes('/ledger-groups?unpointed=true')) return json([]);
+      if (url.includes('/friend-requests?') || url.includes('/debt-proposals?')) {
+        return json({ items: [], page: 1, limit: 20, total: 0 });
+      }
+      if (url.includes('/statistics?')) {
+        return json({
+          ledgerId: ledger.id,
+          from: '2026-10-01',
+          to: '2026-10-31',
+          ledger: { income: 0, expense: 0, net: 0 },
+          mine: { income: 0, expense: 0, net: 0 },
+          expenseGroups: [],
+          incomeGroups: [],
+        });
+      }
       if (url.includes('/users/me/record-defaults')) {
         return json({
           ledgerId: ledger.id,
@@ -143,6 +161,9 @@ describe('TransactionForm', () => {
           typeof init.body === 'string' ? (JSON.parse(init.body) as { name?: string }) : {};
         return json({ id: `new-${requestBody.name}`, displayName: requestBody.name });
       }
+      if (url.includes('/counterparties?askMerge=true')) {
+        return json({ items: [], page: 1, limit: 100, total: 0 });
+      }
       if (url.includes('/counterparties')) {
         return json({
           items: [
@@ -168,6 +189,9 @@ describe('TransactionForm', () => {
       if (url.endsWith('/splits')) return json({ id: 'split-1' });
       if (url.includes('/categories')) {
         return json(options.categories ?? [category]);
+      }
+      if (url.includes('/accounts/balance-trend')) {
+        return json({ months: [] });
       }
       if (url.includes('/accounts')) {
         return json(options.accounts ?? accounts);

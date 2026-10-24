@@ -8,6 +8,8 @@ interface BalanceTrendChartProps {
   months: BalanceTrend['months'] | undefined;
   isLoading: boolean;
   error: unknown;
+  /** 外層版面可調整圖表高度，不需選取元件內部的 SVG。 */
+  className?: string;
 }
 
 const WIDTH = 640;
@@ -17,7 +19,7 @@ const RIGHT = WIDTH - LEFT;
 const TOP = 34;
 const BOTTOM = HEIGHT - 38;
 
-export function BalanceTrendChart({ months, isLoading, error }: BalanceTrendChartProps) {
+export function BalanceTrendChart({ months, isLoading, error, className }: BalanceTrendChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
@@ -28,7 +30,7 @@ export function BalanceTrendChart({ months, isLoading, error }: BalanceTrendChar
 
   if (error || (!isLoading && values.length === 0)) {
     return (
-      <section className={styles.card} aria-labelledby="balance-trend-heading">
+      <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
         <h2 className={styles.heading} id="balance-trend-heading">
           資產
         </h2>
@@ -41,7 +43,7 @@ export function BalanceTrendChart({ months, isLoading, error }: BalanceTrendChar
 
   if (isLoading) {
     return (
-      <section className={styles.card} aria-labelledby="balance-trend-heading">
+      <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
         <h2 className={styles.heading} id="balance-trend-heading">
           資產
         </h2>
@@ -78,7 +80,7 @@ export function BalanceTrendChart({ months, isLoading, error }: BalanceTrendChar
     .join('；');
 
   return (
-    <section className={styles.card} aria-labelledby="balance-trend-heading">
+    <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
       <h2 className={styles.heading} id="balance-trend-heading">
         資產
       </h2>
@@ -142,6 +144,10 @@ export function BalanceTrendChart({ months, isLoading, error }: BalanceTrendChar
       </svg>
     </section>
   );
+}
+
+function cardClassName(className: string | undefined): string | undefined {
+  return className ? `${styles.card} ${className}` : styles.card;
 }
 
 function formatMonth(month: string): string {

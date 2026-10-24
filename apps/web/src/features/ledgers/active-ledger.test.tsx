@@ -47,6 +47,35 @@ describe('Active ledger selection', () => {
   function routeFetch(ledgers: unknown[]) {
     fetchMock.mockImplementation((url: string) => {
       const target = String(url);
+      if (target.includes('/accounts/balance-trend')) {
+        return Promise.resolve(jsonResponse(200, { months: [] }));
+      }
+      if (target.includes('/transactions/marked')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 10, total: 0 }));
+      }
+      if (target.includes('/counterparties?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 100, total: 0 }));
+      }
+      if (target.includes('/ledger-groups?unpointed=true')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (target.includes('/friend-requests?') || target.includes('/debt-proposals?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+      }
+      if (target.includes('/statistics?')) {
+        const ledgerId = target.split('/ledgers/')[1]?.split('/')[0] ?? 'ledger-1';
+        return Promise.resolve(
+          jsonResponse(200, {
+            ledgerId,
+            from: '2026-10-01',
+            to: '2026-10-31',
+            ledger: { income: 0, expense: 0, net: 0 },
+            mine: { income: 0, expense: 0, net: 0 },
+            expenseGroups: [],
+            incomeGroups: [],
+          }),
+        );
+      }
       if (target.includes('/ledgers/') && target.includes('/transactions')) {
         const ledgerId = target.split('/ledgers/')[1]?.split('/')[0] ?? '';
         return Promise.resolve(

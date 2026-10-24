@@ -53,6 +53,35 @@ describe('Accounts page', () => {
     const accounts = options.accounts ?? [cash, card];
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
+      if (url.includes('/accounts/balance-trend')) {
+        return Promise.resolve(jsonResponse(200, { months: [] }));
+      }
+      if (url.includes('/transactions/marked')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 10, total: 0 }));
+      }
+      if (url.includes('/counterparties?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 100, total: 0 }));
+      }
+      if (url.includes('/ledger-groups?unpointed=true')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (url.includes('/friend-requests?') || url.includes('/debt-proposals?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+      }
+      if (url.endsWith('/statistics') || url.includes('/statistics?')) {
+        const ledgerId = url.split('/ledgers/')[1]?.split('/')[0] ?? 'ledger-1';
+        return Promise.resolve(
+          jsonResponse(200, {
+            ledgerId,
+            from: '2026-10-01',
+            to: '2026-10-31',
+            ledger: { income: 0, expense: 0, net: 0 },
+            mine: { income: 0, expense: 0, net: 0 },
+            expenseGroups: [],
+            incomeGroups: [],
+          }),
+        );
+      }
       if (url.includes('/accounts') && method !== 'GET') {
         return Promise.resolve(options.write?.() ?? jsonResponse(201, cash));
       }
@@ -353,6 +382,34 @@ describe('Transaction form without any account', () => {
       role: 'OWNER',
     };
     fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/accounts/balance-trend')) {
+        return Promise.resolve(jsonResponse(200, { months: [] }));
+      }
+      if (url.includes('/transactions/marked')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 10, total: 0 }));
+      }
+      if (url.includes('/counterparties?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 100, total: 0 }));
+      }
+      if (url.includes('/ledger-groups?unpointed=true')) {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (url.includes('/friend-requests?') || url.includes('/debt-proposals?')) {
+        return Promise.resolve(jsonResponse(200, { items: [], page: 1, limit: 20, total: 0 }));
+      }
+      if (url.includes('/statistics?')) {
+        return Promise.resolve(
+          jsonResponse(200, {
+            ledgerId: ledger.id,
+            from: '2026-10-01',
+            to: '2026-10-31',
+            ledger: { income: 0, expense: 0, net: 0 },
+            mine: { income: 0, expense: 0, net: 0 },
+            expenseGroups: [],
+            incomeGroups: [],
+          }),
+        );
+      }
       if (url.includes('/accounts')) {
         return Promise.resolve(jsonResponse(200, []));
       }

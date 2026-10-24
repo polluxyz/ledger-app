@@ -34,9 +34,12 @@ describe('Home dashboard', () => {
   let availableLedgers: Array<typeof ledger> = [ledger];
   let markedTransactions: Array<Record<string, unknown>> = [];
   let markedTotal = 0;
+  let emptyMarksAfterCreate = false;
   let statisticsFailure = false;
   let balanceTrendFailure = false;
   let accountsFailure = false;
+  let accountsPending = false;
+  let accountsEmpty = false;
   let afterCreate = false;
   let createdTransaction: Record<string, unknown> | null = null;
   let accountBalance = account.balance;
@@ -45,6 +48,7 @@ describe('Home dashboard', () => {
   let releaseRefetches: (() => void) | null = null;
   let delayedRecentLedgerId: string | null = null;
   let delayedRecentResponse: Promise<Response> | null = null;
+  let recentTransactionOverride: Array<Record<string, unknown>> | null = null;
   const createdRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
   const accountWriteRequests: string[] = [];
 
@@ -166,7 +170,9 @@ describe('Home dashboard', () => {
   }
 
   function transactionPage(ledgerId: string) {
-    const items = ledgerId === otherLedger.id ? homeTransactions : dailyTransactions;
+    const items =
+      recentTransactionOverride ??
+      (ledgerId === otherLedger.id ? homeTransactions : dailyTransactions);
     return {
       items: createdTransaction && ledgerId === ledger.id ? [createdTransaction, ...items] : items,
       page: 1,
@@ -197,9 +203,12 @@ describe('Home dashboard', () => {
     availableLedgers = [ledger];
     markedTransactions = [];
     markedTotal = 0;
+    emptyMarksAfterCreate = false;
     statisticsFailure = false;
     balanceTrendFailure = false;
     accountsFailure = false;
+    accountsPending = false;
+    accountsEmpty = false;
     afterCreate = false;
     createdTransaction = null;
     accountBalance = account.balance;
@@ -208,6 +217,7 @@ describe('Home dashboard', () => {
     releaseRefetches = null;
     delayedRecentLedgerId = null;
     delayedRecentResponse = null;
+    recentTransactionOverride = null;
     createdRequests.length = 0;
     accountWriteRequests.length = 0;
     dailyTransactions.forEach((transaction, index) => {
@@ -243,10 +253,15 @@ describe('Home dashboard', () => {
           amount: body.amount,
           createdAt: '2026-10-24T00:00:00.000Z',
         });
-        markedTransactions = [
-          { ...createdTransaction, marked: true, ledger: { id: ledgerId, name: ledger.name } },
-        ];
-        markedTotal = 1;
+        if (emptyMarksAfterCreate) {
+          markedTransactions = [];
+          markedTotal = 0;
+        } else {
+          markedTransactions = [
+            { ...createdTransaction, marked: true, ledger: { id: ledgerId, name: ledger.name } },
+          ];
+          markedTotal = 1;
+        }
         accountBalance = 99000;
         counterpartBalance = 20000;
         return response(createdTransaction, 201);
@@ -288,6 +303,8 @@ describe('Home dashboard', () => {
         if (accountsFailure) {
           return response({ statusCode: 400, errorCode: 'TEST', message: 'accounts failed' }, 400);
         }
+        if (accountsPending) return new Promise<Response>(() => {});
+        if (accountsEmpty) return response([]);
         return response([{ ...account, balance: accountBalance }]);
       }
       if (path === '/counterparties') {
@@ -439,8 +456,33 @@ describe('Home dashboard', () => {
     expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
     expect(screen.getByRole('link', { name: /本月收入/ })).toHaveTextContent('$50,000');
     expect(screen.getByRole('link', { name: /結餘/ })).toHaveTextContent('$49,297');
+    expect(screen.getByRole('link', { name: /本月支出/ })).not.toHaveTextContent('我 ');
     expect(screen.getByRole('list', { name: '支出分類' })).toHaveTextContent('餐飲');
     expect(countRequest(`/ledgers/${ledger.id}/statistics`)).toBe(1);
+  });
+
+  it('uses the Taiwan calendar month for the statistics request and stat links', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-31T16:30:00.000Z'));
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+
+    const request = fetchMock.mock.calls.find(([input]) =>
+      endpointOf(input).path.endsWith('/statistics'),
+    );
+    expect(request).toBeDefined();
+    const requestUrl = endpointOf(request?.[0]).url;
+    expect(requestUrl.searchParams.get('from')).toBe('2026-04-01');
+    expect(requestUrl.searchParams.get('to')).toBe('2026-04-30');
+
+    for (const label of [/本月支出/, /本月收入/, /結餘/]) {
+      const link = screen.getByRole('link', { name: label });
+      expect(
+        new URL(link.getAttribute('href')!, 'http://localhost').searchParams.get('month'),
+      ).toBe('2026-04');
+    }
   });
 
   it('shows shared-ledger totals and category names after switching while personal queries stay cached', async () => {
@@ -488,6 +530,77 @@ describe('Home dashboard', () => {
     expect(screen.getByRole('group', { name: '新增一筆交易' })).toBeInTheDocument();
   });
 
+  it('keeps the W260 section order and puts the trend beside recent activity', async () => {
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    const stats = screen.getByLabelText('本月收支');
+    const activity = screen.getByRole('region', { name: '最近與標註' });
+    const trendChart = screen.getByRole('group', { name: /每月資產/ }).closest('section');
+    const myHeading = screen.getByRole('heading', { name: '我的' });
+
+    expect(trendChart).not.toBeNull();
+    expect(stats.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(
+      activity.compareDocumentPosition(trendChart!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    expect(
+      trendChart!.compareDocumentPosition(myHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it('does not leave an empty pending card on the home page', async () => {
+    signIn();
+    render(<App />);
+
+    await waitForInitialHome();
+    expect(screen.queryByRole('heading', { name: '待確認' })).not.toBeInTheDocument();
+  });
+
+  it('shows at most five compact rows in recent activity', async () => {
+    signIn();
+    render(<App />);
+
+    const recent = await recentRegion();
+    const rows = recent.getAllByRole('listitem');
+
+    expect(rows).toHaveLength(5);
+    expect(within(rows[0]!).getByText('交易 1')).toBeInTheDocument();
+    expect(within(rows[0]!).getByText('餐飲')).toBeInTheDocument();
+    expect(rows[0]).not.toHaveTextContent('備註 1');
+    expect(rows[0]).not.toHaveTextContent('現金');
+    expect(recent.getByText('交易 5')).toBeInTheDocument();
+    expect(recent.queryByText('交易 6')).not.toBeInTheDocument();
+  });
+
+  it('keeps home links and title actions while leaving filters and paging to the transactions page', async () => {
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+
+    await recentRegion();
+    expect(screen.getByRole('link', { name: '查看全部' })).toHaveAttribute('href', '/transactions');
+    const accountSection = screen.getByRole('heading', { name: '帳戶' }).closest('section');
+    expect(accountSection).not.toBeNull();
+    expect(within(accountSection!).getByRole('link', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
+
+    const heading = screen.getByRole('heading', { name: '總覽' });
+    const header = heading.closest('header');
+    const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
+    const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    expect(addButton.closest('header')).toBe(header);
+    expect(switcher.closest('header')).toBe(header);
+    expect(heading.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+    expect(screen.queryByRole('region', { name: '篩選交易' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '分頁' })).not.toBeInTheDocument();
+  });
+
   it('shares the account query when the workbench form unmounts and mounts again', async () => {
     const user = userEvent.setup();
     signIn();
@@ -514,6 +627,33 @@ describe('Home dashboard', () => {
     expect(await screen.findByText('帳戶暫時無法載入', {}, WAIT)).toBeInTheDocument();
     expect(countRequest('/accounts')).toBe(1);
     expect(screen.queryByRole('list', { name: '帳戶清單' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the account loading state inside the asset card', async () => {
+    signIn();
+    accountsPending = true;
+    render(<App />);
+
+    const accountHeading = await screen.findByRole('heading', { name: '帳戶' }, WAIT);
+    const assets = accountHeading.closest('section');
+    expect(assets).not.toBeNull();
+    expect(within(accountHeading.parentElement!).getByText('載入中…')).toBeInTheDocument();
+    expect(countRequest('/accounts')).toBe(1);
+  });
+
+  it('keeps the account page link available when the account list is empty', async () => {
+    signIn();
+    accountsEmpty = true;
+    render(<App />);
+
+    await waitForInitialHome();
+    const assets = screen.getByRole('heading', { name: '帳戶' }).closest('section');
+    expect(assets).not.toBeNull();
+    expect(within(assets!).getByText('還沒有帳戶。')).toBeInTheDocument();
+    expect(within(assets!).getByRole('link', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
   });
 
   it('does not show the old ledger recent rows while the new ledger request is pending', async () => {
@@ -569,6 +709,77 @@ describe('Home dashboard', () => {
     expect(screen.queryByRole('dialog', { name: '編輯交易' })).not.toBeInTheDocument();
   });
 
+  it('opens an editor from a recent row and only collapses it when closed', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    const recent = await recentRegion();
+    await user.click(recent.getAllByRole('button', { name: /^編輯/ })[0]!);
+    const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
+    expect(within(panel).getByLabelText('金額')).toHaveValue(101);
+
+    await user.click(within(panel).getByRole('button', { name: '關閉' }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+    expect(screen.getByRole('dialog', { name: '編輯交易' }).closest('[inert]')).not.toBeNull();
+    expect(screen.queryByRole('group', { name: '新增一筆交易' })).not.toBeInTheDocument();
+  });
+
+  it('opens a recent row editor with the keyboard', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    const recent = await recentRegion();
+    const row = recent.getAllByRole('button', { name: /^編輯.*餐飲/ })[0]!;
+    row.focus();
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
+  });
+
+  it('edits linked debt rows from recent activity and leaves another persons debt read-only', async () => {
+    const user = userEvent.setup();
+    signIn();
+    recentTransactionOverride = [
+      makeTransaction(ledger.id, 1, {
+        id: 'linked-debt',
+        type: 'LEND',
+        title: '借小明',
+        category: null,
+        debt: {
+          entryId: 'entry-1',
+          kind: 'LEND',
+          counterpartyId: 'counterparty-1',
+          counterpartyName: '小明',
+          paired: false,
+          note: null,
+        },
+      }),
+      makeTransaction(ledger.id, 2, {
+        id: 'other-debt',
+        type: 'LEND',
+        title: '他人借出',
+        category: null,
+        debt: null,
+      }),
+    ];
+    render(<App />);
+
+    const recent = await recentRegion();
+    await user.click(recent.getByRole('button', { name: /^編輯.*借出/ }));
+    expect(await screen.findByRole('dialog', { name: '編輯交易' }, WAIT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+    }, WAIT);
+
+    await user.click(recent.getByText('借出', { exact: true }));
+    expect(document.querySelector('[data-registered]')).not.toHaveAttribute('data-open');
+  });
+
   it('switches to a marked transaction ledger before editing and keeps the target after a rerender', async () => {
     const user = userEvent.setup();
     signIn();
@@ -584,9 +795,9 @@ describe('Home dashboard', () => {
 
     await waitForInitialHome();
     await user.click(screen.getByRole('tab', { name: '標註 1' }));
-    await user.click(
-      within(screen.getByRole('region', { name: '標註' })).getByRole('button', { name: /^編輯/ }),
-    );
+    const marked = screen.getByRole('region', { name: '標註' });
+    expect(within(marked).getByText('家用')).toBeInTheDocument();
+    await user.click(within(marked).getByRole('button', { name: /^編輯/ }));
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(dialog).getByLabelText('金額')).toHaveValue(99);
     expect(localStorage.getItem('ledger.activeLedgerId')).toBe(otherLedger.id);
@@ -734,6 +945,7 @@ describe('Home dashboard', () => {
   it('returns to Recent and moves focus there when the last mark is cancelled', async () => {
     const user = userEvent.setup();
     signIn();
+    availableLedgers = [{ ...ledger, role: 'VIEWER' }];
     markedTransactions = [
       {
         ...makeTransaction(ledger.id, 1, { id: 'only-mark', marked: true }),
@@ -756,6 +968,39 @@ describe('Home dashboard', () => {
     const recentTab = screen.getByRole('tab', { name: '最近' });
     expect(recentTab).toHaveAttribute('aria-selected', 'true');
     expect(recentTab).toHaveFocus();
+  });
+
+  it('shows recent content with a valid tab label when marked disappears after a refetch', async () => {
+    const user = userEvent.setup();
+    signIn();
+    markedTransactions = [
+      {
+        ...makeTransaction(ledger.id, 1, { id: 'only-mark', marked: true }),
+        ledger: { id: ledger.id, name: ledger.name },
+      },
+    ];
+    markedTotal = 1;
+    emptyMarksAfterCreate = true;
+    render(<App />);
+
+    await waitForInitialHome();
+    await user.click(screen.getByRole('tab', { name: '標註 1' }));
+    expect(screen.getByRole('tab', { name: '標註 1' })).toHaveAttribute('aria-selected', 'true');
+
+    const form = screen.getByRole('group', { name: '新增一筆交易' });
+    await user.type(within(form).getByLabelText('金額'), '250');
+    await chooseCategory(user, form, '新增類');
+    await user.click(within(form).getByRole('button', { name: '新增' }));
+
+    await waitFor(
+      () => expect(screen.queryByRole('tab', { name: /標註/ })).not.toBeInTheDocument(),
+      WAIT,
+    );
+    const recentTab = screen.getByRole('tab', { name: '最近' });
+    const panel = screen.getByRole('tabpanel');
+    expect(recentTab).toHaveAttribute('aria-selected', 'true');
+    expect(panel).toHaveAttribute('aria-labelledby', 'home-recent-tab');
+    expect(within(panel).getByRole('region', { name: '最近交易' })).toBeInTheDocument();
   });
 
   it('supports tablist arrow navigation and roving tabindex', async () => {
