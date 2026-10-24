@@ -1,6 +1,7 @@
 import {
   LlmProviderError,
   type LLMProvider,
+  type LlmProviderDescriptor,
   type LlmRequest,
   type LlmResponse,
 } from './llm-provider';
@@ -14,6 +15,8 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
  * API key 只放在 Authorization 標頭；錯誤只回傳分類、狀態碼與耗時，避免洩漏句子或模型內容。
  */
 export class GlmLlmProvider implements LLMProvider {
+  readonly descriptor: LlmProviderDescriptor;
+
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
@@ -21,7 +24,9 @@ export class GlmLlmProvider implements LLMProvider {
     private readonly reasoningEffort?: 'low' | 'high' | 'max',
     private readonly fetchImplementation: typeof fetch = fetch,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
-  ) {}
+  ) {
+    this.descriptor = { configured: true, provider: 'glm', model };
+  }
 
   async complete(request: LlmRequest): Promise<LlmResponse> {
     const startedAt = Date.now();
@@ -66,7 +71,7 @@ export class GlmLlmProvider implements LLMProvider {
 
       const responseText = await this.readResponseBody(response, controller);
       if (responseText === null) {
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
       let payload: unknown;
@@ -74,12 +79,12 @@ export class GlmLlmProvider implements LLMProvider {
         payload = JSON.parse(responseText) as unknown;
       } catch {
         // 解析錯誤訊息可能包含模型回應片段，因此只把它視為看不懂。
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
       const messageContent = this.getMessageContent(payload);
       if (typeof messageContent !== 'string') {
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
       let content: unknown;
@@ -87,11 +92,11 @@ export class GlmLlmProvider implements LLMProvider {
         content = JSON.parse(messageContent) as unknown;
       } catch {
         // 不把 JSON.parse 的例外帶出這層，避免錯誤訊息攜帶模型內容。
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
       const usage = this.getUsage(payload);
-      return usage ? { content, usage } : { content };
+      return usage ? { content, usage, truncated: false } : { content, truncated: false };
     } catch (error: unknown) {
       if (error instanceof LlmProviderError) {
         throw error;

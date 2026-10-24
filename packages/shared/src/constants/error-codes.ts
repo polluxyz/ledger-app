@@ -152,6 +152,8 @@ export const ErrorCode = {
   AI_NOT_CONFIGURED: 'AI_NOT_CONFIGURED',
   /** AI 的 provider 回錯誤、連不上或逾時（4a 決策 248）。不帶 provider 的原始錯誤。503。 */
   AI_UNAVAILABLE: 'AI_UNAVAILABLE',
+  /** 超過每人每日的 AI 記帳解析次數（4a 額度決策 296）。429。 */
+  AI_DAILY_LIMIT: 'AI_DAILY_LIMIT',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

@@ -1,4 +1,4 @@
-import type { LLMProvider, LlmRequest, LlmResponse } from './llm-provider';
+import type { LLMProvider, LlmProviderDescriptor, LlmRequest, LlmResponse } from './llm-provider';
 import type { AiWireDraft } from './ai-wire-format';
 
 interface FakeData {
@@ -14,6 +14,8 @@ interface FakeData {
  * 不重用伺服器對照表與檢查函式，清單漏送或名稱不符就讓測試直接失敗。
  */
 export class FakeLlmProvider implements LLMProvider {
+  readonly descriptor: LlmProviderDescriptor = { configured: true, provider: 'fake', model: null };
+
   complete(request: LlmRequest): Promise<LlmResponse> {
     const match = /^<ai-data>(.*)<\/ai-data>$/m.exec(request.system);
     if (!match) throw new Error('Fake provider catalog is missing.');
@@ -135,6 +137,6 @@ export class FakeLlmProvider implements LLMProvider {
         drafts = [draft({ amountYuan: '60', title: '早餐', category: category('早餐') })];
         break;
     }
-    return Promise.resolve({ content: { drafts } });
+    return Promise.resolve({ content: { drafts }, truncated: false });
   }
 }

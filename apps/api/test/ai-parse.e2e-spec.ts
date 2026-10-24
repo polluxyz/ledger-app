@@ -32,7 +32,10 @@ describe('AI parse transaction (e2e)', () => {
   let categories: Category[];
   const fake = new FakeLlmProvider();
   const complete = jest.fn<Promise<LlmResponse>, [LlmRequest]>();
-  const stub: LLMProvider = { complete };
+  const stub: LLMProvider = {
+    descriptor: { configured: true, provider: 'stub', model: null },
+    complete,
+  };
   const today = '2040-03-01';
   const originalNodeEnv = process.env.NODE_ENV;
 
@@ -373,6 +376,7 @@ describe('AI parse transaction (e2e)', () => {
       )!.code;
       const cash = data.accounts.find((row) => row.name === '現金')!.code;
       return Promise.resolve({
+        truncated: false,
         content: {
           drafts: [
             wire({
@@ -399,6 +403,7 @@ describe('AI parse transaction (e2e)', () => {
     complete.mockImplementationOnce((input) => {
       dataOf(input);
       return Promise.resolve({
+        truncated: false,
         content: {
           drafts: [
             wire({ category: 'C999', newCategory: '日用品' }),
@@ -416,14 +421,18 @@ describe('AI parse transaction (e2e)', () => {
   it.each([null, { drafts: [] }, { drafts: 'bad' }, { drafts: [null, 1] }])(
     'SC-P8: malformed content %p is empty with 200',
     async (content) => {
-      complete.mockResolvedValueOnce({ content });
+      complete.mockResolvedValueOnce({ truncated: false, content });
       expect((await parse('壞格式').expect(200)).body).toEqual({ drafts: [] });
     },
   );
   it('SC-P8: only first ten slots count, even when they contain invalid elements', async () => {
-    complete.mockResolvedValueOnce({ content: { drafts: Array<unknown>(11).fill(wire()) } });
+    complete.mockResolvedValueOnce({
+      truncated: false,
+      content: { drafts: Array<unknown>(11).fill(wire()) },
+    });
     expect(responseDrafts((await parse('十一筆').expect(200)).body)).toHaveLength(10);
     complete.mockResolvedValueOnce({
+      truncated: false,
       content: { drafts: [null, 1, ...Array<unknown>(9).fill(wire())] },
     });
     expect(responseDrafts((await parse('壞元素').expect(200)).body)).toHaveLength(8);
@@ -579,9 +588,12 @@ describe('AI parse transaction (e2e)', () => {
       expect(logged.filter((args) => JSON.stringify(args).includes(marker))).toHaveLength(3);
       logged.length = 0;
       const before = await counts();
-      complete.mockResolvedValueOnce({ content: { drafts: [wire({ title: marker })] } });
+      complete.mockResolvedValueOnce({
+        truncated: false,
+        content: { drafts: [wire({ title: marker })] },
+      });
       await parse(marker).expect(200);
-      complete.mockResolvedValueOnce({ content: null });
+      complete.mockResolvedValueOnce({ truncated: false, content: null });
       await parse(marker).expect(200);
       complete.mockRejectedValueOnce(new LlmProviderError('http', 503, 20));
       await parse(marker).expect(503);

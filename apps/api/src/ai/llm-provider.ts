@@ -18,6 +18,8 @@ export interface LlmRequest {
   user: string;
   /** 要求模型回傳的 JSON 結構（`ai-wire-format.ts` 的 `AI_WIRE_JSON_SCHEMA`）。 */
   schema: Record<string, unknown>;
+  /** 輸出 token 上限（額度決策 293）。由 `AI_QUOTA_LIMITS` 決定，provider 照實帶給模型。 */
+  maxOutputTokens: number;
 }
 
 export interface LlmUsage {
@@ -28,11 +30,27 @@ export interface LlmUsage {
 export interface LlmResponse {
   /** 模型回的 JSON，已經 parse 過。`null`＝回的不是 JSON（當成看不懂，決策 246）。 */
   content: unknown;
-  /** 有回報就帶，給 T6 記錄 token 用量。 */
+  /** 只放驗證過的非負安全整數；不合格就不帶（額度決策 298 (c)）。 */
   usage?: LlmUsage;
+  /**
+   * 模型因為輸出上限被截斷（GLM 的 `finish_reason === 'length'`）。即使 content 是完整的
+   * JSON 也算截斷。`false` 只代表沒有截斷訊號，不保證內容完整。
+   */
+  truncated: boolean;
+}
+
+/**
+ * provider 的身分，給額度與日誌用（不含金鑰）。`configured: false` 時 `complete` 一定丟
+ * `AI_NOT_CONFIGURED`，所以扣額度之前就能先擋下，不浪費次數。
+ */
+export interface LlmProviderDescriptor {
+  configured: boolean;
+  provider: string;
+  model: string | null;
 }
 
 export interface LLMProvider {
+  readonly descriptor: LlmProviderDescriptor;
   complete(request: LlmRequest): Promise<LlmResponse>;
 }
 

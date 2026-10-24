@@ -44,7 +44,7 @@ describe('LLM provider factory', () => {
           GLM_BASE_URL: 'https://example.test/v4',
           GLM_REASONING_EFFORT: 'low',
         }),
-      ).complete({ system: '', user: '', schema: {} });
+      ).complete({ system: '', user: '', schema: {}, maxOutputTokens: 2048 });
       const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<
         string,
         unknown
@@ -69,7 +69,7 @@ describe('LLM provider factory', () => {
     expect(provider).not.toBeInstanceOf(FakeLlmProvider);
     expect(provider).not.toBeInstanceOf(GlmLlmProvider);
     await expect(async () =>
-      provider.complete({ system: '', user: '', schema: {} }),
+      provider.complete({ system: '', user: '', schema: {}, maxOutputTokens: 2048 }),
     ).rejects.toMatchObject({ status: 503, errorCode: 'AI_NOT_CONFIGURED' });
   });
 });

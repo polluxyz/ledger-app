@@ -17,7 +17,10 @@ describe('AiService', () => {
       account: { findMany: jest.fn().mockResolvedValue([{ id: 'cash', name: '現金' }]) },
     };
     const users = { getRecordDefaults: jest.fn().mockResolvedValue({ accountId: 'cash' }) };
-    const provider = { complete: jest.fn().mockResolvedValue({ content: { drafts: [] } }) };
+    const provider = {
+      descriptor: { configured: true, provider: 'stub', model: null },
+      complete: jest.fn().mockResolvedValue({ truncated: false, content: { drafts: [] } }),
+    };
     const service = new AiService(
       prisma as unknown as PrismaService,
       users as unknown as UsersService,

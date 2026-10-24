@@ -10,6 +10,7 @@ const BASE_REQUEST = {
   system: '請把句子轉成交易草稿。',
   user: USER_SENTENCE,
   schema: { type: 'object', required: ['drafts'] },
+  maxOutputTokens: 2048,
 };
 
 function createFetchMock(response: Response): FetchMock {
@@ -264,6 +265,7 @@ describe('GlmLlmProvider', () => {
       const fetchMock = createFetchMock(response);
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
         content: null,
       });
     });
@@ -279,6 +281,7 @@ describe('GlmLlmProvider', () => {
       });
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
         content: null,
       });
       expect(requestSignal?.aborted).toBe(true);
@@ -292,6 +295,7 @@ describe('GlmLlmProvider', () => {
       );
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
         content: { drafts: [] },
         usage: { promptTokens: 23, completionTokens: 11 },
       });
@@ -305,6 +309,7 @@ describe('GlmLlmProvider', () => {
       );
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
         content: { drafts: [] },
       });
     });
@@ -319,6 +324,7 @@ describe('GlmLlmProvider', () => {
       );
 
       await expect(createProvider(fetchMock).complete(BASE_REQUEST)).resolves.toEqual({
+        truncated: false,
         content: { drafts: [] },
       });
     });

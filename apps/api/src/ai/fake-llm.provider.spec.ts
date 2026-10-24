@@ -26,6 +26,7 @@ describe('FakeLlmProvider', () => {
       system: `<ai-data>${JSON.stringify(catalog)}</ai-data>`,
       user,
       schema: {},
+      maxOutputTokens: 2048,
     });
   it('uses actual codes from names rather than hardcoded positions', async () => {
     expect((await send('早餐 60 現金、午餐 120 刷卡')).content).toMatchObject({
@@ -89,8 +90,8 @@ describe('FakeLlmProvider', () => {
     expect(() => send('早餐 60 現金、午餐 120 刷卡', { ...data, accounts: [] })).toThrow(
       'does not match',
     );
-    expect(() => provider.complete({ system: '', user: '今天天氣很好', schema: {} })).toThrow(
-      'missing',
-    );
+    expect(() =>
+      provider.complete({ system: '', user: '今天天氣很好', schema: {}, maxOutputTokens: 2048 }),
+    ).toThrow('missing');
   });
 });

@@ -41,6 +41,8 @@ export class AiService {
         system: catalog.system,
         user: dto.text.trim(),
         schema: AI_WIRE_JSON_SCHEMA,
+        // T0 暫用決策 292 (c) 的預設值；T1 改成讀注入的 `AI_QUOTA_LIMITS`。
+        maxOutputTokens: 2048,
       });
       return validateAiDrafts(response.content, catalog, defaults, dto.today);
     } catch (error: unknown) {
