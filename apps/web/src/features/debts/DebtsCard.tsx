@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { Counterparty, LedgerGroup, Paginated } from '@ledger/shared';
 import { Link } from 'react-router-dom';
+import { getAvatarLabels } from '../../lib/avatar-labels';
 import { BalanceArrow } from './BalanceArrow';
 import styles from './DebtsCard.module.css';
 
@@ -22,6 +23,11 @@ export function DebtsCard({
 }: DebtsCardProps) {
   const counterparties = counterpartiesQuery.data?.items.slice(0, 5) ?? [];
   const ledgerGroups = unpointedLedgersQuery.data ?? [];
+  const avatarLabels = getAvatarLabels([
+    '我',
+    ...counterparties.map((counterparty) => counterparty.displayName),
+    ...ledgerGroups.flatMap((group) => group.people.map(({ person }) => person.name)),
+  ]);
   const counterpartyTotal = counterpartiesQuery.data?.total ?? 0;
   const bothQueriesSucceeded =
     !counterpartiesQuery.isLoading &&
@@ -61,7 +67,11 @@ export function DebtsCard({
             <li className={styles.person} key={counterparty.id}>
               <span className={styles.name}>{counterparty.displayName}</span>
               <span className={styles.balance}>
-                <BalanceArrow name={counterparty.displayName} amount={counterparty.totalBalance} />
+                <BalanceArrow
+                  name={counterparty.displayName}
+                  nameLabel={avatarLabels.get(counterparty.displayName)}
+                  amount={counterparty.totalBalance}
+                />
               </span>
             </li>
           ))}
@@ -91,7 +101,11 @@ export function DebtsCard({
               <li className={styles.person} key={person.id}>
                 <span className={styles.name}>{person.name}</span>
                 <span className={styles.balance}>
-                  <BalanceArrow name={person.name} amount={amount} />
+                  <BalanceArrow
+                    name={person.name}
+                    nameLabel={avatarLabels.get(person.name)}
+                    amount={amount}
+                  />
                 </span>
               </li>
             ))}

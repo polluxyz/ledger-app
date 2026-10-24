@@ -20,6 +20,18 @@ describe('HomeAccountList', () => {
     }));
   }
 
+  function temporaryAccount(hasTransactions: boolean): Account {
+    return {
+      id: `temporary-${hasTransactions ? 'used' : 'empty'}`,
+      name: 'Internal temporary account',
+      initialBalance: 0,
+      balance: 5000,
+      isTemporary: true,
+      hasTransactions,
+      createdAt: '2026-10-01T00:00:00.000Z',
+    };
+  }
+
   it('shows an empty state for zero accounts', () => {
     render(<HomeAccountList accounts={[]} />);
 
@@ -58,6 +70,35 @@ describe('HomeAccountList', () => {
     expect(toggle).toHaveTextContent('全部 6 個');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+  });
+
+  it('does not display or count an empty temporary account', () => {
+    render(<HomeAccountList accounts={[...makeAccounts(6), temporaryAccount(false)]} />);
+
+    const list = screen.getByRole('list', { name: '帳戶' });
+    expect(screen.getByRole('button', { name: '全部 6 個' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '全部 7 個' })).not.toBeInTheDocument();
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+
+    fireEvent.click(screen.getByRole('button', { name: '全部 6 個' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(list).queryByText('臨時帳戶')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty message when the only account is an empty temporary account', () => {
+    render(<HomeAccountList accounts={[temporaryAccount(false)]} />);
+
+    expect(screen.getByText('還沒有帳戶。')).toBeInTheDocument();
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('shows a used temporary account as 臨時帳戶', () => {
+    render(<HomeAccountList accounts={[temporaryAccount(true)]} />);
+
+    const list = screen.getByRole('list', { name: '帳戶' });
+    expect(within(list).getByText('臨時帳戶')).toBeInTheDocument();
+    expect(within(list).queryByText('Internal temporary account')).not.toBeInTheDocument();
   });
 
   it('shows twelve accounts in API order, labels the temporary account, and queries the list width', () => {

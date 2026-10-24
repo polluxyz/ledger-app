@@ -130,7 +130,7 @@ describe('DebtsCard', () => {
 
   it('keeps counterparty rows visible when unpointed ledgers fail and hides overview links when asked', () => {
     renderCard(
-      queryState(paginated([counterparty('person-1', '阿明', 0, 26000)])),
+      queryState(paginated([counterparty('person-1', '阿明', 0, 26000)], 6)),
       queryState<LedgerGroup[]>(undefined, { error: new Error('request failed') }),
       false,
     );
@@ -140,6 +140,16 @@ describe('DebtsCard', () => {
     expect(screen.queryByRole('link', { name: '全部 →' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '全部 6 人 →' })).not.toBeInTheDocument();
     expect(screen.queryByText('沒有借還')).not.toBeInTheDocument();
+  });
+
+  it('uses distinct avatar labels for names with the same first character across both sources', () => {
+    renderCard(
+      queryState(paginated([counterparty('person-1', '小明', 0, 12000)])),
+      queryState([ledgerGroup('家用', '小美', -12000)]),
+    );
+
+    expect(screen.getByTitle('小明')).toHaveTextContent('明');
+    expect(screen.getByTitle('小美')).toHaveTextContent('美');
   });
 
   it('does not claim there are no debts while one source is loading', () => {
