@@ -2,9 +2,16 @@ import { AiService } from './ai.service';
 import { LlmProviderError } from './llm-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import { AiQuotaService } from './ai-quota.service';
+import { Logger } from '@nestjs/common';
 
 /** mock 資料庫與 provider，確認拒絕發生在讀清單之前，以及只有指定例外會轉成 503。 */
 describe('AiService', () => {
+  let log: jest.SpyInstance;
+  beforeEach(() => {
+    log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
   const dto = { text: '  早餐 60  ', ledgerId: 'own', today: '2040-01-01' };
   function setup(role: string | null = 'OWNER', archivedAt: Date | null = null) {
     const prisma = {
@@ -21,12 +28,19 @@ describe('AiService', () => {
       descriptor: { configured: true, provider: 'stub', model: null },
       complete: jest.fn().mockResolvedValue({ truncated: false, content: { drafts: [] } }),
     };
+    const quota = {
+      reserve: jest.fn().mockResolvedValue({ day: '2040-01-01' }),
+      record: jest.fn().mockResolvedValue(undefined),
+    };
+    const limits = { perUserDaily: 50, globalDaily: 500, maxOutputTokens: 3072 };
     const service = new AiService(
       prisma as unknown as PrismaService,
       users as unknown as UsersService,
       provider,
+      quota as unknown as AiQuotaService,
+      limits,
     );
-    return { service, prisma, provider, users };
+    return { service, prisma, provider, users, quota, limits };
   }
   it.each([
     [null, null, 404],
@@ -64,5 +78,51 @@ describe('AiService', () => {
     const error = new Error('programming error');
     provider.complete.mockRejectedValue(error);
     await expect(service.parseTransaction('me', dto)).rejects.toBe(error);
+  });
+
+  it('checks configuration before catalog and quota', async () => {
+    const { service, provider, prisma, quota } = setup();
+    provider.descriptor.configured = false;
+    await expect(service.parseTransaction('me', dto)).rejects.toMatchObject({
+      errorCode: 'AI_NOT_CONFIGURED',
+    });
+    expect(prisma.ledger.findMany).not.toHaveBeenCalled();
+    expect(quota.reserve).not.toHaveBeenCalled();
+  });
+
+  it('loads catalog before quota and commits quota before provider; limits remain live', async () => {
+    const { service, provider, prisma, quota, limits } = setup();
+    await service.parseTransaction('me', dto);
+    expect(prisma.account.findMany.mock.invocationCallOrder[0]).toBeLessThan(
+      quota.reserve.mock.invocationCallOrder[0]!,
+    );
+    expect(quota.reserve.mock.invocationCallOrder[0]).toBeLessThan(
+      provider.complete.mock.invocationCallOrder[0]!,
+    );
+    expect(provider.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ maxOutputTokens: 3072 }),
+    );
+    limits.maxOutputTokens = 4096;
+    await service.parseTransaction('me', dto);
+    expect(provider.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ maxOutputTokens: 4096 }),
+    );
+  });
+
+  it('does not reserve when reading catalog fails', async () => {
+    const { service, prisma, quota } = setup();
+    prisma.category.findMany.mockRejectedValue(new Error('catalog failure'));
+    await expect(service.parseTransaction('me', dto)).rejects.toThrow('catalog failure');
+    expect(quota.reserve).not.toHaveBeenCalled();
+  });
+
+  it('SC-P25.2: discards complete JSON when truncated and records usage exactly once', async () => {
+    const { service, provider, quota } = setup();
+    const usage = { promptTokens: 4, completionTokens: 2 };
+    provider.complete.mockResolvedValue({ truncated: true, content: { drafts: [{}] }, usage });
+    expect(await service.parseTransaction('me', dto)).toEqual({ drafts: [] });
+    expect(quota.record).toHaveBeenCalledTimes(1);
+    expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', usage);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('outcome=truncated'));
   });
 });

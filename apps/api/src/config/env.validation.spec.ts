@@ -14,6 +14,22 @@ describe('validateEnv', () => {
     JWT_SECRET: 'a'.repeat(32),
   };
 
+  it.each([
+    ['AI_PARSE_DAILY_LIMIT_PER_USER', 50, 10000, 0],
+    ['AI_DAILY_LIMIT_GLOBAL', 500, 1000000, 0],
+    ['AI_PARSE_MAX_OUTPUT_TOKENS', 2048, 32768, 256],
+  ] as const)('SC-P23.4: validates %s boundaries and blank defaults', (key, fallback, max, min) => {
+    for (const blank of [undefined, '', '  ']) {
+      expect(validateEnv({ ...base, [key]: blank })[key]).toBe(fallback);
+    }
+    for (const value of ['-1', '1.5', 'abc', String(max + 1)]) {
+      expect(() => validateEnv({ ...base, [key]: value })).toThrow(key);
+    }
+    expect(validateEnv({ ...base, [key]: String(min) })[key]).toBe(min);
+    expect(validateEnv({ ...base, [key]: String(max) })[key]).toBe(max);
+    if (min > 0) expect(() => validateEnv({ ...base, [key]: '0' })).toThrow(key);
+  });
+
   it('defaults AI to fake without requiring external credentials', () => {
     expect(validateEnv(base)).toMatchObject({
       LLM_PROVIDER: 'fake',
