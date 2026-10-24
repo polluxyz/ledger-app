@@ -21,11 +21,16 @@ describe('FakeLlmProvider', () => {
     currentLedger: 'L9',
     today: '2040-03-01',
   };
+  it('describes the fake provider as configured', () => {
+    expect(provider.descriptor).toEqual({ configured: true, provider: 'fake', model: null });
+  });
+
   const send = (user: string, catalog = data) =>
     provider.complete({
       system: `<ai-data>${JSON.stringify(catalog)}</ai-data>`,
       user,
       schema: {},
+      maxOutputTokens: 2048,
     });
   it('uses actual codes from names rather than hardcoded positions', async () => {
     expect((await send('早餐 60 現金、午餐 120 刷卡')).content).toMatchObject({
@@ -85,12 +90,20 @@ describe('FakeLlmProvider', () => {
     ])
       expect((await send(text)).content).toEqual({ drafts: [] });
   });
+
+  it('returns a valid empty draft marked as truncated for the explicit script sentence', async () => {
+    expect(await send('請截斷測試輸出')).toEqual({
+      content: { drafts: [] },
+      truncated: true,
+    });
+  });
+
   it('fails if script names or data are missing', () => {
     expect(() => send('早餐 60 現金、午餐 120 刷卡', { ...data, accounts: [] })).toThrow(
       'does not match',
     );
-    expect(() => provider.complete({ system: '', user: '今天天氣很好', schema: {} })).toThrow(
-      'missing',
-    );
+    expect(() =>
+      provider.complete({ system: '', user: '今天天氣很好', schema: {}, maxOutputTokens: 2048 }),
+    ).toThrow('missing');
   });
 });

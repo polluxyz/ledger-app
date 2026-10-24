@@ -22,13 +22,24 @@
 - z.ai 條款：`advisor` 2026-10-24 讀過官方條款與 DPA。結論是開放給其他人前要補告知與同意、並向供應商確認用途；現在只有開發者自己用，不必先做。阻擋項見 `../handoff.md`。
 - Jev：開發者想之後把分類交給 Jev。`advisor` 建議先用 GLM 做完，Jev 另寫評估 spec，達標才換（spec §2.4）。這次不建任何 Jev 的檔案。
 
+## 每日額度與輸出上限（2026-10-24 核可，#166 合併，已部署並驗完真的模型）
+
+- spec `docs/specs/phase-4a-ai-quota.md`（決策 292～299、W245、SC-P18～P27），plan 與 todo 在 `tasks/archive/ai-parse-quota-*.md`。
+- 開發者在 dev 試過 4a 與新分類提議：「目前測試看起來沒甚麼問題」，費用控管「先繼續做」。
+- 每人每日 50 次、全站每日 500 次，台灣日曆日；呼叫模型前扣額度，扣了不退。新增 2 張表，要跑 migration。
+- `advisor` 給了 4 輪意見，都已併入 spec 與 plan，雙方沒有留下分歧。
+- T0～T5 都做完。T4 兩軸審查找到 3 個測試缺口，已補並做過突變檢查。各任務 commit、驗證數字、審查結果見 plan §7。
+- 部署：dev 已套用 migration `20261024120000_ai_parse_daily_usage`，部署前的備份在 `/tmp/aiq/backup/ledger_dev-before-aiq.dump`。冒煙測試用 a@a.com 送了 2 句，所以 a@a.com 10-24 已用 2 次額度。
+- T5：glm-5.3 跑 SC-P27（10 筆 3 次，加 SC-P17、4a SC-P10 第 5、6、8 步各 3 次），27/27，都沒有被截斷。10 筆最多用 609 個輸出 token，所以上限維持 2048。思考 token 算在輸出 token 裡。表的次數與 token 和 provider 回報一致。
+- 新的環境變數：`AI_PARSE_DAILY_LIMIT_PER_USER`（50）、`AI_DAILY_LIMIT_GLOBAL`（500）、`AI_PARSE_MAX_OUTPUT_TOKENS`（2048）。空白就用預設值。
+
 ## 下一步
 
-1. 開發者下次開 dev：重開 API 與 Vite，按 `Ctrl + Shift + R`，自己試「衛生紙 189」這類句子。
-2. 10-28 後換模型：處理 `GLM_BASE_URL` 預設值（spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17。
-3. 費用控管與 `max_tokens` 之後再設。
+1. 10-28 後換模型：處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。
 
 ## 已知問題
+
+- 待開發者確認後刪除的測試資料庫：`ledger_aiq_api_test`、`ledger_aiq_provider_test`（額度 worker 用過的）。
 
 - 假 provider 遇到固定句子、但帳本裡沒有對應的分類或帳戶時回 500（plan 核可的行為）。劇本以外的句子回 0 筆草稿。
 - glm-5.3 關不掉思考。`low` 時轉帳句偶爾要 16～19 秒，超過 25 秒回 503，使用者重送。

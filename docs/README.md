@@ -64,6 +64,7 @@
 | [`phase-2j-stats.md`](specs/phase-2j-stats.md)                                     | 2j 統計：首頁摘要、統計頁、資產趨勢               | 已完成    |
 | [`phase-4a-ai-text.md`](specs/phase-4a-ai-text.md)                                 | 階段四：4a AI 文字記帳（一句話變成交易草稿）      | 已完成    |
 | [`phase-4a-ai-new-category.md`](specs/phase-4a-ai-new-category.md)                 | 4a 補充：AI 先挑現有分類，沒有才提議新分類        | 已完成    |
+| [`phase-4a-ai-quota.md`](specs/phase-4a-ai-quota.md)                               | 4a 補充：AI 記帳的每日額度與輸出上限              | 已完成    |
 | [`phase-2k-home-redesign.md`](specs/phase-2k-home-redesign.md)                     | 2k 首頁改版：卡片版面、資產卡、借還卡、分類條配色 | 已完成    |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                                  | 長期有效  |
 

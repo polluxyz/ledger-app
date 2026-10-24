@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { TransactionDraft } from '@ledger/shared';
-import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
+import { AI_TEXT_MAX_LENGTH, ErrorCode } from '@ledger/shared';
 import { ApiError } from '../../lib/api-client';
 import { toDateInputValue } from '../../lib/format';
 import { Button } from '../../components/Button';
@@ -94,6 +94,7 @@ export function AiDraftInput({ ledgerId, onParsed }: AiDraftInputProps) {
 
 function getParseErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return 'AI 暫時沒有回應，請稍後再試。';
+  if (error.errorCode === ErrorCode.AI_DAILY_LIMIT) return '今天的 AI 次數用完了';
   if (error.statusCode === 429 || error.errorCode === 'TOO_MANY_REQUESTS') {
     return '太頻繁了，等一分鐘再試。';
   }

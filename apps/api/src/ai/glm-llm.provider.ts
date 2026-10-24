@@ -1,6 +1,7 @@
 import {
   LlmProviderError,
   type LLMProvider,
+  type LlmProviderDescriptor,
   type LlmRequest,
   type LlmResponse,
 } from './llm-provider';
@@ -14,6 +15,8 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
  * API key 只放在 Authorization 標頭；錯誤只回傳分類、狀態碼與耗時，避免洩漏句子或模型內容。
  */
 export class GlmLlmProvider implements LLMProvider {
+  readonly descriptor: LlmProviderDescriptor;
+
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
@@ -21,7 +24,9 @@ export class GlmLlmProvider implements LLMProvider {
     private readonly reasoningEffort?: 'low' | 'high' | 'max',
     private readonly fetchImplementation: typeof fetch = fetch,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
-  ) {}
+  ) {
+    this.descriptor = { configured: true, provider: 'glm', model };
+  }
 
   async complete(request: LlmRequest): Promise<LlmResponse> {
     const startedAt = Date.now();
@@ -43,6 +48,7 @@ export class GlmLlmProvider implements LLMProvider {
           },
           body: JSON.stringify({
             model: this.model,
+            max_tokens: request.maxOutputTokens,
             messages: [
               {
                 role: 'system',
@@ -66,7 +72,7 @@ export class GlmLlmProvider implements LLMProvider {
 
       const responseText = await this.readResponseBody(response, controller);
       if (responseText === null) {
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
       let payload: unknown;
@@ -74,12 +80,15 @@ export class GlmLlmProvider implements LLMProvider {
         payload = JSON.parse(responseText) as unknown;
       } catch {
         // 解析錯誤訊息可能包含模型回應片段，因此只把它視為看不懂。
-        return { content: null };
+        return { content: null, truncated: false };
       }
 
+      // 外層可解析時先保留用量與截斷訊號；content 壞掉不應抹掉已取得的 usage。
+      const usage = this.getUsage(payload);
+      const truncated = this.getFinishReason(payload) === 'length';
       const messageContent = this.getMessageContent(payload);
       if (typeof messageContent !== 'string') {
-        return { content: null };
+        return { content: null, truncated, ...(usage ? { usage } : {}) };
       }
 
       let content: unknown;
@@ -87,11 +96,10 @@ export class GlmLlmProvider implements LLMProvider {
         content = JSON.parse(messageContent) as unknown;
       } catch {
         // 不把 JSON.parse 的例外帶出這層，避免錯誤訊息攜帶模型內容。
-        return { content: null };
+        return { content: null, truncated, ...(usage ? { usage } : {}) };
       }
 
-      const usage = this.getUsage(payload);
-      return usage ? { content, usage } : { content };
+      return { content, truncated, ...(usage ? { usage } : {}) };
     } catch (error: unknown) {
       if (error instanceof LlmProviderError) {
         throw error;
@@ -162,11 +170,27 @@ export class GlmLlmProvider implements LLMProvider {
 
     const promptTokens: unknown = payload['usage']['prompt_tokens'];
     const completionTokens: unknown = payload['usage']['completion_tokens'];
-    if (typeof promptTokens !== 'number' || typeof completionTokens !== 'number') {
+    if (
+      typeof promptTokens !== 'number' ||
+      typeof completionTokens !== 'number' ||
+      !Number.isSafeInteger(promptTokens) ||
+      !Number.isSafeInteger(completionTokens) ||
+      promptTokens < 0 ||
+      completionTokens < 0
+    ) {
       return undefined;
     }
 
     return { promptTokens, completionTokens };
+  }
+
+  private getFinishReason(payload: unknown): unknown {
+    if (!this.isRecord(payload) || !Array.isArray(payload['choices'])) {
+      return undefined;
+    }
+
+    const firstChoice: unknown = payload['choices'][0];
+    return this.isRecord(firstChoice) ? firstChoice['finish_reason'] : undefined;
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

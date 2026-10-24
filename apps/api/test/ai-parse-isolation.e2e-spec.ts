@@ -31,7 +31,10 @@ describe('AI parse transaction — isolation (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   const complete = jest.fn<Promise<LlmResponse>, Parameters<LLMProvider['complete']>>();
-  const stub: LLMProvider = { complete };
+  const stub: LLMProvider = {
+    descriptor: { configured: true, provider: 'stub', model: null },
+    complete,
+  };
 
   beforeAll(async () => {
     ({ app, prisma } = await createE2EApp((builder) =>
@@ -41,7 +44,7 @@ describe('AI parse transaction — isolation (e2e)', () => {
   beforeEach(async () => {
     await resetDb(prisma);
     complete.mockReset();
-    complete.mockResolvedValue({ content: { drafts: [] } });
+    complete.mockResolvedValue({ truncated: false, content: { drafts: [] } });
   });
   afterAll(() => app.close());
 
@@ -221,6 +224,7 @@ describe('AI parse transaction — isolation (e2e)', () => {
         ...overrides,
       });
       complete.mockResolvedValueOnce({
+        truncated: false,
         content: {
           drafts: [
             // 1. 別人的帳本、別人看得到但我不能寫的帳本的分類、別人的帳戶，全用原始 UUID。
@@ -282,6 +286,7 @@ describe('AI parse transaction — isolation (e2e)', () => {
       const s = await scene();
       // 目前帳本是「花蓮三日」，模型回 Bob 私人帳本的原始 UUID：一樣不接受，留在目前帳本。
       complete.mockResolvedValueOnce({
+        truncated: false,
         content: {
           drafts: [
             {
