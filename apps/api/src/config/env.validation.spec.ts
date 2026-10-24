@@ -27,6 +27,8 @@ describe('validateEnv', () => {
     }
     expect(validateEnv({ ...base, [key]: String(min) })[key]).toBe(min);
     expect(validateEnv({ ...base, [key]: String(max) })[key]).toBe(max);
+    // 下限的前一個值（輸出上限是 255）要被拒絕，下限寫錯成 1 也會變紅。
+    expect(() => validateEnv({ ...base, [key]: String(min - 1) })).toThrow(key);
     if (min > 0) expect(() => validateEnv({ ...base, [key]: '0' })).toThrow(key);
   });
 
