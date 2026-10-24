@@ -105,6 +105,7 @@ describe('AI parse transaction (e2e)', () => {
     date: today,
     title: '早餐',
     categoryId: categoryId('早餐'),
+    newCategoryName: null,
     accountId: bob.cashId,
     toAccountId: null,
     ...overrides,

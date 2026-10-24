@@ -47,6 +47,7 @@ describe('AI draft validation', () => {
       date: '2040-03-01',
       title: '早餐',
       categoryId: 'food',
+      newCategoryName: null,
       accountId: 'cash',
       toAccountId: null,
     });

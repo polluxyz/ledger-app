@@ -1,6 +1,12 @@
 import type { CategoryIcon } from '../constants/category-icons';
 import type { CategoryType } from './transaction';
 
+/**
+ * 分類名稱的長度上限。新增、改名分類，以及新增交易的 `newCategoryName`（4a 補充決策 286）
+ * 共用這一個值，免得兩條建立分類的路徑限制不同。
+ */
+export const CATEGORY_NAME_MAX_LENGTH = 50;
+
 /** API 回傳的分類形狀。 */
 export interface Category {
   id: string;

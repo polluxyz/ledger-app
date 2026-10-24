@@ -36,6 +36,7 @@ function draft(overrides: Partial<TransactionDraft> = {}): TransactionDraft {
     date: '2026-10-23',
     title: '早餐',
     categoryId: category.id,
+    newCategoryName: null,
     accountId: 'acc-cash',
     toAccountId: null,
     ...overrides,

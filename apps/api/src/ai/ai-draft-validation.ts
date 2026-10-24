@@ -64,6 +64,8 @@ export function validateAiDrafts(
         item.type !== 'TRANSFER' && category?.ledgerId === ledgerId && category.type === item.type
           ? category.id
           : null,
+      // 4a 補充決策 283 由 T2 實作；在那之前一律不提議。
+      newCategoryName: null,
       accountId: item.account === null ? validDefault : (account ?? null),
       toAccountId:
         item.type === 'TRANSFER' && typeof item.toAccount === 'string'

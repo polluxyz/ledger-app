@@ -203,14 +203,25 @@ export interface TransactionDebtRef {
  * | 轉帳                         | **必填**                       | **不可填**   | **必填**      |
  *
  * 帳戶不能是臨時帳戶（400 `TEMPORARY_ACCOUNT_NOT_SELECTABLE`）。
+ *
+ * 表中 `categoryId` 的「必填」也可以改用 `newCategoryName` 滿足：支出／收入兩者恰好填一個，
+ * 轉帳兩者都不可填（4a 補充決策 286）。
  */
 export interface CreateTransactionRequest {
   type: ManualTransactionType;
   /** 金額，單位：分。 */
   amount: Cents;
   date: string;
-  /** 支出／收入必填；轉帳不可填。須屬於同一帳本、且型別一致。 */
+  /** 支出／收入必填（或改填 `newCategoryName`）；轉帳不可填。須屬於同一帳本、且型別一致。 */
   categoryId?: string;
+  /**
+   * 支出／收入用，和 `categoryId` 恰好填一個；轉帳不可填。去掉前後空白後 1～50 字
+   * （`CATEGORY_NAME_MAX_LENGTH`）。
+   *
+   * 後端在同一個資料庫交易裡取得或建立這本帳本、這個型別的同名分類，再新增交易（決策 286～288）。
+   * 已有同名分類就沿用，不會重複建立。
+   */
+  newCategoryName?: string;
   /** 連動帳本必填、非連動帳本不可填。須屬於**呼叫者本人**（否則 404）。 */
   accountId?: string;
   /** 僅轉帳使用：轉入的帳戶。須屬於本人，且不得與 `accountId` 相同。 */
