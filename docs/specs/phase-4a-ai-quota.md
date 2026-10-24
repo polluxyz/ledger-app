@@ -1,6 +1,6 @@
 # Spec：4a 補充：AI 記帳的每日額度與輸出上限
 
-> 狀態：**已實作**，真的模型（SC-P27）待驗（開發者 2026-10-24 核可假設 1～15；同日核可本 spec、plan、todo，含 §10 的 8 項。實作紀錄見 `tasks/ai-parse-quota-plan.md` §7）
+> 狀態：**已完成**（開發者 2026-10-24 核可假設 1～15；同日核可本 spec、plan、todo，含 §10 的 8 項。#166 合併，2026-10-24 部署 dev；T5 用 glm-5.3 驗完 SC-P27，27/27。實作紀錄見 `tasks/archive/ai-parse-quota-plan.md` §7）
 > 上游：[`phase-4a-ai-text.md`](phase-4a-ai-text.md)。本 spec 處理它「範圍外」的「費用上限與每日額度」，並修改 SC-P11（見 §9）。
 > 依據：
 >

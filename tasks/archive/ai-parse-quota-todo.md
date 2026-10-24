@@ -1,6 +1,6 @@
 # 4a 補充任務清單：AI 記帳的每日額度與輸出上限
 
-plan：`tasks/ai-parse-quota-plan.md`；spec：`docs/specs/phase-4a-ai-quota.md`。
+plan：`tasks/archive/ai-parse-quota-plan.md`；spec：`docs/specs/phase-4a-ai-quota.md`。
 
 - [x] **T0 契約與先紅的測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；API／Web typecheck 通過；既有測試行為不變；`ai-quota-isolation.e2e-spec.ts` 的額度與兩張表斷言紅、正向對照（200、provider 被呼叫）綠；查表只用 `$queryRaw`。
@@ -10,7 +10,7 @@ plan：`tasks/ai-parse-quota-plan.md`；spec：`docs/specs/phase-4a-ai-quota.md`
       驗收：SC-P25 第 1～4 項單元測試綠；length 即使 JSON 完整也算截斷；64 KiB 保護保留；所有 provider stub 補 `descriptor`；`ai-parse.e2e-spec.ts` 全綠。
 - [x] **T3 畫面**（依賴 T0；`aiq-web`，Codex）：plan §1.4。
       驗收：W245 元件測試綠（含其他 429 仍顯示舊訊息）；Web lint、typecheck、test 全綠。
-- [ ] **T4 整合、文件、PR、部署**（依賴 T1～T3；協調者）：plan §1.5。
+- [x] **T4 整合、文件、PR、部署**（依賴 T1～T3；協調者）：plan §1.5。
       驗收：全部檢查與 e2e 綠；spec §9 的文件都改了；CI 全綠、squash merge；dev 跑過 migration，送 1 句後兩張表與日誌照預期；worker 的 worktree、分支、終端機清掉。
-- [ ] **T5 真的模型**（依賴 T4；協調者）：plan §1.6。
+- [x] **T5 真的模型**（依賴 T4；協調者）：plan §1.6。
       驗收：SC-P27 的表填完（含 SC-P17 五句與 SC-P10 第 5、6、8 步各 3 次），失敗也照記；模型、提示詞版本、token、是否有思考 token 欄位記進實作紀錄。

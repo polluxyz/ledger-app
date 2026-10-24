@@ -244,3 +244,34 @@ B1 的修正同時補上：Eve 的回應只有 `{ drafts: [] }`；body 帶 `user
 - 修正涉及的 3 個檔：GLM spec 34/34、隔離 e2e 14/14、env spec 12/12。
 - format:check、lint、typecheck 全過；單元 shared 126、API 56 suites 880、Web 122 files 1008，全綠。
 - Web e2e（Playwright，先 build shared 與 API）：92 passed。
+
+### 合併與部署（2026-10-24）
+
+- #166 squash merge 成 `a183bf7`。CI（lint、typecheck、test、build、兩套 e2e）與 CodeQL 全綠。
+- 主工作區：`git pull`、`pnpm install --frozen-lockfile`、shared build；`pg_dump` 備份 `ledger_dev`；`prisma generate`、`prisma migrate deploy` 套用 `20261024120000_ai_parse_daily_usage`；`prisma migrate diff` 沒有差異；API build。
+- 冒煙測試：暫時用 `LLM_PROVIDER=fake PORT=3200 node dist/main`，用 dev 的測試帳號打第一本帳本。plan 寫送 1 句，實際送了 2 句：第 1 句「早餐 80」不在假 provider 的劇本裡，回 0 筆，日誌是 `outcome=empty`；改送劇本內的「早餐 60」，日誌是 `outcome=success`、`drafts=1`。兩張表各 1 列，`calls = 2`。用完已關掉。
+- worker 的 worktree、分支已清；整合分支 `feature/ai-parse-quota` 合併後已刪。
+
+### T5 真的模型（2026-10-24）
+
+- 模型 `glm-5.3`，端點 `https://api.z.ai/api/paas/v4`，`GLM_REASONING_EFFORT=low`，逾時 25 秒，`AI_PARSE_MAX_OUTPUT_TOKENS=2048`。提示詞版本＝`73b31db`（之後沒改過）。程式碼＝`a183bf7`。
+- 量測方式同新分類 T6：暫時的 e2e（不進版控，跑完已刪）對 `ledger_ai_test` 打 `POST /ai/parse-transaction`。資料：「日常」支出分類只有早餐、午餐、交通、其他；旅行基金只有住宿與薪資；帳戶現金、信用卡、儲蓄；先用儲蓄記 1 筆，讓記帳預設帳戶是儲蓄；`today`＝2026-10-24。包住全域 `fetch` 取得 provider 原始的 `usage` 與 `finish_reason`。
+- 每格驗 200、25 秒內，以及下表「驗什麼」。結果 **27/27**：
+
+| 句子                                      | 驗什麼                                | 3 次結果 | 耗時（秒）     | 輸出 token    |
+| ----------------------------------------- | ------------------------------------- | -------- | -------------- | ------------- |
+| 10 筆（全部現金）                         | 10 筆、金額依序正確、都是現金         | 對對對   | 6.9、7.6、11.8 | 495、589、609 |
+| SC-P17 1「高鐵 1490」                     | 交通、沒有提議                        | 對對對   | 3.1、1.6、3.7  | 56～59        |
+| SC-P17 2「衛生紙 189」                    | 分類 null、提議日用品或生活用品       | 對對對   | 4.5、3.5、1.6  | 54～57        |
+| SC-P17 3「雜支 50」                       | 其他                                  | 對對對   | 2.7、2.2、1.9  | 55～57        |
+| SC-P17 4「旅行基金 機票 8000 刷卡」       | 旅行基金、分類 null、提議交通、信用卡 | 對對對   | 3.9、3.8、1.8  | 57            |
+| SC-P17 5「早餐 60 現金、午餐 120 刷卡」   | 早餐／現金、午餐／信用卡、沒有提議    | 對對對   | 4.7、3.9、2.4  | 105           |
+| 4a SC-P10 第 5 步「昨天計程車 250」       | 10-23、交通、儲蓄                     | 對對對   | 3.1、4.1、2.8  | 55～57        |
+| 4a SC-P10 第 6 步「從儲蓄轉 5000 到現金」 | 轉帳 儲蓄 → 現金，沒有分類也沒有提議  | 對對對   | 2.4、1.9、3.2  | 56            |
+| 4a SC-P10 第 8 步「今天天氣很好」         | 0 筆                                  | 對對對   | 2.0、1.3、2.7  | 7             |
+
+- 27 次的 `finish_reason` 都是 `stop`，沒有被截斷，所以沒有跑 4096 那一輪。10 筆的句子最多用 609 個輸出 token，約是上限 2048 的 30%。
+- 輸入 token：10 筆 803，其他 755～765。
+- 思考 token：回應有 `completion_tokens_details.reasoning_tokens` 欄位。10 筆的第 2、3 次是 72、102，其他 25 次是 0。它**算在 `completion_tokens` 裡**：`total_tokens` 都等於輸入加輸出，沒有另外加上思考 token。所以 `max_tokens` 也要容納思考的部分。
+- 兩張表與 provider 回報一致：`calls` 27、輸入 20631、輸出 3048、`usageUnknownCalls` 0，個人與全站相同，和 27 次原始 `usage` 的合計相同。
+- 名稱（title）不驗。不用調提示詞，也不用改輸出上限的預設值。
