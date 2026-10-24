@@ -14,7 +14,7 @@
 | ---------- | ----------------- | ------------------------------- | ------------------- | -------------------------------------------------- |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                |
 | `stats-2j` | （待命）          | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2j（#154）、2k（#163）已合併並部署                 |
-| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 4a、新分類提議已部署（#155、#161）；每日額度實作中 |
+| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 4a、新分類提議已部署（#155、#161）；每日額度已實作 |
 
 ## 跨工作區的規則
 

@@ -11,22 +11,24 @@ import type { Env } from '../config/env.validation';
  */
 describe('LLM provider factory', () => {
   it('selects fake explicitly', () => {
-    expect(
-      createLlmProvider(new ConfigService<Env, true>({ LLM_PROVIDER: 'fake' })),
-    ).toBeInstanceOf(FakeLlmProvider);
+    const provider = createLlmProvider(new ConfigService<Env, true>({ LLM_PROVIDER: 'fake' }));
+
+    expect(provider).toBeInstanceOf(FakeLlmProvider);
+    expect(provider.descriptor).toEqual({ configured: true, provider: 'fake', model: null });
   });
 
   it('selects GLM when key and model are both set', () => {
-    expect(
-      createLlmProvider(
-        new ConfigService<Env, true>({
-          LLM_PROVIDER: 'glm',
-          GLM_API_KEY: ' key ',
-          GLM_MODEL: 'model',
-          GLM_BASE_URL: 'https://example.test/v4',
-        }),
-      ),
-    ).toBeInstanceOf(GlmLlmProvider);
+    const provider = createLlmProvider(
+      new ConfigService<Env, true>({
+        LLM_PROVIDER: 'glm',
+        GLM_API_KEY: ' key ',
+        GLM_MODEL: 'model',
+        GLM_BASE_URL: 'https://example.test/v4',
+      }),
+    );
+
+    expect(provider).toBeInstanceOf(GlmLlmProvider);
+    expect(provider.descriptor).toEqual({ configured: true, provider: 'glm', model: 'model' });
   });
 
   it('passes the configured reasoning effort to the GLM request', async () => {
@@ -44,7 +46,7 @@ describe('LLM provider factory', () => {
           GLM_BASE_URL: 'https://example.test/v4',
           GLM_REASONING_EFFORT: 'low',
         }),
-      ).complete({ system: '', user: '', schema: {} });
+      ).complete({ system: '', user: '', schema: {}, maxOutputTokens: 2048 });
       const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<
         string,
         unknown
@@ -68,8 +70,9 @@ describe('LLM provider factory', () => {
     );
     expect(provider).not.toBeInstanceOf(FakeLlmProvider);
     expect(provider).not.toBeInstanceOf(GlmLlmProvider);
+    expect(provider.descriptor).toEqual({ configured: false, provider: 'glm', model: null });
     await expect(async () =>
-      provider.complete({ system: '', user: '', schema: {} }),
+      provider.complete({ system: '', user: '', schema: {}, maxOutputTokens: 2048 }),
     ).rejects.toMatchObject({ status: 503, errorCode: 'AI_NOT_CONFIGURED' });
   });
 });

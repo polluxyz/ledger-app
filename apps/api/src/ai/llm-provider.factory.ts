@@ -24,6 +24,8 @@ export function createLlmProvider(config: ConfigService<Env, true>): LLMProvider
     );
   }
   return {
+    // 讓 AiService 在扣額度前就擋下；complete 仍丟錯當保險。
+    descriptor: { configured: false, provider: 'glm', model: null },
     complete: () => {
       throw new AppException(
         HttpStatus.SERVICE_UNAVAILABLE,

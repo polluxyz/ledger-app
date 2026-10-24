@@ -200,4 +200,47 @@ spec：`docs/specs/phase-4a-ai-quota.md`（決策 292～299、W245、SC-P18～SC
 
 ## 7. 實作紀錄
 
-（實作時填）
+### T0～T3（2026-10-24）
+
+| 任務 | commit                                | 誰做               | 協調者重跑的結果                                                   |
+| ---- | ------------------------------------- | ------------------ | ------------------------------------------------------------------ |
+| T0   | `65338fc`                             | 協調者             | 隔離 e2e：額度與兩張表的斷言紅，正向對照綠                         |
+| T3   | `ff77613`（ff 合併）                  | Codex（`default`） | Web lint、typecheck、test 全綠                                     |
+| T2   | `9f102a0`（合併 `d898a00`）           | Codex（`default`） | API lint／typecheck 過；單元 863/863；`ai-parse.e2e-spec.ts` 43/43 |
+| T1   | `b0406a9`（合併 `bd1c082`，沒有衝突） | Codex（`backend`） | 見下方「整合後」                                                   |
+
+- T1 改了 `ai.controller.ts`，只加 429／503 的 OpenAPI 標註，路由、DTO、guard、回應格式都沒動。§1.2 本來就列了 controller，所以不算偏離。
+- SC-P24 第 2 項「原本是 503 就仍回 503」：正常的 503 不會帶 usage，回寫只會收到 `null`。所以用故障注入（讓回寫的資料庫交易拋錯）驗證 503 仍是 503，另外斷言正常 503 時 `record` 收到 `null`、token 欄位不變。
+- 這次的 schema 變更（2 張表）在核可 spec 與 plan 時已一併核可，沒有另外再提。
+- `ai.module.ts` 讀上限時多了 `?? 50` 這類預設值。環境變數驗證已經保證有值，所以這幾個預設值不會生效，無害，沒有改。
+
+### 整合後（`bd1c082`）
+
+- `pnpm --filter @ledger/shared build`、`prisma generate` 後：format:check、lint、typecheck 全過。
+- 單元：shared 126、API 56 suites 877、Web 122 files 1008，全綠。
+- API e2e 56 suites 589/589。migration 已套用到 `ledger_ai_test`，`prisma migrate diff`（資料庫對 schema）沒有差異。
+
+### T4 兩軸審查
+
+implement-spec 要求由沒有實作的 reviewer 看兩軸：A 專案規範、B spec 的漏做／做錯／超出範圍。兩位都只讀，範圍是 `5520dd3..bd1c082`。
+
+| reviewer                          | 範圍       | 軸 A                    | 軸 B                                                                                                                              |
+| --------------------------------- | ---------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| R1（`default`，gpt-6-luna max）   | T1         | 通過                    | 中 1 項：`env.validation.spec.ts` 只驗 0，沒驗 255；下限誤寫成 1 也會綠                                                           |
+| R2（`backend`，gpt-6.1-sol high） | T0、T2、T3 | 中 1 項（與 B1 同一件） | 中 2 項：B1 隔離 e2e 的「Eve 不影響 Bob」只比 `calls`，回寫寫錯人仍會綠；B2 GLM 測試只用 2048，實作寫死 `max_tokens: 2048` 也會綠 |
+
+3 項都是「成功條件沒有真的測到」，實作本身沒有錯。協調者自己補測試，每項都做了突變檢查（故意改壞實作，確認新測試變紅，再還原）：
+
+| 發現 | 修正 commit | 突變                                    | 結果                             |
+| ---- | ----------- | --------------------------------------- | -------------------------------- |
+| B1   | `ef409b0`   | 回寫的 `WHERE` 拿掉 `userId` 條件       | 新斷言抓到 Bob 的 token 欄位被改 |
+| B2   | `ef409b0`   | `max_tokens` 寫死 2048                  | 256、3072、4096 三個案例紅       |
+| R1   | `474fcb7`   | `AI_PARSE_MAX_OUTPUT_TOKENS` 下限改成 1 | 1 個測試紅                       |
+
+B1 的修正同時補上：Eve 的回應只有 `{ drafts: [] }`；body 帶 `userId` 會被 DTO 擋下（400）；Eve 自己用滿 2 次後第 3 次才被擋。
+
+### 修正後（`474fcb7`）
+
+- 修正涉及的 3 個檔：GLM spec 34/34、隔離 e2e 14/14、env spec 12/12。
+- format:check、lint、typecheck 全過；單元 shared 126、API 56 suites 880、Web 122 files 1008，全綠。
+- Web e2e（Playwright，先 build shared 與 API）：92 passed。

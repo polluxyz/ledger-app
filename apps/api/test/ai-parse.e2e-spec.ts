@@ -5,6 +5,7 @@ import type { Express } from 'express';
 import type { Account, Category, ParseTransactionResponse, TransactionDraft } from '@ledger/shared';
 import request from 'supertest';
 import { FakeLlmProvider } from '../src/ai/fake-llm.provider';
+import { AI_CLOCK } from '../src/ai/ai-quota.tokens';
 import {
   LLM_PROVIDER,
   LlmProviderError,
@@ -15,11 +16,12 @@ import {
 import { createLlmProvider } from '../src/ai/llm-provider.factory';
 import type { Env } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { Prisma } from '../src/generated/prisma/client';
 import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
- * SC-P1～P9、P11：真正 HTTP 與測試資料庫，正常句子走假 provider，惡意資料走注入 stub。
+ * SC-P1～P9、P26：真正 HTTP 與測試資料庫，正常句子走假 provider，惡意資料走注入 stub。
  * 限流另外開啟並換 token／IP／帳本；不存不記同時攔日誌、掃文字欄位、比對所有表筆數。
  */
 describe('AI parse transaction (e2e)', () => {
@@ -32,13 +34,21 @@ describe('AI parse transaction (e2e)', () => {
   let categories: Category[];
   const fake = new FakeLlmProvider();
   const complete = jest.fn<Promise<LlmResponse>, [LlmRequest]>();
-  const stub: LLMProvider = { complete };
+  const stub: LLMProvider = {
+    descriptor: { configured: true, provider: 'stub', model: null },
+    complete,
+  };
   const today = '2040-03-01';
   const originalNodeEnv = process.env.NODE_ENV;
 
   beforeAll(async () => {
     ({ app, prisma } = await createE2EApp((builder) =>
-      builder.overrideProvider(LLM_PROVIDER).useValue(stub),
+      builder
+        .overrideProvider(LLM_PROVIDER)
+        .useValue(stub)
+        // 固定額度日期，避免 SC-P26 的四次呼叫恰好跨過台灣午夜而拆成兩列。
+        .overrideProvider(AI_CLOCK)
+        .useValue(() => new Date('2026-10-24T12:00:00Z')),
     ));
     // 限流測試真的讓 X-Forwarded-For 成為不同 IP，不只改了未被使用的標頭。
     const expressApp = app.getHttpAdapter().getInstance() as Express;
@@ -373,6 +383,7 @@ describe('AI parse transaction (e2e)', () => {
       )!.code;
       const cash = data.accounts.find((row) => row.name === '現金')!.code;
       return Promise.resolve({
+        truncated: false,
         content: {
           drafts: [
             wire({
@@ -399,6 +410,7 @@ describe('AI parse transaction (e2e)', () => {
     complete.mockImplementationOnce((input) => {
       dataOf(input);
       return Promise.resolve({
+        truncated: false,
         content: {
           drafts: [
             wire({ category: 'C999', newCategory: '日用品' }),
@@ -416,14 +428,18 @@ describe('AI parse transaction (e2e)', () => {
   it.each([null, { drafts: [] }, { drafts: 'bad' }, { drafts: [null, 1] }])(
     'SC-P8: malformed content %p is empty with 200',
     async (content) => {
-      complete.mockResolvedValueOnce({ content });
+      complete.mockResolvedValueOnce({ truncated: false, content });
       expect((await parse('壞格式').expect(200)).body).toEqual({ drafts: [] });
     },
   );
   it('SC-P8: only first ten slots count, even when they contain invalid elements', async () => {
-    complete.mockResolvedValueOnce({ content: { drafts: Array<unknown>(11).fill(wire()) } });
+    complete.mockResolvedValueOnce({
+      truncated: false,
+      content: { drafts: Array<unknown>(11).fill(wire()) },
+    });
     expect(responseDrafts((await parse('十一筆').expect(200)).body)).toHaveLength(10);
     complete.mockResolvedValueOnce({
+      truncated: false,
       content: { drafts: [null, 1, ...Array<unknown>(9).fill(wire())] },
     });
     expect(responseDrafts((await parse('壞元素').expect(200)).body)).toHaveLength(8);
@@ -537,7 +553,7 @@ describe('AI parse transaction (e2e)', () => {
     await parse('今天天氣很好', carol.ledgerId, carol.token, '203.0.113.1').expect(429);
   });
 
-  it('SC-P11: success, unknown, provider error and timeout never persist or log input/output', async () => {
+  it('SC-P26: only numeric usage changes; input/output never persists or appears in logs', async () => {
     const marker = 'AI_PRIVATE_SENTINEL_74b62';
     const logged: unknown[][] = [];
     const spies = [
@@ -560,15 +576,15 @@ describe('AI parse transaction (e2e)', () => {
     const counts = async () => {
       const tables = await prisma.$queryRaw<
         { tablename: string }[]
-      >`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations' ORDER BY tablename`;
+      >`SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'AiParseDailyUsage', 'AiDailyUsage') ORDER BY tablename`;
       return Promise.all(
         tables.map(async ({ tablename }) => ({
           table: tablename,
-          count: (
-            await prisma.$queryRawUnsafe<{ count: bigint }[]>(
-              `SELECT count(*) AS count FROM "${tablename.replaceAll('"', '""')}"`,
-            )
-          )[0]!.count.toString(),
+          contents: (
+            await prisma.$queryRaw<{ contents: string }[]>`
+              SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text), '[]'::jsonb)::text AS contents
+              FROM ${Prisma.raw(`"${tablename.replaceAll('"', '""')}"`)} t`
+          )[0]!.contents,
         })),
       );
     };
@@ -579,9 +595,12 @@ describe('AI parse transaction (e2e)', () => {
       expect(logged.filter((args) => JSON.stringify(args).includes(marker))).toHaveLength(3);
       logged.length = 0;
       const before = await counts();
-      complete.mockResolvedValueOnce({ content: { drafts: [wire({ title: marker })] } });
+      complete.mockResolvedValueOnce({
+        truncated: false,
+        content: { drafts: [wire({ title: marker })] },
+      });
       await parse(marker).expect(200);
-      complete.mockResolvedValueOnce({ content: null });
+      complete.mockResolvedValueOnce({ truncated: false, content: null });
       await parse(marker).expect(200);
       complete.mockRejectedValueOnce(new LlmProviderError('http', 503, 20));
       await parse(marker).expect(503);
@@ -589,16 +608,60 @@ describe('AI parse transaction (e2e)', () => {
       await parse(marker).expect(503);
       expect(JSON.stringify(logged)).not.toContain(marker);
       expect(await counts()).toEqual(before);
+      const personal = await prisma.aiParseDailyUsage.findMany();
+      const global = await prisma.aiDailyUsage.findMany();
+      expect(personal).toHaveLength(1);
+      expect(global).toHaveLength(1);
+      expect(personal[0]).toMatchObject({
+        userId: bob.userId,
+        calls: 4,
+        promptTokens: 0n,
+        completionTokens: 0n,
+        usageUnknownCalls: 4,
+      });
+      expect(global[0]).toMatchObject({
+        calls: 4,
+        promptTokens: 0n,
+        completionTokens: 0n,
+        usageUnknownCalls: 4,
+      });
+      for (const row of [...personal, ...global]) {
+        for (const [key, value] of Object.entries(row)) {
+          if (key === 'userId') expect(value).toBe(bob.userId);
+          else
+            expect(
+              typeof value === 'number' || typeof value === 'bigint' || value instanceof Date,
+            ).toBe(true);
+        }
+      }
+      const usageLogs = logged
+        .flat()
+        .filter(
+          (value): value is string => typeof value === 'string' && value.startsWith('outcome='),
+        );
+      expect(usageLogs).toHaveLength(4);
+      expect(usageLogs.map((line) => line.split(' ')[0])).toEqual([
+        'outcome=success',
+        'outcome=invalid',
+        'outcome=http',
+        'outcome=timeout',
+      ]);
+      for (const line of usageLogs) {
+        expect(line).toMatch(
+          /provider=stub model=none durationMs=\d+ promptTokens=unknown completionTokens=unknown drafts=\d+ ledgers=\d+ categories=\d+ accounts=\d+ promptBytes=\d+/,
+        );
+        expect(line).not.toContain(bob.userId);
+      }
+      expect(usageLogs[2]).toContain('httpStatus=503');
       const columns = await prisma.$queryRaw<
         { table_name: string; column_name: string }[]
       >`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND data_type IN ('text', 'character varying', 'character', 'json', 'jsonb')`;
       for (const column of columns) {
         const table = column.table_name.replaceAll('"', '""');
         const field = column.column_name.replaceAll('"', '""');
-        const matches = await prisma.$queryRawUnsafe<{ count: bigint }[]>(
-          `SELECT count(*) AS count FROM "${table}" WHERE "${field}"::text LIKE $1`,
-          `%${marker}%`,
-        );
+        const matches = await prisma.$queryRaw<{ count: bigint }[]>`
+          SELECT count(*) AS count FROM ${Prisma.raw(`"${table}"`)}
+          WHERE ${Prisma.raw(`"${field}"`)}::text LIKE ${`%${marker}%`}`;
         expect(matches[0]!.count).toBe(0n);
       }
     } finally {
