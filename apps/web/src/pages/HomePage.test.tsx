@@ -121,6 +121,7 @@ describe('Home dashboard', () => {
       marked: countRequest('/transactions/marked'),
       recent: countRequest(`/ledgers/${ledgerId}/transactions`, { page: '1', limit: '5' }),
       statistics: countRequest(`/ledgers/${ledgerId}/statistics`),
+      categories: countRequest(`/ledgers/${ledgerId}/categories`),
     };
   }
 
@@ -922,6 +923,7 @@ describe('Home dashboard', () => {
       expect(after.marked).toBe(before.marked + 1);
       expect(after.recent).toBe(before.recent + 1);
       expect(after.statistics).toBe(before.statistics + 1);
+      expect(after.categories).toBe(before.categories + 1);
     }, WAIT);
 
     expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
@@ -931,7 +933,8 @@ describe('Home dashboard', () => {
     expect(screen.queryByRole('tab', { name: '標註 1' })).not.toBeInTheDocument();
 
     const delta = fetchMock.mock.calls.length - totalBefore;
-    expect(delta).toBe(9);
+    // 總數為 POST 1 次、8 個首頁端點各 1 次、分類清單 1 次（4a W244）。
+    expect(delta).toBe(10);
     releaseRefetches?.();
     holdRefetches = null;
 
