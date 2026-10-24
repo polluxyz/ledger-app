@@ -12,7 +12,7 @@ plan：`tasks/phase-2k-plan.md`；spec：`docs/specs/phase-2k-home-redesign.md`�
       驗收：配色 store 用 `useSyncExternalStore`，兩個訂閱者同時更新、取消訂閱、寫入失敗仍通知的測試通過；測試之間會重置 store；缺值、非法值、讀寫丟例外各有測試；`homeCategoryColor` 三種模式乘深淺兩種主題，金色時固定分組與未分類是中性灰；設定彈窗的 radiogroup、方向鍵、roving tabindex、示意條顏色、不發請求有測試；`StatsPage` 加金色、灰色不影響統計頁顏色的斷言，既有測試全綠；Web 檢查全綠。
 - [x] **W3 首頁組裝**（依賴 W1、W2、W4；`2k-home-page`）：plan §1.4。
       驗收：`Dashboard` 不再用 `key={ledger.id}`，表單 `key` 帶帳本 id；`useAccounts` 的 context 只由 `LedgerView` 提供；SC-H2 用真的 `QueryClient`＋真的 `PendingCard` 與表單，切帳本後 `/accounts`、`/accounts/balance-trend`、`/counterparties?nonZero`、`/counterparties?askMerge`、`/ledger-groups?unpointed`、標註列表的增量都是 0；帳戶 context 的卸載再掛載、invalidate、首次載入與錯誤各有測試；B 帳本回應延遲時 A 的最近交易不能操作，其他 `keepPreviousData` 的 hook 確認結果寫進 PR 描述；右側欄目標 A→B→A 不出現舊目標、跨帳本動作在 rerender 後仍正確、同帳本重抓不清表單；SC-H3 寫入後各重抓一次、重抓期間仍是舊數字，PR 描述附請求增量；SC-H12 打開的是補帳戶表單、請求帶原帳本 id；H4、H6、H11、H15、H16、H17、H18 首頁部分通過；`AccountBalances` 與它的測試已刪，提到它的註解已改；`HomePage.tsx` 檔頭與 `Dashboard` 註解已更新；交易頁、帳戶頁既有測試全綠；Web 檢查全綠。
-- [ ] **W5 Web e2e**（依賴 W3；`2k-web-e2e`）：plan §1.5。
+- [x] **W5 Web e2e**（依賴 W3；`2k-web-e2e`）：plan §1.5。
       派工前：確認沒有別的 worktree 正在跑 Web e2e，3100、5273、5274 沒有被佔。
       驗收：`home.spec.ts` 涵蓋 SC-H1、H3、H8 的寬度（439／440px、右側欄打開）、H13（含標註超過 10 筆展開、量 SVG 本身與點位方框）、H14（390px 淺色與深色）、H18（含統計頁不變）；既有 e2e 跟著新版面改了選擇器，沒刪掉驗證的行為；兩套 Web e2e 全綠。
 - [ ] **W6 截圖驗收修正**（依賴 W5；`2k-home-fixes`）：plan §6 實作紀錄 2026-10-24 W5 截圖驗收、決策 310～312。
