@@ -59,6 +59,14 @@ describe('BalanceTrendChart', () => {
     expect(lower.monthY + 3).toBeLessThan(lowerPoint.y - 7);
   });
 
+  it('clamps labels to the top edge instead of throwing when the chart is too short', () => {
+    const bounds = { top: 10, bottom: 40 };
+    const positions = getFinalLabelYPositions({ x: 0, y: 20 }, { x: 200, y: 15 }, bounds);
+
+    expect(positions.valueY - 14).toBeGreaterThanOrEqual(bounds.top);
+    expect(positions.valueY - 14).toBe(bounds.top);
+  });
+
   it('keeps the latest value and month visible and exposes every month to screen readers', () => {
     const months = series([10000, 15000, 30000]);
     render(<BalanceTrendChart months={months} isLoading={false} error={null} />);

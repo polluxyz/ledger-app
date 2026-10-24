@@ -56,5 +56,13 @@ export function getFinalLabelYPositions(
 
   if (fits(preferred)) return preferred;
   if (fits(alternate)) return alternate;
-  throw new RangeError('資產趨勢圖面沒有足夠空間顯示最後一點標籤。');
+
+  const minimumValueY = bounds.top + VALUE_LABEL_ASCENT;
+  const maximumValueY = bounds.bottom - labelBaselineGap - MONTH_LABEL_DESCENT;
+  const valueY =
+    maximumValueY < minimumValueY
+      ? minimumValueY
+      : Math.min(Math.max(preferred.valueY, minimumValueY), maximumValueY);
+
+  return { valueY, monthY: valueY + labelBaselineGap };
 }
