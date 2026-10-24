@@ -194,7 +194,10 @@ describe('TransactionForm', () => {
   async function openTypeBar(user: ReturnType<typeof userEvent.setup>) {
     await user.click(await screen.findByRole('button', { name: '新增交易' }, WAIT));
     const expense = await screen.findByRole('button', { name: '支出' }, WAIT);
-    await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue('acc-1'), WAIT);
+    await waitFor(
+      () => expect(screen.getByRole('combobox', { name: '帳戶' })).toHaveValue('acc-1'),
+      WAIT,
+    );
     const bar = expense.parentElement;
     expect(bar).not.toBeNull();
     return bar as HTMLElement;
@@ -490,13 +493,13 @@ describe('TransactionForm', () => {
     expect(screen.queryByLabelText('備註')).not.toBeInTheDocument();
 
     await screen.findByRole('option', { name: '現金' }, WAIT);
-    expect(screen.getByLabelText('帳戶')).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: '帳戶' })).toHaveValue('');
     const title = screen.getByLabelText('名稱');
     await user.clear(title);
     await user.type(title, '新的名稱');
     await user.click(screen.getByRole('combobox', { name: '分類' }));
     await user.click(await screen.findByRole('option', { name: '居住' }, WAIT));
-    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.selectOptions(screen.getByRole('combobox', { name: '帳戶' }), 'acc-2');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
     const request = await requestDetails(
@@ -519,7 +522,7 @@ describe('TransactionForm', () => {
     );
 
     await screen.findByRole('option', { name: '現金' }, WAIT);
-    expect(screen.getByLabelText('帳戶')).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: '帳戶' })).toHaveValue('');
     await waitFor(() => expect(screen.getByRole('button', { name: '儲存' })).toBeEnabled(), WAIT);
     await user.clear(screen.getByLabelText('名稱'));
     await user.type(screen.getByLabelText('名稱'), '只改名稱');
@@ -580,7 +583,7 @@ describe('TransactionForm', () => {
     const title = screen.getByLabelText('名稱');
     await user.clear(title);
     await user.type(title, '帳本往來');
-    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.selectOptions(screen.getByRole('combobox', { name: '帳戶' }), 'acc-2');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
     const request = await requestDetails(
@@ -645,7 +648,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     const labels = Array.from(container.querySelectorAll('form label'))
       .map((label) => label.textContent?.trim())
       .filter((label) => label !== undefined);
@@ -668,7 +671,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    const accountSelect = await screen.findByLabelText('帳戶', {}, WAIT);
+    const accountSelect = await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await waitFor(() => expect(accountSelect).toHaveValue('acc-1'), WAIT);
     expect(accountSelect).toHaveValue('acc-1');
     expect(screen.queryByRole('option', { name: '臨時帳戶' })).not.toBeInTheDocument();
@@ -694,7 +697,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByLabelText('帳戶', {}, WAIT)).toHaveValue('');
+    expect(await screen.findByRole('combobox', { name: '帳戶' }, WAIT)).toHaveValue('');
   });
 
   it('uses POST /splits for another payer and previews my full share when splitting is off', async () => {
@@ -710,7 +713,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.type(screen.getByLabelText('金額'), '750');
     await selectFoodCategory(user);
     await user.type(screen.getByLabelText('名稱'), '晚餐');
@@ -758,7 +761,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.click(screen.getByRole('button', { name: '改為選付款人' }));
     const payer = screen.getByRole('combobox', { name: '付款人' });
     expect(payer).toHaveValue('');
@@ -781,7 +784,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.type(screen.getByLabelText('金額'), '3000');
     await selectFoodCategory(user);
     await user.click(screen.getByRole('checkbox', { name: '分帳' }));
@@ -816,7 +819,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.click(screen.getByRole('button', { name: '收入' }));
     await user.type(screen.getByLabelText('金額'), '750');
     await selectFoodCategory(user);
@@ -923,7 +926,7 @@ describe('TransactionForm', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.type(screen.getByLabelText('金額'), '3000');
     await selectFoodCategory(user);
     await user.type(screen.getByLabelText('名稱'), '晚餐');
@@ -1023,7 +1026,7 @@ describe('TransactionForm', () => {
     expect(screen.queryByRole('option', { name: '我' })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
 
-    expect(screen.queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '帳戶' })).not.toBeInTheDocument();
     const section = screen.getByRole('region', { name: '分帳' });
     expect(within(section).getByRole('checkbox', { name: '分帳' })).toBeChecked();
     expect(screen.getByText('你欠小明 $500')).toBeInTheDocument();
@@ -1102,7 +1105,7 @@ describe('TransactionForm', () => {
     renderSharedForm();
     await waitForSharedPeople();
 
-    await screen.findByLabelText('帳戶', {}, WAIT);
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
     await user.type(screen.getByLabelText('金額'), '500');
     await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '改為選付款人' }));
@@ -1231,7 +1234,7 @@ describe('TransactionForm', () => {
     await waitForSharedPeople();
 
     await user.click(screen.getByRole('button', { name: '改為選帳戶' }));
-    await user.selectOptions(screen.getByLabelText('帳戶'), 'acc-2');
+    await user.selectOptions(screen.getByRole('combobox', { name: '帳戶' }), 'acc-2');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
     const request = await requestDetails('PATCH', '/ledgers/ledger-shared/transactions/txn-shared');

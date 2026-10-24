@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createContext, createElement, useContext, type ReactNode } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { Account, CreateAccountRequest, UpdateAccountRequest } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
 import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
@@ -9,17 +11,37 @@ import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-writ
  * 與分類不同，這裡**不需要帳本 id**——帳戶屬於使用者、跨帳本共用，端點也在頂層。
  * 因此 query key 不帶帳本，切換帳本時也不必重新請求。
  *
+ * 首頁的 `LedgerView` 會提供整份帳戶 query 結果，讓其下的交易表單共用同一個 observer；
+ * 交易頁與帳戶頁不提供這個 context，仍各自使用 hook。這避免首頁切帳本時表單重掛而重打
+ * 個人帳戶端點，也讓首次載入與錯誤狀態都由首頁持有的 query 決定。
+ *
  * 餘額由後端隨交易計算；任何會影響首頁金額或顯示的寫入，都透過
  * `invalidateAfterMoneyWrite` 一併更新相關快取。
  */
 export const ACCOUNTS_KEY = ['accounts'] as const;
 
+const AccountsQueryContext = createContext<UseQueryResult<Account[], Error> | undefined>(undefined);
+
+/** 只由首頁的 LedgerView 提供帳戶結果，其他頁面維持各自訂閱帳戶 query。 */
+export function AccountsQueryProvider({
+  query,
+  children,
+}: {
+  query: UseQueryResult<Account[], Error>;
+  children: ReactNode;
+}) {
+  return createElement(AccountsQueryContext.Provider, { value: query, children });
+}
+
 /** 目前使用者的帳戶（含即時餘額）。 */
 export function useAccounts() {
-  return useQuery({
+  const shared = useContext(AccountsQueryContext);
+  const own = useQuery({
     queryKey: ACCOUNTS_KEY,
     queryFn: () => apiRequest<Account[]>('/accounts'),
+    enabled: shared === undefined,
   });
+  return shared ?? own;
 }
 
 /**

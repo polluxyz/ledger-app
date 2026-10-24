@@ -144,13 +144,13 @@ export function TransactionWorkbench({
             <Icon name="chevronRight" size={18} />
           </button>
           <TransactionForm
-            key={
+            key={`${ledger.id}:${
               activeTarget.kind === 'copy'
                 ? activeTarget.transaction.id
                 : activeTarget.kind === 'draft'
                   ? activeTarget.item.key
                   : 'new'
-            }
+            }`}
             ledger={activeTarget.kind === 'draft' ? draftLedger! : ledger}
             amountFieldId={amountFieldId}
             copyFrom={activeTarget.kind === 'copy' ? activeTarget.transaction : undefined}

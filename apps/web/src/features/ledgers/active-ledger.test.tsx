@@ -8,7 +8,7 @@ import App from '../../App';
  * 重點全在「存下來的 id 失效時會怎樣」。這種錯不會拋例外、不會讓別的測試變紅，
  * 只會讓首頁停在一片空白，所以每一種失效情形都各給一條測試。
  *
- * 從真實的 App 出發、只換掉 fetch，比照 `AccountBalances.test.tsx`。
+ * 從真實的 App 出發、只換掉 fetch，比照首頁整合測試。
  */
 describe('Active ledger selection', () => {
   const fetchMock = vi.fn();
