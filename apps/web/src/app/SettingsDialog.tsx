@@ -50,12 +50,27 @@ const HOME_CATEGORY_COLOR_OPTIONS: readonly { value: HomeCategoryColorMode; labe
   { value: 'gray', label: '灰色' },
 ];
 
-const HOME_CATEGORY_COLOR_PREVIEW_GROUP: StatisticsGroup = {
-  kind: 'CATEGORY',
-  category: { id: 'settings-preview', name: '示意分類', icon: null },
-  amount: 0,
-  percentageBps: 0,
-};
+const HOME_CATEGORY_COLOR_PREVIEW_GROUPS: readonly StatisticsGroup[] = [
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-food', name: '示意分類一', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-home', name: '示意分類二', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-books', name: '示意分類三', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  { kind: 'UNCATEGORIZED', category: null, amount: 0, percentageBps: 0 },
+];
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
@@ -258,15 +273,19 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
                 <span
                   className={styles.categoryColorPreview}
                   data-testid="category-color-preview"
-                  style={{
-                    backgroundColor: homeCategoryColor(
-                      HOME_CATEGORY_COLOR_PREVIEW_GROUP,
-                      option.value,
-                      chartTheme,
-                    ),
-                  }}
                   aria-hidden="true"
-                />
+                >
+                  {HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => (
+                    <span
+                      key={group.category?.id ?? group.kind}
+                      className={styles.categoryColorPreviewSegment}
+                      data-color-segment=""
+                      style={{
+                        backgroundColor: homeCategoryColor(group, option.value, chartTheme),
+                      }}
+                    />
+                  ))}
+                </span>
                 <span className={styles.cardLabel}>{option.label}</span>
               </button>
             );

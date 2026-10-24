@@ -2,12 +2,35 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { StatisticsGroup } from '@ledger/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NEUTRAL_CHART_COLORS } from '../features/statistics/charts/chart-colors';
 import { SettingsDialog } from './SettingsDialog';
 import {
   HOME_CATEGORY_COLORS_STORAGE_KEY,
   homeCategoryColor,
   resetHomeCategoryColorsForTests,
 } from './use-home-category-colors';
+
+const HOME_CATEGORY_COLOR_PREVIEW_GROUPS: readonly StatisticsGroup[] = [
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-food', name: '示意分類一', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-home', name: '示意分類二', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  {
+    kind: 'CATEGORY',
+    category: { id: 'settings-preview-books', name: '示意分類三', icon: null },
+    amount: 0,
+    percentageBps: 0,
+  },
+  { kind: 'UNCATEGORIZED', category: null, amount: 0, percentageBps: 0 },
+];
 
 /**
  * 設定彈窗（2i · SC-32.2、SC-32.3，第二輪修訂）。
@@ -130,16 +153,10 @@ describe('SettingsDialog', () => {
     expect(localStorage.getItem(HOME_CATEGORY_COLORS_STORAGE_KEY)).toBe('gold');
   });
 
-  it('shows each color preview using its mode and the current chart theme', () => {
+  it('shows every preview segment using its mode and the current chart theme', () => {
     document.documentElement.setAttribute('data-theme', 'dark');
     render(<SettingsDialog open onClose={vi.fn()} />);
 
-    const previewGroup: StatisticsGroup = {
-      kind: 'CATEGORY',
-      category: { id: 'settings-preview', name: '示意分類', icon: null },
-      amount: 0,
-      percentageBps: 0,
-    };
     const options = [
       { mode: 'color' as const, label: '彩色' },
       { mode: 'gold' as const, label: '金色' },
@@ -150,9 +167,29 @@ describe('SettingsDialog', () => {
       const preview = within(screen.getByRole('radio', { name: option.label })).getByTestId(
         'category-color-preview',
       );
-      const expected = document.createElement('span');
-      expected.style.backgroundColor = homeCategoryColor(previewGroup, option.mode, 'dark');
-      expect(preview.style.backgroundColor).toBe(expected.style.backgroundColor);
+      expect(preview).toHaveAttribute('aria-hidden', 'true');
+      const segments = Array.from(preview.querySelectorAll<HTMLElement>('[data-color-segment]'));
+      const colors = segments.map((segment) => segment.style.backgroundColor);
+      const expectedColors = HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => {
+        const expected = document.createElement('span');
+        expected.style.backgroundColor = homeCategoryColor(group, option.mode, 'dark');
+        return expected.style.backgroundColor;
+      });
+
+      expect(colors).toHaveLength(4);
+      expect(colors).toEqual(expectedColors);
+      if (option.mode === 'color') {
+        expect(new Set(colors.slice(0, 3)).size).toBe(3);
+      } else if (option.mode === 'gold') {
+        expect(colors.slice(0, 3)).toEqual(Array(3).fill('var(--color-accent)'));
+        const neutral = document.createElement('span');
+        neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
+        expect(colors[3]).toBe(neutral.style.backgroundColor);
+      } else {
+        const neutral = document.createElement('span');
+        neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
+        expect(colors).toEqual(Array(4).fill(neutral.style.backgroundColor));
+      }
     }
   });
 

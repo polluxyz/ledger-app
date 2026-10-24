@@ -1,5 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -15,6 +23,7 @@ import {
   ActiveLedgerContext,
   type ActiveLedgerContextValue,
 } from '../features/ledgers/active-ledger-context';
+import { useHomeCategoryColors } from '../app/use-home-category-colors';
 import {
   getChartColorForId,
   getStatisticsGroupColor,
@@ -334,13 +343,17 @@ describe('StatsPage', () => {
     document.documentElement.setAttribute('data-theme', 'dark');
 
     async function readCategoryColors(mode: 'color' | 'gold' | 'gray') {
-      localStorage.setItem('ledger.homeCategoryColors', mode);
+      const preference = renderHook(() => useHomeCategoryColors());
+      act(() => preference.result.current.choose(mode));
+      expect(preference.result.current.mode).toBe(mode);
+
       const rendered = renderPage('/stats?tab=cat&ledger=family&month=2026-10');
       const list = await screen.findByRole('list', { name: '支出分類清單' });
       const colors = Array.from(list.querySelectorAll('[style*="--swatch-color"]')).map((swatch) =>
         (swatch as HTMLElement).style.getPropertyValue('--swatch-color'),
       );
       rendered.unmount();
+      preference.unmount();
       return colors;
     }
 
