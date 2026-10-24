@@ -73,7 +73,13 @@ describe('Debt hooks', () => {
     const calls = invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>;
     const keys = calls.map(([filters]) => filters.queryKey);
     expect(keys).toEqual(
-      expect.arrayContaining([['counterparties'], ['transactions'], ['accounts']]) as unknown,
+      expect.arrayContaining([
+        ['transactions'],
+        ['accounts'],
+        ['ledger-statistics'],
+        ['balance-trend'],
+        ['counterparties'],
+      ]) as unknown,
     );
   }
 
@@ -210,7 +216,7 @@ describe('Debt hooks', () => {
     },
   );
 
-  // 3b-2：這幾個只動到部分快取，所以各自釘住該失效的前綴，不套用上面那條「全部失效」。
+  // 邀請狀態仍只更新自己的清單；影響首頁對象顯示的寫入走共用金額失效清單。
   function invalidatedKeys(): unknown[] {
     const calls = invalidate.mock.calls as unknown as Array<[{ queryKey: unknown }]>;
     return calls.map(([filters]) => filters.queryKey);
@@ -231,7 +237,7 @@ describe('Debt hooks', () => {
       body: { name: '媽媽' },
     });
     expect(lastRequest().url).toMatch(/\/counterparties$/);
-    expect(invalidatedKeys()).toEqual([['counterparties']]);
+    expectEverythingInvalidated();
   });
 
   it('clears a nickname by sending name: null as is', async () => {
@@ -259,7 +265,7 @@ describe('Debt hooks', () => {
     await act(() => result.current.mutateAsync('cp-linked'));
     expect(lastRequest()).toMatchObject({ method: 'DELETE' });
     expect(lastRequest().url).toMatch(/\/counterparties\/cp-linked\/merge-prompt$/);
-    expect(invalidatedKeys()).toEqual([['counterparties']]);
+    expectEverythingInvalidated();
   });
 
   it('unlinks and refreshes debts, transactions, accounts and everything pending', async () => {

@@ -6,19 +6,14 @@ import type {
   UpdateSplitResponse,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { ACCOUNTS_KEY } from '../accounts/use-accounts';
-import { COUNTERPARTIES_KEY } from '../debts/use-debts';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 import { DEBT_PROPOSALS_KEY } from '../linking/use-linking';
 
 /** 分帳與相關資料共用的快取前綴。 */
 export const SPLITS_KEY = ['splits'] as const;
-const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
 
 function invalidateAfterWrite(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: SPLITS_KEY });
-  void queryClient.invalidateQueries({ queryKey: ALL_TRANSACTIONS_KEY });
-  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-  void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+  invalidateAfterMoneyWrite(queryClient);
   void queryClient.invalidateQueries({ queryKey: DEBT_PROPOSALS_KEY });
 }
 

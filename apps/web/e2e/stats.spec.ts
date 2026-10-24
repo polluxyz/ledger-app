@@ -14,7 +14,7 @@ import {
   type TestUser,
 } from './api';
 import { expect, test } from './fixtures';
-import { switchLedger } from './ui';
+import { expectHomeSectionOrder, switchLedger } from './ui';
 
 /**
  * 統計頁的端對端驗收：測試資料只透過正式 API 建立，首頁、統計頁與交易頁都用瀏覽器操作。
@@ -380,32 +380,6 @@ async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
-async function expectHomeCardSpacing(page: Page): Promise<void> {
-  const assetCard = page.getByRole('region', { name: '資產' });
-  const summary = page.locator('[aria-label="本月收支"]');
-  const nextCard = page.getByRole('region', { name: '最近交易' });
-  await expect(assetCard).toBeVisible();
-  await expect(summary).toBeVisible();
-  await expect(nextCard).toBeVisible();
-
-  await expect
-    .poll(async () => {
-      const [assetBox, summaryBox, nextBox] = await Promise.all([
-        assetCard.boundingBox(),
-        summary.boundingBox(),
-        nextCard.boundingBox(),
-      ]);
-      if (!assetBox || !summaryBox || !nextBox) {
-        return Number.POSITIVE_INFINITY;
-      }
-
-      const assetToSummaryGap = summaryBox.y - (assetBox.y + assetBox.height);
-      const summaryToNextGap = nextBox.y - (summaryBox.y + summaryBox.height);
-      return Math.abs(assetToSummaryGap - summaryToNextGap);
-    })
-    .toBeLessThanOrEqual(1);
-}
-
 async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
   const amounts = [
     { label: '本月支出', amount: '$12,345,678' },
@@ -595,13 +569,13 @@ test.describe('2j 統計頁端對端', () => {
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await switchLedger(page, ledger.name);
       await expectHomeAmountsOnOneLine(page);
-      await expectHomeCardSpacing(page);
+      await expectHomeSectionOrder(page, 390);
       await expectNoHorizontalPageScroll(page);
 
       if (theme === 'light') {
         await page.setViewportSize({ width: 1280, height: 844 });
         await expectHomeAmountsOnOneLine(page);
-        await expectHomeCardSpacing(page);
+        await expectHomeSectionOrder(page, 1280);
         await expectNoHorizontalPageScroll(page);
         await page.setViewportSize({ width: 390, height: 844 });
       }

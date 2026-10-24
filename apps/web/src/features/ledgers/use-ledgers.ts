@@ -9,6 +9,7 @@ import type {
   LeaveRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 帳本的伺服器狀態。
@@ -91,6 +92,7 @@ export function useRenameLedger() {
     onSuccess: (ledger) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledger.id] });
+      invalidateAfterMoneyWrite(queryClient);
     },
   });
 }
@@ -107,6 +109,7 @@ export function useArchiveLedger() {
     onSuccess: (ledger) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledger.id] });
+      invalidateAfterMoneyWrite(queryClient);
     },
   });
 }
@@ -141,6 +144,7 @@ export function useDeleteLedger() {
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       queryClient.removeQueries({ queryKey: ['ledger', id] });
+      invalidateAfterMoneyWrite(queryClient);
     },
   });
 }
@@ -155,6 +159,7 @@ export function useUnarchiveLedger() {
     onSuccess: (ledger) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledger.id] });
+      invalidateAfterMoneyWrite(queryClient);
     },
   });
 }
@@ -238,11 +243,7 @@ export function useLeaveLedger() {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       void queryClient.removeQueries({ queryKey: ['ledger', id] });
       void queryClient.invalidateQueries({ queryKey: ['members', id] });
-      void queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      void queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      void queryClient.invalidateQueries({ queryKey: ['counterparties'] });
-      void queryClient.invalidateQueries({ queryKey: ['ledger-groups'] });
-      void queryClient.invalidateQueries({ queryKey: ['ledger-settlements'] });
+      invalidateAfterMoneyWrite(queryClient);
     },
   });
 }

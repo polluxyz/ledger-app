@@ -9,10 +9,8 @@ import type {
   Transaction,
   UpdateSettlementRequest,
 } from '@ledger/shared';
-import { ACCOUNTS_KEY } from '../accounts/use-accounts';
-import { COUNTERPARTIES_KEY } from '../debts/use-debts';
-import { LEDGER_GROUPS_KEY } from '../ledger-people/use-ledger-pointers';
 import { apiRequest } from '../../lib/api-client';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
  * 共享帳本的結清（3e）：每個人的淨額與建議、記結清、補帳戶。
@@ -35,22 +33,12 @@ export function ledgerSettlementsKey(ledgerId: string | null) {
 export const LEDGER_SETTLEMENT_PAGE_SIZE = 20;
 
 /**
- * 結清與補帳戶會改變交易列表、淨額、帳戶餘額，也會改變借還頁的對象總額與帳本群組。
- * 少了任何一份都不會報錯，只會讓畫面停在舊數字，所以集中在這裡一起失效。
- *
- * 交易列表的 key 直接寫字面值，不從 `use-transactions` 匯入：那一份反過來要匯入
- * 本檔的 `settlementSummaryKey`，互相匯入會形成循環。
+ * 結清與補帳戶會改變交易、淨額、帳戶餘額與借還摘要。成功後呼叫
+ * `invalidateAfterMoneyWrite`，和其他金額寫入入口共用同一份前綴清單。
  */
-function useInvalidateSettlementWrites(ledgerId: string) {
+function useInvalidateSettlementWrites() {
   const queryClient = useQueryClient();
-  return () => {
-    void queryClient.invalidateQueries({ queryKey: ['transactions', ledgerId] });
-    void queryClient.invalidateQueries({ queryKey: settlementSummaryKey(ledgerId) });
-    void queryClient.invalidateQueries({ queryKey: ledgerSettlementsKey(ledgerId) });
-    void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-    void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-    void queryClient.invalidateQueries({ queryKey: LEDGER_GROUPS_KEY });
-  };
+  return () => invalidateAfterMoneyWrite(queryClient);
 }
 
 /** 每個人的淨額＋結清建議。只有共享帳本有，呼叫端傳 `enabled`。 */
@@ -82,7 +70,7 @@ export function useLedgerSettlementPages(ledgerId: string | null) {
 
 /** 記一筆結清。付錢的人是我時省略 `fromPersonId`。 */
 export function useCreateSettlement(ledgerId: string) {
-  const invalidate = useInvalidateSettlementWrites(ledgerId);
+  const invalidate = useInvalidateSettlementWrites();
   return useMutation({
     mutationFn: (input: CreateSettlementRequest) =>
       apiRequest<SettlementResponse>(`/ledgers/${ledgerId}/settlements`, {
@@ -95,7 +83,7 @@ export function useCreateSettlement(ledgerId: string) {
 
 /** 改一筆結清。`settlementId` 是 `transaction.settlement.id`。 */
 export function useUpdateSettlement(ledgerId: string) {
-  const invalidate = useInvalidateSettlementWrites(ledgerId);
+  const invalidate = useInvalidateSettlementWrites();
   return useMutation({
     mutationFn: ({
       settlementId,
@@ -114,7 +102,7 @@ export function useUpdateSettlement(ledgerId: string) {
 
 /** 刪除一筆結清（後端軟刪除那筆轉帳）。 */
 export function useDeleteSettlement(ledgerId: string) {
-  const invalidate = useInvalidateSettlementWrites(ledgerId);
+  const invalidate = useInvalidateSettlementWrites();
   return useMutation({
     mutationFn: (settlementId: string) =>
       apiRequest<void>(`/ledgers/${ledgerId}/settlements/${settlementId}`, { method: 'DELETE' }),
@@ -127,7 +115,7 @@ export function useDeleteSettlement(ledgerId: string) {
  * 400 `ACCOUNT_NOT_PAYERS`。
  */
 export function useSetTransactionAccount(ledgerId: string) {
-  const invalidate = useInvalidateSettlementWrites(ledgerId);
+  const invalidate = useInvalidateSettlementWrites();
   return useMutation({
     mutationFn: ({ transactionId, input }: { transactionId: string; input: SetAccountRequest }) =>
       apiRequest<SetAccountResponse>(`/ledgers/${ledgerId}/transactions/${transactionId}/account`, {
@@ -140,7 +128,7 @@ export function useSetTransactionAccount(ledgerId: string) {
 
 /** 付錢或收錢的人補自己那一邊的結清帳戶。`settlementId` 是 `transaction.settlement.id`。 */
 export function useSetSettlementAccount(ledgerId: string) {
-  const invalidate = useInvalidateSettlementWrites(ledgerId);
+  const invalidate = useInvalidateSettlementWrites();
   return useMutation({
     mutationFn: ({ settlementId, input }: { settlementId: string; input: SetAccountRequest }) =>
       apiRequest<SetAccountResponse>(`/ledgers/${ledgerId}/settlements/${settlementId}/account`, {

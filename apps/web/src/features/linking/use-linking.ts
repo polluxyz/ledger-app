@@ -11,7 +11,7 @@ import type {
   Paginated,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { ACCOUNTS_KEY } from '../accounts/use-accounts';
+import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 import { COUNTERPARTIES_KEY } from '../debts/use-debts';
 
 /**
@@ -36,9 +36,6 @@ import { COUNTERPARTIES_KEY } from '../debts/use-debts';
 export const FRIEND_REQUESTS_KEY = ['friend-requests'] as const;
 /** 提議的前綴。 */
 export const DEBT_PROPOSALS_KEY = ['debt-proposals'] as const;
-/** 交易快取的前綴（見 `use-transactions.ts`），不分帳本。 */
-const ALL_TRANSACTIONS_KEY = ['transactions'] as const;
-
 /** 待確認卡片一次取幾筆（spec §4.5）。 */
 const PENDING_LIMIT = 20;
 /** 送出的待確認邀請、待詢問的對象通常只有幾筆；一頁就夠。 */
@@ -52,9 +49,7 @@ export const PENDING_REFRESH_MS = 30_000;
 function invalidateAfterResponse(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: FRIEND_REQUESTS_KEY });
   void queryClient.invalidateQueries({ queryKey: DEBT_PROPOSALS_KEY });
-  void queryClient.invalidateQueries({ queryKey: COUNTERPARTIES_KEY });
-  void queryClient.invalidateQueries({ queryKey: ALL_TRANSACTIONS_KEY });
-  void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+  invalidateAfterMoneyWrite(queryClient);
 }
 
 // ---------------------------------------------------------------------------

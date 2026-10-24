@@ -1,5 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -15,7 +23,11 @@ import {
   ActiveLedgerContext,
   type ActiveLedgerContextValue,
 } from '../features/ledgers/active-ledger-context';
-import { getChartColorForId } from '../features/statistics/charts/chart-colors';
+import { useHomeCategoryColors } from '../app/use-home-category-colors';
+import {
+  getChartColorForId,
+  getStatisticsGroupColor,
+} from '../features/statistics/charts/chart-colors';
 import StatsPage from './StatsPage';
 
 const statisticsApi = vi.hoisted(() => ({
@@ -325,6 +337,33 @@ describe('StatsPage', () => {
     ).toEqual(['呆帳$50071.12%', '午餐$12017.07%', '早餐$8011.38%', '結清差額$30.43%']);
     expect(within(list).queryByRole('button', { name: /呆帳/ })).not.toBeInTheDocument();
     expect(within(list).getByRole('button', { name: /午餐，\$120，17.07%/ })).toBeInTheDocument();
+  });
+
+  it('keeps statistical category colors unchanged by the home color preference', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+
+    async function readCategoryColors(mode: 'color' | 'gold' | 'gray') {
+      const preference = renderHook(() => useHomeCategoryColors());
+      act(() => preference.result.current.choose(mode));
+      expect(preference.result.current.mode).toBe(mode);
+
+      const rendered = renderPage('/stats?tab=cat&ledger=family&month=2026-10');
+      const list = await screen.findByRole('list', { name: '支出分類清單' });
+      const colors = Array.from(list.querySelectorAll('[style*="--swatch-color"]')).map((swatch) =>
+        (swatch as HTMLElement).style.getPropertyValue('--swatch-color'),
+      );
+      rendered.unmount();
+      preference.unmount();
+      return colors;
+    }
+
+    const colorMode = await readCategoryColors('color');
+    expect(colorMode).toEqual([
+      getStatisticsGroupColor(dinner, 'dark'),
+      getStatisticsGroupColor(supplies, 'dark'),
+    ]);
+    expect(await readCategoryColors('gold')).toEqual(colorMode);
+    expect(await readCategoryColors('gray')).toEqual(colorMode);
   });
 
   it('never keeps the previous ledger chart while loading a new ledger', async () => {

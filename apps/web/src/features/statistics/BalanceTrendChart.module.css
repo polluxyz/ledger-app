@@ -18,7 +18,10 @@
 .chart {
   display: block;
   width: 100%;
-  height: auto;
+  height: var(--balance-trend-chart-height, auto);
+  min-height: var(--balance-trend-chart-min-height, auto);
+  max-height: var(--balance-trend-chart-max-height, none);
+  flex: var(--balance-trend-chart-flex, 0 1 auto);
   overflow: visible;
   color: var(--color-primary);
 }
@@ -71,8 +74,7 @@
 }
 
 .valueLabel,
-.monthLabel,
-.activeLabel {
+.monthLabel {
   fill: var(--color-text);
   font-family: inherit;
   text-anchor: end;
@@ -87,6 +89,11 @@
 .monthLabel {
   fill: var(--color-text-muted);
   font-size: 11px;
+}
+
+.activeLabel {
+  fill: var(--color-text);
+  font-family: inherit;
 }
 
 .status {

@@ -271,6 +271,22 @@ export async function createTransaction(
   return readJson<Transaction>(response, '記一筆交易');
 }
 
+/** 標註交易，供首頁標註分頁的版面測試準備資料。 */
+export async function markTransaction(
+  request: APIRequestContext,
+  token: string,
+  ledgerId: string,
+  transactionId: string,
+): Promise<void> {
+  const response = await request.put(
+    `${API_BASE_URL}/ledgers/${ledgerId}/transactions/${transactionId}/mark`,
+    { headers: authHeaders(token) },
+  );
+  if (!response.ok()) {
+    throw new Error(`標註交易失敗：${response.status()} ${await response.text()}`);
+  }
+}
+
 /** 讀取單本帳本的第一頁交易，供 e2e 核對建立、搬移與複製後的資料。 */
 export async function listLedgerTransactions(
   request: APIRequestContext,
