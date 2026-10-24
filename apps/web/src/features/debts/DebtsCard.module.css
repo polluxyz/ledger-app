@@ -1,0 +1,98 @@
+.card {
+  min-width: 0;
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.heading,
+.ledgerHeading {
+  margin: 0;
+  font-weight: 700;
+}
+
+.heading {
+  font-size: var(--text-sm);
+}
+
+.allLink,
+.allPeople {
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.allLink {
+  flex: none;
+}
+
+.people,
+.ledgerPeople {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-xs) 0;
+}
+
+.name {
+  min-width: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.balance {
+  flex: none;
+}
+
+.allPeople {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: var(--space-xs);
+}
+
+.ledgerGroup {
+  margin-top: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.ledgerHeading {
+  margin-bottom: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.status,
+.empty {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.empty {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius);
+  background-color: var(--color-fill);
+}
