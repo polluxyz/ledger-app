@@ -10,20 +10,22 @@
 - dev 的 a@a.com 在「test 的帳本」多了「早餐」「午餐」分類與「信用卡」帳戶，給假 provider 的固定句子用。
 - 預覽頁（不進版控）：`docs/artifacts/step-4a-ai-draft-preview.html`。
 
-## 新分類提議（2026-10-24 核可，#161 已完成）
+## 新分類提議（2026-10-24 核可，#161 合併，已部署並驗完真的模型）
 
-- spec `docs/specs/phase-4a-ai-new-category.md`，plan 與 todo 在 `tasks/ai-new-category-*.md`。T0～T4 已做完並合併（#161）；實作紀錄見 plan §7。
+- spec `docs/specs/phase-4a-ai-new-category.md`，plan 與 todo 在 `tasks/archive/ai-new-category-*.md`。T0～T6 都做完；實作紀錄見 plan §7。
+- T5：dev 已重新 build（沒有 migration）。a@a.com 的「test 的帳本」與「tttest」各多一個「日用品」分類，測試交易已軟刪除。
+- T6：glm-5.3 跑 SC-P17 與 4a SC-P10 第 5、6、8 步，24/24。保留預設分類的對照輪，分類 9/9 對，1 次 25 秒逾時。
 - 會改 API：草稿與新增交易都多一個 `newCategoryName`。不改 schema。
 - 開發者原話：「z.ai只會用到28號 之後就會換其他模型喔 先暫時用這個」。所以：
   - 不做 z.ai 專屬的工作。`GLM_BASE_URL` 的預設值（bigmodel.cn）先不改。`advisor` 建議現在改成 `https://api.z.ai/api/paas/v4`，開發者核可 spec §10 第 5 項時同意延到換模型那次處理。
-  - 真的模型驗收（plan T6）排在 10-28 前；來不及就等換模型後跑。換模型時提示詞可能要重調，SC-P10、SC-P17 要重測。
+  - 換模型時提示詞可能要重調，SC-P10、SC-P17 要重測。做法照 plan §7 T6（暫時的 e2e 對 `ledger_ai_test`）。
 - z.ai 條款：`advisor` 2026-10-24 讀過官方條款與 DPA。結論是開放給其他人前要補告知與同意、並向供應商確認用途；現在只有開發者自己用，不必先做。阻擋項見 `../handoff.md`。
 - Jev：開發者想之後把分類交給 Jev。`advisor` 建議先用 GLM 做完，Jev 另寫評估 spec，達標才換（spec §2.4）。這次不建任何 Jev 的檔案。
 
 ## 下一步
 
-1. T5：部署 dev（沒有 migration），用假 provider 走 spec §1 第 2、3、6、7 步。dev 使用者要有最近一筆交易，草稿才會帶預設帳戶。
-2. T6：2026-10-28 前在主工作區用真的模型跑 SC-P17（5 句各 3 次）與 4a SC-P10 第 5、6、8 步各 3 次，結果記進 `tasks/ai-new-category-plan.md` §7。來不及就等換模型後跑。
+1. 開發者下次開 dev：重開 API 與 Vite，按 `Ctrl + Shift + R`，自己試「衛生紙 189」這類句子。
+2. 10-28 後換模型：處理 `GLM_BASE_URL` 預設值（spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17。
 3. 費用控管與 `max_tokens` 之後再設。
 
 ## 已知問題
