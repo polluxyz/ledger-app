@@ -15,6 +15,8 @@
 
 PR1（A+ 版面）已以 #172（`2454a0d`）合進 `main` 並部署到 dev。等開發者按 `Ctrl + Shift + R` 看過，再開 PR2（todo S2）。
 
+下一個 session 先做：派 Codex 修 `apps/web/e2e/home.spec.ts` 的 `getRect` 偶發失敗（見「已知問題」），再開 PR2。
+
 - PR1 含 W-A3（決策 336、SC-Y30）：首頁「最近」「標註」卡窄於 360px 時交易列改成兩行，名稱不再被擠掉。協調者看過 309px、390px、寬卡的淺色與深色截圖。
 - 驗證 commit `d6006bc`：format:check／lint／typecheck 全綠；單元測試 API 881、Web 1032、shared 126 條；Web e2e 90 條（worker 跑）；CI 全綠。
 - 部署：主工作區 `git pull`、重建 shared 與 API（同時帶進 #171，API 預設只聽 `localhost`）。開發者要重開 API 與 Vite。
@@ -29,6 +31,7 @@ PR1（A+ 版面）已以 #172（`2454a0d`）合進 `main` 並部署到 dev。等
 ## 已知問題
 
 - 390px 時，借還卡的長對象名稱（例：「搬移測試對象 1021」）被擠成 4 行。部署後檢查時看到，開發者還沒看過，未決定要不要改。
+- 首頁 e2e 偶發失敗：#173（只改文件）的 CI 第一次跑，SC-Y2、SC-Y8 都在 `getRect` 拋「無法取得首頁元件的實際方框」，其餘 88 條通過；同一份程式在 #172 的 CI 全過。`getRect` 只呼叫一次 `boundingBox()`，視窗寬度一變、首頁在桌機版面與一欄版面之間切換重畫時，就可能拿到 null。修法方向：量之前先等元素可見，或整段量測放進重試（`expect.poll`），不放寬斷言。屬 `apps/web`，派 Codex。
 - Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（plan §6）。再出現時先看是不是機器負載。
 
 ## 之後的 PR
