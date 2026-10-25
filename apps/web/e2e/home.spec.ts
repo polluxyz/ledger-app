@@ -174,7 +174,9 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
 
     await page.setViewportSize({ width: 901, height: 900 });
     await expect(page.locator('[data-home-layout="tree"]')).toBeVisible();
-    const desktop = await readHomeCards(page);
+    const desktop = await waitForHomeCards(page, (snapshot) => {
+      expect(snapshot.cardIds).toEqual(HOME_CARD_IDS);
+    });
     expect(desktop.cardIds).toEqual(HOME_CARD_IDS);
   });
 
@@ -478,22 +480,25 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     await openNewTransaction(page);
     const panelListWidth = await list.evaluate((element) => element.clientWidth);
     expect(panelListWidth).toBeLessThan(440);
+    let panelRects: { first: Rect; second: Rect } | undefined;
     await expect
       .poll(async () => {
         const [first, second] = await Promise.all([
           getRect(list.getByRole('listitem').nth(0)),
           getRect(list.getByRole('listitem').nth(1)),
         ]);
+        const sameColumn = Math.abs(first.x - second.x) <= 1;
+        if (sameColumn) panelRects = { first, second };
         return {
-          sameColumn: Math.abs(first.x - second.x) <= 1,
+          sameColumn,
           first,
           second,
           listWidth: await list.evaluate((element) => element.clientWidth),
         };
       })
       .toMatchObject({ sameColumn: true });
-    const panelFirst = await getRect(list.getByRole('listitem').nth(0));
-    const panelSecond = await getRect(list.getByRole('listitem').nth(1));
+    if (!panelRects) throw new Error('新增交易面板的帳戶清單尚未量測。');
+    const { first: panelFirst, second: panelSecond } = panelRects;
     expectAccountColumns(panelFirst, panelSecond, 1);
 
     await writeMeasurement(testInfo, {
@@ -716,8 +721,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         .getByRole('tablist', { name: '最近與標註' })
         .getByRole('tab')
         .all()) {
-        const rect = await tab.boundingBox();
-        if (!rect) throw new Error('無法量到首頁分頁的觸控區。');
+        const rect = await getRect(tab);
         expect(rect.height).toBeGreaterThanOrEqual(44);
         tabHeights.push(rect.height);
       }
@@ -1681,7 +1685,14 @@ async function readStatisticsCategoryColor(page: Page): Promise<string> {
 }
 
 async function getRect(locator: Locator): Promise<Rect> {
-  const rect = await locator.boundingBox();
+  // 視窗或側欄剛改變版面時，元素可能短暫沒有方框；重試整個定位與量測流程。
+  let rect: Rect | null = null;
+  await expect(async () => {
+    const measuredRect = await locator.boundingBox();
+    expect(measuredRect).not.toBeNull();
+    if (!measuredRect) throw new Error('無法取得首頁元件的實際方框。');
+    rect = measuredRect;
+  }).toPass({ timeout: 5_000 });
   if (!rect) throw new Error('無法取得首頁元件的實際方框。');
   return rect;
 }
