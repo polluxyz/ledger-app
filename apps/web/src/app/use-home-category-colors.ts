@@ -78,7 +78,7 @@ export function homeCategoryColor(
   group: StatisticsGroup,
   mode: HomeCategoryColorMode,
   chartTheme: ChartTheme,
-  isFirstExpenseGroup = true,
+  isFirstExpenseGroup: boolean,
 ): string {
   if (mode === 'color') {
     return getStatisticsGroupColor(group, chartTheme);

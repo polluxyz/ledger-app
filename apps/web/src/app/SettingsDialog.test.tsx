@@ -170,9 +170,9 @@ describe('SettingsDialog', () => {
       expect(preview).toHaveAttribute('aria-hidden', 'true');
       const segments = Array.from(preview.querySelectorAll<HTMLElement>('[data-color-segment]'));
       const colors = segments.map((segment) => segment.style.backgroundColor);
-      const expectedColors = HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => {
+      const expectedColors = HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group, index) => {
         const expected = document.createElement('span');
-        expected.style.backgroundColor = homeCategoryColor(group, option.mode, 'dark');
+        expected.style.backgroundColor = homeCategoryColor(group, option.mode, 'dark', index === 0);
         return expected.style.backgroundColor;
       });
 
@@ -181,10 +181,10 @@ describe('SettingsDialog', () => {
       if (option.mode === 'color') {
         expect(new Set(colors.slice(0, 3)).size).toBe(3);
       } else if (option.mode === 'gold') {
-        expect(colors.slice(0, 3)).toEqual(Array(3).fill('var(--color-accent)'));
         const neutral = document.createElement('span');
         neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
-        expect(colors[3]).toBe(neutral.style.backgroundColor);
+        expect(colors[0]).toBe('var(--color-accent)');
+        expect(colors.slice(1)).toEqual(Array(3).fill(neutral.style.backgroundColor));
       } else {
         const neutral = document.createElement('span');
         neutral.style.backgroundColor = NEUTRAL_CHART_COLORS.dark;
