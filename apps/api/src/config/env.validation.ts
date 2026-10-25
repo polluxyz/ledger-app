@@ -9,6 +9,19 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
   PORT: z.coerce.number().int().positive().default(3000),
+  /**
+   * API 監聽的網路位址。預設只聽本機，同一個網路裡的其他裝置連不到；
+   * 不指定時 Node 會聽所有網路介面，等於把開發中的 API 開給整個區網。
+   * 要讓實機 App 或容器連進來時，再明確設成 `0.0.0.0`。留空視同未設定。
+   *
+   * 預設寫 `localhost` 而不是 `127.0.0.1`：前端與 e2e 都連 `localhost`，Windows 會先
+   * 解析成 IPv6 的 `::1`。只聽 `127.0.0.1` 時，瀏覽器每條連線都要等 `::1` 失敗才改連，
+   * 畫面明顯變慢。聽 `localhost` 會落在同一個解析結果上，跟前端一致。
+   */
+  HOST: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().trim().min(1).default('localhost'),
+  ),
   LLM_PROVIDER: z.enum(['glm', 'fake']).default('fake'),
   GLM_API_KEY: z.string().optional(),
   GLM_MODEL: z.string().optional(),

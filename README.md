@@ -57,7 +57,7 @@ tasks/         Plans & task lists for work in progress
 
 ## Prerequisites
 
-- **Node.js 22+** (see `.node-version`)
+- **Node.js 22.23.4+ (22.x)** (see `.node-version`; `pnpm install` refuses other versions)
 - **pnpm** (`packageManager` in `package.json`)
 - **PostgreSQL 18** running locally
 
