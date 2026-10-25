@@ -33,6 +33,27 @@
 - T5：glm-5.3 跑 SC-P27（10 筆 3 次，加 SC-P17、4a SC-P10 第 5、6、8 步各 3 次），27/27，都沒有被截斷。10 筆最多用 609 個輸出 token，所以上限維持 2048。思考 token 算在輸出 token 裡。表的次數與 token 和 provider 回報一致。
 - 新的環境變數：`AI_PARSE_DAILY_LIMIT_PER_USER`（50）、`AI_DAILY_LIMIT_GLOBAL`（500）、`AI_PARSE_MAX_OUTPUT_TOKENS`（2048）。空白就用預設值。
 
+## AI 入口改成圖示（2026-10-25 進行中，等開發者回覆）
+
+- 開發者原話：「ai的部分我不太想要直接放在上方欄位 我想要弄個icon點擊開來才輸入」「我想放在上方橫條的右邊」。看完第一版預覽後：「logo可以換嗎?」「橫條展開弄個動畫」，所以目前傾向 B 案，還沒明確拍板。
+- worktree `C:/Users/Administrator/orca/workspaces/ledger-app/ai-icon`，分支 `feature/ai-icon-entry`（從 `c3e7f8a` 開，沒有 commit、沒有 push）。Node 更新後要在該 worktree 重跑 `pnpm install`。
+- 預覽頁（不進版控，只在 ai-icon worktree）：`docs/artifacts/step-ai-icon-entry-preview.html`。A 案＝圖示下方彈出小框；B 案＝輸入欄從圖示往左展開，有動畫（只用 `--motion-*` token），有慢速播放鈕。頁首有 5 個圖示候選：1 星芒、2 星群、3 魔杖、4 麥克風加星芒、5 筆加星芒。
+- 兩方意見：Codex（設計）推薦 B，理由是不遮交易明細；`advisor` 推薦 A，理由是小框放得下錯誤訊息，手機上 B 的輸入欄太窄。協調者原本傾向 A，但已告訴開發者 B 也可行，由他實際點過後選。
+- 兩案共用的預設（advisor 提、協調者同意，已告知開發者，等他確認）：
+  1. 只在交易頁「明細」出現（W214 離頁即消失不變）。
+  2. 送出成功且至少產生 1 筆草稿時，清空並自動收起；草稿照舊加到列表上方。
+  3. 空結果或錯誤時保留原句、不收起。
+  4. 錯誤訊息改放在輸入欄下方。這偏離 4a spec W213，要先改 spec。
+  5. 解析中可以收起，請求繼續；圖示顯示處理中。收起不取消、不退額度。
+  - 不改 schema、API，不加套件。
+- 待開發者回覆：圖示編號、A 或 B、上面 5 點、刪除 `ledger_aiq_api_test`／`ledger_aiq_provider_test`。
+- 回覆後：
+  1. 協調者更新主 spec `docs/specs/phase-4a-ai-text.md`（§1 第 1 步、W208、W213、W214、SC-P12、§6）與 `phase-2i-web-layout-v2.md` SC-38（入口靠右、橫條高度不變；SC-38 舊文寫帳本切換在橫條，與現況不符，要註明、不要照舊文搬回）。新決策用 W246 起。
+  2. 派 Codex（`default`）在 ai-icon 實作，含單元測試與 Web e2e。
+  3. PR → 部署 dev → 提醒開發者 `Ctrl + Shift + R` → 清 worktree、分支、終端機。
+- advisor 列的實作驗收點：浮層與 sticky 橫條 `backdrop-filter` 的堆疊、375px 與手機虛擬鍵盤、readonly 與沒有帳本時的樣子、切換檢視時進行中的請求。另外 Esc 不要掛在 document 上，避免多個浮層一起關。
+- Orca run `run_50f41e6dc0fb` 留著（Orca 沒有關閉 run 的指令）。advisor 與 Codex 的 worker 都已 release，終端機都已關閉；下次派工開新終端機。
+
 ## 下一步
 
 1. 10-28 後換模型：處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。

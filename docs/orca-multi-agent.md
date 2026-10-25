@@ -167,6 +167,8 @@ Codex 用到沒有為止（開發者 2026-10-19）：`usedPercent` 只當參考�
 - 派工後讀一次畫面。看到 `[Pasted Content N chars]` 代表任務只貼進輸入框、沒有送出，補一次 `orca terminal send --terminal <handle> --enter`。
 - worker 回報「全部通過」不算數，驗收時自己跑 `pnpm typecheck` 與 `pnpm test`。agy 曾回報全綠，實際有型別錯誤與逾時的測試。
 - 跳過許可的代價是 worker 在 worktree 裡做什麼都不會問。驗收時看完整的 `git status` 與 `git diff`，範圍外的改動一律退回。
+- 用 `--terminal` 接到不在協調者 worktree 的終端機，要同時帶 `--worktree path:<那個 worktree>`，否則回 `terminal_worktree_mismatch`。
+- Orca 自動更新或重啟後，舊的終端機 handle 會回 `terminal_handle_stale`，用 `orca terminal list` 依標題找新 handle。重啟前開的兩段式終端機可能派工逾時（`agent_readiness` timeout），或 Codex 每個指令都失敗（`helper_unknown_error: setup refresh had errors`）。遇到就 `worker-stop`、`orca terminal close`，開新終端機用 `--retry-of` 重派（2026-10-25）。
 
 **Codex**
 
