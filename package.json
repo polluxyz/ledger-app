@@ -5,7 +5,7 @@
   "description": "Personal & family expense tracking system with AI-powered entry (NestJS + React + React Native monorepo)",
   "packageManager": "pnpm@11.3.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.23.4 <23"
   },
   "scripts": {
     "lint": "pnpm -r lint",

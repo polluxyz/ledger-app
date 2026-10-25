@@ -55,6 +55,7 @@ async function bootstrap() {
   // 掛在 /docs（在 /api 前綴之外），是慣例的文件位置。
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  // 位址與埠都取驗證過的設定；HOST 預設只聽本機（見 `env.validation.ts`）。
+  await app.listen(config.get('PORT', { infer: true }), config.get('HOST', { infer: true }));
 }
 void bootstrap();

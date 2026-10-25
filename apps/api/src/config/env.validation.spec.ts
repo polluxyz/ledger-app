@@ -32,6 +32,14 @@ describe('validateEnv', () => {
     if (min > 0) expect(() => validateEnv({ ...base, [key]: '0' })).toThrow(key);
   });
 
+  // 沒設或留空都要落回只聽本機；預設值被改成空字串或 0.0.0.0，API 就會對整個區網開放。
+  it('listens on this machine only unless HOST is set explicitly', () => {
+    for (const blank of [undefined, '', '  ']) {
+      expect(validateEnv({ ...base, HOST: blank }).HOST).toBe('localhost');
+    }
+    expect(validateEnv({ ...base, HOST: '0.0.0.0' }).HOST).toBe('0.0.0.0');
+  });
+
   it('defaults AI to fake without requiring external credentials', () => {
     expect(validateEnv(base)).toMatchObject({
       LLM_PROVIDER: 'fake',

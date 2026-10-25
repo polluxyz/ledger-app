@@ -35,6 +35,7 @@
 | 統一錯誤格式         | `AllExceptionsFilter` 清掉框架訊息，不洩漏堆疊與內部細節                       | `apps/api/src/common/filters/`          |
 | 流量限制             | 全站寬鬆預設，auth 端點以 `@Throttle` 收緊（60 秒 5 次，超限 429）             | `apps/api/src/app.module.ts:25`         |
 | CORS                 | 只放行 `CORS_ORIGIN` 設定的來源；刻意不開 `credentials`                        | `apps/api/src/main.ts:25`               |
+| 監聽位址             | 預設只聽本機（`localhost`），要對外時以 `HOST` 明確開放                        | `apps/api/src/main.ts`                  |
 | 密碼雜湊             | bcrypt；登入失敗不區分「帳號不存在」與「密碼錯誤」                             | `apps/api/src/auth/`                    |
 | 機敏設定外置         | `DATABASE_URL` / `JWT_SECRET` 等走環境變數，啟動時以 schema 驗證，缺漏即失敗   | `apps/api/src/config/env.validation.ts` |
 | SAST（靜態安全掃描） | CodeQL：追不可信輸入是否流到危險位置；PR 觸發 ＋ 每週定期重跑                  | `.github/workflows/codeql.yml`          |
@@ -217,3 +218,4 @@
 - **2026-08-22（同日修訂）**：收斂 §3 假設清單的措辭。補上「基本防護不因排除 APT 而免除」、界定只寫應用程式層可控項目、把 SEC-9 的理由與法規合規脫鉤、修正「OAuth 等於 2FA」的錯誤說法、假設 5 改為指回 SEC-8 並定調「記改變、不記讀取」。
 - **2026-08-23**：依外部審閱意見修訂 §5、§6。SEC-1 定義「已處理」與例外清單；SEC-2 改寫成結果導向並定下 15 分鐘空窗上限；SEC-3 拆成 API 與 Web 兩層；SEC-4 明說 CSP 不是 token 不外洩的保證；SEC-5 只保留 `404` 一種作法；SEC-6 給出 256 bits 下限、輪替移到部署文件；SEC-7 移除「用 `CORS_ORIGIN` 證明 HTTPS」的錯誤驗證；SEC-8 補上匯出與資料送出系統這兩類必記的讀取；SEC-9 改為結果導向、共享資料的處置交由資料模型 spec。新增 SEC-19（好友關係不擴張權限）、SEC-20（先定義資源授權模型）。階段四補上「LLM 輸入與輸出都不可信」的不變式。
 - **2026-09-23**：SEC-11 目標由「無法判定」改為「限制判定的速度」，並列出可判定的端點與各自的限制。原因是註冊與加成員兩條路早已可判定，3a 的好友邀請經開發者定案也明確回「找不到使用者」。威脅表的「使用者列舉」一列改為「部分」。
+- **2026-10-25**：§2 現況表補上「監聽位址」。API 原本沒指定位址，會聽所有網路介面；改成預設只聽本機（`localhost`），要對外時用 `HOST` 開放（開發者 2026-10-25 選定）。不用 `127.0.0.1`：Windows 把 `localhost` 先解析成 `::1`，前端每條連線都要等退回 IPv4，Web e2e 因此失敗。
