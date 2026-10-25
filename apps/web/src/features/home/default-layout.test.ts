@@ -27,24 +27,33 @@ describe('home default layout', () => {
     ).toBe(true);
   });
 
-  it('keeps the default three-card rows unwrapped at the 976px content width', () => {
-    const defaultContentWidth = 976;
-    const firstBand = DEFAULT_HOME_LAYOUT_V1.bands[0]!;
-    const lastBand = DEFAULT_HOME_LAYOUT_V1.bands[2]!;
+  it.each([
+    { label: '976px spec width', contentWidthPx: 976, expectedSparePx: 17 },
+    { label: '961px with Windows scrollbar', contentWidthPx: 961, expectedSparePx: 2 },
+  ])(
+    'keeps the default three-card rows unwrapped at $label',
+    ({ contentWidthPx, expectedSparePx }) => {
+      const firstBand = DEFAULT_HOME_LAYOUT_V1.bands[0]!;
+      const lastBand = DEFAULT_HOME_LAYOUT_V1.bands[2]!;
 
-    expect(firstBand.root.type).toBe('split');
-    expect(minWidthOf(firstBand.root)).toBeLessThanOrEqual(defaultContentWidth);
-    if (firstBand.root.type === 'split') {
+      expect(firstBand.root.type).toBe('split');
+      expect(minWidthOf(firstBand.root)).toBeLessThanOrEqual(contentWidthPx);
+      if (firstBand.root.type === 'split') {
+        expect(
+          firstBand.root.children
+            .map(minWidthOf)
+            .every((width) => width <= (contentWidthPx - 2 * HOME_LAYOUT_GAP_PX) / 3),
+        ).toBe(true);
+      }
+
+      // Windows 桌機實測：1280px 視窗 − 15px 捲軸 − 240px 展開側欄 − 64px 頁面外距＝961px。
+      // 3 × 309px 卡片 + 2 × 16px 間距＝959px；保留 2px 餘裕後三卡列不換行。
       expect(
-        firstBand.root.children.map(minWidthOf).every((width) => width <= (976 - 32) / 3),
-      ).toBe(true);
-    }
-
-    // 976px − 2 × 16px 間距 − 3 × 314px 卡片＝2px 餘裕。
-    expect(976 - 2 * HOME_LAYOUT_GAP_PX - 3 * HOME_CARD_REGISTRY.expense.minWidthPx).toBe(2);
-    // 最近活動、帳戶與借還的最小寬度各 314px，共 974px。
-    expect(minWidthOf(lastBand.root)).toBe(974);
-  });
+        contentWidthPx - 2 * HOME_LAYOUT_GAP_PX - 3 * HOME_CARD_REGISTRY.expense.minWidthPx,
+      ).toBe(expectedSparePx);
+      expect(minWidthOf(lastBand.root)).toBe(959);
+    },
+  );
 
   it.each([1152, 976])(
     'wraps every layer of the nested SC-Y29 layout within %i pixels',

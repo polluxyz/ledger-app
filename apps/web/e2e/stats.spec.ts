@@ -391,17 +391,42 @@ async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
     const card = page.getByRole('link', { name: `${label} ${amount}` });
     await expect(card).toBeVisible();
     const value = card.locator('strong');
-    const metrics = await value.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return {
-        text: element.textContent?.trim(),
-        lineCount: range.getClientRects().length,
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-      };
-    });
+    let metrics:
+      | {
+          text: string | undefined;
+          lineCount: number;
+          scrollWidth: number;
+          clientWidth: number;
+        }
+      | undefined;
+    await expect
+      .poll(
+        async () => {
+          try {
+            metrics = await value.evaluate((element) => {
+              const range = document.createRange();
+              range.selectNodeContents(element);
+              return {
+                text: element.textContent?.trim(),
+                lineCount: range.getClientRects().length,
+                scrollWidth: element.scrollWidth,
+                clientWidth: element.clientWidth,
+              };
+            });
+            return (
+              metrics.text === amount &&
+              metrics.lineCount === 1 &&
+              metrics.scrollWidth <= metrics.clientWidth
+            );
+          } catch {
+            return false;
+          }
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
+    if (!metrics) throw new Error(`${label} 金額尚未完成版面測量。`);
     expect(metrics.text).toBe(amount);
     expect(metrics.lineCount).toBe(1);
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);

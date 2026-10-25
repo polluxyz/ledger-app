@@ -1,25 +1,24 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Locator, Page, Route, TestInfo } from '@playwright/test';
 import {
+  addMember,
   createAccount,
   createCategory,
+  createLedger,
   createDebtEntry,
   createTransaction,
   listAccounts,
   listCategories,
+  linkByEmail,
   markTransaction,
   personalLedger,
   type TestUser,
 } from './api';
 import { API_BASE_URL } from './env';
 import { expect, test } from './fixtures';
-import {
-  expectHomeSectionOrder,
-  newTransactionForm,
-  openNewTransaction,
-  openUserMenu,
-  selectCategory,
-} from './ui';
+import { newTransactionForm, openNewTransaction, openUserMenu, selectCategory } from './ui';
 
 interface HomeSetup {
   ledger: Awaited<ReturnType<typeof personalLedger>>;
@@ -35,16 +34,94 @@ interface Rect {
   height: number;
 }
 
+const HOME_CARD_IDS = [
+  'expense',
+  'income',
+  'net',
+  'trend',
+  'categories',
+  'activity',
+  'accounts',
+  'debts',
+] as const;
+
+type HomeCardId = (typeof HOME_CARD_IDS)[number];
+
+const APLUS_SHOTS_DIR = fileURLToPath(
+  new URL('../../../docs/artifacts/2l-aplus-shots/', import.meta.url),
+);
+
 /**
  * 首頁改版的瀏覽器驗收：以前置 API 建立真實帳務資料，再透過畫面操作寫入與切換設定。
- * 版面斷言直接量瀏覽器方框，量測值與截圖寫到 Playwright 的 gitignore 輸出目錄。
+ * 版面斷言直接量瀏覽器方框；量測值放 Playwright 輸出目錄，A+ 展示截圖放 gitignore 的 artifacts。
  */
-test.describe('2k 首頁改版端對端', () => {
-  test('SC-H1：1280px 與 390px 的首頁區塊依 W260 排列', async ({ signedInPage: page }) => {
-    for (const width of [1280, 390]) {
+test.describe('2l 首頁 A+ 版面端對端', () => {
+  test('SC-Y1：預設卡片在 1280px 展開與收合側欄時維持三列比例', async ({
+    signedInPage: page,
+    userA,
+    userB,
+    request,
+  }, testInfo) => {
+    const linked = await linkByEmail(request, userB, userA);
+    await createDebtEntry(request, userB.token, {
+      counterparty: { id: linked.inviterSideId },
+      kind: 'LEND',
+      amount: 10_000,
+      date: currentTaiwanDate(),
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await ensureSidebarExpanded(page);
+    const viewportInset = await measureViewportInset(page);
+    // 1280px 扣掉實測捲軸與 stable 保留區、展開側欄 240px、兩側各 32px；收合側欄改扣 72px。
+    const expandedContentWidth = 1280 - viewportInset.layoutGutterWidth - 240 - 64;
+    const collapsedContentWidth = 1280 - viewportInset.layoutGutterWidth - 72 - 64;
+    const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
+    await expect(pendingCard).toBeVisible();
+
+    const expanded = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.abs(snapshot.layout.width - expandedContentWidth)).toBeLessThanOrEqual(2);
+      expectDefaultHomeRows(snapshot.cards);
+    });
+    const firstRowBottom = Math.max(
+      ...(['expense', 'income', 'net'] as const).map(
+        (cardId) => expanded.cards[cardId].y + expanded.cards[cardId].height,
+      ),
+    );
+    const pendingBox = await getRect(pendingCard);
+    expect(pendingBox.y).toBeGreaterThanOrEqual(firstRowBottom - 2);
+    expect(expanded.cards.trend.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 2);
+
+    await page.getByRole('button', { name: '收合側欄', exact: true }).click();
+    await expect(page.getByRole('button', { name: '展開側欄', exact: true })).toBeVisible();
+    const collapsed = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.abs(snapshot.layout.width - collapsedContentWidth)).toBeLessThanOrEqual(2);
+      expectDefaultHomeRows(snapshot.cards);
+    });
+
+    await writeMeasurement(testInfo, {
+      scenario: 'SC-Y1',
+      viewportInset,
+      expanded: { layoutWidth: expanded.layout.width, cards: expanded.cards, pendingBox },
+      collapsed: { layoutWidth: collapsed.layout.width, cards: collapsed.cards },
+    });
+  });
+
+  test('SC-Y2：390px 與 900px 固定一欄，901px 回到桌機版面', async ({ signedInPage: page }) => {
+    for (const width of [390, 900]) {
       await page.setViewportSize({ width, height: 900 });
-      await expectHomeSectionOrder(page, width);
+      const layout = page.locator('[data-home-layout="narrow"]');
+      await expect(layout).toBeVisible();
+      const cardIds = await readCardIds(layout);
+      expect(cardIds).toEqual(HOME_CARD_IDS);
+      await expectNoHorizontalPageOverflow(page);
     }
+
+    await page.setViewportSize({ width: 901, height: 900 });
+    await expect(page.locator('[data-home-layout="tree"]')).toBeVisible();
+    const desktop = await readHomeCards(page);
+    expect(desktop.cardIds).toEqual(HOME_CARD_IDS);
   });
 
   test('SC-H3：首頁新增支出後相關數字一起更新，重抓期間保留舊值', async ({
@@ -83,16 +160,16 @@ test.describe('2k 首頁改版端對端', () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
-    const statistics = page.locator('[aria-label="本月收支"]');
-    const expenseStat = statistics.getByRole('link', { name: /^本月支出/ });
-    const incomeStat = statistics.getByRole('link', { name: /^本月收入/ });
-    const netStat = statistics.getByRole('link', { name: /^結餘/ });
+    const expenseStat = page.locator('[data-home-card-id="expense"]');
+    const incomeStat = page.locator('[data-home-card-id="income"]');
+    const netStat = page.locator('[data-home-card-id="net"]');
     const categories = page.getByRole('list', { name: '支出分類' });
     const foodRow = categories
       .getByRole('listitem')
       .filter({ hasText: setup.expenseCategory.name });
-    const total = page.locator('[aria-label^="總額 "]');
+    const total = page.locator('[aria-label^="總資產 "] strong');
     const trend = page.locator('svg[role="group"][aria-label^="每月資產"]');
+    const trendCard = page.locator('[data-home-card-id="trend"]');
     const finalTrendPoint = trend.locator('circle[role="button"]').last();
     const accountBalance = page.getByLabel('記帳驗收現金餘額');
 
@@ -154,10 +231,7 @@ test.describe('2k 首頁改版端對端', () => {
       await expect(total).toHaveText('$1,025');
       await expect(finalTrendPoint).toHaveAttribute('aria-label', /\$1,025/);
       await expect(accountBalance).toHaveText('$1,025');
-      await expect(statistics).not.toContainText('載入中');
-      await expect(page.locator('section[aria-labelledby="home-asset-heading"]')).not.toContainText(
-        '載入中',
-      );
+      await expect(trendCard).not.toContainText('載入中');
 
       releaseRefetches();
       await expect(expenseStat).toContainText('$37.34');
@@ -197,72 +271,179 @@ test.describe('2k 首頁改版端對端', () => {
     });
   });
 
-  test('SC-H8：展開帳戶清單在 439px 為一欄、440px 為兩欄，右側欄打開時依實際寬度排版', async ({
+  test('SC-Y3：卡片分割剛好放得下、少 1px 與全部換行，恢復寬度後回到原版面', async ({
+    signedInPage: page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await ensureSidebarExpanded(page);
+    const viewportInset = await measureViewportInset(page);
+    // 三卡剛好寬度為 3×309px + 2×16px＝959px；少 1px 時目標為 958px。
+    // 視窗寬度＝目標內容寬＋實測捲軸與 stable 保留區＋側欄（240／72px）＋新增面板（0／360px）＋兩側外距 64px。
+    const viewportForContent = (contentWidth: number, sidebarWidth: number, drawerWidth: number) =>
+      contentWidth + viewportInset.layoutGutterWidth + sidebarWidth + drawerWidth + 64;
+    const justFitsViewport = viewportForContent(959, 240, 0);
+    const onePixelShortViewport = viewportForContent(958, 240, 0);
+    await page.setViewportSize({ width: justFitsViewport, height: 900 });
+    const justFits = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(959);
+      expectDefaultHomeRows(snapshot.cards);
+    });
+    await expectNoHorizontalPageOverflow(page);
+
+    await page.setViewportSize({ width: onePixelShortViewport, height: 900 });
+    const onePixelShort = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(958);
+      expectCardRows(snapshot.cards, [
+        ['expense', 'income'],
+        ['net'],
+        ['trend', 'categories'],
+        ['activity', 'accounts'],
+        ['debts'],
+      ]);
+    });
+    await expectNoHorizontalPageOverflow(page);
+
+    const allWrappedViewport = viewportForContent(390, 72, 360);
+    const allWrappedLayout: HomeLayoutKind = allWrappedViewport <= 900 ? 'narrow' : 'tree';
+    await ensureSidebarCollapsed(page);
+    await page.setViewportSize({ width: allWrappedViewport, height: 900 });
+    await openNewTransaction(page);
+    const allWrapped = await waitForHomeCards(
+      page,
+      (snapshot) => {
+        expect(Math.round(snapshot.layout.width)).toBe(390);
+        expectCardRows(snapshot.cards, [
+          ['expense'],
+          ['income'],
+          ['net'],
+          ['trend'],
+          ['categories'],
+          ['activity'],
+          ['accounts'],
+          ['debts'],
+        ]);
+      },
+      allWrappedLayout,
+    );
+    await expectNoHorizontalPageOverflow(page);
+
+    await page.getByRole('button', { name: '收起新增面板', exact: true }).click();
+    await page.setViewportSize({ width: justFitsViewport, height: 900 });
+    await ensureSidebarExpanded(page);
+    const restored = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(959);
+      expectDefaultHomeRows(snapshot.cards);
+    });
+    expectCardRectsClose(restored.cards, justFits.cards);
+
+    await writeMeasurement(testInfo, {
+      scenario: 'SC-Y3',
+      viewportInset,
+      viewportWidths: {
+        justFits: justFitsViewport,
+        onePixelShort: onePixelShortViewport,
+        allWrapped: allWrappedViewport,
+      },
+      allWrappedLayout,
+      contentWidths: {
+        justFits: justFits.layout.width,
+        onePixelShort: onePixelShort.layout.width,
+        allWrapped: allWrapped.layout.width,
+        restored: restored.layout.width,
+      },
+      cardRows: {
+        justFits: justFits.cards,
+        onePixelShort: onePixelShort.cards,
+        allWrapped: allWrapped.cards,
+      },
+    });
+  });
+
+  test('SC-Y8：六個帳戶的展開清單依 439px／440px 容器寬換欄，收起時保持一欄', async ({
     signedInPage: page,
     userA,
     request,
   }, testInfo) => {
-    for (let index = 2; index <= 12; index += 1) {
+    for (let index = 2; index <= 6; index += 1) {
       await createAccount(request, userA.token, {
         name: `首頁帳戶 ${String(index).padStart(2, '0')}`,
       });
     }
-
-    await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
-    const assetCard = page.locator('section[aria-labelledby="home-asset-heading"]');
-    const list = assetCard.getByRole('list', { name: '帳戶' });
-    const toggle = assetCard.getByRole('button', { name: '全部 12 個' });
-    await expect(list.getByRole('listitem')).toHaveCount(5);
-    await toggle.click();
-    await expect(list.getByRole('listitem')).toHaveCount(12);
 
+    const accountsCard = page.locator('[data-home-card-id="accounts"]');
+    const list = accountsCard.getByRole('list', { name: '帳戶' });
     const apiOrder = (await listAccounts(request, userA.token))
       .filter((account) => !account.isTemporary || account.hasTransactions)
       .map((account) => account.name);
-    expect(apiOrder).toHaveLength(12);
-    for (const [index, name] of apiOrder.entries()) {
-      await expect(list.getByRole('listitem').nth(index)).toContainText(name);
-    }
+    expect(apiOrder).toHaveLength(6);
 
-    const container = list.locator('xpath=..');
-    const widths: Array<{ width: number; columns: number; first: Rect; second: Rect }> = [];
-    for (const [width, columns] of [
-      [439, 1],
-      [440, 2],
-    ] as const) {
-      await container.evaluate((element, targetWidth) => {
-        (element as HTMLElement).style.width = `${targetWidth}px`;
-      }, width);
-      await expect
-        .poll(() => list.evaluate((element) => element.getBoundingClientRect().width))
-        .toBe(width);
-      const first = await getRect(list.getByRole('listitem').nth(0));
-      const second = await getRect(list.getByRole('listitem').nth(1));
-      if (columns === 1) {
-        expect(Math.abs(first.x - second.x)).toBeLessThanOrEqual(1);
-        expect(second.y).toBeGreaterThan(first.y);
-      } else {
-        expect(second.x).toBeGreaterThan(first.x);
-        expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(1);
+    const widths: Array<{
+      viewportWidth: number;
+      contentWidth: number;
+      columns: number;
+      first: Rect;
+      second: Rect;
+    }> = [];
+    for (const viewportWidth of [1280, 390]) {
+      await page.setViewportSize({ width: viewportWidth, height: 900 });
+      await accountsCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
+      await expect(list.getByRole('listitem')).toHaveCount(6);
+      for (const [index, name] of apiOrder.entries()) {
+        await expect(list.getByRole('listitem').nth(index)).toContainText(name);
       }
-      widths.push({ width, columns, first, second });
+
+      for (const [contentWidth, columns] of [
+        [439, 1],
+        [440, 2],
+      ] as const) {
+        await list.evaluate((element, width) => {
+          (element as HTMLElement).style.width = `${width}px`;
+        }, contentWidth);
+        await expect.poll(() => list.evaluate((element) => element.clientWidth)).toBe(contentWidth);
+        const first = await getRect(list.getByRole('listitem').nth(0));
+        const second = await getRect(list.getByRole('listitem').nth(1));
+        expectAccountColumns(first, second, columns);
+        widths.push({ viewportWidth, contentWidth, columns, first, second });
+      }
+
+      await list.evaluate((element) => {
+        (element as HTMLElement).style.width = '440px';
+      });
+      await accountsCard.getByRole('button', { name: '收起', exact: true }).click();
+      const firstCollapsed = await getRect(list.getByRole('listitem').nth(0));
+      const secondCollapsed = await getRect(list.getByRole('listitem').nth(1));
+      expectAccountColumns(firstCollapsed, secondCollapsed, 1);
+      await list.evaluate((element) => {
+        (element as HTMLElement).style.width = '';
+      });
     }
-    await container.evaluate((element) => {
-      (element as HTMLElement).style.width = '';
-    });
 
     await page.setViewportSize({ width: 1280, height: 900 });
+    await accountsCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
     await openNewTransaction(page);
-    const panelListWidth = await list.evaluate((element) => element.getBoundingClientRect().width);
+    const panelListWidth = await list.evaluate((element) => element.clientWidth);
     expect(panelListWidth).toBeLessThan(440);
+    await expect
+      .poll(async () => {
+        const [first, second] = await Promise.all([
+          getRect(list.getByRole('listitem').nth(0)),
+          getRect(list.getByRole('listitem').nth(1)),
+        ]);
+        return {
+          sameColumn: Math.abs(first.x - second.x) <= 1,
+          first,
+          second,
+          listWidth: await list.evaluate((element) => element.clientWidth),
+        };
+      })
+      .toMatchObject({ sameColumn: true });
     const panelFirst = await getRect(list.getByRole('listitem').nth(0));
     const panelSecond = await getRect(list.getByRole('listitem').nth(1));
-    expect(Math.abs(panelFirst.x - panelSecond.x)).toBeLessThanOrEqual(1);
-    expect(panelSecond.y).toBeGreaterThan(panelFirst.y);
+    expectAccountColumns(panelFirst, panelSecond, 1);
 
     await writeMeasurement(testInfo, {
-      scenario: 'SC-H8',
+      scenario: 'SC-Y8',
       widthMeasurements: widths,
       rightPanel: {
         viewportWidth: 1280,
@@ -272,124 +453,69 @@ test.describe('2k 首頁改版端對端', () => {
     });
   });
 
-  for (const recentCount of [0, 1, 5]) {
-    test(`SC-H13：最近 ${recentCount} 筆時趨勢卡與 SVG 尺寸符合規格`, async ({
-      signedInPage: page,
-      userA,
-      request,
-    }, testInfo) => {
-      const setup = await getHomeSetup(request, userA);
-      if (recentCount > 0) {
-        for (let index = 0; index < recentCount; index += 1) {
-          await createTransaction(request, userA.token, setup.ledger.id, {
-            type: recentCount === 1 ? 'INCOME' : 'EXPENSE',
-            amount: (index + 1) * 1_000,
-            date: currentTaiwanDate(),
-            categoryId: recentCount === 1 ? setup.incomeCategory.id : setup.expenseCategory.id,
-            accountId: setup.account.id,
-            title: `最近交易 ${index + 1}`,
-          });
-        }
-      }
-
-      await page.setViewportSize({ width: 1280, height: 900 });
-      await page.reload();
-      const activityCard = page.locator('section[aria-label="最近與標註"]');
-      if (recentCount === 0) {
-        await expect(page.getByRole('tabpanel')).toContainText('還沒有任何交易');
-      } else {
-        await expect(page.getByRole('tabpanel').locator('li')).toHaveCount(recentCount);
-      }
-      const measurement = await expectDesktopTrendLayout(page, activityCard);
-      const pointYCoordinates = await page
-        .locator('svg[role="group"][aria-label^="每月資產"] circle[role="button"]')
-        .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cy'))));
-      const finalPointY = pointYCoordinates.at(-1);
-      if (finalPointY === undefined) throw new Error('資產趨勢圖缺少最後一個點位。');
-      if (recentCount === 1) expect(finalPointY).toBe(Math.min(...pointYCoordinates));
-      if (recentCount === 5) expect(finalPointY).toBe(Math.max(...pointYCoordinates));
-      await writeMeasurement(testInfo, {
-        scenario: 'SC-H13',
-        tab: 'recent',
-        transactionCount: recentCount,
-        finalPointY,
-        pointYCoordinates,
-        ...measurement,
-      });
-    });
-  }
-
-  for (const markedCount of [2, 10, 12]) {
-    test(`SC-H13：標註 ${markedCount} 筆${markedCount > 10 ? '展開後' : ''}趨勢卡符合規格`, async ({
-      signedInPage: page,
-      userA,
-      request,
-    }, testInfo) => {
-      const setup = await getHomeSetup(request, userA);
-      const transactions = [];
-      for (let index = 0; index < markedCount; index += 1) {
-        transactions.push(
-          await createTransaction(request, userA.token, setup.ledger.id, {
-            type: 'EXPENSE',
-            amount: (index + 1) * 1_000,
-            date: currentTaiwanDate(),
-            categoryId: setup.expenseCategory.id,
-            accountId: setup.account.id,
-            title: `標註交易 ${index + 1}`,
-          }),
-        );
-      }
-      for (const transaction of transactions) {
-        await markTransaction(request, userA.token, setup.ledger.id, transaction.id);
-      }
-
-      await page.setViewportSize({ width: 1280, height: 900 });
-      await page.reload();
-      await expect(
-        page.getByRole('tab', { name: `標註 ${markedCount}`, exact: true }),
-      ).toBeVisible();
-      const activityCard = page.locator('section[aria-label="最近與標註"]');
-      await page.getByRole('tab', { name: `標註 ${markedCount}`, exact: true }).click();
-      const panel = page.getByRole('tabpanel');
-      await expect(panel.locator('li')).toHaveCount(Math.min(markedCount, 10));
-      if (markedCount > 10) {
-        await page.getByRole('button', { name: '再 2 筆', exact: true }).click();
-        await expect(panel.locator('li')).toHaveCount(markedCount);
-      }
-      const measurement = await expectDesktopTrendLayout(page, activityCard);
-      await writeMeasurement(testInfo, {
-        scenario: 'SC-H13',
-        tab: 'marked',
-        transactionCount: markedCount,
-        expanded: markedCount > 10,
-        ...measurement,
-      });
-    });
-  }
-
-  test('SC-H13：390px 時趨勢 SVG 不超過 260px，點位和標籤都在 SVG 內', async ({
+  test('SC-Y4 高度：趨勢圖至少 180px，卡片被同列內容撐高時圖面跟著變高', async ({
     signedInPage: page,
+    userA,
+    request,
   }, testInfo) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('svg[role="group"][aria-label^="每月資產"]')).toBeVisible();
-    const svg = page.locator('svg[role="group"][aria-label^="每月資產"]');
-    const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
-    const box = await getRect(svg);
-    expect(box.height).toBeLessThanOrEqual(260);
-    const cardBox = await getRect(trendCard);
-    const bottomGap = cardBox.y + cardBox.height - (box.y + box.height);
-    expect(bottomGap).toBeLessThanOrEqual(32);
-    const labels = await expectTrendLabelsReadable(svg);
-    const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
+    const setup = await getHomeSetup(request, userA);
+    const categories = [setup.expenseCategory];
+    for (let index = 2; index <= 12; index += 1) {
+      categories.push(
+        await createCategory(request, userA.token, setup.ledger.id, {
+          name: `圖表高度分類 ${index}`,
+          type: 'EXPENSE',
+        }),
+      );
+    }
+    for (const [index, category] of categories.entries()) {
+      await createTransaction(request, userA.token, setup.ledger.id, {
+        type: 'EXPENSE',
+        amount: (index + 1) * 1_000,
+        date: currentTaiwanDate(),
+        categoryId: category.id,
+        accountId: setup.account.id,
+        title: `圖表高度支出 ${index + 1}`,
+      });
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    const trendCard = page.locator('[data-home-card-id="trend"]');
+    const categoryCard = page.locator('[data-home-card-id="categories"]');
+    const svg = trendCard.locator('svg[role="group"][aria-label^="每月資產"]');
+    await expect(svg).toBeVisible();
+    const initialTrend = await getRect(trendCard);
+    const initialSvg = await getRect(svg);
+    expect(initialSvg.height).toBeGreaterThanOrEqual(180);
+
+    await categoryCard.getByRole('button', { name: /^全部 / }).click();
+    const categoryList = page.getByRole('list', { name: '支出分類' });
+    await expect(categoryList.getByRole('listitem')).toHaveCount(12);
+    const expandedCategoryCard = await getRect(categoryCard);
+    const expandedTrend = await getRect(trendCard);
+    const expandedSvg = await getRect(svg);
+    expect(expandedCategoryCard.height).toBeGreaterThan(initialTrend.height);
+    expect(expandedTrend.height).toBeGreaterThan(initialTrend.height);
+    expect(expandedSvg.height).toBeGreaterThan(initialSvg.height);
+    expect(expandedSvg.height).toBeGreaterThanOrEqual(180);
+
+    const lastPoint = svg.locator('circle[role="button"]').last();
+    await lastPoint.hover();
+    const labels = svg.locator('text');
+    await expect(labels).toHaveCount(2);
+    const lastPointLabel = await getRect(labels.nth(1));
     const children = await expectSvgChildrenInside(svg);
+    await expectFinalSegmentClearOfLabels(svg);
+
     await writeMeasurement(testInfo, {
-      scenario: 'SC-H13',
-      viewportWidth: 390,
-      trendCard: cardBox,
-      svg: box,
-      bottomGap,
-      labels,
-      segmentLabelDistances,
+      scenario: 'SC-Y4-height',
+      initialTrend,
+      initialSvg,
+      expandedCategoryCard,
+      expandedTrend,
+      expandedSvg,
+      lastPointLabel,
       children,
     });
   });
@@ -460,8 +586,8 @@ test.describe('2k 首頁改版端對端', () => {
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 
-      const assetCard = page.locator('section[aria-labelledby="home-asset-heading"]');
-      const categorySection = page.locator('section[aria-labelledby="home-category-heading"]');
+      const assetCard = page.locator('[data-home-card-id="accounts"]');
+      const categorySection = page.locator('[data-home-card-id="categories"]');
       const categoryToggle = categorySection.getByRole('button', {
         name: '全部 15 類',
         exact: true,
@@ -470,7 +596,7 @@ test.describe('2k 首頁改版端對端', () => {
       const accountList = assetCard.getByRole('list', { name: '帳戶' });
       await expect(
         page
-          .locator('section[aria-labelledby="home-debts-heading"]')
+          .locator('[data-home-card-id="debts"]')
           .getByText(longPersonName, {
             exact: true,
           })
@@ -566,6 +692,37 @@ test.describe('2k 首頁改版端對端', () => {
       });
     }
 
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await page.reload();
+    await ensureSidebarExpanded(page);
+    const desktop = await readHomeCards(page);
+    expectDefaultHomeRows(desktop.cards);
+    expect(Math.abs(desktop.cards.expense.width - 310)).toBeLessThanOrEqual(1);
+
+    const desktopCategoryCard = page.locator('[data-home-card-id="categories"]');
+    const desktopAccountsCard = page.locator('[data-home-card-id="accounts"]');
+    const desktopDebtsCard = page.locator('[data-home-card-id="debts"]');
+    await desktopCategoryCard.getByRole('button', { name: '全部 15 類', exact: true }).click();
+    await desktopAccountsCard.getByRole('button', { name: '全部 12 個', exact: true }).click();
+    const desktopCategoryName = page.getByText(longCategoryName, { exact: true });
+    const desktopAccountList = desktopAccountsCard.getByRole('list', { name: '帳戶' });
+    const desktopAccountName = desktopAccountList.getByText(longAccountName, { exact: true });
+    const desktopAccountAmount = desktopAccountList.getByText('$12,345,678', { exact: true });
+    const desktopDebtName = desktopDebtsCard.getByText(longPersonName, { exact: true }).first();
+    for (const longValue of [
+      desktopCategoryName,
+      desktopAccountName,
+      desktopAccountAmount,
+      desktopDebtName,
+    ]) {
+      await expect(longValue).toBeVisible();
+    }
+    await expectTextInsideCard(desktopCategoryCard, desktopCategoryName);
+    await expectTextInsideCard(desktopAccountsCard, desktopAccountName);
+    await expectTextInsideCard(desktopAccountsCard, desktopAccountAmount);
+    await expectTextInsideCard(desktopDebtsCard, desktopDebtName);
+    await expectNoHorizontalPageOverflow(page);
+
     await page.goto('/transactions');
     const transactionPageName = page.getByText(recentRowName, { exact: true });
     await expect(transactionPageName).toBeVisible();
@@ -598,28 +755,110 @@ test.describe('2k 首頁改版端對端', () => {
   test('SC-H18：首頁配色即時切換並保留，統計頁配色不受影響', async ({
     signedInPage: page,
     userA,
+    userB,
     request,
   }, testInfo) => {
-    const setup = await getHomeSetup(request, userA);
-    const secondCategory = await createCategory(request, userA.token, setup.ledger.id, {
-      name: '日常用品',
+    const personal = await getHomeSetup(request, userA);
+    const sharedLedger = await createLedger(request, userA.token, {
+      name: 'A+ 家庭共享帳本',
+      kind: 'SHARED',
+    });
+    await addMember(request, userA.token, sharedLedger.id, {
+      email: userB.email,
+      role: 'EDITOR',
+    });
+    const userBAccount = (await listAccounts(request, userB.token)).find(
+      (account) => !account.isTemporary,
+    );
+    if (!userBAccount) throw new Error('展示帳號缺少可用帳戶。');
+    const sharedCategories = await listCategories(request, userA.token, sharedLedger.id);
+    const expenseCategory = sharedCategories.find((category) => category.type === 'EXPENSE');
+    const incomeCategory = sharedCategories.find((category) => category.type === 'INCOME');
+    if (!expenseCategory || !incomeCategory) throw new Error('共享帳本缺少預設收支分類。');
+    const secondCategory = await createCategory(request, userA.token, sharedLedger.id, {
+      name: 'A+ 展示日常用品',
       type: 'EXPENSE',
     });
-    await createTransaction(request, userA.token, setup.ledger.id, {
+    const thirdCategory = await createCategory(request, userA.token, sharedLedger.id, {
+      name: 'A+ 展示交通',
       type: 'EXPENSE',
-      amount: 3_000,
+    });
+
+    for (let index = 2; index <= 6; index += 1) {
+      await createAccount(request, userA.token, {
+        name: `A+ 展示帳戶 ${index}`,
+        initialBalance: index * 100_000,
+      });
+    }
+
+    await createTransaction(request, userA.token, sharedLedger.id, {
+      type: 'EXPENSE',
+      amount: 120_000,
       date: currentTaiwanDate(),
-      categoryId: setup.expenseCategory.id,
-      accountId: setup.account.id,
-      title: '首頁彩色分類一',
+      categoryId: expenseCategory.id,
+      accountId: personal.account.id,
+      title: 'A+ 共享帳本餐飲支出',
     });
-    await createTransaction(request, userA.token, setup.ledger.id, {
+    await createTransaction(request, userA.token, sharedLedger.id, {
       type: 'EXPENSE',
-      amount: 2_000,
+      amount: 84_500,
       date: currentTaiwanDate(),
       categoryId: secondCategory.id,
-      accountId: setup.account.id,
-      title: '首頁彩色分類二',
+      accountId: personal.account.id,
+      title: 'A+ 共享帳本日常用品支出',
+    });
+    await createTransaction(request, userA.token, sharedLedger.id, {
+      type: 'EXPENSE',
+      amount: 53_000,
+      date: currentTaiwanDate(),
+      categoryId: thirdCategory.id,
+      accountId: personal.account.id,
+      title: 'A+ 共享帳本交通支出',
+    });
+    await createTransaction(request, userA.token, sharedLedger.id, {
+      type: 'INCOME',
+      amount: 260_000,
+      date: currentTaiwanDate(),
+      categoryId: incomeCategory.id,
+      accountId: personal.account.id,
+      title: 'A+ 共享帳本收入',
+    });
+    await createDebtEntry(request, userA.token, {
+      counterparty: { name: '展示對象欠我' },
+      kind: 'LEND',
+      amount: 24_560,
+      date: currentTaiwanDate(),
+      record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
+    });
+    await createDebtEntry(request, userA.token, {
+      counterparty: { name: '展示對象我欠' },
+      kind: 'BORROW',
+      amount: 7_890,
+      date: currentTaiwanDate(),
+      record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
+    });
+    const linked = await linkByEmail(request, userB, userA);
+    await createDebtEntry(request, userB.token, {
+      counterparty: { id: linked.inviterSideId },
+      kind: 'LEND',
+      amount: 18_300,
+      date: currentTaiwanDate(),
+      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
+    });
+    const overpaid = await createDebtEntry(request, userB.token, {
+      counterparty: { name: '展示差額付款人' },
+      kind: 'BORROW',
+      amount: 7_000,
+      date: currentTaiwanDate(),
+      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
+    });
+    await createDebtEntry(request, userB.token, {
+      counterparty: { id: overpaid.counterparty.id },
+      kind: 'REPAYMENT',
+      amount: 8_200,
+      settle: true,
+      date: currentTaiwanDate(),
+      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
     });
 
     const options = [
@@ -646,8 +885,15 @@ test.describe('2k 首頁改版端對端', () => {
     const screenshots: string[] = [];
     const measurements = [];
 
+    await mkdir(APLUS_SHOTS_DIR, { recursive: true });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
+    const ledgerSwitcher = page.getByRole('group', { name: '作用中帳本' });
+    await ledgerSwitcher.getByRole('button').click();
+    await page.locator(`[role="option"] [data-ledger-name="${sharedLedger.name}"]`).click();
+    await expect(ledgerSwitcher.getByRole('button')).toContainText(sharedLedger.name);
+    await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
+
     for (const themeOption of options) {
       for (const mode of themeOption.modes) {
         await page.setViewportSize({ width: 1280, height: 900 });
@@ -674,20 +920,37 @@ test.describe('2k 首頁改版端對端', () => {
         if (mode.value === 'color') expect(homeColorBeforeReload).toMatch(/^#[0-9a-f]{6}$/i);
 
         await page.reload();
+        await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
         await expect(page.locator('html')).toHaveAttribute('data-theme', themeOption.theme);
         await expect.poll(() => readHomeCategoryColor(page)).toBe(homeColorBeforeReload);
+
+        const accountCard = page.locator('[data-home-card-id="accounts"]');
+        await accountCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
+        await expect(
+          accountCard.getByRole('list', { name: '帳戶' }).getByRole('listitem'),
+        ).toHaveCount(6);
+        await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象欠我');
+        await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象我欠');
 
         const screenshotsForMode: string[] = [];
         for (const width of [1280, 390]) {
           await page.setViewportSize({ width, height: 900 });
-          const path = testInfo.outputPath(`home-${themeOption.theme}-${mode.value}-${width}.png`);
+          await page.evaluate(() => window.scrollTo(0, 0));
+          if (width === 390) {
+            await expect(page.locator('[data-home-layout="narrow"]')).toBeVisible();
+            await expectNoHorizontalPageOverflow(page);
+          }
+          const path = join(
+            APLUS_SHOTS_DIR,
+            `home-${width}px-${themeOption.theme}-${mode.value}.png`,
+          );
           await page.screenshot({ path, fullPage: true, animations: 'disabled' });
           screenshots.push(path);
           screenshotsForMode.push(path);
         }
 
         await page.goto(
-          `/stats?tab=cat&ledger=${encodeURIComponent(setup.ledger.id)}&month=${currentTaiwanMonth()}`,
+          `/stats?tab=cat&ledger=${encodeURIComponent(sharedLedger.id)}&month=${currentTaiwanMonth()}`,
         );
         await expect(
           page.getByRole('heading', { level: 2, name: '統計', exact: true }),
@@ -734,13 +997,22 @@ test.describe('2k 首頁改版端對端', () => {
       });
     }
 
-    const activityCard = page.locator('section[aria-label="最近與標註"]');
+    const activityCard = page.locator('[data-home-card-id="activity"]');
+    const accountsCard = page.locator('[data-home-card-id="accounts"]');
+    const debtsCard = page.locator('[data-home-card-id="debts"]');
     const recentRows = page.getByRole('tabpanel').locator('li');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
     await expect(recentRows).toHaveCount(2);
-    const desktopCard = await getRect(activityCard);
-    expect(desktopCard.height).toBeGreaterThanOrEqual(256);
+    const [desktopCard, desktopAccounts, desktopDebts] = await Promise.all([
+      getRect(activityCard),
+      getRect(accountsCard),
+      getRect(debtsCard),
+    ]);
+    expect(Math.abs(desktopCard.y - desktopAccounts.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(desktopCard.y - desktopDebts.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(desktopCard.height - desktopAccounts.height)).toBeLessThanOrEqual(2);
+    expect(Math.abs(desktopCard.height - desktopDebts.height)).toBeLessThanOrEqual(2);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
@@ -752,6 +1024,8 @@ test.describe('2k 首頁改版端對端', () => {
     await writeMeasurement(testInfo, {
       scenario: 'W7-recent-card',
       desktopCard,
+      desktopAccounts,
+      desktopDebts,
       mobileCard,
       lastRow,
       bottomGap,
@@ -774,40 +1048,158 @@ async function getHomeSetup(
   return { ledger, account, expenseCategory, incomeCategory };
 }
 
-async function expectDesktopTrendLayout(page: Page, activityCard: Locator) {
-  const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
-  await expect(activityCard).toBeVisible();
-  await expect(trendCard).toBeVisible();
-  const activityBox = await getRect(activityCard);
-  const trendBox = await getRect(trendCard);
-  expect(Math.abs(activityBox.y - trendBox.y)).toBeLessThanOrEqual(1);
-  expect(trendBox.y + trendBox.height - (activityBox.y + activityBox.height)).toBeLessThanOrEqual(
-    1,
-  );
-  expect(activityBox.height).toBeGreaterThanOrEqual(256);
-
-  const svg = page.locator('svg[role="group"][aria-label^="每月資產"]');
-  const svgBox = await getRect(svg);
-  expect(svgBox.height).toBeGreaterThanOrEqual(180);
-  expect(svgBox.height).toBeLessThanOrEqual(320);
-  await expect(svg.locator('circle[role="button"]')).toHaveCount(12);
-  const labels = await expectTrendLabelsReadable(svg);
-  const segmentLabelDistances = await expectFinalSegmentClearOfLabels(svg);
-  const children = await expectSvgChildrenInside(svg);
-  return { activityBox, trendBox, svg: svgBox, labels, segmentLabelDistances, children };
+async function ensureSidebarExpanded(page: Page): Promise<void> {
+  const expandButton = page.getByRole('button', { name: '展開側欄', exact: true });
+  if (await expandButton.isVisible()) await expandButton.click();
+  await expect(page.getByRole('button', { name: '收合側欄', exact: true })).toBeVisible();
 }
 
-async function expectTrendLabelsReadable(svg: Locator) {
-  await svg.locator('circle[role="button"]').first().hover();
-  const labels = svg.locator('text');
-  await expect(labels).toHaveCount(3);
-  const value = await getRect(labels.nth(0));
-  const month = await getRect(labels.nth(1));
-  const hovered = await getRect(labels.nth(2));
-  expect(value.height).toBeGreaterThanOrEqual(13);
-  expect(month.height).toBeGreaterThanOrEqual(10);
-  expect(hovered.height).toBeGreaterThanOrEqual(13);
-  return { value, month, hovered };
+async function readCardIds(layout: Locator): Promise<HomeCardId[]> {
+  const ids = await layout
+    .locator('[data-home-card-id]')
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-home-card-id')),
+    );
+  return ids.map((id) => {
+    if (id === null || !HOME_CARD_IDS.includes(id as HomeCardId)) {
+      throw new Error(`首頁出現未登記的卡片 id：${id ?? '(空)'}`);
+    }
+    return id as HomeCardId;
+  });
+}
+
+type HomeLayoutKind = 'tree' | 'narrow';
+
+async function readHomeCards(
+  page: Page,
+  layoutKind: HomeLayoutKind = 'tree',
+): Promise<{
+  layout: Rect;
+  cardIds: HomeCardId[];
+  cards: Record<HomeCardId, Rect>;
+}> {
+  const layout = page.locator(`[data-home-layout="${layoutKind}"]`);
+  await expect(layout).toBeVisible();
+  const cards = {} as Record<HomeCardId, Rect>;
+  for (const cardId of HOME_CARD_IDS) {
+    cards[cardId] = await getRect(layout.locator(`[data-home-card-id="${cardId}"]`));
+  }
+  return { layout: await getRect(layout), cardIds: await readCardIds(layout), cards };
+}
+
+type HomeCardsSnapshot = Awaited<ReturnType<typeof readHomeCards>>;
+
+/** ResizeObserver 重排非同步；等完整卡片方框與列斷言同時通過再回傳快照。 */
+async function waitForHomeCards(
+  page: Page,
+  verify: (snapshot: HomeCardsSnapshot) => void,
+  layoutKind: HomeLayoutKind = 'tree',
+): Promise<HomeCardsSnapshot> {
+  let snapshot: HomeCardsSnapshot | undefined;
+  await expect(async () => {
+    snapshot = await readHomeCards(page, layoutKind);
+    verify(snapshot);
+  }).toPass({ timeout: 5_000 });
+  if (!snapshot) throw new Error('首頁卡片版面尚未穩定。');
+  return snapshot;
+}
+
+async function ensureSidebarCollapsed(page: Page): Promise<void> {
+  const expandButton = page.getByRole('button', { name: '展開側欄', exact: true });
+  if (!(await expandButton.isVisible())) {
+    await page.getByRole('button', { name: '收合側欄', exact: true }).click();
+  }
+  await expect(expandButton).toBeVisible();
+}
+
+/** 強制頁面有垂直捲動後量實際捲軸與 stable 保留區，合併得到排版可用寬度的總扣除量。 */
+async function measureViewportInset(page: Page): Promise<{
+  scrollbarWidth: number;
+  stableGutterWidth: number;
+  layoutGutterWidth: number;
+}> {
+  await page.addStyleTag({ content: 'html { min-height: 200vh; }' });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollHeight > document.documentElement.clientHeight,
+      ),
+    )
+    .toBe(true);
+  return page.evaluate(() => {
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const stableGutterWidth =
+      document.documentElement.clientWidth - document.documentElement.getBoundingClientRect().width;
+    return {
+      scrollbarWidth,
+      stableGutterWidth,
+      layoutGutterWidth: scrollbarWidth + stableGutterWidth,
+    };
+  });
+}
+
+function expectDefaultHomeRows(cards: Record<HomeCardId, Rect>): void {
+  expectCardRows(cards, [
+    ['expense', 'income', 'net'],
+    ['trend', 'categories'],
+    ['activity', 'accounts', 'debts'],
+  ]);
+  expectWidthsEqual(cards, ['expense', 'income', 'net']);
+  expect(Math.abs(cards.trend.width - 2 * cards.categories.width)).toBeLessThanOrEqual(2);
+  expectWidthsEqual(cards, ['activity', 'accounts', 'debts']);
+}
+
+function expectCardRows(
+  cards: Record<HomeCardId, Rect>,
+  rows: readonly (readonly HomeCardId[])[],
+): void {
+  for (const row of rows) {
+    const first = cards[row[0]!];
+    for (const cardId of row.slice(1)) {
+      expect(Math.abs(cards[cardId].y - first.y)).toBeLessThanOrEqual(2);
+      expect(cards[cardId].x).toBeGreaterThanOrEqual(first.x - 2);
+    }
+  }
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = cards[rows[index - 1]![0]!];
+    const current = cards[rows[index]![0]!];
+    expect(current.y).toBeGreaterThanOrEqual(previous.y + previous.height - 2);
+  }
+}
+
+function expectWidthsEqual(cards: Record<HomeCardId, Rect>, cardIds: readonly HomeCardId[]): void {
+  const widths = cardIds.map((cardId) => cards[cardId].width);
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(2);
+}
+
+function expectCardRectsClose(
+  actual: Record<HomeCardId, Rect>,
+  expected: Record<HomeCardId, Rect>,
+): void {
+  for (const cardId of HOME_CARD_IDS) {
+    for (const dimension of ['x', 'y', 'width', 'height'] as const) {
+      expect(Math.abs(actual[cardId][dimension] - expected[cardId][dimension])).toBeLessThanOrEqual(
+        2,
+      );
+    }
+  }
+}
+
+function expectAccountColumns(first: Rect, second: Rect, columns: 1 | 2): void {
+  if (columns === 1) {
+    expect(second.y).toBeGreaterThan(first.y);
+  } else {
+    expect(second.x).toBeGreaterThan(first.x);
+    expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(1);
+  }
+}
+
+async function expectNoHorizontalPageOverflow(page: Page): Promise<void> {
+  const dimensions = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
 async function expectFinalSegmentClearOfLabels(svg: Locator) {
@@ -979,6 +1371,12 @@ async function getRect(locator: Locator): Promise<Rect> {
   const rect = await locator.boundingBox();
   if (!rect) throw new Error('無法取得首頁元件的實際方框。');
   return rect;
+}
+
+async function expectTextInsideCard(card: Locator, text: Locator): Promise<void> {
+  const [cardBox, textBox] = await Promise.all([getRect(card), getRect(text)]);
+  expect(textBox.x).toBeGreaterThanOrEqual(cardBox.x - 1);
+  expect(textBox.x + textBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
 }
 
 async function writeMeasurement(testInfo: TestInfo, measurement: unknown): Promise<void> {

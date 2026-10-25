@@ -7,7 +7,7 @@ describe('home layout math', () => {
   it('uses a card minimum width directly', () => {
     const card: HomeLayoutNode = { type: 'card', cardId: 'expense' };
 
-    expect(minWidthOf(card)).toBe(314);
+    expect(minWidthOf(card)).toBe(309);
   });
 
   it('adds child minima and gaps for horizontal splits', () => {
@@ -21,7 +21,7 @@ describe('home layout math', () => {
       weights: [5000, 5000],
     };
 
-    expect(minWidthOf(split)).toBe(314 + 314 + HOME_LAYOUT_GAP_PX);
+    expect(minWidthOf(split)).toBe(309 + 309 + HOME_LAYOUT_GAP_PX);
   });
 
   it('uses the widest child minimum for vertical splits', () => {
