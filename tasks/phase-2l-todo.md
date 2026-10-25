@@ -4,21 +4,21 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
 
 ## docs
 
-- [ ] **D0 docs PR**（協調者；`feature/home-design-align`）：plan §0。
+- [x] **D0 docs PR**（協調者；`feature/home-design-align`）：plan §0。
       驗收：spec、plan、todo、`docs/handoff.md`（`stats-2j` 那一列、編號分段登記 313～335、W272～W287、`SC-Y`）、`docs/handoff/stats-2j.md` 合進 `main`；CI 全綠。
 
 ## PR1：A+ 版面（`feature/2l-home-aplus`）
 
-- [ ] **S1 共用型別與預設版面**（協調者；依賴 D0）：plan §1.1。
+- [x] **S1 共用型別與預設版面**（協調者；依賴 D0）：plan §1.1。
       驗收：`packages/shared/src/types/home-layout.ts` 照 spec §3.2；`index.ts` 匯出；`pnpm --filter @ledger/shared build` 通過；沒有驗證函式。
-- [ ] **W-A1 版面渲染與卡片拆分**（依賴 S1；`2l-aplus`）：plan §1.2。
+- [x] **W-A1 版面渲染與卡片拆分**（依賴 S1；`2l-aplus`）：plan §1.2。
       驗收：卡片登記表 8 張卡，最小寬度實測後填，預設版面在內容區 976px 不換行；`HomeCard` 外框統一；渲染器吃 `DEFAULT_HOME_LAYOUT_V1`；`minWidthOf`、`wrapSplit` 純函式有單元測試（剛好放得下、差 1px、全部換行、最小寬度夾限、間距、SC-Y29 的巢狀換行）；渲染器有不換行模式；待處理卡在第 1 根列後；≤900px 與沒有帳本走固定版面；`trend` 有總資產、共享帳本標「我的總資產」；`categories` 每類兩行加進度條；`accounts` 獨立；`debts` 用 `HomeBalanceSummaryArrow`（往來對象 `totalBalance`、未指向帳本 `people.amount`），借還頁、交易頁、分帳、結清的箭頭測試沒改；金色規則照決策 315；帳戶清單用 container query（展開後量清單，收起一欄）；預設版面每張卡一次、權重加總 10000 的測試；SC-Y4～Y7、Y25 有元件測試；2k 的 SC-H2、H3 請求增量測試照樣過；Web 檢查全綠。
-- [ ] **W-A2 PR1 Web e2e**（依賴 W-A1；`2l-aplus-e2e`）：plan §1.3。
+- [x] **W-A2 PR1 Web e2e**（依賴 W-A1；`2l-aplus-e2e`）：plan §1.3。
       派工前：確認沒有別的 worktree 正在跑 Web e2e，3100、5273、5274 沒有被佔。
       驗收：`home.spec.ts` 涵蓋 SC-Y1（左側欄展開與收合）、Y2、Y3、Y8、Y4 的趨勢卡高度；2k 的 SC-H14 照樣過；兩套 Web e2e 全綠；截圖 1280／390px、淺深色、三種配色交回。
-- [ ] **W-A3 首頁窄卡的交易列**（依賴 W-A2；`2l-aplus`）：plan §1.3a。
+- [x] **W-A3 首頁窄卡的交易列**（依賴 W-A2；`2l-aplus`）：plan §1.3a。
       驗收：SC-Y30 的 e2e 在 309px 卡寬量幾何，6 種列都過；390px 與寬卡、深淺色截圖交回；交易頁列高仍 52px；SC-H14 的首頁列高斷言照決策 336 改；兩套 Web e2e 與 Web 檢查全綠。
-- [ ] **D1 PR1 驗收、PR、部署**（協調者）：plan §1.4。
+- [x] **D1 PR1 驗收、PR、部署**（協調者）：plan §1.4。
       驗收：diff 沒有 `apps/api`、沒有新套件；自己重跑 SC-H2、H3；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；截圖逐張對過；PR 依模板、CI 全綠、squash merge；部署 dev，提醒 `Ctrl + Shift + R`；開發者看過。
 
 ## PR2：伺服器儲存（`feature/2l-home-layout-api`）

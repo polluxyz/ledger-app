@@ -13,23 +13,25 @@
 
 ## 2l 進度（2026-10-25）
 
-PR1（A+ 版面）已驗收完，開 PR 中（`feature/2l-home-aplus`）。合併後照 todo D1 部署 dev，請開發者按 `Ctrl + Shift + R` 看過再開 PR2。
+PR1（A+ 版面）已以 #172（`2454a0d`）合進 `main` 並部署到 dev。等開發者按 `Ctrl + Shift + R` 看過，再開 PR2（todo S2）。
 
-- `polluxyz/2l-aplus` 已用一般 merge 併進 `feature/2l-home-aplus`，也併了 main（#170 Node 22.23.4、#171 API 只聽 `localhost`）。
-- 協調者已驗 `3372946`：只動 `apps/web/e2e/**`，改成實測捲軸寬度、等版面穩定再量，斷言沒有放寬。
-- 合併後的分支：format:check／lint／typecheck／build 全綠，Web 單元測試 1032 條、Web e2e 88 條全過（SC-H1、H13 依 spec SC-Y9 由 SC-Y1、Y2、Y4 取代，條數比 main 少）。
-- `2l-aplus` worktree 與 `polluxyz/2l-aplus` 分支在 PR1 合併後清掉，連同 `ledger_2laplus_test`（刪資料庫前先問）。
-- CI 在 Linux 跑：留意 SC-Y1／SC-Y3 的寬度。
+下一個 session 先做：派 Codex 修 `apps/web/e2e/home.spec.ts` 的 `getRect` 偶發失敗（見「已知問題」），再開 PR2。這份交接所在的 #173（`docs/2l-pr1-merged`）還沒合併：CI 兩次都卡在這個偶發失敗。修正的 PR 合進 `main` 後，用 `gh pr update-branch 173` 併進來，等 CI 綠再合併。
+
+- PR1 含 W-A3（決策 336、SC-Y30）：首頁「最近」「標註」卡窄於 360px 時交易列改成兩行，名稱不再被擠掉。協調者看過 309px、390px、寬卡的淺色與深色截圖。
+- 驗證 commit `d6006bc`：format:check／lint／typecheck 全綠；單元測試 API 881、Web 1032、shared 126 條；Web e2e 90 條（worker 跑）；CI 全綠。
+- 部署：主工作區 `git pull`、重建 shared 與 API（同時帶進 #171，API 預設只聽 `localhost`）。開發者要重開 API 與 Vite。
+- `2l-aplus` worktree 與本機 `polluxyz/2l-aplus` 分支已清掉。遠端 `polluxyz/2l-aplus` 不是 PR 來源分支，刪之前先問。`ledger_2laplus_test` 也還在，刪之前先問。
 
 ### 待開發者決定
 
-- 1280px「最近」卡（約 309px 寬）標題被切得很短：「借入 · 展示對象」只剩「借入 · …」，「還清」那列標題整個看不到（390px 反而看得到一部分）。不在 W-A2 範圍，開 PR1 時一起給開發者看。
+- 可否刪遠端分支 `polluxyz/2l-aplus` 與測試資料庫 `ledger_2laplus_test`。
 - 可否刪測試資料庫 `ledger_homedesign_test`（已刪的 `home-design` worktree 留下的）。刪資料庫要先問。
 - 要不要請 Codex 重產已刪的 A+ 預覽頁（選用，實作以 spec 文字為準）。
 
 ## 已知問題
 
 - 390px 時，借還卡的長對象名稱（例：「搬移測試對象 1021」）被擠成 4 行。部署後檢查時看到，開發者還沒看過，未決定要不要改。
+- 首頁 e2e 偶發失敗：#173（只改文件）的 CI 第一次跑，SC-Y2、SC-Y8 都在 `getRect` 拋「無法取得首頁元件的實際方框」，其餘 88 條通過；第二次只有 SC-Y2 敗，89 條通過；同一份程式在 #172 的 CI 全過。`getRect` 只呼叫一次 `boundingBox()`，視窗寬度一變、首頁在桌機版面與一欄版面之間切換重畫時，就可能拿到 null。修法方向：量之前先等元素可見，或整段量測放進重試（`expect.poll`），不放寬斷言。屬 `apps/web`，派 Codex。
 - Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（plan §6）。再出現時先看是不是機器負載。
 
 ## 之後的 PR
