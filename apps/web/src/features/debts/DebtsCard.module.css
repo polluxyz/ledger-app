@@ -1,44 +1,13 @@
-.card {
-  min-width: 0;
-  padding: var(--space-md) var(--space-lg) var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.header {
+.content {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-sm);
-}
-
-.heading,
-.ledgerHeading {
-  margin: 0;
-  font-weight: 700;
-}
-
-.heading {
-  font-size: var(--text-sm);
-}
-
-.allLink,
-.allPeople {
-  color: var(--color-accent);
-  font-size: var(--text-sm);
-  text-decoration: none;
-}
-
-.allLink {
-  flex: none;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .people,
 .ledgerPeople {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: var(--space-xs);
   margin: 0;
@@ -48,21 +17,9 @@
 
 .person {
   display: flex;
+  min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-width: 0;
   padding: var(--space-xs) 0;
-}
-
-.name {
-  min-width: 0;
-  color: var(--color-text-muted);
-  overflow-wrap: anywhere;
-}
-
-.balance {
-  flex: none;
 }
 
 .allPeople {
@@ -70,6 +27,9 @@
   align-items: center;
   min-height: 44px;
   margin-top: var(--space-xs);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  text-decoration: none;
 }
 
 .ledgerGroup {
@@ -79,9 +39,10 @@
 }
 
 .ledgerHeading {
-  margin-bottom: var(--space-xs);
+  margin: 0 0 var(--space-xs);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+  font-weight: 700;
 }
 
 .status,

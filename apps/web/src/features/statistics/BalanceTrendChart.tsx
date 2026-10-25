@@ -11,6 +11,8 @@ interface BalanceTrendChartProps {
   error: unknown;
   /** 外層版面可調整圖表高度，不需選取元件內部的 SVG。 */
   className?: string;
+  /** 首頁由共用 HomeCard 提供標題；統計頁或獨立使用時保留自己的標題。 */
+  showHeading?: boolean;
 }
 
 const WIDTH = 640;
@@ -20,7 +22,13 @@ const HORIZONTAL_INSET = 32;
 const TOP_INSET = 44;
 const BOTTOM_INSET = 44;
 
-export function BalanceTrendChart({ months, isLoading, error, className }: BalanceTrendChartProps) {
+export function BalanceTrendChart({
+  months,
+  isLoading,
+  error,
+  className,
+  showHeading = true,
+}: BalanceTrendChartProps) {
   const chartRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState(FALLBACK_SIZE);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -47,10 +55,16 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
 
   if (error || (!isLoading && values.length === 0)) {
     return (
-      <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
-        <h2 className={styles.heading} id="balance-trend-heading">
-          資產趨勢
-        </h2>
+      <section
+        className={cardClassName(className)}
+        aria-labelledby={showHeading ? 'balance-trend-heading' : undefined}
+        aria-label={showHeading ? undefined : '資產趨勢圖'}
+      >
+        {showHeading && (
+          <h2 className={styles.heading} id="balance-trend-heading">
+            資產趨勢
+          </h2>
+        )}
         <p className={styles.status} role="status">
           資產暫時無法載入
         </p>
@@ -60,10 +74,16 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
 
   if (isLoading) {
     return (
-      <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
-        <h2 className={styles.heading} id="balance-trend-heading">
-          資產趨勢
-        </h2>
+      <section
+        className={cardClassName(className)}
+        aria-labelledby={showHeading ? 'balance-trend-heading' : undefined}
+        aria-label={showHeading ? undefined : '資產趨勢圖'}
+      >
+        {showHeading && (
+          <h2 className={styles.heading} id="balance-trend-heading">
+            資產趨勢
+          </h2>
+        )}
         <p className={styles.status} role="status">
           載入中…
         </p>
@@ -107,10 +127,16 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
     .join('；');
 
   return (
-    <section className={cardClassName(className)} aria-labelledby="balance-trend-heading">
-      <h2 className={styles.heading} id="balance-trend-heading">
-        資產趨勢
-      </h2>
+    <section
+      className={cardClassName(className)}
+      aria-labelledby={showHeading ? 'balance-trend-heading' : undefined}
+      aria-label={showHeading ? undefined : '資產趨勢圖'}
+    >
+      {showHeading && (
+        <h2 className={styles.heading} id="balance-trend-heading">
+          資產趨勢
+        </h2>
+      )}
       <svg
         ref={chartRef}
         className={styles.chart}
@@ -175,7 +201,7 @@ export function BalanceTrendChart({ months, isLoading, error, className }: Balan
 }
 
 function cardClassName(className: string | undefined): string | undefined {
-  return className ? `${styles.card} ${className}` : styles.card;
+  return className ? `${styles.panel} ${className}` : styles.panel;
 }
 
 function formatMonth(month: string): string {

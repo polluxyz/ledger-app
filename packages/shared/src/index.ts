@@ -28,3 +28,4 @@ export * from './ledger-debts';
 export * from './entry-labels';
 export * from './types/ai';
 export * from './types/statistics';
+export * from './types/home-layout';

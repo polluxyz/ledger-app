@@ -275,13 +275,18 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
                   data-testid="category-color-preview"
                   aria-hidden="true"
                 >
-                  {HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group) => (
+                  {HOME_CATEGORY_COLOR_PREVIEW_GROUPS.map((group, index) => (
                     <span
                       key={group.category?.id ?? group.kind}
                       className={styles.categoryColorPreviewSegment}
                       data-color-segment=""
                       style={{
-                        backgroundColor: homeCategoryColor(group, option.value, chartTheme),
+                        backgroundColor: homeCategoryColor(
+                          group,
+                          option.value,
+                          chartTheme,
+                          index === 0,
+                        ),
                       }}
                     />
                   ))}

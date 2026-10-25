@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { StatisticsGroup } from '@ledger/shared';
 import styles from './HomeCategorySection.module.css';
@@ -26,20 +25,10 @@ describe('HomeCategorySection', () => {
 
   it('shows the first five groups in API order and expands all fifteen with API percentages', () => {
     render(
-      <MemoryRouter>
-        <HomeCategorySection
-          expenseGroups={groups}
-          ledgerName="家用"
-          statisticsHref="/stats?ledgerId=ledger-home&from=2026-10-01&to=2026-10-31&tab=categories"
-          colorOf={() => 'var(--color-accent)'}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole('heading', { name: '家用 · 本月支出' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '明細 →' })).toHaveAttribute(
-      'href',
-      '/stats?ledgerId=ledger-home&from=2026-10-01&to=2026-10-31&tab=categories',
+      <HomeCategorySection
+        expenseGroups={groups}
+        colorOf={(_group, isFirst) => (isFirst ? 'var(--color-accent)' : 'gray')}
+      />,
     );
 
     const list = screen.getByRole('list', { name: '支出分類' });
@@ -55,6 +44,13 @@ describe('HomeCategorySection', () => {
     expect(firstFive[0]?.querySelector(`.${styles.swatch}`)).toHaveStyle({
       '--group-color': 'var(--color-accent)',
     });
+    expect(firstFive[0]?.querySelector('[role="progressbar"]')).toHaveAttribute(
+      'aria-valuenow',
+      '0',
+    );
+    expect(firstFive[0]?.querySelector(`.${styles.progressFill}`)).toHaveStyle({
+      '--progress-width': '0%',
+    });
 
     fireEvent.click(screen.getByRole('button', { name: '全部 15 類' }));
     expect(within(list).getAllByRole('listitem')).toHaveLength(15);
@@ -65,23 +61,27 @@ describe('HomeCategorySection', () => {
   });
 
   it('shows the empty state and keeps the supplied statistics destination', () => {
-    render(
-      <MemoryRouter>
-        <HomeCategorySection
-          expenseGroups={[]}
-          ledgerName={null}
-          statisticsHref="/stats?tab=categories"
-          colorOf={() => 'red'}
-        />
-      </MemoryRouter>,
-    );
+    render(<HomeCategorySection expenseGroups={[]} colorOf={() => 'red'} />);
 
-    expect(screen.getByRole('heading', { name: '本月支出' })).toBeInTheDocument();
     expect(screen.getByText('本月沒有支出')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '明細 →' })).toHaveAttribute(
-      'href',
-      '/stats?tab=categories',
-    );
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('renders two lines per category and preserves percentage formatting', () => {
+    const rows = [category('22.80%', 2280), category('22%', 2200), category('under', 0)];
+    render(<HomeCategorySection expenseGroups={rows} colorOf={() => 'gray'} />);
+
+    const list = screen.getByRole('list', { name: '支出分類' });
+    const items = within(list).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      '22.80%$12522.80%',
+      '22%$12522%',
+      'under$125<0.01%',
+    ]);
+    expect(
+      within(items[0]!).getByRole('progressbar', { name: '22.80%佔本月支出' }),
+    ).toHaveAttribute('aria-valuenow', '2280');
+    expect(items[0]?.querySelector(`.${styles.summary}`)).toBeInTheDocument();
+    expect(items[0]?.querySelector(`.${styles.progress}`)).toBeInTheDocument();
   });
 });

@@ -16,6 +16,8 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
 - [ ] **W-A2 PR1 Web e2e**（依賴 W-A1；`2l-aplus-e2e`）：plan §1.3。
       派工前：確認沒有別的 worktree 正在跑 Web e2e，3100、5273、5274 沒有被佔。
       驗收：`home.spec.ts` 涵蓋 SC-Y1（左側欄展開與收合）、Y2、Y3、Y8、Y4 的趨勢卡高度；2k 的 SC-H14 照樣過；兩套 Web e2e 全綠；截圖 1280／390px、淺深色、三種配色交回。
+- [ ] **W-A3 首頁窄卡的交易列**（依賴 W-A2；`2l-aplus`）：plan §1.3a。
+      驗收：SC-Y30 的 e2e 在 309px 卡寬量幾何，6 種列都過；390px 與寬卡、深淺色截圖交回；交易頁列高仍 52px；SC-H14 的首頁列高斷言照決策 336 改；兩套 Web e2e 與 Web 檢查全綠。
 - [ ] **D1 PR1 驗收、PR、部署**（協調者）：plan §1.4。
       驗收：diff 沒有 `apps/api`、沒有新套件；自己重跑 SC-H2、H3；`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；截圖逐張對過；PR 依模板、CI 全綠、squash merge；部署 dev，提醒 `Ctrl + Shift + R`；開發者看過。
 

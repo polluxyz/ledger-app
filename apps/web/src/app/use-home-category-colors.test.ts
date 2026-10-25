@@ -125,9 +125,9 @@ describe('home category colors', () => {
           ? 'var(--color-accent)'
           : neutral;
 
-    expect(homeCategoryColor(category, mode, theme)).toBe(expectedCategory);
-    expect(homeCategoryColor(fixedGroup, mode, theme)).toBe(neutral);
-    expect(homeCategoryColor(uncategorized, mode, theme)).toBe(neutral);
+    expect(homeCategoryColor(category, mode, theme, true)).toBe(expectedCategory);
+    expect(homeCategoryColor(fixedGroup, mode, theme, true)).toBe(neutral);
+    expect(homeCategoryColor(uncategorized, mode, theme, true)).toBe(neutral);
   });
 
   it.each(['light', 'dark'] as const)(
@@ -135,8 +135,23 @@ describe('home category colors', () => {
     (theme) => {
       const neutral = NEUTRAL_CHART_COLORS[theme];
 
-      expect(homeCategoryColor(fixedGroup, 'gold', theme)).toBe(neutral);
-      expect(homeCategoryColor(uncategorized, 'gold', theme)).toBe(neutral);
+      expect(homeCategoryColor(fixedGroup, 'gold', theme, true)).toBe(neutral);
+      expect(homeCategoryColor(uncategorized, 'gold', theme, true)).toBe(neutral);
+      expect(homeCategoryColor(category, 'gold', theme, false)).toBe(neutral);
+    },
+  );
+
+  it.each([
+    { first: category, later: fixedGroup, goldFirst: true },
+    { first: uncategorized, later: category, goldFirst: false },
+    { first: fixedGroup, later: category, goldFirst: false },
+  ])(
+    'gives gold only to the first row when it is a regular category',
+    ({ first, later, goldFirst }) => {
+      expect(homeCategoryColor(first, 'gold', 'light', true)).toBe(
+        goldFirst ? 'var(--color-accent)' : NEUTRAL_CHART_COLORS.light,
+      );
+      expect(homeCategoryColor(later, 'gold', 'light', false)).toBe(NEUTRAL_CHART_COLORS.light);
     },
   );
 });

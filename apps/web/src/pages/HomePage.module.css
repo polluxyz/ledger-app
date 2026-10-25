@@ -1,6 +1,4 @@
-/* 首頁摘要卡使用共用設計 token，左右欄在空間不足時自然改排成一欄。 */
-
-/* 本月支出、收入與結餘都可點進目前帳本的分類統計。 */
+/* 未登入的摘要只是靜態示意；登入後每張卡由 HomeCard 統一排版。 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -10,7 +8,7 @@
 
 @media (max-width: 40rem) {
   .stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -24,16 +22,6 @@
   box-shadow: var(--shadow-sm);
   color: var(--color-text);
   text-decoration: none;
-}
-
-.stat[href]:hover,
-.stat[href]:focus-visible {
-  border-color: var(--color-accent);
-}
-
-.stat[href]:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
 }
 
 .statLabel {
@@ -58,57 +46,26 @@
   white-space: nowrap;
 }
 
-.statsMessage {
-  margin-bottom: var(--space-md);
-  padding: var(--space-md);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-muted);
-  text-align: center;
+.statContent {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  flex: 1;
 }
 
-/* 最近／趨勢與「我的」兩組都沿用至少 20rem 的欄寬。 */
 .dashboard {
   container-name: home-dashboard;
   container-type: inline-size;
 }
 
-.activityAndTrend,
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
-  gap: var(--space-md);
-  align-items: stretch;
-}
-
-.activityAndTrend {
-  grid-template-columns: minmax(0, 1fr);
-  margin-bottom: var(--space-lg);
-}
-
-.cards {
-  align-items: start;
-}
-
-/* 最近與標註共用一張卡，切換只更換 tab panel 的內容。 */
-.dataCard {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: var(--space-md) var(--space-lg) var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
 .activityHeader {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  margin-bottom: var(--space-sm);
 }
 
 .activityTabs {
@@ -148,7 +105,7 @@
   min-width: 0;
 }
 
-/* 首頁交易列沿用 TransactionList 元件，只在這張卡把列與日期標頭的左右縮排歸零。 */
+/* 最近交易沿用 TransactionList，只有首頁這張卡把列左右縮排歸零。 */
 .activityPanel {
   --transaction-list-inline-padding: 0px;
 }
@@ -159,19 +116,12 @@
   flex-direction: column;
 }
 
-.cardHeading {
-  margin: 0 0 var(--space-sm);
-  font-size: var(--text-sm);
-  font-weight: 700;
-}
-
 .cardLink {
-  font-size: var(--text-sm);
   color: var(--color-accent);
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
-/* 載入中、失敗與空狀態共用，交易列載入時保留相近高度。 */
 .status {
   margin: 0;
   padding: var(--space-sm) var(--space-md);
@@ -200,42 +150,40 @@
   background-color: var(--color-fill);
 }
 
-/* 圖表卡與最近列等高；高度設定透過元件的 className 傳入，不選取其內部 DOM。 */
+/* 趨勢圖跟著外層卡片伸展，且 SVG 至少保留 180px 繪圖空間。 */
 .trendChart {
-  --balance-trend-chart-height: 200px;
-  --balance-trend-chart-max-height: 260px;
+  --balance-trend-chart-height: 180px;
+  --balance-trend-chart-min-height: 180px;
+  --balance-trend-chart-max-height: none;
+  --balance-trend-chart-flex: 1 1 180px;
 
-  display: flex;
+  min-height: 180px;
+  flex: 1;
+  margin: 0;
+}
+
+.trendTotal {
+  display: inline-flex;
   min-width: 0;
-  flex-direction: column;
-  margin-bottom: 0;
+  align-items: baseline;
+  gap: var(--space-xs);
 }
 
-/* 兩欄要容納兩個 20rem 欄寬與 1rem 間距；容器變窄時 grid 和圖表同時退回一欄。 */
-@container home-dashboard (min-width: 41rem) {
-  .activityAndTrend {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dataCard {
-    min-height: 16rem;
-  }
-
-  .trendChart {
-    --balance-trend-chart-height: 180px;
-    --balance-trend-chart-min-height: 180px;
-    --balance-trend-chart-max-height: 320px;
-    --balance-trend-chart-flex: 1 1 180px;
-  }
-}
-
-.myHeading {
-  margin: 0 0 var(--space-sm);
-  font-size: var(--text-sm);
+.trendTotalValue {
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-/* 說明用的單張卡片（訪客引導、找不到帳本）。 */
+.trendTotalLabel,
+.trendTotalStatus {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* 訪客引導與找不到帳本的說明沿用中性的共用表面樣式。 */
 .card {
   margin-bottom: var(--space-md);
   padding: var(--space-lg);
@@ -246,7 +194,6 @@
   text-align: center;
 }
 
-/* 訪客只有這一張卡，寬螢幕上不要拉成一長條。 */
 .guest {
   max-width: 32rem;
   margin: 0 auto;
@@ -255,4 +202,10 @@
 .note {
   margin: 0 0 var(--space-md);
   color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
 }

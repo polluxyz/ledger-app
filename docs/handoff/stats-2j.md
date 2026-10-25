@@ -11,17 +11,31 @@
 - 已知限制（2j spec §1）：交易頁的日期篩選用瀏覽器時區換算，統計用台灣時間。
 - 效能（SC-R13）：統計端點 p95 約 260～310ms，機器有其他負載時曾量到 907～967ms。
 
+## 2l 進度（2026-10-25）
+
+PR1（A+ 版面）已驗收完，開 PR 中（`feature/2l-home-aplus`）。合併後照 todo D1 部署 dev，請開發者按 `Ctrl + Shift + R` 看過再開 PR2。
+
+- `polluxyz/2l-aplus` 已用一般 merge 併進 `feature/2l-home-aplus`，也併了 main（#170 Node 22.23.4、#171 API 只聽 `localhost`）。
+- 協調者已驗 `3372946`：只動 `apps/web/e2e/**`，改成實測捲軸寬度、等版面穩定再量，斷言沒有放寬。
+- 合併後的分支：format:check／lint／typecheck／build 全綠，Web 單元測試 1032 條、Web e2e 88 條全過（SC-H1、H13 依 spec SC-Y9 由 SC-Y1、Y2、Y4 取代，條數比 main 少）。
+- `2l-aplus` worktree 與 `polluxyz/2l-aplus` 分支在 PR1 合併後清掉，連同 `ledger_2laplus_test`（刪資料庫前先問）。
+- CI 在 Linux 跑：留意 SC-Y1／SC-Y3 的寬度。
+
+### 待開發者決定
+
+- 1280px「最近」卡（約 309px 寬）標題被切得很短：「借入 · 展示對象」只剩「借入 · …」，「還清」那列標題整個看不到（390px 反而看得到一部分）。不在 W-A2 範圍，開 PR1 時一起給開發者看。
+- 可否刪測試資料庫 `ledger_homedesign_test`（已刪的 `home-design` worktree 留下的）。刪資料庫要先問。
+- 要不要請 Codex 重產已刪的 A+ 預覽頁（選用，實作以 spec 文字為準）。
+
 ## 已知問題
 
 - 390px 時，借還卡的長對象名稱（例：「搬移測試對象 1021」）被擠成 4 行。部署後檢查時看到，開發者還沒看過，未決定要不要改。
 - Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（plan §6）。再出現時先看是不是機器負載。
 
-## 下一步
+## 之後的 PR
 
-1. docs PR（todo D0）合併後，照 todo 從 PR1 開始。
-2. C0 試裝拖動套件前，再跟開發者確認套件清單。
-
-Orca run `run_dfe66599ba8a`。Codex 設計 worker 的 worktree `home-design`（分支 `polluxyz/home-design`，資料庫 `ledger_homedesign_test`）還開著，PR1 要不要沿用由協調者決定；不用就清掉。
+- PR2、PR3 照 `tasks/phase-2l-todo.md`。C0 試裝拖動套件前，再跟開發者確認套件清單。
+- 2l 全部完成後，刪 `ledger_2laplus_test` 等測試資料庫前要先問開發者。
 
 ## 開發者在這次討論給的偏好
 

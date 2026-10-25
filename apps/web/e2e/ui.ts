@@ -93,67 +93,87 @@ export function homeActivityRow(page: Page, hasText: string): Locator {
   return page.getByRole('tabpanel').getByRole('listitem').filter({ hasText });
 }
 
-/** 共用首頁區塊順序與響應式排列驗收，依視窗寬度檢查卡片方框的位置。 */
+/** 共用首頁卡片順序與響應式排列驗收，直接檢查新版版面資料與實際方框。 */
 export async function expectHomeSectionOrder(page: Page, viewportWidth: number): Promise<void> {
+  const cardIds = [
+    'expense',
+    'income',
+    'net',
+    'trend',
+    'categories',
+    'activity',
+    'accounts',
+    'debts',
+  ] as const;
   const pageHeading = page.getByRole('heading', { level: 2, name: '總覽' });
-  const summary = page.locator('[aria-label="本月收支"]');
-  const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
-  const activityCard = page.locator('section[aria-label="最近與標註"]');
-  const trendCard = page.locator('section[aria-labelledby="balance-trend-heading"]');
-  const myHeading = page.getByRole('heading', { level: 2, name: '我的' });
-  const assetCard = page.locator('section[aria-labelledby="home-asset-heading"]');
-  const debtsCard = page.locator('section[aria-labelledby="home-debts-heading"]');
-
-  for (const section of [
-    pageHeading,
-    summary,
-    activityCard,
-    trendCard,
-    myHeading,
-    assetCard,
-    debtsCard,
-  ]) {
-    await expect(section).toBeVisible();
-  }
-
-  const pendingBox =
-    (await pendingCard.count()) > 0 ? await requiredBoundingBox(pendingCard) : null;
-  const [headingBox, summaryBox, activityBox, trendBox, myBox, assetBox, debtsBox] =
-    await Promise.all([
-      requiredBoundingBox(pageHeading),
-      requiredBoundingBox(summary),
-      requiredBoundingBox(activityCard),
-      requiredBoundingBox(trendCard),
-      requiredBoundingBox(myHeading),
-      requiredBoundingBox(assetCard),
-      requiredBoundingBox(debtsCard),
-    ]);
-
-  expect(summaryBox.y).toBeGreaterThanOrEqual(headingBox.y);
-  if (pendingBox) {
-    expect(pendingBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
-    expect(activityBox.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 1);
-  } else {
-    expect(activityBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
-  }
-  expect(trendBox.y).toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height - 1);
-  expect(myBox.y).toBeGreaterThanOrEqual(
-    Math.max(activityBox.y + activityBox.height, trendBox.y + trendBox.height) - 1,
+  const layout = page.locator(
+    viewportWidth <= 900 ? '[data-home-layout="narrow"]' : '[data-home-layout="tree"]',
   );
-  expect(assetBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
-  expect(debtsBox.y).toBeGreaterThanOrEqual(myBox.y + myBox.height - 1);
+  await expect(pageHeading).toBeVisible();
+  await expect(layout).toBeVisible();
 
-  if (viewportWidth >= 1024) {
-    expect(Math.abs(activityBox.y - trendBox.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(assetBox.y - debtsBox.y)).toBeLessThanOrEqual(1);
-  } else {
-    expect(trendBox.y).toBeGreaterThanOrEqual(activityBox.y + activityBox.height - 1);
-    expect(debtsBox.y).toBeGreaterThanOrEqual(assetBox.y + assetBox.height - 1);
+  const actualCardIds = await layout
+    .locator('[data-home-card-id]')
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-home-card-id')),
+    );
+  expect(actualCardIds).toEqual(cardIds);
+  const cards = Object.fromEntries(
+    await Promise.all(
+      cardIds.map(
+        async (cardId) =>
+          [
+            cardId,
+            await requiredBoundingBox(layout.locator(`[data-home-card-id="${cardId}"]`)),
+          ] as const,
+      ),
+    ),
+  ) as Record<(typeof cardIds)[number], NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>>;
+
+  if (viewportWidth <= 900) {
+    for (let index = 1; index < cardIds.length; index += 1) {
+      const previous = cards[cardIds[index - 1]!];
+      const current = cards[cardIds[index]!];
+      expect(current.y).toBeGreaterThanOrEqual(previous.y + previous.height - 1);
+    }
+    return;
+  }
+
+  let rowTop = cards[cardIds[0]].y;
+  let rowBottom = cards[cardIds[0]].y + cards[cardIds[0]].height;
+  let previousCard = cards[cardIds[0]];
+  for (const cardId of cardIds.slice(1)) {
+    const current = cards[cardId];
+    if (Math.abs(current.y - rowTop) <= 2) {
+      expect(current.x).toBeGreaterThanOrEqual(previousCard.x + previousCard.width - 2);
+      rowBottom = Math.max(rowBottom, current.y + current.height);
+    } else {
+      expect(current.y).toBeGreaterThanOrEqual(rowBottom - 2);
+      rowTop = current.y;
+      rowBottom = current.y + current.height;
+    }
+    previousCard = current;
+  }
+
+  const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
+  if ((await pendingCard.count()) > 0 && (await pendingCard.isVisible())) {
+    const pendingBox = await requiredBoundingBox(pendingCard);
+    const firstRowBottom = Math.max(
+      ...cardIds.slice(0, 3).map((cardId) => cards[cardId].y + cards[cardId].height),
+    );
+    expect(pendingBox.y).toBeGreaterThanOrEqual(firstRowBottom - 2);
+    expect(cards.trend.y).toBeGreaterThanOrEqual(pendingBox.y + pendingBox.height - 2);
   }
 }
 
 async function requiredBoundingBox(locator: Locator) {
-  const box = await locator.boundingBox();
+  let box = await locator.boundingBox();
+  await expect
+    .poll(async () => {
+      box = await locator.boundingBox();
+      return box !== null;
+    })
+    .toBe(true);
   expect(box).not.toBeNull();
   if (!box) throw new Error('首頁版面驗收找不到區塊方框。');
   return box;

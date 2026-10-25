@@ -1,4 +1,7 @@
-/* 交易列共用在交易頁與總覽，固定圖示、金額與操作欄避免長名稱推動版面。 */
+/*
+ * 交易頁保留 52px 單列規格；首頁 activity 的卡片只有 309px 時，固定圖示、金額與操作
+ * 會把名稱壓窄，因此只對明確標記的首頁清單啟用容器窄版排法。
+ */
 .list {
   display: flex;
   flex-direction: column;
@@ -33,6 +36,16 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* 首頁只用來量 activity 列表的內容寬；交易頁的 ul 不會成為容器。 */
+.homeActivityRows {
+  container: home-activity-rows / inline-size;
+}
+
+/* 寬卡時把首頁專用包裝攤平，延續既有的四欄交易列。 */
+.homeActivityFooter {
+  display: contents;
 }
 
 /* 每列固定兩行 52px（3d 修訂 1；52px 讓 1440×900 首屏仍放得下 10 筆，SC-24.3）；只有分帳展開時才額外長出明細列。 */
@@ -353,4 +366,69 @@
   padding: var(--space-xl);
   color: var(--color-text-muted);
   text-align: center;
+}
+
+/* 窄首頁卡把分類／名稱放第一行、金額與操作併在第二行，展開細項才另佔第三行。 */
+@container home-activity-rows (max-width: 360px) {
+  .homeActivityRows .row {
+    height: auto;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    align-items: center;
+    row-gap: var(--space-xs);
+    padding: var(--space-sm) 0;
+  }
+
+  .homeActivityRows .rowExpanded {
+    grid-template-rows: auto auto auto;
+  }
+
+  .homeActivityRows .iconBadge {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .homeActivityRows .main {
+    grid-column: 2;
+    grid-row: 1;
+    height: auto;
+    min-height: 2.25rem;
+  }
+
+  .homeActivityRows .mainButton {
+    height: auto;
+  }
+
+  .homeActivityRows .homeActivityFooter {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  .homeActivityRows .amount {
+    flex: 0 1 auto;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .homeActivityRows .actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    width: auto;
+  }
+
+  .homeActivityRows .details {
+    grid-column: 2;
+    grid-row: 3;
+    padding-left: 0;
+  }
+
+  .homeActivityRows .differenceDetails {
+    grid-column: 2;
+    grid-row: 3;
+  }
 }
