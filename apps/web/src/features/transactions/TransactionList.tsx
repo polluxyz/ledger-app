@@ -371,6 +371,116 @@ export function TransactionList({
               ]
                 .filter(Boolean)
                 .join(' ');
+              const amountElement = (
+                <span
+                  className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}
+                  data-home-activity-part={homeActivity ? 'amount' : undefined}
+                >
+                  {settlement
+                    ? formatMoney(amount)
+                    : formatTransactionAmount(transaction.type, amount)}
+                </span>
+              );
+              const actionsElement = (
+                <span
+                  className={styles.actions}
+                  data-home-activity-part={homeActivity ? 'actions' : undefined}
+                >
+                  {transaction.accountPending && (
+                    <button
+                      type="button"
+                      className={styles.pendingButton}
+                      aria-label="臨時帳戶"
+                      onClick={() => onFillAccount?.(transaction)}
+                    >
+                      臨時帳戶
+                    </button>
+                  )}
+                  {(hasExpandableDetails || hasDifferenceDetails) && (
+                    <button
+                      type="button"
+                      className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
+                      aria-label={
+                        hasDifferenceDetails
+                          ? `${expanded ? '收合' : '展開'}細項`
+                          : hasMergeDetails
+                            ? `${expanded ? '收合' : '展開'}細項`
+                            : `${expanded ? '收合' : '展開'}分帳明細`
+                      }
+                      aria-expanded={expanded}
+                      onClick={() => setExpandedId(expanded ? null : transaction.id)}
+                    >
+                      ›
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.action}
+                    aria-label={`更多交易動作：${describe(transaction)}`}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenuId === transaction.id}
+                    onClick={(event) => {
+                      const isOpen = openMenuId === transaction.id;
+                      if (!isOpen) menuTriggerRef.current = event.currentTarget;
+                      setOpenMenuId(isOpen ? null : transaction.id);
+                    }}
+                  >
+                    ⋯
+                  </button>
+                  {openMenuId === transaction.id && (
+                    <div ref={menuRef} className={styles.menu} role="menu" aria-label="交易動作">
+                      {isClickable && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            openRow(transaction);
+                          }}
+                        >
+                          編輯
+                        </button>
+                      )}
+                      {onCopy && canCopyTransaction(transaction) && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onCopy(transaction);
+                          }}
+                        >
+                          複製
+                        </button>
+                      )}
+                      {onToggleMark && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onToggleMark(transaction, ledgerIds?.get(transaction.id));
+                          }}
+                        >
+                          {transaction.marked ? '取消標註' : '標註'}
+                        </button>
+                      )}
+                      {onDelete && isClickable && canDeleteTransactionFromEditor(transaction) && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onDelete(transaction);
+                          }}
+                        >
+                          刪除
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </span>
+              );
 
               return (
                 <Fragment key={transaction.id}>
@@ -413,119 +523,17 @@ export function TransactionList({
                     ) : (
                       <span className={styles.main}>{rowContent}</span>
                     )}
-                    <span
-                      className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}
-                      data-home-activity-part={homeActivity ? 'amount' : undefined}
-                    >
-                      {settlement
-                        ? formatMoney(amount)
-                        : formatTransactionAmount(transaction.type, amount)}
-                    </span>
-                    <span
-                      className={styles.actions}
-                      data-home-activity-part={homeActivity ? 'actions' : undefined}
-                    >
-                      {transaction.accountPending && (
-                        <button
-                          type="button"
-                          className={styles.pendingButton}
-                          aria-label="臨時帳戶"
-                          onClick={() => onFillAccount?.(transaction)}
-                        >
-                          臨時帳戶
-                        </button>
-                      )}
-                      {(hasExpandableDetails || hasDifferenceDetails) && (
-                        <button
-                          type="button"
-                          className={`${styles.action} ${expanded ? styles.expandedAction : ''}`}
-                          aria-label={
-                            hasDifferenceDetails
-                              ? `${expanded ? '收合' : '展開'}細項`
-                              : hasMergeDetails
-                                ? `${expanded ? '收合' : '展開'}細項`
-                                : `${expanded ? '收合' : '展開'}分帳明細`
-                          }
-                          aria-expanded={expanded}
-                          onClick={() => setExpandedId(expanded ? null : transaction.id)}
-                        >
-                          ›
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={styles.action}
-                        aria-label={`更多交易動作：${describe(transaction)}`}
-                        aria-haspopup="menu"
-                        aria-expanded={openMenuId === transaction.id}
-                        onClick={(event) => {
-                          const isOpen = openMenuId === transaction.id;
-                          if (!isOpen) menuTriggerRef.current = event.currentTarget;
-                          setOpenMenuId(isOpen ? null : transaction.id);
-                        }}
-                      >
-                        ⋯
-                      </button>
-                      {openMenuId === transaction.id && (
-                        <div
-                          ref={menuRef}
-                          className={styles.menu}
-                          role="menu"
-                          aria-label="交易動作"
-                        >
-                          {isClickable && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuId(null);
-                                openRow(transaction);
-                              }}
-                            >
-                              編輯
-                            </button>
-                          )}
-                          {onCopy && canCopyTransaction(transaction) && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuId(null);
-                                onCopy(transaction);
-                              }}
-                            >
-                              複製
-                            </button>
-                          )}
-                          {onToggleMark && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuId(null);
-                                onToggleMark(transaction, ledgerIds?.get(transaction.id));
-                              }}
-                            >
-                              {transaction.marked ? '取消標註' : '標註'}
-                            </button>
-                          )}
-                          {onDelete &&
-                            isClickable &&
-                            canDeleteTransactionFromEditor(transaction) && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  onDelete(transaction);
-                                }}
-                              >
-                                刪除
-                              </button>
-                            )}
-                        </div>
-                      )}
-                    </span>
+                    {homeActivity ? (
+                      <div className={styles.homeActivityFooter}>
+                        {amountElement}
+                        {actionsElement}
+                      </div>
+                    ) : (
+                      <>
+                        {amountElement}
+                        {actionsElement}
+                      </>
+                    )}
                     {expanded && (hasExpandableDetails || hasDifferenceDetails) && (
                       <div
                         className={`${styles.details} ${

@@ -387,8 +387,8 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     const restored = await waitForHomeCards(page, (snapshot) => {
       expect(Math.round(snapshot.layout.width)).toBe(959);
       expectDefaultHomeRows(snapshot.cards);
+      expectCardRectsClose(snapshot.cards, justFits.cards);
     });
-    expectCardRectsClose(restored.cards, justFits.cards);
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y3',
@@ -900,7 +900,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       date,
       title: '細項',
       categoryId: expenseCategory.id,
-      accountId: account.id,
+      payerPersonId: otherMember.id,
       ledgerSplit: shares,
     });
 
@@ -925,7 +925,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       { name: '代付', temporaryAccount: true },
       { name: '分帳', badge: 'split' },
       { name: '標註' },
-      { name: '細項', badge: 'split', expand: true },
+      { name: '細項', badge: 'split', expand: true, temporaryAccount: true },
     ];
     // 最近頁固定只呈現 RECENT_LIMIT=5 筆，量它實際顯示的五列；標註頁則檢查全部六種案例。
     const recentRowCases = rowCases.filter(({ name }) => name !== '分帳');
@@ -1490,9 +1490,10 @@ function expectCardRectsClose(
 ): void {
   for (const cardId of HOME_CARD_IDS) {
     for (const dimension of ['x', 'y', 'width', 'height'] as const) {
-      expect(Math.abs(actual[cardId][dimension] - expected[cardId][dimension])).toBeLessThanOrEqual(
-        2,
-      );
+      expect(
+        Math.abs(actual[cardId][dimension] - expected[cardId][dimension]),
+        `${cardId}.${dimension}: actual=${actual[cardId][dimension]}, expected=${expected[cardId][dimension]}`,
+      ).toBeLessThanOrEqual(2);
     }
   }
 }
@@ -1752,6 +1753,15 @@ function expectActivityRowGeometry(geometry: HomeActivityRowGeometry, card: Rect
   }
   expect(geometry.controls.length).toBeGreaterThan(0);
   expect(geometry.actions.width).toBeGreaterThan(0);
+  const amountActionsOverlap =
+    geometry.amount.x < geometry.actions.right - 0.5 &&
+    geometry.amount.right > geometry.actions.x + 0.5 &&
+    geometry.amount.y < geometry.actions.bottom - 0.5 &&
+    geometry.amount.bottom > geometry.actions.y + 0.5;
+  expect(amountActionsOverlap, '金額與操作不得重疊').toBe(false);
+  const amountCenterY = geometry.amount.y + geometry.amount.height / 2;
+  const actionsCenterY = geometry.actions.y + geometry.actions.height / 2;
+  expect(Math.abs(amountCenterY - actionsCenterY), '金額與操作要排在同一行').toBeLessThanOrEqual(1);
   if (geometry.details) {
     expect(geometry.details.y).toBeGreaterThanOrEqual(geometry.actions.bottom - 1);
   }
