@@ -13,7 +13,7 @@
 | worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                               |
 | ---------- | ----------------- | ------------------------------- | ------------------- | -------------------------------------------------- |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                |
-| `stats-2j` | 2l 各 PR 分支     | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2l 首頁 A+ 與可編輯版面：spec 已核可               |
+| `stats-2j` | 2l 各 PR 分支     | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2l PR1 做到 W-A2 驗收中途（Node 更新前暫停）       |
 | `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 4a、新分類提議、每日額度已部署（#155、#161、#166） |
 
 ## 跨工作區的規則
