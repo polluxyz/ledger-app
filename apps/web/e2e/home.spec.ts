@@ -11,6 +11,7 @@ import {
   createTransaction,
   listAccounts,
   listCategories,
+  listLedgerPeople,
   linkByEmail,
   markTransaction,
   personalLedger,
@@ -61,6 +62,30 @@ interface Rect {
   y: number;
   width: number;
   height: number;
+}
+
+interface ActivityRowCase {
+  name: string;
+  badge?: 'cleared' | 'split';
+  expand?: boolean;
+  temporaryAccount?: boolean;
+}
+
+interface MeasuredBox extends Rect {
+  right: number;
+  bottom: number;
+}
+
+interface HomeActivityRowGeometry {
+  row: MeasuredBox;
+  icon: MeasuredBox;
+  category: MeasuredBox;
+  name: { box: MeasuredBox; text: string; clientWidth: number; scrollWidth: number };
+  amount: MeasuredBox;
+  badges: MeasuredBox[];
+  actions: MeasuredBox;
+  controls: MeasuredBox[];
+  details: MeasuredBox | null;
 }
 
 const HOME_CARD_IDS = [
@@ -663,7 +688,9 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
           height: element.getBoundingClientRect().height,
         };
       });
-      expect(recentRowLayout).toEqual({ paddingLeft: '0px', paddingRight: '0px', height: 52 });
+      expect(recentRowLayout.paddingLeft).toBe('0px');
+      expect(recentRowLayout.paddingRight).toBe('0px');
+      expect(recentRowLayout.height).toBeGreaterThanOrEqual(52);
 
       await markedTab.click();
       const markedPanel = page.getByRole('tabpanel');
@@ -779,6 +806,251 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       transactionPageRowLayout,
       measurements,
     });
+  });
+
+  test('SC-Y30：窄 activity 卡的最近與標註列保留名稱、金額、徽章與操作', async ({
+    signedInPage: initialPage,
+    userA,
+    userB,
+    request,
+    openAs,
+  }, testInfo) => {
+    let page = initialPage;
+    const ledger = await createLedger(request, userA.token, {
+      name: 'SC-Y30 activity 列',
+      kind: 'SHARED',
+    });
+    await addMember(request, userA.token, ledger.id, {
+      email: userB.email,
+      role: 'EDITOR',
+    });
+
+    const [accounts, categories, people] = await Promise.all([
+      listAccounts(request, userA.token),
+      listCategories(request, userA.token, ledger.id),
+      listLedgerPeople(request, userA.token, ledger.id),
+    ]);
+    const account = accounts.find((item) => item.name === '現金' && !item.isTemporary);
+    const expenseCategory = categories.find((category) => category.type === 'EXPENSE');
+    const self = people.find((person) => person.userId === userA.id);
+    const otherMember = people.find((person) => person.userId === userB.id);
+    if (!account || !expenseCategory || !self || !otherMember) {
+      throw new Error('SC-Y30 前置資料缺少現金帳戶、支出分類或共享帳本成員。');
+    }
+
+    const date = currentTaiwanDate();
+    const record = { ledgerId: ledger.id, accountId: account.id };
+    const shares = {
+      method: 'EQUAL' as const,
+      shares: [{ personId: self.id }, { personId: otherMember.id }],
+    };
+
+    // 分帳列先建立，讓最近頁的 5 筆上限保留短借、差額還清與展開列等窄卡關鍵案例。
+    const splitRow = await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 10_000,
+      date,
+      title: '分帳',
+      categoryId: expenseCategory.id,
+      accountId: account.id,
+      ledgerSplit: shares,
+    });
+    const markedRow = await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 11_000,
+      date,
+      title: '標註',
+      categoryId: expenseCategory.id,
+      accountId: account.id,
+    });
+    const shortDebt = await createDebtEntry(request, userA.token, {
+      counterparty: { name: '短友' },
+      kind: 'BORROW',
+      amount: 6_000,
+      date,
+      title: '短借',
+      record,
+    });
+    const shortDebtId = shortDebt.entries[0]?.transactionId;
+    if (!shortDebtId) throw new Error('SC-Y30 短借紀錄沒有產生交易。');
+
+    const differenceRepayment = await createDebtEntry(request, userA.token, {
+      counterparty: { id: shortDebt.counterparty.id },
+      kind: 'REPAYMENT',
+      amount: 6_500,
+      settle: true,
+      date,
+      title: '差額',
+      record,
+    });
+    const differenceRepaymentId = differenceRepayment.entries[0]?.transactionId;
+    if (!differenceRepaymentId) throw new Error('SC-Y30 差額還清沒有產生交易。');
+
+    const temporaryAccountRow = await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 7_000,
+      date,
+      title: '代付',
+      categoryId: expenseCategory.id,
+      payerPersonId: otherMember.id,
+    });
+    const expandedRow = await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 12_000,
+      date,
+      title: '細項',
+      categoryId: expenseCategory.id,
+      accountId: account.id,
+      ledgerSplit: shares,
+    });
+
+    for (const transactionId of [
+      splitRow.id,
+      markedRow.id,
+      shortDebtId,
+      differenceRepaymentId,
+      temporaryAccountRow.id,
+      expandedRow.id,
+    ]) {
+      await markTransaction(request, userA.token, ledger.id, transactionId);
+      await markTransaction(request, userB.token, ledger.id, transactionId);
+    }
+
+    // B 是代付列的付款人，因此他的檢視會顯示本人待補的臨時帳戶操作。
+    page = await openAs(userB);
+
+    const rowCases: ActivityRowCase[] = [
+      { name: '短借' },
+      { name: '差額', badge: 'cleared' },
+      { name: '代付', temporaryAccount: true },
+      { name: '分帳', badge: 'split' },
+      { name: '標註' },
+      { name: '細項', badge: 'split', expand: true },
+    ];
+    // 最近頁固定只呈現 RECENT_LIMIT=5 筆，量它實際顯示的五列；標註頁則檢查全部六種案例。
+    const recentRowCases = rowCases.filter(({ name }) => name !== '分帳');
+    const viewportCases = [
+      { name: '309px', width: 1280, layout: 'tree' as const },
+      { name: '390px', width: 390, layout: 'narrow' as const },
+      { name: 'wide-card', width: 900, layout: 'narrow' as const },
+    ];
+    const screenshots: string[] = [];
+    const measurements: unknown[] = [];
+    await mkdir(testInfo.outputDir, { recursive: true });
+
+    async function selectTestLedger(): Promise<void> {
+      await expect(page.locator('[data-home-card-id="activity"]')).toBeVisible();
+      const switcher = page.getByRole('group', { name: '作用中帳本' });
+      await switcher.getByRole('button').click();
+      await page.locator(`[role="option"] [data-ledger-name="${ledger.name}"]`).click();
+      await expect(switcher.getByRole('button')).toContainText(ledger.name);
+    }
+
+    for (const theme of ['light', 'dark'] as const) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.evaluate((value) => window.localStorage.setItem('ledger.theme', value), theme);
+      await page.reload();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await ensureSidebarExpanded(page);
+      await selectTestLedger();
+
+      for (const viewport of viewportCases) {
+        await page.setViewportSize({ width: viewport.width, height: 900 });
+        await waitForHomeCards(
+          page,
+          (current) => {
+            if (viewport.width === 1280) {
+              expectDefaultHomeRows(current.cards);
+              expect(Math.abs(current.cards.activity.width - 309)).toBeLessThanOrEqual(1);
+            }
+            if (viewport.width === 900) expect(current.cards.activity.width).toBeGreaterThan(400);
+          },
+          viewport.layout,
+        );
+        const activityCard = page.locator('[data-home-card-id="activity"]');
+        if (viewport.width === 390) {
+          await expect(page.locator('[data-home-layout="narrow"]')).toBeVisible();
+          await expectNoHorizontalPageOverflow(page);
+        }
+
+        const recentTab = activityCard.getByRole('tab', { name: '最近', exact: true });
+        const markedTab = activityCard.getByRole('tab', { name: /^標註/ });
+        const tabCases = [
+          { name: 'recent', tab: recentTab, rows: recentRowCases },
+          { name: 'marked', tab: markedTab, rows: rowCases },
+        ];
+        for (const tabCase of tabCases) {
+          await tabCase.tab.click();
+          await expect(tabCase.tab).toHaveAttribute('aria-selected', 'true');
+          const panel = activityCard.getByRole('tabpanel');
+          await expect(panel).toBeVisible();
+          await activityCard.scrollIntoViewIfNeeded();
+          const cardBox = await getRect(activityCard);
+          await expect(panel.locator('[data-home-activity-part="name"]')).toHaveCount(
+            tabCase.rows.length,
+          );
+
+          const rowMeasurements = [];
+          for (const rowCase of tabCase.rows) {
+            const namePart = panel
+              .locator('[data-home-activity-part="name"]')
+              .filter({ hasText: rowCase.name });
+            await expect(namePart).toHaveCount(1);
+            await expect(namePart).toHaveText(rowCase.name);
+            const row = namePart.locator('xpath=ancestor::li[1]');
+            await expect(row).toBeVisible();
+            await expect(row.locator('[data-home-activity-part="category"]')).toBeVisible();
+            await expect(row.locator('[data-home-activity-part="amount"]')).toBeVisible();
+            await expect(row.locator('[data-home-activity-part="actions"]')).toBeVisible();
+
+            if (rowCase.temporaryAccount) {
+              await expect(row.getByRole('button', { name: '臨時帳戶' })).toBeVisible();
+            }
+
+            if (rowCase.badge === 'cleared') {
+              await expect(row.locator('[class*="clearedBadge"]')).toBeVisible();
+            }
+            if (rowCase.badge === 'split') {
+              await expect(row.locator('[class*="splitBadge"]')).toBeVisible();
+            }
+            if (rowCase.expand) {
+              await row.getByRole('button', { name: '展開分帳明細' }).click();
+              await expect(row.getByRole('button', { name: '收合分帳明細' })).toHaveAttribute(
+                'aria-expanded',
+                'true',
+              );
+              await expect(row.locator('[data-home-activity-part="details"]')).toBeVisible();
+            }
+
+            const geometry = await measureHomeActivityRow(row);
+            expect(geometry.category.width).toBeGreaterThan(0);
+            expect(geometry.name.box.width).toBeGreaterThan(0);
+            expect(geometry.amount.width).toBeGreaterThan(0);
+            expect([...rowCase.name]).toHaveLength(2);
+            expect(geometry.name.scrollWidth).toBeLessThanOrEqual(geometry.name.clientWidth);
+            expectActivityRowGeometry(geometry, cardBox);
+            rowMeasurements.push({ name: rowCase.name, geometry });
+          }
+
+          const screenshotPath = testInfo.outputPath(
+            `home-activity-${viewport.name}-${theme}-${tabCase.name}.png`,
+          );
+          await activityCard.screenshot({ path: screenshotPath, animations: 'disabled' });
+          screenshots.push(screenshotPath);
+          measurements.push({
+            viewport: viewport.name,
+            viewportWidth: viewport.width,
+            theme,
+            tab: tabCase.name,
+            card: cardBox,
+            rows: rowMeasurements,
+            screenshot: screenshotPath,
+          });
+        }
+      }
+    }
+
+    await writeMeasurement(testInfo, { scenario: 'SC-Y30', screenshots, measurements });
   });
 
   test('SC-H18：淺色主題首頁配色即時切換並保留，統計頁配色不受影響', async ({
@@ -1411,6 +1683,91 @@ async function getRect(locator: Locator): Promise<Rect> {
   const rect = await locator.boundingBox();
   if (!rect) throw new Error('無法取得首頁元件的實際方框。');
   return rect;
+}
+
+/** 以真實 DOM 方框檢查窄版首頁列的可用空間、文字截斷與重疊。 */
+async function measureHomeActivityRow(row: Locator): Promise<HomeActivityRowGeometry> {
+  return row.evaluate((element) => {
+    function part(name: string): HTMLElement {
+      const target = element.querySelector<HTMLElement>(`[data-home-activity-part="${name}"]`);
+      if (!target) throw new Error(`首頁交易列缺少 ${name} 元素。`);
+      return target;
+    }
+
+    function box(target: Element): MeasuredBox {
+      const rect = target.getBoundingClientRect();
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        right: rect.right,
+        bottom: rect.bottom,
+      };
+    }
+
+    const name = part('name');
+    const actions = part('actions');
+    const details = element.querySelector<HTMLElement>('[data-home-activity-part="details"]');
+    return {
+      row: box(element),
+      icon: box(part('icon')),
+      category: box(part('category')),
+      name: {
+        box: box(name),
+        text: name.textContent?.trim() ?? '',
+        clientWidth: name.clientWidth,
+        scrollWidth: name.scrollWidth,
+      },
+      amount: box(part('amount')),
+      badges: Array.from(
+        element.querySelectorAll<HTMLElement>('[data-home-activity-part="badge"]'),
+      ).map(box),
+      actions: box(actions),
+      controls: Array.from(actions.querySelectorAll('button')).map(box),
+      details: details ? box(details) : null,
+    };
+  });
+}
+
+function expectActivityRowGeometry(geometry: HomeActivityRowGeometry, card: Rect): void {
+  const boxes = [
+    { name: '整列', box: geometry.row },
+    { name: '圖示', box: geometry.icon },
+    { name: '分類', box: geometry.category },
+    { name: '名稱', box: geometry.name.box },
+    ...geometry.badges.map((box, index) => ({ name: `徽章 ${index + 1}`, box })),
+    { name: '金額', box: geometry.amount },
+    ...geometry.controls.map((box, index) => ({ name: `操作 ${index + 1}`, box })),
+    ...(geometry.details ? [{ name: '展開細項', box: geometry.details }] : []),
+  ];
+  const cardRight = card.x + card.width;
+  const cardBottom = card.y + card.height;
+  for (const item of boxes) {
+    expect(item.box.width, `${item.name} 寬度`).toBeGreaterThan(0);
+    expect(item.box.x, `${item.name} 超出卡片左側`).toBeGreaterThanOrEqual(card.x - 1);
+    expect(item.box.right, `${item.name} 超出卡片右側`).toBeLessThanOrEqual(cardRight + 1);
+    expect(item.box.y, `${item.name} 超出卡片上方`).toBeGreaterThanOrEqual(card.y - 1);
+    expect(item.box.bottom, `${item.name} 超出卡片下方`).toBeLessThanOrEqual(cardBottom + 1);
+  }
+  expect(geometry.controls.length).toBeGreaterThan(0);
+  expect(geometry.actions.width).toBeGreaterThan(0);
+  if (geometry.details) {
+    expect(geometry.details.y).toBeGreaterThanOrEqual(geometry.actions.bottom - 1);
+  }
+
+  for (let firstIndex = 1; firstIndex < boxes.length; firstIndex += 1) {
+    const first = boxes[firstIndex]!;
+    for (let secondIndex = firstIndex + 1; secondIndex < boxes.length; secondIndex += 1) {
+      const second = boxes[secondIndex]!;
+      const overlaps =
+        first.box.x < second.box.right - 0.5 &&
+        first.box.right > second.box.x + 0.5 &&
+        first.box.y < second.box.bottom - 0.5 &&
+        first.box.bottom > second.box.y + 0.5;
+      expect(overlaps, `${first.name} 與 ${second.name} 不得重疊`).toBe(false);
+    }
+  }
 }
 
 async function expectTextInsideCard(card: Locator, text: Locator): Promise<void> {

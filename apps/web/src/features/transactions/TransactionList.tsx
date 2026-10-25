@@ -1,3 +1,7 @@
+/**
+ * 交易列表在交易頁維持固定 52px 列高；首頁 activity 卡另外啟用窄容器多行排版，避免
+ * 309px 卡片的固定圖示、金額與操作欄把交易名稱擠到看不見。
+ */
 import { Fragment, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   actualAmountOf,
@@ -29,6 +33,8 @@ interface TransactionListProps {
   isFiltered?: boolean;
   /** 總覽最近交易沿用同一列樣式，但不顯示日期分組。 */
   variant?: 'grouped' | 'recent';
+  /** 首頁 activity 卡專用：窄卡換成多行；交易頁保留固定 52px 的預設列。 */
+  homeActivity?: boolean;
   /** 首頁摘要使用自己的空狀態文案。 */
   emptyMessage?: string;
   /** 正在編輯的那一筆的 id，該列會標成選取中。沒有就傳 null 或不傳。 */
@@ -137,6 +143,7 @@ export function TransactionList({
   error,
   isFiltered = false,
   variant = 'grouped',
+  homeActivity = false,
   emptyMessage,
   selectedId = null,
   onEdit,
@@ -240,7 +247,7 @@ export function TransactionList({
       {groups.map((group) => (
         <div key={group.key} className={styles.dateGroup}>
           {variant === 'grouped' && <p className={styles.groupHeading}>{group.heading}</p>}
-          <ul className={styles.rows}>
+          <ul className={`${styles.rows} ${homeActivity ? styles.homeActivityRows : ''}`}>
             {group.transactions.map((transaction) => {
               const isDebt = isDebtTransactionType(transaction.type);
               const split = transaction.split;
@@ -303,13 +310,28 @@ export function TransactionList({
               const rowContent = (
                 <>
                   <span className={styles.title}>
-                    <span className={styles.titleText}>
+                    <span
+                      className={styles.titleText}
+                      data-home-activity-part={homeActivity ? 'category' : undefined}
+                    >
                       {settlement ? '結清' : rowLabel(transaction)}
                     </span>
                     {(hasSplit || hasMergeDetails) && (
-                      <span className={styles.splitBadge}>分帳</span>
+                      <span
+                        className={styles.splitBadge}
+                        data-home-activity-part={homeActivity ? 'badge' : undefined}
+                      >
+                        分帳
+                      </span>
                     )}
-                    {differenceLabel !== null && <span className={styles.clearedBadge}>還清</span>}
+                    {differenceLabel !== null && (
+                      <span
+                        className={styles.clearedBadge}
+                        data-home-activity-part={homeActivity ? 'badge' : undefined}
+                      >
+                        還清
+                      </span>
+                    )}
                   </span>
                   <span className={styles.subtitle}>
                     {settlement && settlementFrom && settlementTo ? (
@@ -321,7 +343,12 @@ export function TransactionList({
                         srText={`${settlementFrom}付給${settlementTo}`}
                       />
                     ) : (
-                      <span className={styles.name}>{rowName(transaction)}</span>
+                      <span
+                        className={styles.name}
+                        data-home-activity-part={homeActivity ? 'name' : undefined}
+                      >
+                        {rowName(transaction)}
+                      </span>
                     )}
                     {transaction.merge?.sourceLedgerName && (
                       <span className={styles.mergeSource}>
@@ -352,7 +379,11 @@ export function TransactionList({
                     onClick={(event) => handleRowClick(event, transaction)}
                   >
                     {/* 圓形底色＋金色圖示，與提案頁樣板一致（3d 修訂 2）。 */}
-                    <span className={styles.iconBadge} aria-hidden="true">
+                    <span
+                      className={styles.iconBadge}
+                      aria-hidden="true"
+                      data-home-activity-part={homeActivity ? 'icon' : undefined}
+                    >
                       <CategoryIcon
                         className={styles.categoryIcon}
                         icon={isMergedLedgerTransfer ? null : transaction.category?.icon}
@@ -382,12 +413,18 @@ export function TransactionList({
                     ) : (
                       <span className={styles.main}>{rowContent}</span>
                     )}
-                    <span className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}>
+                    <span
+                      className={`${styles.amount} ${AMOUNT_COLOR[transaction.type]}`}
+                      data-home-activity-part={homeActivity ? 'amount' : undefined}
+                    >
                       {settlement
                         ? formatMoney(amount)
                         : formatTransactionAmount(transaction.type, amount)}
                     </span>
-                    <span className={styles.actions}>
+                    <span
+                      className={styles.actions}
+                      data-home-activity-part={homeActivity ? 'actions' : undefined}
+                    >
                       {transaction.accountPending && (
                         <button
                           type="button"
@@ -494,6 +531,7 @@ export function TransactionList({
                         className={`${styles.details} ${
                           hasDifferenceDetails || hasMergeDetails ? styles.differenceDetails : ''
                         }`}
+                        data-home-activity-part={homeActivity ? 'details' : undefined}
                       >
                         {hasDifferenceDetails && differenceAmount !== null ? (
                           <>

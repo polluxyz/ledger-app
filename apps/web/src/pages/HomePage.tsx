@@ -628,7 +628,7 @@ interface RecentTransactionsProps {
   onToggleMark: (transaction: Transaction) => void;
 }
 
-/** 最近交易沿用交易頁的單列元件，這裡只負責載入、錯誤與空狀態。 */
+/** 首頁最近交易沿用共用資料列；窄卡排法由 TransactionList 的首頁限定樣式處理。 */
 function RecentBody({
   transactions,
   isLoading,
@@ -657,6 +657,7 @@ function RecentBody({
       isLoading={false}
       error={null}
       variant="recent"
+      homeActivity
       selectedId={selectedId}
       onEdit={onSelect}
       onEditDebtTransaction={onSelect}
@@ -722,6 +723,7 @@ function MarkedTransactionsCard({
         transactions={transactions}
         isLoading={false}
         error={null}
+        homeActivity
         selectedId={selectedId}
         onEdit={onSelect}
         onEditDebtTransaction={onSelect}
