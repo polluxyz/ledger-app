@@ -11,26 +11,15 @@
 - 已知限制（2j spec §1）：交易頁的日期篩選用瀏覽器時區換算，統計用台灣時間。
 - 效能（SC-R13）：統計端點 p95 約 260～310ms，機器有其他負載時曾量到 907～967ms。
 
-## 2l 進度（2026-10-25，Node.js 更新前暫停）
+## 2l 進度（2026-10-25）
 
-PR1（A+ 版面）做到 W-A2 驗收中途。還沒開 PR。
+PR1（A+ 版面）已驗收完，開 PR 中（`feature/2l-home-aplus`）。合併後照 todo D1 部署 dev，請開發者按 `Ctrl + Shift + R` 看過再開 PR2。
 
-- `feature/2l-home-aplus`（已 push）：S1 shared 型別、W-A1 版面與卡片拆分、W-A1 金色示意修正、docs（捲軸寬度）。W-A1 已驗收。
-- `polluxyz/2l-aplus`（已 push，worktree `2l-aplus`）：比 `feature/2l-home-aplus` 多 3 個 commit，還沒併回：
-  - `1fedfd9` 三卡列最小寬度 314px → 309px（協調者授權的 `apps/web/src` 改動）。
-  - `b628661` PR1 的 Web e2e。
-  - `3372946` 修 2 個時序紅燈（等版面穩定再量、實測捲軸寬度）。
-- 這個 worktree 的 API e2e 用自己的資料庫 `ledger_2laplus_test`（`apps/api/.env.test` 已改）。
-- W-A2 worker 已 release，終端機已關。Orca run `run_dfe66599ba8a` 目前沒有派出中的 worker。
-- 協調者已驗：`1fedfd9`＋`b628661` 的 diff 範圍、lint／typecheck／format:check／web 單元測試 1032／build 全綠、12 張截圖（`2l-aplus/docs/artifacts/2l-aplus-shots/`）。
-- 協調者還沒驗：`3372946`。
-
-### 下一步
-
-1. 在 `2l-aplus` 跑 `pnpm install`（Node 換版後要重建）。看 `3372946` 的 diff，確認只動 `apps/web/e2e/**`、斷言沒有放寬。
-2. 自己重跑整套 Web e2e（先確認 3100／5273／5274 沒人用）。全綠後把 `polluxyz/2l-aplus` 併進 `feature/2l-home-aplus`（`17d2757` 在後者，不是 fast-forward，用一般 merge）。
-3. PR1 照 todo D1：diff 只能有 `apps/web`、shared `home-layout.ts` 與 export、docs。開 PR、盯 CI、squash merge、在 main worktree 部署 dev，請開發者 `Ctrl + Shift + R` 後看過再開 PR2。
-4. CI 在 Linux 跑：留意 SC-Y1／SC-Y3 的寬度。`3372946` 改成實測捲軸寬度＋`scrollbar-gutter: stable` 保留區，但還沒在 CI 上跑過。
+- `polluxyz/2l-aplus` 已用一般 merge 併進 `feature/2l-home-aplus`，也併了 main（#170 Node 22.23.4、#171 API 只聽 `localhost`）。
+- 協調者已驗 `3372946`：只動 `apps/web/e2e/**`，改成實測捲軸寬度、等版面穩定再量，斷言沒有放寬。
+- 合併後的分支：format:check／lint／typecheck／build 全綠，Web 單元測試 1032 條、Web e2e 88 條全過（SC-H1、H13 依 spec SC-Y9 由 SC-Y1、Y2、Y4 取代，條數比 main 少）。
+- `2l-aplus` worktree 與 `polluxyz/2l-aplus` 分支在 PR1 合併後清掉，連同 `ledger_2laplus_test`（刪資料庫前先問）。
+- CI 在 Linux 跑：留意 SC-Y1／SC-Y3 的寬度。
 
 ### 待開發者決定
 
