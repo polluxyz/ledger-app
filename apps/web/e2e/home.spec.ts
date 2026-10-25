@@ -18,7 +18,13 @@ import {
 } from './api';
 import { API_BASE_URL } from './env';
 import { expect, test } from './fixtures';
-import { newTransactionForm, openNewTransaction, openUserMenu, selectCategory } from './ui';
+import {
+  newTransactionForm,
+  openDashboard,
+  openNewTransaction,
+  openUserMenu,
+  selectCategory,
+} from './ui';
 
 interface HomeSetup {
   ledger: Awaited<ReturnType<typeof personalLedger>>;
@@ -26,6 +32,29 @@ interface HomeSetup {
   expenseCategory: Awaited<ReturnType<typeof listCategories>>[number];
   incomeCategory: Awaited<ReturnType<typeof listCategories>>[number];
 }
+
+const HOME_PALETTE_THEME_OPTIONS = [
+  {
+    theme: 'light',
+    label: '淺色',
+    modes: [
+      { value: 'color', label: '彩色' },
+      { value: 'gold', label: '金色' },
+      { value: 'gray', label: '灰色' },
+    ],
+  },
+  {
+    theme: 'dark',
+    label: '深色',
+    modes: [
+      { value: 'color', label: '彩色' },
+      { value: 'gold', label: '金色' },
+      { value: 'gray', label: '灰色' },
+    ],
+  },
+] as const;
+
+type HomePaletteThemeOption = (typeof HOME_PALETTE_THEME_OPTIONS)[number];
 
 interface Rect {
   x: number;
@@ -752,233 +781,24 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     });
   });
 
-  test('SC-H18：首頁配色即時切換並保留，統計頁配色不受影響', async ({
+  test('SC-H18：淺色主題首頁配色即時切換並保留，統計頁配色不受影響', async ({
     signedInPage: page,
     userA,
     userB,
     request,
   }, testInfo) => {
-    const personal = await getHomeSetup(request, userA);
-    const sharedLedger = await createLedger(request, userA.token, {
-      name: 'A+ 家庭共享帳本',
-      kind: 'SHARED',
-    });
-    await addMember(request, userA.token, sharedLedger.id, {
-      email: userB.email,
-      role: 'EDITOR',
-    });
-    const userBAccount = (await listAccounts(request, userB.token)).find(
-      (account) => !account.isTemporary,
-    );
-    if (!userBAccount) throw new Error('展示帳號缺少可用帳戶。');
-    const sharedCategories = await listCategories(request, userA.token, sharedLedger.id);
-    const expenseCategory = sharedCategories.find((category) => category.type === 'EXPENSE');
-    const incomeCategory = sharedCategories.find((category) => category.type === 'INCOME');
-    if (!expenseCategory || !incomeCategory) throw new Error('共享帳本缺少預設收支分類。');
-    const secondCategory = await createCategory(request, userA.token, sharedLedger.id, {
-      name: 'A+ 展示日常用品',
-      type: 'EXPENSE',
-    });
-    const thirdCategory = await createCategory(request, userA.token, sharedLedger.id, {
-      name: 'A+ 展示交通',
-      type: 'EXPENSE',
-    });
+    const { sharedLedger } = await prepareHomePaletteData(request, userA, userB);
+    await runHomePaletteTheme(page, sharedLedger, HOME_PALETTE_THEME_OPTIONS[0], testInfo);
+  });
 
-    for (let index = 2; index <= 6; index += 1) {
-      await createAccount(request, userA.token, {
-        name: `A+ 展示帳戶 ${index}`,
-        initialBalance: index * 100_000,
-      });
-    }
-
-    await createTransaction(request, userA.token, sharedLedger.id, {
-      type: 'EXPENSE',
-      amount: 120_000,
-      date: currentTaiwanDate(),
-      categoryId: expenseCategory.id,
-      accountId: personal.account.id,
-      title: 'A+ 共享帳本餐飲支出',
-    });
-    await createTransaction(request, userA.token, sharedLedger.id, {
-      type: 'EXPENSE',
-      amount: 84_500,
-      date: currentTaiwanDate(),
-      categoryId: secondCategory.id,
-      accountId: personal.account.id,
-      title: 'A+ 共享帳本日常用品支出',
-    });
-    await createTransaction(request, userA.token, sharedLedger.id, {
-      type: 'EXPENSE',
-      amount: 53_000,
-      date: currentTaiwanDate(),
-      categoryId: thirdCategory.id,
-      accountId: personal.account.id,
-      title: 'A+ 共享帳本交通支出',
-    });
-    await createTransaction(request, userA.token, sharedLedger.id, {
-      type: 'INCOME',
-      amount: 260_000,
-      date: currentTaiwanDate(),
-      categoryId: incomeCategory.id,
-      accountId: personal.account.id,
-      title: 'A+ 共享帳本收入',
-    });
-    await createDebtEntry(request, userA.token, {
-      counterparty: { name: '展示對象欠我' },
-      kind: 'LEND',
-      amount: 24_560,
-      date: currentTaiwanDate(),
-      record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
-    });
-    await createDebtEntry(request, userA.token, {
-      counterparty: { name: '展示對象我欠' },
-      kind: 'BORROW',
-      amount: 7_890,
-      date: currentTaiwanDate(),
-      record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
-    });
-    const linked = await linkByEmail(request, userB, userA);
-    await createDebtEntry(request, userB.token, {
-      counterparty: { id: linked.inviterSideId },
-      kind: 'LEND',
-      amount: 18_300,
-      date: currentTaiwanDate(),
-      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
-    });
-    const overpaid = await createDebtEntry(request, userB.token, {
-      counterparty: { name: '展示差額付款人' },
-      kind: 'BORROW',
-      amount: 7_000,
-      date: currentTaiwanDate(),
-      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
-    });
-    await createDebtEntry(request, userB.token, {
-      counterparty: { id: overpaid.counterparty.id },
-      kind: 'REPAYMENT',
-      amount: 8_200,
-      settle: true,
-      date: currentTaiwanDate(),
-      record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
-    });
-
-    const options = [
-      {
-        theme: 'light',
-        label: '淺色',
-        modes: [
-          { value: 'color', label: '彩色' },
-          { value: 'gold', label: '金色' },
-          { value: 'gray', label: '灰色' },
-        ],
-      },
-      {
-        theme: 'dark',
-        label: '深色',
-        modes: [
-          { value: 'color', label: '彩色' },
-          { value: 'gold', label: '金色' },
-          { value: 'gray', label: '灰色' },
-        ],
-      },
-    ] as const;
-    const statisticsColorByTheme = new Map<string, string>();
-    const screenshots: string[] = [];
-    const measurements = [];
-
-    await mkdir(APLUS_SHOTS_DIR, { recursive: true });
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.reload();
-    const ledgerSwitcher = page.getByRole('group', { name: '作用中帳本' });
-    await ledgerSwitcher.getByRole('button').click();
-    await page.locator(`[role="option"] [data-ledger-name="${sharedLedger.name}"]`).click();
-    await expect(ledgerSwitcher.getByRole('button')).toContainText(sharedLedger.name);
-    await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
-
-    for (const themeOption of options) {
-      for (const mode of themeOption.modes) {
-        await page.setViewportSize({ width: 1280, height: 900 });
-        await openUserMenu(page);
-        await page.getByRole('button', { name: '設定' }).click();
-        const dialog = page.getByRole('dialog', { name: '設定' });
-        await expect(dialog).toBeVisible();
-        const appearance = dialog.getByRole('radiogroup', { name: '外觀' });
-        await appearance.getByRole('radio', { name: themeOption.label, exact: true }).click();
-        const colorGroup = dialog.getByRole('radiogroup', { name: '首頁分類條配色' });
-        await colorGroup.getByRole('radio', { name: mode.label, exact: true }).click();
-        await expect(
-          colorGroup.getByRole('radio', { name: mode.label, exact: true }),
-        ).toHaveAttribute('aria-checked', 'true');
-        await expect(page.locator('html')).toHaveAttribute('data-theme', themeOption.theme);
-        await page.keyboard.press('Escape');
-        await expect(dialog).toBeHidden();
-
-        const homeColorBeforeReload = await readHomeCategoryColor(page);
-        if (mode.value === 'gold') expect(homeColorBeforeReload).toBe('var(--color-accent)');
-        if (mode.value === 'gray') {
-          expect(homeColorBeforeReload).toBe(themeOption.theme === 'light' ? '#6a6252' : '#9d9482');
-        }
-        if (mode.value === 'color') expect(homeColorBeforeReload).toMatch(/^#[0-9a-f]{6}$/i);
-
-        await page.reload();
-        await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
-        await expect(page.locator('html')).toHaveAttribute('data-theme', themeOption.theme);
-        await expect.poll(() => readHomeCategoryColor(page)).toBe(homeColorBeforeReload);
-
-        const accountCard = page.locator('[data-home-card-id="accounts"]');
-        await accountCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
-        await expect(
-          accountCard.getByRole('list', { name: '帳戶' }).getByRole('listitem'),
-        ).toHaveCount(6);
-        await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象欠我');
-        await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象我欠');
-
-        const screenshotsForMode: string[] = [];
-        for (const width of [1280, 390]) {
-          await page.setViewportSize({ width, height: 900 });
-          await page.evaluate(() => window.scrollTo(0, 0));
-          if (width === 390) {
-            await expect(page.locator('[data-home-layout="narrow"]')).toBeVisible();
-            await expectNoHorizontalPageOverflow(page);
-          }
-          const path = join(
-            APLUS_SHOTS_DIR,
-            `home-${width}px-${themeOption.theme}-${mode.value}.png`,
-          );
-          await page.screenshot({ path, fullPage: true, animations: 'disabled' });
-          screenshots.push(path);
-          screenshotsForMode.push(path);
-        }
-
-        await page.goto(
-          `/stats?tab=cat&ledger=${encodeURIComponent(sharedLedger.id)}&month=${currentTaiwanMonth()}`,
-        );
-        await expect(
-          page.getByRole('heading', { level: 2, name: '統計', exact: true }),
-        ).toBeVisible();
-        const statisticsColor = await readStatisticsCategoryColor(page);
-        const existingColor = statisticsColorByTheme.get(themeOption.theme);
-        if (existingColor === undefined)
-          statisticsColorByTheme.set(themeOption.theme, statisticsColor);
-        else expect(statisticsColor).toBe(existingColor);
-
-        await page.goto('/');
-        await expect(page.locator('[aria-label="支出分類"]')).toBeVisible();
-        measurements.push({
-          theme: themeOption.theme,
-          mode: mode.value,
-          homeColor: homeColorBeforeReload,
-          statisticsColor,
-          screenshots: screenshotsForMode,
-        });
-      }
-    }
-
-    await writeMeasurement(testInfo, {
-      scenario: 'SC-H18',
-      statisticsColorByTheme: Object.fromEntries(statisticsColorByTheme),
-      screenshots,
-      measurements,
-    });
+  test('SC-H18：深色主題首頁配色即時切換並保留，統計頁配色不受影響', async ({
+    signedInPage: page,
+    userA,
+    userB,
+    request,
+  }, testInfo) => {
+    const { sharedLedger } = await prepareHomePaletteData(request, userA, userB);
+    await runHomePaletteTheme(page, sharedLedger, HOME_PALETTE_THEME_OPTIONS[1], testInfo);
   });
   test('W7：最近卡桌機維持最小高度，390px 依內容收合', async ({
     signedInPage: page,
@@ -1032,6 +852,226 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     });
   });
 });
+
+/** 為淺色與深色兩條測試建立相同的帳務資料。 */
+async function prepareHomePaletteData(
+  request: Parameters<typeof personalLedger>[0],
+  userA: TestUser,
+  userB: TestUser,
+) {
+  const personal = await getHomeSetup(request, userA);
+  const sharedLedger = await createLedger(request, userA.token, {
+    name: 'A+ 家庭共享帳本',
+    kind: 'SHARED',
+  });
+  await addMember(request, userA.token, sharedLedger.id, {
+    email: userB.email,
+    role: 'EDITOR',
+  });
+  const userBAccount = (await listAccounts(request, userB.token)).find(
+    (account) => !account.isTemporary,
+  );
+  if (!userBAccount) throw new Error('展示帳號缺少可用帳戶。');
+  const sharedCategories = await listCategories(request, userA.token, sharedLedger.id);
+  const expenseCategory = sharedCategories.find((category) => category.type === 'EXPENSE');
+  const incomeCategory = sharedCategories.find((category) => category.type === 'INCOME');
+  if (!expenseCategory || !incomeCategory) throw new Error('共享帳本缺少預設收支分類。');
+  const secondCategory = await createCategory(request, userA.token, sharedLedger.id, {
+    name: 'A+ 展示日常用品',
+    type: 'EXPENSE',
+  });
+  const thirdCategory = await createCategory(request, userA.token, sharedLedger.id, {
+    name: 'A+ 展示交通',
+    type: 'EXPENSE',
+  });
+
+  for (let index = 2; index <= 6; index += 1) {
+    await createAccount(request, userA.token, {
+      name: `A+ 展示帳戶 ${index}`,
+      initialBalance: index * 100_000,
+    });
+  }
+
+  await createTransaction(request, userA.token, sharedLedger.id, {
+    type: 'EXPENSE',
+    amount: 120_000,
+    date: currentTaiwanDate(),
+    categoryId: expenseCategory.id,
+    accountId: personal.account.id,
+    title: 'A+ 共享帳本餐飲支出',
+  });
+  await createTransaction(request, userA.token, sharedLedger.id, {
+    type: 'EXPENSE',
+    amount: 84_500,
+    date: currentTaiwanDate(),
+    categoryId: secondCategory.id,
+    accountId: personal.account.id,
+    title: 'A+ 共享帳本日常用品支出',
+  });
+  await createTransaction(request, userA.token, sharedLedger.id, {
+    type: 'EXPENSE',
+    amount: 53_000,
+    date: currentTaiwanDate(),
+    categoryId: thirdCategory.id,
+    accountId: personal.account.id,
+    title: 'A+ 共享帳本交通支出',
+  });
+  await createTransaction(request, userA.token, sharedLedger.id, {
+    type: 'INCOME',
+    amount: 260_000,
+    date: currentTaiwanDate(),
+    categoryId: incomeCategory.id,
+    accountId: personal.account.id,
+    title: 'A+ 共享帳本收入',
+  });
+  await createDebtEntry(request, userA.token, {
+    counterparty: { name: '展示對象欠我' },
+    kind: 'LEND',
+    amount: 24_560,
+    date: currentTaiwanDate(),
+    record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
+  });
+  await createDebtEntry(request, userA.token, {
+    counterparty: { name: '展示對象我欠' },
+    kind: 'BORROW',
+    amount: 7_890,
+    date: currentTaiwanDate(),
+    record: { ledgerId: sharedLedger.id, accountId: personal.account.id },
+  });
+  const linked = await linkByEmail(request, userB, userA);
+  await createDebtEntry(request, userB.token, {
+    counterparty: { id: linked.inviterSideId },
+    kind: 'LEND',
+    amount: 18_300,
+    date: currentTaiwanDate(),
+    record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
+  });
+  const overpaid = await createDebtEntry(request, userB.token, {
+    counterparty: { name: '展示差額付款人' },
+    kind: 'BORROW',
+    amount: 7_000,
+    date: currentTaiwanDate(),
+    record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
+  });
+  await createDebtEntry(request, userB.token, {
+    counterparty: { id: overpaid.counterparty.id },
+    kind: 'REPAYMENT',
+    amount: 8_200,
+    settle: true,
+    date: currentTaiwanDate(),
+    record: { ledgerId: sharedLedger.id, accountId: userBAccount.id },
+  });
+  return { sharedLedger };
+}
+
+/** 驗證單一主題下三種首頁配色。 */
+async function runHomePaletteTheme(
+  page: Page,
+  sharedLedger: Awaited<ReturnType<typeof createLedger>>,
+  themeOption: HomePaletteThemeOption,
+  testInfo: TestInfo,
+): Promise<void> {
+  const options = [themeOption];
+  const statisticsColorByTheme = new Map<string, string>();
+  const screenshots: string[] = [];
+  const measurements = [];
+
+  await mkdir(APLUS_SHOTS_DIR, { recursive: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.reload();
+  const ledgerSwitcher = page.getByRole('group', { name: '作用中帳本' });
+  await ledgerSwitcher.getByRole('button').click();
+  await page.locator(`[role="option"] [data-ledger-name="${sharedLedger.name}"]`).click();
+  await expect(ledgerSwitcher.getByRole('button')).toContainText(sharedLedger.name);
+  await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
+
+  for (const themeOption of options) {
+    for (const mode of themeOption.modes) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await openUserMenu(page);
+      await page.getByRole('button', { name: '設定' }).click();
+      const dialog = page.getByRole('dialog', { name: '設定' });
+      await expect(dialog).toBeVisible();
+      const appearance = dialog.getByRole('radiogroup', { name: '外觀' });
+      await appearance.getByRole('radio', { name: themeOption.label, exact: true }).click();
+      const colorGroup = dialog.getByRole('radiogroup', { name: '首頁分類條配色' });
+      await colorGroup.getByRole('radio', { name: mode.label, exact: true }).click();
+      await expect(
+        colorGroup.getByRole('radio', { name: mode.label, exact: true }),
+      ).toHaveAttribute('aria-checked', 'true');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', themeOption.theme);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+
+      const homeColorBeforeReload = await readHomeCategoryColor(page);
+      if (mode.value === 'gold') expect(homeColorBeforeReload).toBe('var(--color-accent)');
+      if (mode.value === 'gray') {
+        expect(homeColorBeforeReload).toBe(themeOption.theme === 'light' ? '#6a6252' : '#9d9482');
+      }
+      if (mode.value === 'color') expect(homeColorBeforeReload).toMatch(/^#[0-9a-f]{6}$/i);
+
+      await page.reload();
+      await expect(page.locator('[data-home-card-id="categories"]')).toContainText('未分類');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', themeOption.theme);
+      await expect.poll(() => readHomeCategoryColor(page)).toBe(homeColorBeforeReload);
+
+      const accountCard = page.locator('[data-home-card-id="accounts"]');
+      await accountCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
+      await expect(
+        accountCard.getByRole('list', { name: '帳戶' }).getByRole('listitem'),
+      ).toHaveCount(6);
+      await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象欠我');
+      await expect(page.locator('[data-home-card-id="debts"]')).toContainText('展示對象我欠');
+
+      const screenshotsForMode: string[] = [];
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        if (width === 390) {
+          await expect(page.locator('[data-home-layout="narrow"]')).toBeVisible();
+          await expectNoHorizontalPageOverflow(page);
+        }
+        const path = join(
+          APLUS_SHOTS_DIR,
+          `home-${width}px-${themeOption.theme}-${mode.value}.png`,
+        );
+        await page.screenshot({ path, fullPage: true, animations: 'disabled' });
+        screenshots.push(path);
+        screenshotsForMode.push(path);
+      }
+
+      await page.goto(
+        `/stats?tab=cat&ledger=${encodeURIComponent(sharedLedger.id)}&month=${currentTaiwanMonth()}`,
+      );
+      await expect(
+        page.getByRole('heading', { level: 2, name: '統計', exact: true }),
+      ).toBeVisible();
+      const statisticsColor = await readStatisticsCategoryColor(page);
+      const existingColor = statisticsColorByTheme.get(themeOption.theme);
+      if (existingColor === undefined)
+        statisticsColorByTheme.set(themeOption.theme, statisticsColor);
+      else expect(statisticsColor).toBe(existingColor);
+
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await openDashboard(page);
+      await expect(page.locator('[aria-label="支出分類"]')).toBeVisible();
+      measurements.push({
+        theme: themeOption.theme,
+        mode: mode.value,
+        homeColor: homeColorBeforeReload,
+        statisticsColor,
+        screenshots: screenshotsForMode,
+      });
+    }
+  }
+
+  await writeMeasurement(testInfo, {
+    scenario: 'SC-H18',
+    statisticsColorByTheme: Object.fromEntries(statisticsColorByTheme),
+    screenshots,
+    measurements,
+  });
+}
 
 async function getHomeSetup(
   request: Parameters<typeof personalLedger>[0],
