@@ -73,12 +73,17 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
     await ensureSidebarExpanded(page);
+    const viewportInset = await measureViewportInset(page);
+    // 1280px 扣掉實測捲軸與 stable 保留區、展開側欄 240px、兩側各 32px；收合側欄改扣 72px。
+    const expandedContentWidth = 1280 - viewportInset.layoutGutterWidth - 240 - 64;
+    const collapsedContentWidth = 1280 - viewportInset.layoutGutterWidth - 72 - 64;
     const pendingCard = page.locator('section[aria-labelledby="pending-card-heading"]');
     await expect(pendingCard).toBeVisible();
 
-    const expanded = await readHomeCards(page);
-    expect(Math.abs(expanded.layout.width - 961)).toBeLessThanOrEqual(2);
-    expectDefaultHomeRows(expanded.cards);
+    const expanded = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.abs(snapshot.layout.width - expandedContentWidth)).toBeLessThanOrEqual(2);
+      expectDefaultHomeRows(snapshot.cards);
+    });
     const firstRowBottom = Math.max(
       ...(['expense', 'income', 'net'] as const).map(
         (cardId) => expanded.cards[cardId].y + expanded.cards[cardId].height,
@@ -90,16 +95,14 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
 
     await page.getByRole('button', { name: '收合側欄', exact: true }).click();
     await expect(page.getByRole('button', { name: '展開側欄', exact: true })).toBeVisible();
-    await expect
-      .poll(async () =>
-        Math.round((await getRect(page.locator('[data-home-layout="tree"]'))).width),
-      )
-      .toBe(1129);
-    const collapsed = await readHomeCards(page);
-    expectDefaultHomeRows(collapsed.cards);
+    const collapsed = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.abs(snapshot.layout.width - collapsedContentWidth)).toBeLessThanOrEqual(2);
+      expectDefaultHomeRows(snapshot.cards);
+    });
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y1',
+      viewportInset,
       expanded: { layoutWidth: expanded.layout.width, cards: expanded.cards, pendingBox },
       collapsed: { layoutWidth: collapsed.layout.width, cards: collapsed.cards },
     });
@@ -271,69 +274,77 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
   test('SC-Y3：卡片分割剛好放得下、少 1px 與全部換行，恢復寬度後回到原版面', async ({
     signedInPage: page,
   }, testInfo) => {
-    // 登記表三卡列各 309px，HOME_LAYOUT_GAP_PX 是 16px：3×309+2×16=959px，少 1px 就換成 2+1。
-    // Windows 捲軸佔 15px；1280px 展開側欄內容為 1280−15−240−2×32=961px，1278px／1277px 分別是 959px／958px。
-    // 全部拆列時最窄兩卡列需小於 2×309+16=634px；901px、收合側欄、360px 新增面板下為 901−15−72−360−2×32=390px。
-    await page.setViewportSize({ width: 1278, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await ensureSidebarExpanded(page);
-    await expect
-      .poll(async () =>
-        Math.round((await getRect(page.locator('[data-home-layout="tree"]'))).width),
-      )
-      .toBe(959);
-    const justFits = await readHomeCards(page);
-    expectDefaultHomeRows(justFits.cards);
+    const viewportInset = await measureViewportInset(page);
+    // 三卡剛好寬度為 3×309px + 2×16px＝959px；少 1px 時目標為 958px。
+    // 視窗寬度＝目標內容寬＋實測捲軸與 stable 保留區＋側欄（240／72px）＋新增面板（0／360px）＋兩側外距 64px。
+    const viewportForContent = (contentWidth: number, sidebarWidth: number, drawerWidth: number) =>
+      contentWidth + viewportInset.layoutGutterWidth + sidebarWidth + drawerWidth + 64;
+    const justFitsViewport = viewportForContent(959, 240, 0);
+    const onePixelShortViewport = viewportForContent(958, 240, 0);
+    await page.setViewportSize({ width: justFitsViewport, height: 900 });
+    const justFits = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(959);
+      expectDefaultHomeRows(snapshot.cards);
+    });
     await expectNoHorizontalPageOverflow(page);
 
-    await page.setViewportSize({ width: 1277, height: 900 });
-    await expect
-      .poll(async () =>
-        Math.round((await getRect(page.locator('[data-home-layout="tree"]'))).width),
-      )
-      .toBe(958);
-    const onePixelShort = await readHomeCards(page);
-    expectCardRows(onePixelShort.cards, [
-      ['expense', 'income'],
-      ['net'],
-      ['trend', 'categories'],
-      ['activity', 'accounts'],
-      ['debts'],
-    ]);
+    await page.setViewportSize({ width: onePixelShortViewport, height: 900 });
+    const onePixelShort = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(958);
+      expectCardRows(snapshot.cards, [
+        ['expense', 'income'],
+        ['net'],
+        ['trend', 'categories'],
+        ['activity', 'accounts'],
+        ['debts'],
+      ]);
+    });
     await expectNoHorizontalPageOverflow(page);
 
-    await page.setViewportSize({ width: 901, height: 900 });
+    const allWrappedViewport = viewportForContent(390, 72, 360);
+    const allWrappedLayout: HomeLayoutKind = allWrappedViewport <= 900 ? 'narrow' : 'tree';
+    await ensureSidebarCollapsed(page);
+    await page.setViewportSize({ width: allWrappedViewport, height: 900 });
     await openNewTransaction(page);
-    await expect
-      .poll(async () =>
-        Math.round((await getRect(page.locator('[data-home-layout="tree"]'))).width),
-      )
-      .toBe(390);
-    const allWrapped = await readHomeCards(page);
-    expectCardRows(allWrapped.cards, [
-      ['expense'],
-      ['income'],
-      ['net'],
-      ['trend'],
-      ['categories'],
-      ['activity'],
-      ['accounts'],
-      ['debts'],
-    ]);
+    const allWrapped = await waitForHomeCards(
+      page,
+      (snapshot) => {
+        expect(Math.round(snapshot.layout.width)).toBe(390);
+        expectCardRows(snapshot.cards, [
+          ['expense'],
+          ['income'],
+          ['net'],
+          ['trend'],
+          ['categories'],
+          ['activity'],
+          ['accounts'],
+          ['debts'],
+        ]);
+      },
+      allWrappedLayout,
+    );
     await expectNoHorizontalPageOverflow(page);
 
     await page.getByRole('button', { name: '收起新增面板', exact: true }).click();
-    await page.setViewportSize({ width: 1278, height: 900 });
-    await expect
-      .poll(async () =>
-        Math.round((await getRect(page.locator('[data-home-layout="tree"]'))).width),
-      )
-      .toBe(959);
-    const restored = await readHomeCards(page);
-    expectDefaultHomeRows(restored.cards);
+    await page.setViewportSize({ width: justFitsViewport, height: 900 });
+    await ensureSidebarExpanded(page);
+    const restored = await waitForHomeCards(page, (snapshot) => {
+      expect(Math.round(snapshot.layout.width)).toBe(959);
+      expectDefaultHomeRows(snapshot.cards);
+    });
     expectCardRectsClose(restored.cards, justFits.cards);
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y3',
+      viewportInset,
+      viewportWidths: {
+        justFits: justFitsViewport,
+        onePixelShort: onePixelShortViewport,
+        allWrapped: allWrappedViewport,
+      },
+      allWrappedLayout,
       contentWidths: {
         justFits: justFits.layout.width,
         onePixelShort: onePixelShort.layout.width,
@@ -1057,18 +1068,74 @@ async function readCardIds(layout: Locator): Promise<HomeCardId[]> {
   });
 }
 
-async function readHomeCards(page: Page): Promise<{
+type HomeLayoutKind = 'tree' | 'narrow';
+
+async function readHomeCards(
+  page: Page,
+  layoutKind: HomeLayoutKind = 'tree',
+): Promise<{
   layout: Rect;
   cardIds: HomeCardId[];
   cards: Record<HomeCardId, Rect>;
 }> {
-  const layout = page.locator('[data-home-layout="tree"]');
+  const layout = page.locator(`[data-home-layout="${layoutKind}"]`);
   await expect(layout).toBeVisible();
   const cards = {} as Record<HomeCardId, Rect>;
   for (const cardId of HOME_CARD_IDS) {
     cards[cardId] = await getRect(layout.locator(`[data-home-card-id="${cardId}"]`));
   }
   return { layout: await getRect(layout), cardIds: await readCardIds(layout), cards };
+}
+
+type HomeCardsSnapshot = Awaited<ReturnType<typeof readHomeCards>>;
+
+/** ResizeObserver 重排非同步；等完整卡片方框與列斷言同時通過再回傳快照。 */
+async function waitForHomeCards(
+  page: Page,
+  verify: (snapshot: HomeCardsSnapshot) => void,
+  layoutKind: HomeLayoutKind = 'tree',
+): Promise<HomeCardsSnapshot> {
+  let snapshot: HomeCardsSnapshot | undefined;
+  await expect(async () => {
+    snapshot = await readHomeCards(page, layoutKind);
+    verify(snapshot);
+  }).toPass({ timeout: 5_000 });
+  if (!snapshot) throw new Error('首頁卡片版面尚未穩定。');
+  return snapshot;
+}
+
+async function ensureSidebarCollapsed(page: Page): Promise<void> {
+  const expandButton = page.getByRole('button', { name: '展開側欄', exact: true });
+  if (!(await expandButton.isVisible())) {
+    await page.getByRole('button', { name: '收合側欄', exact: true }).click();
+  }
+  await expect(expandButton).toBeVisible();
+}
+
+/** 強制頁面有垂直捲動後量實際捲軸與 stable 保留區，合併得到排版可用寬度的總扣除量。 */
+async function measureViewportInset(page: Page): Promise<{
+  scrollbarWidth: number;
+  stableGutterWidth: number;
+  layoutGutterWidth: number;
+}> {
+  await page.addStyleTag({ content: 'html { min-height: 200vh; }' });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollHeight > document.documentElement.clientHeight,
+      ),
+    )
+    .toBe(true);
+  return page.evaluate(() => {
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const stableGutterWidth =
+      document.documentElement.clientWidth - document.documentElement.getBoundingClientRect().width;
+    return {
+      scrollbarWidth,
+      stableGutterWidth,
+      layoutGutterWidth: scrollbarWidth + stableGutterWidth,
+    };
+  });
 }
 
 function expectDefaultHomeRows(cards: Record<HomeCardId, Rect>): void {
