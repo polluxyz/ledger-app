@@ -7,7 +7,7 @@
 - 2j 已以 PR #154 合進 `main`，程式隨 4a 部署到 dev（#156）。plan 與 todo 在 `tasks/archive/phase-2j-*.md`，驗收數字在 plan §6。
 - 2k 首頁改版已以 PR #163（`ad1471f`）合進 `main` 並部署到 dev（只改前端）。部署後在 dev 用無頭瀏覽器點過：首頁版面、展開與收起、最近｜標註切換、三種配色切換、重整後配色保留、390px，沒有 console 錯誤或 4xx／5xx。spec `docs/specs/phase-2k-home-redesign.md`，plan 與 todo 在 `tasks/archive/phase-2k-*.md`，W1～W7 的驗收數字在 plan §6。
 - 討論過程：參考圖與三個版本的比較、分類條配色 demo 都在 `docs/artifacts/home-redesign/`（不進版控）。advisor（Codex）審過 spec 一輪、plan 兩輪，修訂紀錄在 spec §11 與 plan §6。
-- 2l 首頁 A+ 版面與可編輯版面：spec `docs/specs/phase-2l-home-layout.md`、plan 與 todo `tasks/phase-2l-*.md` 待開發者核可。A+ 對照圖與版面編輯原型在 `docs/artifacts/home-design-align/`（不進版控）。advisor（Codex）兩輪意見與分歧在 spec §10。
+- 2l 首頁 A+ 版面與可編輯版面：spec `docs/specs/phase-2l-home-layout.md`、plan 與 todo `tasks/phase-2l-*.md` 開發者 2026-10-25 核可。A+ 對照圖與版面編輯原型在 `docs/artifacts/home-design-align/`（不進版控）。advisor（Codex）兩輪方向意見、兩輪全文審查都在 spec §10，雙方已無分歧。
 - 已知限制（2j spec §1）：交易頁的日期篩選用瀏覽器時區換算，統計用台灣時間。
 - 效能（SC-R13）：統計端點 p95 約 260～310ms，機器有其他負載時曾量到 907～967ms。
 
@@ -18,8 +18,8 @@
 
 ## 下一步
 
-1. 開發者核可 2l 的 spec、plan、todo（schema、API、新套件要明確同意）。
-2. docs PR（todo D0）合併後，照 todo 從 PR1 開始。
+1. docs PR（todo D0）合併後，照 todo 從 PR1 開始。
+2. C0 試裝拖動套件前，再跟開發者確認套件清單。
 
 Orca run `run_dfe66599ba8a`。Codex 設計 worker 的 worktree `home-design`（分支 `polluxyz/home-design`，資料庫 `ledger_homedesign_test`）還開著，PR1 要不要沿用由協調者決定；不用就清掉。
 

@@ -1,8 +1,8 @@
 # 2l 實作計畫：首頁 A+ 版面與可編輯版面
 
-spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、SC-Y1～SC-Y25）。分 3 個 PR，依序合併。
+spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、SC-Y1～SC-Y29）。分 3 個 PR，依序合併。
 
-> 核可：（待開發者核可。schema、API、新套件三項要明確同意。）
+> 核可：開發者 2026-10-25 核可本 plan 與 todo。schema（`UserHomeLayout`）、API（兩個版面端點）、試裝拖動套件的方向已同意；C0 試裝前再確認套件清單。
 
 ## 0. 起點
 
@@ -31,11 +31,13 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 
 依賴 S1。一個 worker 做完 PR1 的網頁部分，因為卡片拆分與渲染器互相牽動，拆開會一直撞同一批檔案。
 
-- **卡片登記表** `apps/web/src/features/home/card-registry.tsx`：`HomeCardId` → 標題、最小寬度、渲染函式。最小寬度從 20rem 起，實測後填。
+- **卡片登記表** `apps/web/src/features/home/card-registry.tsx`：`HomeCardId` → 標題、最小寬度、渲染函式。最小寬度從 20rem 起，實測後填。限制：預設版面在 1280px、左側欄展開（內容區 976px）時不能換行，所以三欄列的每張卡 ≤ (976 − 2 × 間距) ÷ 3（SC-Y1）。
 - **卡片外框** `HomeCard`（決策 320）：標題列、右上連結、內距。PR3 的拖動把手與「移到…」按鈕會放在這個標題列，現在先留一個空的插槽。
-- **渲染器** `HomeLayoutRenderer`：吃 `HomeLayoutV1`，畫根列與分割樹。左右分割用 CSS grid 或 flex，寬度照權重。
-  - 換行（決策 324）：用 `ResizeObserver` 量分割容器寬度，比對子節點最小寬度總和，放不下就照順序分行。換行算法寫成純函式 `wrapSplit(widthPx, minWidths, weights)`，不碰 DOM，單元測試。
-  - 換行狀態要能讓 PR3 讀到（例如 context 給 `isWrapped`），PR1 先不用。
+- **渲染器** `HomeLayoutRenderer`：吃 `HomeLayoutV1`，畫根列與分割樹。左右分割用 CSS grid `minmax(最小寬度, 權重 fr)` 加固定間距（決策 324）。
+  - 節點的不換行最小寬度：卡片取登記表；左右分割＝子節點總和＋(n−1)×間距；上下分割＝子節點最大值。寫成純函式 `minWidthOf(node)`。這個值只用來判斷要不要換行、畫編輯畫布，不當成閱讀模式的硬性欄寬。
+  - 換行（決策 324）：用 `ResizeObserver` 量分割容器寬度，最小寬度大於可用寬度就照順序分行。換行算法寫成純函式 `wrapSplit(widthPx, minWidths, weights, gapPx)`，不碰 DOM。單元測試：剛好放得下、差 1px、全部換行、權重分配遇到最小寬度的夾限（可用 700px、兩卡 320px、權重 6667／3333）、間距有扣。
+  - 巢狀換行（決策 324、SC-Y29）：單獨佔一行的子節點寬度不超過那一行，它的子樹用同一規則往下換行；上下分割跟著可用寬度縮。單元測試用 `x[expense, y[x[income, net, trend, categories], x[activity, accounts, debts]]]`，在 1152px 與 976px 時每一層的結果都不超過可用寬度。
+  - 渲染器留一個「不換行」的模式（PR3 編輯畫布用，寬度不夠時畫布自己橫向捲動），PR1 先不用。
   - 根列的 `extraHeightPx` 在 PR1 一律是 0，但渲染器要支援，PR3 才不用回頭改。
 - **待處理卡**插在第 1 根列之後（決策 322）。
 - **≤900px**（決策 323）：用 `matchMedia('(max-width: 900px)')`，固定順序一欄，不經過分割樹。
@@ -48,7 +50,8 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
   - `debts`：`DebtsCard` 的兩處箭頭換成首頁摘要版 `HomeBalanceSummaryArrow`（決策 317）。`BalanceArrow`、`DebtArrow` 不改。
   - `activity`：`ActivityCard` 套上 `HomeCard` 外框，內容不變。
 - **金色規則**（決策 315）：`use-home-category-colors.ts:77` 改成只看 `expenseGroups` 整體第一列。需要傳進「是不是第一列」與第一列的種類。
-- **container query**（決策 319）：帳戶清單的兩欄斷點改用 container query，量清單自己的寬度。
+- **container query**（決策 319）：帳戶清單的兩欄斷點改用 container query，量展開後清單自己的內容寬度；收起時一律一欄（照現有 `HomeAccountList`）。
+- **借還摘要箭頭**（決策 317）：往來對象吃 `counterparty.totalBalance`，未指向帳本的人吃 `people.amount`；元件測試兩個來源各驗正、負、0。
 - 資料仍由 `LedgerView`／`Dashboard` 打，卡片只吃 props；決策 307（切帳本不重打個人資料）與 306（寫入後一起更新）的結構不能動。
 - 2k 留下的測試：SC-H2、H3 的請求增量測試照樣過。選擇器跟著新版面改，不刪驗證的行為。
 
@@ -56,7 +59,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 
 依賴 W-A1。派工前確認沒有別的 worktree 在跑 Web e2e，3100、5273、5274 沒被佔。
 
-- `e2e/home.spec.ts` 改寫：SC-Y1（1280px 量 8 張卡的位置與寬度比例，容許 2px 誤差）、SC-Y2（390、900、901px）、SC-Y3（右側欄打開，3 種寬度，沒有橫向捲動）、SC-Y8（帳戶清單 439／440px）、SC-Y4 的趨勢卡高度。
+- `e2e/home.spec.ts` 改寫：SC-Y1（1280px、左側欄展開與收合各一次，量 8 張卡的位置與寬度比例，容許 2px 誤差）、SC-Y2（390、900、901px）、SC-Y3（從登記表算出的 3 種內容寬度，沒有橫向捲動）、SC-Y8（6 個帳戶、展開後清單 content box 439／440px，收起時一欄）、SC-Y4 的趨勢卡高度。
 - 2k 的 SC-H14（390px 長字、深淺色）照樣跑。
 - 截圖：1280px 與 390px，淺色與深色，三種配色。協調者逐張看。
 
@@ -88,10 +91,12 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - `apps/api/src/users/`：
   - `home-layout.service.ts`：`get(userId)`、`put(userId, dto)`。
   - PUT 的條件更新照 spec §4.2：`expectedRevision > 0` 用 `updateMany` 帶 revision 條件，`count === 0` 回 409；`expectedRevision === 0` 用 `create`，Prisma `P2002`（違反唯一）回 409。不在 transaction 裡先讀再寫。
-  - DTO：`schemaVersion` 必須是 1；`expectedRevision` 是 0 以上整數；`layout` 用 `@IsObject()` 或 null，再在 service 呼叫 `parseHomeLayoutV1`。不合格丟 `BadRequestException('版面格式不正確')`。`layout` 不能用 class-validator 的 nested，因為全站 `whitelist` 會把樹裡的鍵剝掉；要讓 `layout` 原樣進 service（用 `@Allow()` 加自訂 transform 確認，或在 controller 取原始 body）。worker 寫一條測試證明樹裡的鍵沒有被剝掉。
+  - DTO：`schemaVersion` 必須是 1；`expectedRevision` 是 0 以上整數；`layout` 用 `@IsObject()` 或 null，再在 service 呼叫 `parseHomeLayoutV1`。不合格丟 `BadRequestException('版面格式不正確')`。`layout` 不用 class-validator 的 nested，全站 `whitelist` 就不會遞迴進去（advisor 已核對 `validation.pipe.js`）。worker 仍寫一條 e2e：存一份再讀回，樹完整。
+  - 禁鍵 guard（決策 334）：全站 pipe 會先默默刪掉 `__proto__`、`constructor`、`prototype`（`validation.pipe.js:64-65`、`170-196`），service 看不到。所以 PUT 端點掛一個 guard，在 pipe 之前掃 `req.body` 的自有鍵，出現就丟 `BadRequestException('版面格式不正確')`。用明確的堆疊走訪，不用遞迴；巢狀超過 32 層直接丟同一個例外。`parseHomeLayoutV1` 也照樣拒絕這三個鍵。不要繞過 DTO 改吃原始 body。
+  - DTO 層的錯誤照全站既有格式（`Validation failed`＋`details`），不另做轉換（spec §4.3）。
   - controller 加 `GET me/home-layout/web`、`PUT me/home-layout/web`，userId 取 `user.sub`。OpenAPI 標註。
 - `error-codes.ts` 加 `HOME_LAYOUT_REVISION_CONFLICT`，409 回應帶這個碼（照既有 409 的格式）。
-- 測試：service 單元測試（條件更新、P2002、null 重設）；API e2e：SC-Y11（含兩個並發請求，用 `Promise.all`）、SC-Y12 的 6 條 400 並確認資料庫沒變。
+- 測試：service 單元測試（條件更新、P2002、null 重設）；API e2e：SC-Y11（含兩個並發請求，用 `Promise.all`）、SC-Y12 的 6 條 400 並確認資料庫沒變（`__proto__`、`constructor` 用 `.send(原始 JSON 字串)` 加 `Content-Type: application/json`）；guard 的單元測試。
 
 ### 2.3 PR2 驗收（協調者）
 
@@ -131,17 +136,26 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - 拖動轉接層：只在這一層用 C0 選定的套件，轉成 `moveCard` 呼叫。
 - 列內分隔線：RRP。根列高度把手：自己用 Pointer Events 加鍵盤（W284）。
 - 「移到…」選單（W283）、live region、焦點（決策 328）。
-- 409 彈窗與網路錯誤、逾時（決策 329、W285）。逾時的判定：PUT 超過 10 秒沒回應，或 fetch 丟出非 HTTP 錯誤時，GET 比對 revision 與內容。
-- 編輯中縮到 ≤900px 視同取消；有換行時「編輯」停用；離開首頁丟草稿（決策 323、324，W286）。
+- 409 彈窗與網路錯誤、逾時（決策 329、W285）：`api-client.ts` 加可選的 `signal`；PUT 10 秒用 `AbortController` 中止；中止、網路錯誤、409 後都先 GET，用結構比對（不比字串）判斷是否已存。比對函式寫成純函式並單元測試。
+  - 這次 GET 直接打網路（不用 React Query 快取），有自己的 10 秒逾時與自己的 signal。
+  - 送出到判斷結束之間，停用會改草稿的操作。結果回來先比對世代號碼，不符就丟掉，不做後續動作。
+- 草稿 store（W286）：放在首頁之外（App 層 context 或模組層 store），以使用者 id 區分。
+  - 存整個編輯工作階段：草稿、是否在編輯、原始 revision、進編輯時的版面、是否有改動。回到首頁沿用原始 revision。
+  - 世代號碼：登出、換使用者、「取消」時加 1，並中止進行中的請求。`AuthProvider.tsx:41-47` 目前登出只清 token、帳本偏好與 QueryClient，要接上 store。
+  - 有改動時掛 `beforeunload`，掛在不會跟著首頁卸載的那一層。
+- ≤900px 暫停編輯、草稿保留，暫停期間不寫回草稿、不更新原始 revision（決策 323）；編輯畫布用渲染器的不換行模式，寬度不夠時畫布橫向捲動（決策 324）。
+- `canDrop` 與「移到…」共用一個檢查：結果的深度與節點數不超過 `parseHomeLayoutV1` 的上限（決策 327、SC-Y28）。不檢查最小寬度。
 - 不是編輯模式時，首頁行為與 PR1 相同（SC-Y22）。
 
 ### 3.4 E3：PR3 的 Web e2e（`2l-layout-edit-e2e`，Codex）
 
-依賴 E2。SC-Y14～Y21、Y23。
+依賴 E2。SC-Y14～Y21、Y23、Y26～Y29。
+
+- SC-Y26 的舊版面與 SC-Y29 的巢狀版面：用 API 先 PUT 進去再開首頁。
 
 - SC-Y14 的另一台裝置：同一個測試開第二個 browser context 登入同一帳號。
 - SC-Y18 的兩個分頁：同一個 context 開兩個 page。
-- SC-Y19 的逾時：用 `page.route` 讓 PUT 先送到後端再延遲回應。
+- SC-Y19 的 4 條路徑：PUT 直接失敗；`page.route` 擋住 PUT 超過 10 秒（還沒存進去）；同上再讓 GET 也失敗；`route.fetch()` 先送到後端、再延遲回應（已存進去）。
 - SC-Y23：沿用 `csp.spec.ts` 的做法，打 `vite preview`，進編輯模式拖一次，console 沒有 CSP 違規。
 
 ### 3.5 PR3 驗收（協調者）
@@ -154,15 +168,18 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 
 ## 4. 風險與對策
 
-| 風險                                                        | 對策                                                                               |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| 全站 `whitelist` 把 `layout` 樹裡的鍵剝掉，存進去的是空物件 | B1 必須有測試證明原樣進 service；協調者驗收時用 e2e 存一份再讀回比對               |
-| 並發的第一次建立兩個都成功                                  | 主鍵 `(userId, surface)` 保證只會有 1 列；`create` 撞到回 409；e2e 驗              |
-| 拖動套件在正式 CSP 下不能用                                 | C0 檢查點先驗；兩者都不過就自己寫 Pointer Events 拖動層，不放寬 CSP                |
-| 換行與分隔線互相干擾（換行後分隔線位置不對）                | 決策 324：有換行時不能編輯；換行是純渲染，不改資料                                 |
-| 卡片內容高度變動造成列高跳動                                | 列高＝內容最小高度＋`extraHeightPx`，內容變長時列自動長高，不存內容高度            |
-| PR1 拆卡時破壞 2k 的「切帳本不重打」與「寫入後一起更新」    | 資料仍由 `LedgerView`／`Dashboard` 打，卡片只吃 props；2k 的請求增量測試必須照樣過 |
-| Codex 週額度用完                                            | 網頁不換層，停下來問開發者；PR2 是 `backend` 角色，不受影響                        |
+| 風險                                                     | 對策                                                                               |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 全站 pipe 先刪掉 `__proto__` 等鍵，service 看不到        | PUT 端點的 guard 在 pipe 之前擋；e2e 用原始 JSON 字串送；另存一份再讀回確認樹完整  |
+| 並發的第一次建立兩個都成功                               | 主鍵 `(userId, surface)` 保證只會有 1 列；`create` 撞到回 409；e2e 驗              |
+| 拖動套件在正式 CSP 下不能用                              | C0 檢查點先驗；兩者都不過就自己寫 Pointer Events 拖動層，不放寬 CSP                |
+| 換行與分隔線互相干擾（換行後分隔線位置不對）             | 決策 324：編輯畫布不換行、改成橫向捲動；換行只在非編輯時畫，不改資料               |
+| 逾時後重送，把已存的版面當成衝突                         | 決策 329：中止後先 GET 結構比對；409 也先比對，相同就當成已存                      |
+| A 的草稿留在記憶體，B 登入後存成 B 的版面                | 草稿以使用者 id 區分，登出或換使用者清掉；世代號碼丟掉晚到的結果；SC-Y19、Y27 驗   |
+| 巢狀版面在閱讀模式撐出整頁橫向捲軸                       | 決策 324：一層層換行，最小寬度不當硬性欄寬；SC-Y29 的單元測試與 e2e 驗             |
+| 卡片內容高度變動造成列高跳動                             | 列高＝內容最小高度＋`extraHeightPx`，內容變長時列自動長高，不存內容高度            |
+| PR1 拆卡時破壞 2k 的「切帳本不重打」與「寫入後一起更新」 | 資料仍由 `LedgerView`／`Dashboard` 打，卡片只吃 props；2k 的請求增量測試必須照樣過 |
+| Codex 週額度用完                                         | 網頁不換層，停下來問開發者；PR2 是 `backend` 角色，不受影響                        |
 
 ## 5. 部署順序
 
