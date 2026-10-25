@@ -1,0 +1,48 @@
+.layout,
+.fixedLayout {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.band {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.horizontalSplit {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.horizontalLine {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.verticalSplit {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.fixedGroup {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.pendingSlot {
+  min-width: 0;
+}

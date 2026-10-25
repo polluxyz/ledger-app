@@ -1,8 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { Counterparty, LedgerGroup, Paginated } from '@ledger/shared';
 import { Link } from 'react-router-dom';
-import { getAvatarLabels } from '../../lib/avatar-labels';
-import { BalanceArrow } from './BalanceArrow';
+import { HomeBalanceSummaryArrow } from '../home/HomeBalanceSummaryArrow';
 import styles from './DebtsCard.module.css';
 
 type QueryState<T> = Pick<UseQueryResult<T, Error>, 'data' | 'error' | 'isLoading'>;
@@ -13,7 +12,7 @@ export interface DebtsCardProps {
   showAllLink: boolean;
 }
 
-const DEBTS_OVERVIEW_HREF = '/transactions?view=debts&tab=overview';
+export const DEBTS_OVERVIEW_HREF = '/transactions?view=debts&tab=overview';
 
 /** 首頁借還卡呈現兩份 query 的回應；金額和方向沿用回應及借還清單元件。 */
 export function DebtsCard({
@@ -23,11 +22,6 @@ export function DebtsCard({
 }: DebtsCardProps) {
   const counterparties = counterpartiesQuery.data?.items.slice(0, 5) ?? [];
   const ledgerGroups = unpointedLedgersQuery.data ?? [];
-  const avatarLabels = getAvatarLabels([
-    '我',
-    ...counterparties.map((counterparty) => counterparty.displayName),
-    ...ledgerGroups.flatMap((group) => group.people.map(({ person }) => person.name)),
-  ]);
   const counterpartyTotal = counterpartiesQuery.data?.total ?? 0;
   const bothQueriesSucceeded =
     !counterpartiesQuery.isLoading &&
@@ -39,18 +33,7 @@ export function DebtsCard({
   const isEmpty = bothQueriesSucceeded && counterparties.length === 0 && ledgerGroups.length === 0;
 
   return (
-    <section className={styles.card} aria-labelledby="home-debts-heading">
-      <header className={styles.header}>
-        <h2 className={styles.heading} id="home-debts-heading">
-          借還
-        </h2>
-        {showAllLink && (
-          <Link className={styles.allLink} to={DEBTS_OVERVIEW_HREF}>
-            全部 →
-          </Link>
-        )}
-      </header>
-
+    <div className={styles.content}>
       {counterpartiesQuery.isLoading && (
         <p className={styles.status} role="status">
           對象載入中…
@@ -65,14 +48,10 @@ export function DebtsCard({
         <ul className={styles.people} aria-label="往來對象">
           {counterparties.map((counterparty) => (
             <li className={styles.person} key={counterparty.id}>
-              <span className={styles.name}>{counterparty.displayName}</span>
-              <span className={styles.balance}>
-                <BalanceArrow
-                  name={counterparty.displayName}
-                  nameLabel={avatarLabels.get(counterparty.displayName)}
-                  amount={counterparty.totalBalance}
-                />
-              </span>
+              <HomeBalanceSummaryArrow
+                name={counterparty.displayName}
+                amount={counterparty.totalBalance}
+              />
             </li>
           ))}
         </ul>
@@ -99,14 +78,7 @@ export function DebtsCard({
           <ul className={styles.ledgerPeople} aria-label={`${group.ledger.name}未指向對象`}>
             {group.people.map(({ person, amount }) => (
               <li className={styles.person} key={person.id}>
-                <span className={styles.name}>{person.name}</span>
-                <span className={styles.balance}>
-                  <BalanceArrow
-                    name={person.name}
-                    nameLabel={avatarLabels.get(person.name)}
-                    amount={amount}
-                  />
-                </span>
+                <HomeBalanceSummaryArrow name={person.name} amount={amount} />
               </li>
             ))}
           </ul>
@@ -118,6 +90,6 @@ export function DebtsCard({
           沒有借還
         </p>
       )}
-    </section>
+    </div>
   );
 }

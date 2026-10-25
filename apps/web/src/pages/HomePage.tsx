@@ -14,6 +14,7 @@ import type {
   StatisticsTotals,
   Transaction,
 } from '@ledger/shared';
+import { DEFAULT_HOME_LAYOUT_V1 } from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
 import { homeCategoryColor, useHomeCategoryColors } from '../app/use-home-category-colors';
 import { Button } from '../components/Button';
@@ -22,14 +23,15 @@ import { Icon } from '../components/Icon';
 import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
 import { AccountsQueryProvider, useAccounts } from '../features/accounts/use-accounts';
-import { AssetCard } from '../features/accounts/AssetCard';
+import { HomeAccountList } from '../features/accounts/HomeAccountList';
 import { useCounterparties } from '../features/debts/use-debts';
-import { DebtsCard } from '../features/debts/DebtsCard';
+import { DEBTS_OVERVIEW_HREF, DebtsCard } from '../features/debts/DebtsCard';
 import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { HomeLayoutRenderer, type HomeCardContents } from '../features/home/HomeLayoutRenderer';
 import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
 import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
@@ -144,31 +146,24 @@ function LedgerView() {
     />
   ) : (
     <PageContent>
-      <PageHeader title="總覽" />
-      <div className={styles.trendOnly}>
-        <BalanceTrendChart
-          months={balanceTrendQuery.data?.months}
-          isLoading={balanceTrendQuery.isLoading}
-          error={balanceTrendQuery.error}
-          className={styles.trendChart}
-        />
-      </div>
-      {/* 等帳本查詢完成後再掛載，避免切入首頁時重抓待處理資料。 */}
-      {!ledgerLoading && <PendingCard />}
-      {ledgerLoading && <p className={styles.note}>載入中…</p>}
-      {ledgerError && <FormError error={ledgerError} />}
-      {!ledgerLoading && !ledgerError && (
-        <section className={styles.card}>
-          <p className={styles.note}>找不到任何帳本。</p>
-        </section>
-      )}
-      <h2 className={styles.myHeading}>我的</h2>
-      <div className={styles.cards}>
-        <AssetCard totalQuery={balanceTrendQuery} accountsQuery={accountsQuery} />
-        <DebtsCard
-          counterpartiesQuery={counterpartiesQuery}
-          unpointedLedgersQuery={unpointedLedgersQuery}
-          showAllLink={false}
+      <div className={styles.dashboard}>
+        <PageHeader title="總覽" />
+        <HomeLayoutRenderer
+          fixedGroups={[['trend'], ['accounts', 'debts']]}
+          cards={buildPersonalHomeCards({
+            balanceTrendQuery,
+            accountsQuery,
+            counterpartiesQuery,
+            unpointedLedgersQuery,
+          })}
+          pendingCard={
+            <>
+              {!ledgerLoading && <PendingCard />}
+              {ledgerLoading && <p className={styles.note}>載入中…</p>}
+              {ledgerError && <FormError error={ledgerError} />}
+              {!ledgerLoading && !ledgerError && <p className={styles.note}>找不到任何帳本。</p>}
+            </>
+          }
         />
       </div>
     </PageContent>
@@ -352,15 +347,102 @@ function Dashboard({
   }
 
   const statisticsData = statistics.data;
-  const categorySection =
-    statisticsData?.ledger && statisticsData.mine ? (
+  const statisticsHref = `/stats?tab=cat&ledger=${encodeURIComponent(ledger.id)}&month=${period.from.slice(0, 7)}`;
+  const categoryContent =
+    statistics.error || (statisticsData && (!statisticsData.ledger || !statisticsData.mine)) ? (
+      <p className={styles.status} role="status">
+        統計暫時無法載入
+      </p>
+    ) : statistics.isLoading || !statisticsData ? (
+      <p className={styles.status} role="status">
+        載入中…
+      </p>
+    ) : (
       <HomeCategorySection
         expenseGroups={statisticsData.expenseGroups}
-        ledgerName={ledger.kind === 'SHARED' ? ledger.name : null}
-        statisticsHref={`/stats?tab=cat&ledger=${encodeURIComponent(ledger.id)}&month=${period.from.slice(0, 7)}`}
-        colorOf={(group: StatisticsGroup) => homeCategoryColor(group, mode, chartTheme)}
+        colorOf={(group: StatisticsGroup, isFirstGroup: boolean) =>
+          homeCategoryColor(group, mode, chartTheme, isFirstGroup)
+        }
       />
-    ) : undefined;
+    );
+  const activityProps: ActivityCardProps = {
+    activityTab,
+    onActivityTabChange,
+    hasMarkedTab,
+    recentTabRef,
+    markedTabRef,
+    onTabKeyDown: moveActivityTab,
+    markedQuery,
+    markedTransactions,
+    markedExpanded,
+    onExpandMarked,
+    recentTransactions: recent.data?.items ?? [],
+    recentLoading: recent.isLoading || recent.isPlaceholderData,
+    recentError: recent.error,
+    onSelectRecent: startEditing,
+    onFillRecent: fillAccount,
+    onCopyRecent: startCopying,
+    onDeleteRecent: startDeleting,
+    onToggleRecentMark: (transaction) => toggleMark(transaction),
+    onSelectMarked: (transaction) => startMarkedAction(transaction, 'edit'),
+    onFillMarked: (transaction) => startMarkedAction(transaction, 'fillAccount'),
+    onToggleMarked: (transaction, ledgerId) => toggleMark(transaction, ledgerId),
+    selectedId,
+  };
+  const cards: HomeCardContents = {
+    expense: {
+      href: statisticsHref,
+      children: (
+        <LedgerStatContent ledger={ledger} statistics={statistics} field="expense" announceError />
+      ),
+    },
+    income: {
+      href: statisticsHref,
+      children: <LedgerStatContent ledger={ledger} statistics={statistics} field="income" />,
+    },
+    net: {
+      href: statisticsHref,
+      children: <LedgerStatContent ledger={ledger} statistics={statistics} field="net" />,
+    },
+    trend: {
+      titleMeta: (
+        <TrendTotal balanceTrendQuery={balanceTrendQuery} shared={ledger.kind === 'SHARED'} />
+      ),
+      children: (
+        <BalanceTrendChart
+          months={balanceTrendQuery.data?.months}
+          isLoading={balanceTrendQuery.isLoading}
+          error={balanceTrendQuery.error}
+          className={styles.trendChart}
+          showHeading={false}
+        />
+      ),
+    },
+    categories: {
+      title: ledger.kind === 'SHARED' ? `本月支出 · ${ledger.name}` : '本月支出',
+      action: <Link to={statisticsHref}>明細 →</Link>,
+      children: categoryContent,
+    },
+    activity: {
+      headerContent: <ActivityCardHeader {...activityProps} />,
+      ariaLabel: '最近與標註',
+      children: <ActivityCardPanel {...activityProps} />,
+    },
+    accounts: {
+      action: <Link to="/accounts">管理</Link>,
+      children: <AccountCardContent accountsQuery={accountsQuery} />,
+    },
+    debts: {
+      action: <Link to={DEBTS_OVERVIEW_HREF}>全部 →</Link>,
+      children: (
+        <DebtsCard
+          counterpartiesQuery={counterpartiesQuery}
+          unpointedLedgersQuery={unpointedLedgersQuery}
+          showAllLink={false}
+        />
+      ),
+    },
+  };
 
   return (
     <>
@@ -378,55 +460,11 @@ function Dashboard({
               </>
             }
           />
-          <LedgerStatsRow ledger={ledger} statistics={statistics} period={period} />
-          <PendingCard />
-
-          <div className={styles.activityAndTrend}>
-            <ActivityCard
-              activityTab={activityTab}
-              onActivityTabChange={onActivityTabChange}
-              hasMarkedTab={hasMarkedTab}
-              recentTabRef={recentTabRef}
-              markedTabRef={markedTabRef}
-              onTabKeyDown={moveActivityTab}
-              markedQuery={markedQuery}
-              markedTransactions={markedTransactions}
-              markedExpanded={markedExpanded}
-              onExpandMarked={onExpandMarked}
-              recentTransactions={recent.data?.items ?? []}
-              recentLoading={recent.isLoading || recent.isPlaceholderData}
-              recentError={recent.error}
-              onSelectRecent={startEditing}
-              onFillRecent={fillAccount}
-              onCopyRecent={startCopying}
-              onDeleteRecent={startDeleting}
-              onToggleRecentMark={(transaction) => toggleMark(transaction)}
-              onSelectMarked={(transaction) => startMarkedAction(transaction, 'edit')}
-              onFillMarked={(transaction) => startMarkedAction(transaction, 'fillAccount')}
-              onToggleMarked={(transaction, ledgerId) => toggleMark(transaction, ledgerId)}
-              selectedId={selectedId}
-            />
-            <BalanceTrendChart
-              months={balanceTrendQuery.data?.months}
-              isLoading={balanceTrendQuery.isLoading}
-              error={balanceTrendQuery.error}
-              className={styles.trendChart}
-            />
-          </div>
-
-          <h2 className={styles.myHeading}>我的</h2>
-          <div className={styles.cards}>
-            <AssetCard
-              totalQuery={balanceTrendQuery}
-              accountsQuery={accountsQuery}
-              categorySection={categorySection}
-            />
-            <DebtsCard
-              counterpartiesQuery={counterpartiesQuery}
-              unpointedLedgersQuery={unpointedLedgersQuery}
-              showAllLink
-            />
-          </div>
+          <HomeLayoutRenderer
+            layout={DEFAULT_HOME_LAYOUT_V1}
+            cards={cards}
+            pendingCard={<PendingCard />}
+          />
         </div>
       </PageContent>
 
@@ -460,14 +498,64 @@ interface ActivityCardProps {
   onToggleMarked: (transaction: Transaction, ledgerId?: string) => void;
 }
 
-/** 「最近｜標註」共用一張卡，分頁與焦點留在 LedgerView，不隨帳本切換重設。 */
-function ActivityCard({
+/** 最近／標註分頁放進 HomeCard 的共用標題列，原有鍵盤操作與焦點狀態留在 LedgerView。 */
+function ActivityCardHeader({
   activityTab,
   onActivityTabChange,
   hasMarkedTab,
   recentTabRef,
   markedTabRef,
   onTabKeyDown,
+  markedQuery,
+}: ActivityCardProps) {
+  const visibleTab: HomeActivityTab = hasMarkedTab ? activityTab : 'recent';
+
+  return (
+    <div className={styles.activityHeader}>
+      <div className={styles.activityTabs} role="tablist" aria-label="最近與標註">
+        <button
+          ref={recentTabRef}
+          id="home-recent-tab"
+          type="button"
+          role="tab"
+          aria-selected={visibleTab === 'recent'}
+          aria-controls="home-activity-panel"
+          tabIndex={visibleTab === 'recent' ? 0 : -1}
+          className={visibleTab === 'recent' ? styles.activeTab : styles.tab}
+          onClick={() => onActivityTabChange('recent')}
+          onKeyDown={(event) => onTabKeyDown(event, 'recent')}
+        >
+          最近
+        </button>
+        {hasMarkedTab && (
+          <button
+            ref={markedTabRef}
+            id="home-marked-tab"
+            type="button"
+            role="tab"
+            aria-selected={visibleTab === 'marked'}
+            aria-controls="home-activity-panel"
+            tabIndex={visibleTab === 'marked' ? 0 : -1}
+            className={visibleTab === 'marked' ? styles.activeTab : styles.tab}
+            onClick={() => onActivityTabChange('marked')}
+            onKeyDown={(event) => onTabKeyDown(event, 'marked')}
+          >
+            標註{markedQuery.data?.total ? ` ${markedQuery.data.total}` : ''}
+          </button>
+        )}
+      </div>
+      {visibleTab === 'recent' && (
+        <Link className={styles.cardLink} to="/transactions">
+          查看全部
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function ActivityCardPanel({
+  activityTab,
+  hasMarkedTab,
   markedQuery,
   markedTransactions,
   markedExpanded,
@@ -488,84 +576,42 @@ function ActivityCard({
   const visibleTab: HomeActivityTab = hasMarkedTab ? activityTab : 'recent';
 
   return (
-    <section className={styles.dataCard} aria-label="最近與標註">
-      <div className={styles.activityHeader}>
-        <div className={styles.activityTabs} role="tablist" aria-label="最近與標註">
-          <button
-            ref={recentTabRef}
-            id="home-recent-tab"
-            type="button"
-            role="tab"
-            aria-selected={visibleTab === 'recent'}
-            aria-controls="home-activity-panel"
-            tabIndex={visibleTab === 'recent' ? 0 : -1}
-            className={visibleTab === 'recent' ? styles.activeTab : styles.tab}
-            onClick={() => onActivityTabChange('recent')}
-            onKeyDown={(event) => onTabKeyDown(event, 'recent')}
-          >
-            最近
-          </button>
-          {hasMarkedTab && (
-            <button
-              ref={markedTabRef}
-              id="home-marked-tab"
-              type="button"
-              role="tab"
-              aria-selected={visibleTab === 'marked'}
-              aria-controls="home-activity-panel"
-              tabIndex={visibleTab === 'marked' ? 0 : -1}
-              className={visibleTab === 'marked' ? styles.activeTab : styles.tab}
-              onClick={() => onActivityTabChange('marked')}
-              onKeyDown={(event) => onTabKeyDown(event, 'marked')}
-            >
-              標註{markedQuery.data?.total ? ` ${markedQuery.data.total}` : ''}
-            </button>
-          )}
-        </div>
-        {visibleTab === 'recent' && (
-          <Link className={styles.cardLink} to="/transactions">
-            查看全部
-          </Link>
-        )}
-      </div>
-
-      <div
-        id="home-activity-panel"
-        className={styles.activityPanel}
-        role="tabpanel"
-        aria-labelledby={visibleTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
-        tabIndex={0}
-      >
-        {visibleTab === 'recent' ? (
-          <section className={styles.activityContent} aria-label="最近交易">
-            <RecentBody
-              transactions={recentTransactions}
-              isLoading={recentLoading}
-              error={recentError}
-              selectedId={selectedId}
-              onSelect={onSelectRecent}
-              onFillAccount={onFillRecent}
-              onCopy={onCopyRecent}
-              onDelete={onDeleteRecent}
-              onToggleMark={onToggleRecentMark}
-            />
-          </section>
-        ) : (
-          <MarkedTransactionsCard
-            transactions={markedTransactions}
-            total={markedQuery.data?.total ?? 0}
-            expanded={markedExpanded}
-            isLoading={markedQuery.isLoading}
-            error={markedQuery.error}
-            onExpand={onExpandMarked}
+    <div
+      id="home-activity-panel"
+      className={styles.activityPanel}
+      role="tabpanel"
+      aria-labelledby={visibleTab === 'recent' ? 'home-recent-tab' : 'home-marked-tab'}
+      tabIndex={0}
+    >
+      {visibleTab === 'recent' ? (
+        <section className={styles.activityContent} aria-label="最近交易">
+          <RecentBody
+            transactions={recentTransactions}
+            isLoading={recentLoading}
+            error={recentError}
             selectedId={selectedId}
-            onSelect={onSelectMarked}
-            onFillAccount={onFillMarked}
-            onToggleMark={onToggleMarked}
+            onSelect={onSelectRecent}
+            onFillAccount={onFillRecent}
+            onCopy={onCopyRecent}
+            onDelete={onDeleteRecent}
+            onToggleMark={onToggleRecentMark}
           />
-        )}
-      </div>
-    </section>
+        </section>
+      ) : (
+        <MarkedTransactionsCard
+          transactions={markedTransactions}
+          total={markedQuery.data?.total ?? 0}
+          expanded={markedExpanded}
+          isLoading={markedQuery.isLoading}
+          error={markedQuery.error}
+          onExpand={onExpandMarked}
+          selectedId={selectedId}
+          onSelect={onSelectMarked}
+          onFillAccount={onFillMarked}
+          onToggleMark={onToggleMarked}
+        />
+      )}
+    </div>
   );
 }
 
@@ -729,100 +775,126 @@ function GuestStat({ label }: { label: string }) {
   );
 }
 
-/** 目前帳本與台灣時間當月的摘要；數字全由共用的統計 query 提供。 */
-function LedgerStatsRow({
-  ledger,
-  statistics,
-  period,
+function buildPersonalHomeCards({
+  balanceTrendQuery,
+  accountsQuery,
+  counterpartiesQuery,
+  unpointedLedgersQuery,
 }: {
-  ledger: LedgerSummary;
-  statistics: ReturnType<typeof useLedgerStatistics>;
-  period: ReturnType<typeof currentTaiwanMonthRange>;
-}) {
-  if (statistics.error) {
-    return (
-      <div className={styles.statsMessage} role="alert">
-        統計暫時無法載入
-      </div>
-    );
-  }
+  balanceTrendQuery: ReturnType<typeof useBalanceTrend>;
+  accountsQuery: ReturnType<typeof useAccounts>;
+  counterpartiesQuery: ReturnType<typeof useCounterparties>;
+  unpointedLedgersQuery: ReturnType<typeof useLedgerGroups>;
+}): HomeCardContents {
+  return {
+    trend: {
+      titleMeta: <TrendTotal balanceTrendQuery={balanceTrendQuery} shared={false} />,
+      children: (
+        <BalanceTrendChart
+          months={balanceTrendQuery.data?.months}
+          isLoading={balanceTrendQuery.isLoading}
+          error={balanceTrendQuery.error}
+          className={styles.trendChart}
+          showHeading={false}
+        />
+      ),
+    },
+    accounts: {
+      action: <Link to="/accounts">管理</Link>,
+      children: <AccountCardContent accountsQuery={accountsQuery} />,
+    },
+    debts: {
+      children: (
+        <DebtsCard
+          counterpartiesQuery={counterpartiesQuery}
+          unpointedLedgersQuery={unpointedLedgersQuery}
+          showAllLink={false}
+        />
+      ),
+    },
+  };
+}
 
-  if (statistics.isLoading || !statistics.data) {
+function AccountCardContent({ accountsQuery }: { accountsQuery: ReturnType<typeof useAccounts> }) {
+  if (accountsQuery.isLoading) {
     return (
-      <div className={styles.statsMessage} role="status">
+      <p className={styles.status} role="status">
         載入中…
-      </div>
+      </p>
     );
   }
-
-  // 回應格式不符契約時視為載入錯誤，不能讓整頁崩潰或顯示出假的 0。
-  const ledgerTotals = statistics.data.ledger;
-  const mineTotals = statistics.data.mine;
-  if (!ledgerTotals || !mineTotals) {
+  if (accountsQuery.error) {
     return (
-      <div className={styles.statsMessage} role="alert">
-        統計暫時無法載入
-      </div>
+      <p className={styles.status} role="status">
+        帳戶暫時無法載入
+      </p>
     );
   }
+  return <HomeAccountList accounts={accountsQuery.data ?? []} />;
+}
 
-  const shared = ledger.kind === 'SHARED';
-  const month = period.from.slice(0, 7);
-
+function TrendTotal({
+  balanceTrendQuery,
+  shared,
+}: {
+  balanceTrendQuery: ReturnType<typeof useBalanceTrend>;
+  shared: boolean;
+}) {
+  const total = balanceTrendQuery.data?.months.at(-1)?.total;
+  const label = shared ? '我的總資產' : '總資產';
+  if (balanceTrendQuery.isLoading) {
+    return <span className={styles.trendTotalStatus}>載入中…</span>;
+  }
+  if (balanceTrendQuery.error || total === undefined) {
+    return <span className={styles.trendTotalStatus}>—</span>;
+  }
   return (
-    <div className={styles.stats} aria-label="本月收支">
-      <StatLink
-        label="本月支出"
-        amount={ledgerTotals.expense}
-        mine={mineTotals.expense}
-        shared={shared}
-        ledgerId={ledger.id}
-        month={month}
-      />
-      <StatLink
-        label="本月收入"
-        amount={ledgerTotals.income}
-        mine={mineTotals.income}
-        shared={shared}
-        ledgerId={ledger.id}
-        month={month}
-      />
-      <StatLink
-        label="結餘"
-        amount={ledgerTotals.net}
-        mine={mineTotals.net}
-        shared={shared}
-        ledgerId={ledger.id}
-        month={month}
-      />
-    </div>
+    <span className={styles.trendTotal} aria-label={`${label} ${formatMoney(total)}`}>
+      <strong className={styles.trendTotalValue}>{formatMoney(total)}</strong>
+      <span className={styles.trendTotalLabel}>{label}</span>
+    </span>
   );
 }
 
-/** 每張卡只格式化回傳金額，並將目前帳本與月份帶到統計頁。 */
-function StatLink({
-  label,
-  amount,
-  mine,
-  shared,
-  ledgerId,
-  month,
+type HomeStatisticsField = keyof Pick<StatisticsTotals, 'expense' | 'income' | 'net'>;
+
+/** 摘要卡只呈現統計 API 回應；三張卡共用同一份 query，不在前端推導金額。 */
+function LedgerStatContent({
+  ledger,
+  statistics,
+  field,
+  announceError = false,
 }: {
-  label: string;
-  amount: StatisticsTotals['expense'];
-  mine: StatisticsTotals['expense'];
-  shared: boolean;
-  ledgerId: string;
-  month: string;
+  ledger: LedgerSummary;
+  statistics: ReturnType<typeof useLedgerStatistics>;
+  field: HomeStatisticsField;
+  announceError?: boolean;
 }) {
+  const ledgerTotals = statistics.data?.ledger;
+  const mineTotals = statistics.data?.mine;
+  const error = Boolean(statistics.error || (statistics.data && (!ledgerTotals || !mineTotals)));
+
+  if (error) {
+    return (
+      <p className={styles.status} role={announceError ? 'alert' : 'status'}>
+        統計暫時無法載入
+      </p>
+    );
+  }
+  if (statistics.isLoading || !ledgerTotals || !mineTotals) {
+    return (
+      <p className={styles.status} role="status">
+        載入中…
+      </p>
+    );
+  }
+
   return (
-    <Link
-      className={styles.stat}
-      to={`/stats?tab=cat&ledger=${encodeURIComponent(ledgerId)}&month=${month}`}
-    >
-      <span className={styles.statLabel}>{label}</span>
-      <strong className={styles.statValue}>{formatMoney(amount)}</strong>
-      {shared && <span className={styles.statMine}>我 {formatMoney(mine)}</span>}
-    </Link>
+    <div className={styles.statContent}>
+      <strong className={styles.statValue}>{formatMoney(ledgerTotals[field])}</strong>
+      {ledger.kind === 'SHARED' && (
+        <span className={styles.statMine}>我 {formatMoney(mineTotals[field])}</span>
+      )}
+    </div>
   );
 }

@@ -427,6 +427,6 @@ describe('Transaction form without any account', () => {
     expect(await screen.findByText(/記帳前要先有一個帳戶/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '前往新增帳戶' })).toHaveAttribute('href', '/accounts');
     // 沒有帳戶下拉，也就沒有「選不到東西還能按送出」的狀態。
-    expect(screen.queryByLabelText('帳戶')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '帳戶' })).not.toBeInTheDocument();
   });
 });

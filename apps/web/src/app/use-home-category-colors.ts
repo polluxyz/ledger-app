@@ -73,16 +73,22 @@ export function useHomeCategoryColors() {
   return { mode, choose: homeCategoryColorStore.setMode };
 }
 
-/** 首頁分類段依偏好呈色；固定分組與未分類仍沿用統計圖的中性灰。 */
+/** 首頁分類依偏好呈色；金色只給支出清單整體第一列的一般分類。 */
 export function homeCategoryColor(
   group: StatisticsGroup,
   mode: HomeCategoryColorMode,
   chartTheme: ChartTheme,
+  isFirstExpenseGroup = true,
 ): string {
   if (mode === 'color') {
     return getStatisticsGroupColor(group, chartTheme);
   }
-  if (mode === 'gold' && group.kind === 'CATEGORY' && group.category !== null) {
+  if (
+    mode === 'gold' &&
+    isFirstExpenseGroup &&
+    group.kind === 'CATEGORY' &&
+    group.category !== null
+  ) {
     return 'var(--color-accent)';
   }
   return NEUTRAL_CHART_COLORS[chartTheme];
