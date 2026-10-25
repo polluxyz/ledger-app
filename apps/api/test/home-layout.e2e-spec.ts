@@ -184,20 +184,22 @@ describe('Home layout — persistence and validation (e2e)', () => {
     },
   );
 
-  it.each([{ schemaVersion: 2 }, { expectedRevision: -1 }, { expectedRevision: 1.5 }])(
-    'DTO 錯誤 %j 沿用 Validation failed 格式',
-    async (invalid) => {
-      await put(body()).expect(200);
-      const before = await snapshot();
-      const response = await put({ ...body(nested, 1), ...invalid }).expect(400);
-      expect(response.body).toEqual({
-        statusCode: 400,
-        errorCode: ErrorCode.VALIDATION_FAILED,
-        message: 'Validation failed',
-        details: expect.any(Array) as unknown,
-      });
-      expect((response.body as ApiErrorResponse).details?.length).toBeGreaterThan(0);
-      expect(await snapshot()).toBe(before);
-    },
-  );
+  it.each([
+    { schemaVersion: 2 },
+    { expectedRevision: -1 },
+    { expectedRevision: 1.5 },
+    { expectedRevision: 2147483648 },
+  ])('DTO 錯誤 %j 沿用 Validation failed 格式', async (invalid) => {
+    await put(body()).expect(200);
+    const before = await snapshot();
+    const response = await put({ ...body(nested, 1), ...invalid }).expect(400);
+    expect(response.body).toEqual({
+      statusCode: 400,
+      errorCode: ErrorCode.VALIDATION_FAILED,
+      message: 'Validation failed',
+      details: expect.any(Array) as unknown,
+    });
+    expect((response.body as ApiErrorResponse).details?.length).toBeGreaterThan(0);
+    expect(await snapshot()).toBe(before);
+  });
 });
