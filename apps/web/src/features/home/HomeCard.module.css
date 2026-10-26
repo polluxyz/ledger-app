@@ -15,6 +15,14 @@
   text-decoration: none;
 }
 
+.editingCard {
+  position: relative;
+}
+
+.dragging {
+  opacity: 0.5;
+}
+
 .linkCard:hover,
 .linkCard:focus-visible {
   border-color: var(--color-accent);
@@ -37,6 +45,12 @@
 .controlsSlot {
   display: inline-block;
   flex: none;
+}
+
+.editingControlsSlot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .titleGroup {
@@ -74,6 +88,14 @@
   min-width: 0;
   flex: 1;
   align-items: center;
+}
+
+.headerMain {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .body {

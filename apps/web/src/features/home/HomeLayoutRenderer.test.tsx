@@ -1,12 +1,24 @@
-import { useEffect } from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { useEffect, useState } from 'react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOME_LAYOUT_V1, HOME_CARD_IDS, type HomeCardId } from '@ledger/shared';
 import { HomeLayoutRenderer, type HomeCardContents } from './HomeLayoutRenderer';
 
 const originalMatchMedia = window.matchMedia;
+const originalResizeObserver = window.ResizeObserver;
+
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 function setViewportWidthMatches(matches: boolean) {
+  vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  Object.defineProperty(window, 'ResizeObserver', {
+    configurable: true,
+    value: TestResizeObserver,
+  });
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
   const media = {
     matches,
@@ -35,7 +47,16 @@ function cardContents(cardIds: readonly HomeCardId[] = HOME_CARD_IDS): HomeCardC
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  if (originalResizeObserver) {
+    Object.defineProperty(window, 'ResizeObserver', {
+      configurable: true,
+      value: originalResizeObserver,
+    });
+  } else {
+    Reflect.deleteProperty(window, 'ResizeObserver');
+  }
   if (originalMatchMedia) {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
@@ -177,5 +198,122 @@ describe('HomeLayoutRenderer', () => {
       'data-home-layout',
       'tree',
     );
+  });
+
+  it('keeps reading mode free of editor controls while card links and buttons remain usable', () => {
+    setViewportWidthMatches(false);
+    const onClick = vi.fn();
+    const cards = cardContents();
+    cards.expense = {
+      children: (
+        <>
+          <a href="/transactions">查看交易</a>
+          <button onClick={onClick} type="button">
+            卡片按鈕
+          </button>
+        </>
+      ),
+    };
+    render(<HomeLayoutRenderer layout={DEFAULT_HOME_LAYOUT_V1} cards={cards} />);
+
+    expect(document.querySelector('[data-home-drag-handle]')).not.toBeInTheDocument();
+    expect(document.querySelector('[role="separator"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '查看交易' })).toHaveAttribute('href', '/transactions');
+    fireEvent.click(screen.getByRole('button', { name: '卡片按鈕' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks only card content in edit mode and keeps the move menu outside inert areas', () => {
+    setViewportWidthMatches(false);
+    const cards = cardContents();
+    const { container } = render(
+      <>
+        <h1>總覽</h1>
+        <section data-testid="ai-draft">AI 草稿</section>
+        <HomeLayoutRenderer
+          layout={DEFAULT_HOME_LAYOUT_V1}
+          cards={cards}
+          editing
+          narrowViewport={false}
+          onLayoutChange={vi.fn()}
+        />
+      </>,
+    );
+
+    const card = container.querySelector<HTMLElement>('[data-home-card-id="expense"]')!;
+    expect(card.querySelector('[class*="headerMain"]')).toHaveAttribute('inert');
+    expect(card.querySelector('[class*="body"]')).toHaveAttribute('inert');
+    expect(card.querySelector('[data-home-card-controls]')).not.toHaveAttribute('inert');
+    expect(within(card).getByRole('button', { name: '拖動 本月支出' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '總覽' })).not.toHaveAttribute('inert');
+    expect(screen.getByTestId('ai-draft')).not.toHaveAttribute('inert');
+  });
+
+  it('disables invalid move directions and returns focus with a live announcement after moving', async () => {
+    setViewportWidthMatches(false);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      return {
+        left: 0,
+        top: 0,
+        right: 500,
+        bottom: 500,
+        width: 500,
+        height: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      };
+    });
+    const cards = cardContents();
+    function EditableLayout() {
+      const [layout, setLayout] = useState(DEFAULT_HOME_LAYOUT_V1);
+      return (
+        <HomeLayoutRenderer
+          layout={layout}
+          cards={cards}
+          editing
+          narrowViewport={false}
+          onLayoutChange={setLayout}
+        />
+      );
+    }
+    const { container } = render(<EditableLayout />);
+    const expense = container.querySelector<HTMLElement>('[data-home-card-id="expense"]')!;
+
+    fireEvent.click(within(expense).getByRole('button', { name: '移到…' }));
+    fireEvent.change(screen.getByRole('combobox', { name: '目標卡' }), {
+      target: { value: 'income' },
+    });
+
+    expect(screen.getByRole('button', { name: '左側' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '右側' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '上方' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '下方' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '上方' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        document.querySelector('[data-home-card-id="expense"] [data-home-drag-handle]'),
+      ),
+    );
+    expect(screen.getByText('本月支出 已移到 本月收入 上方')).toBeInTheDocument();
+  });
+
+  it('shows the one-column paused view without editor handles at 900px', () => {
+    setViewportWidthMatches(true);
+    const { container } = render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing={false}
+        narrowViewport
+        wrapMode="responsive"
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('[data-home-layout="narrow"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-home-drag-handle]')).not.toBeInTheDocument();
+    expect(container.querySelector('[role="separator"]')).not.toBeInTheDocument();
   });
 });

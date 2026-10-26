@@ -29,9 +29,12 @@ import { DEBTS_OVERVIEW_HREF, DebtsCard } from '../features/debts/DebtsCard';
 import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
+import { useCurrentUser } from '../features/auth/use-current-user';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { HomeLayoutRenderer, type HomeCardContents } from '../features/home/HomeLayoutRenderer';
+import { HomeLayoutConflictDialog } from '../features/home/HomeLayoutConflictDialog';
+import { useHomeLayout } from '../features/home/use-home-layout';
 import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
 import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
@@ -211,6 +214,8 @@ function Dashboard({
   onSwitchToMarkedLedger,
 }: DashboardProps) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
+  const currentUser = useCurrentUser();
+  const homeLayout = useHomeLayout(currentUser.data?.id ?? null, true);
   const period = currentTaiwanMonthRange();
   const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
   const { mode } = useHomeCategoryColors();
@@ -453,6 +458,31 @@ function Dashboard({
             actions={
               <>
                 <LedgerSwitcher />
+                {homeLayout.isEditing ? (
+                  <>
+                    <Button disabled={homeLayout.isSaving} onClick={homeLayout.finishEditing}>
+                      {homeLayout.isSaving ? '儲存中…' : '完成'}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={homeLayout.isSaving}
+                      onClick={homeLayout.cancelEditing}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={homeLayout.isSaving}
+                      onClick={homeLayout.resetDraft}
+                    >
+                      重設為預設
+                    </Button>
+                  </>
+                ) : homeLayout.canStartEditing ? (
+                  <Button variant="secondary" onClick={homeLayout.startEditing}>
+                    編輯
+                  </Button>
+                ) : null}
                 <Button onClick={startAdding}>
                   <Icon name="plus" />
                   新增交易
@@ -460,14 +490,27 @@ function Dashboard({
               </>
             }
           />
+          {homeLayout.error && <FormError error={homeLayout.error} />}
           <HomeLayoutRenderer
-            layout={DEFAULT_HOME_LAYOUT_V1}
+            layout={homeLayout.layout ?? DEFAULT_HOME_LAYOUT_V1}
             cards={cards}
             pendingCard={<PendingCard />}
+            editing={homeLayout.isEditing}
+            editorDisabled={homeLayout.isSaving}
+            narrowViewport={homeLayout.isNarrow}
+            wrapMode={homeLayout.isEditing ? 'none' : 'responsive'}
+            onLayoutChange={homeLayout.updateDraft}
           />
         </div>
       </PageContent>
 
+      <HomeLayoutConflictDialog
+        open={Boolean(homeLayout.conflict)}
+        isSaving={homeLayout.isSaving}
+        onLoadLatest={homeLayout.loadLatest}
+        onOverwrite={homeLayout.overwriteConflict}
+        onClose={homeLayout.closeConflict}
+      />
       <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
     </>
   );
