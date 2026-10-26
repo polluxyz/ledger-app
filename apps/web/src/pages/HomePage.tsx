@@ -64,8 +64,9 @@ interface PendingMarkedAction {
 }
 
 /**
- * 首頁把帳本摘要、最近交易、標註與資產卡組在一起；數字、分類與排序都直接呈現 API 回應。
- * 只有登入首頁提供帳戶 query context，讓右側表單和待處理卡共用同一份使用者帳戶資料。
+ * 登入且有帳本時，首頁採資料驅動版面：讀取伺服器保存的使用者設定，未曾儲存則用 `DEFAULT_HOME_LAYOUT_V1`，由 `HomeLayoutRenderer` 依版面排卡。
+ * 桌機編輯模式可拖動卡片、調整分隔線與列高；按「完成」會將版面存回伺服器，方便依個人習慣整理首頁。
+ * 數字、分類與排序都直接呈現 API 回應；登入首頁提供帳戶 query context，讓右側表單和待處理卡共用同一份使用者帳戶資料。
  */
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
