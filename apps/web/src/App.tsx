@@ -9,6 +9,7 @@ import { AppProviders } from './app/providers';
 import { RightPanel } from './app/RightPanel';
 import { RightPanelProvider } from './app/RightPanelProvider';
 import { useDisclosure } from './app/use-disclosure';
+import { AiSessionProvider } from './features/ai/ai-session';
 import styles from './App.module.css';
 
 /**
@@ -37,25 +38,31 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppProviders>
-        <RightPanelProvider>
-          <PageToolbarSlotProvider>
-            <div className={styles.shell}>
-              <AppTopBar menuTrigger={menu.triggerProps} />
-              <div className={styles.body}>
-                <AppSidebar panel={menu.panelProps} isOpen={menu.isOpen} onNavigate={menu.close} />
-                <main className={styles.main}>
-                  <PageToolbar />
-                  <div className={styles.content}>
-                    <PageErrorBoundary>
-                      <AppRoutes />
-                    </PageErrorBoundary>
-                  </div>
-                </main>
-                <RightPanel />
+        <AiSessionProvider>
+          <RightPanelProvider>
+            <PageToolbarSlotProvider>
+              <div className={styles.shell}>
+                <AppTopBar menuTrigger={menu.triggerProps} />
+                <div className={styles.body}>
+                  <AppSidebar
+                    panel={menu.panelProps}
+                    isOpen={menu.isOpen}
+                    onNavigate={menu.close}
+                  />
+                  <main className={styles.main}>
+                    <PageToolbar />
+                    <div className={styles.content}>
+                      <PageErrorBoundary>
+                        <AppRoutes />
+                      </PageErrorBoundary>
+                    </div>
+                  </main>
+                  <RightPanel />
+                </div>
               </div>
-            </div>
-          </PageToolbarSlotProvider>
-        </RightPanelProvider>
+            </PageToolbarSlotProvider>
+          </RightPanelProvider>
+        </AiSessionProvider>
       </AppProviders>
     </BrowserRouter>
   );

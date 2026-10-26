@@ -120,6 +120,8 @@ describe('AI drafts on the transactions page', () => {
 
   async function parseDrafts(user: ReturnType<typeof userEvent.setup>, drafts: TransactionDraft[]) {
     parseResponses.push({ drafts });
+    const toggle = await screen.findByRole('button', { name: 'AI 記帳' }, WAIT);
+    if (toggle.getAttribute('aria-expanded') !== 'true') await user.click(toggle);
     const input = await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT);
     await user.type(input, '早餐 60 現金');
     await user.click(screen.getByRole('button', { name: '送出' }));
@@ -130,18 +132,21 @@ describe('AI drafts on the transactions page', () => {
     );
   }
 
-  it('W208 places the input above the details and appends returned drafts', async () => {
+  it('W246 portals the icon and expanded input to the toolbar and appends returned drafts', async () => {
     const user = userEvent.setup();
     parseResponses.push({ drafts: [makeDraft()] });
     render(<App />);
 
-    const input = await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT);
+    const toggle = await screen.findByRole('button', { name: 'AI 記帳' }, WAIT);
     const details = await screen.findByText(
       '還沒有任何交易，從上方新增第一筆吧。',
       undefined,
       WAIT,
     );
-    expect(input.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    const input = await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT);
     await user.type(input, '早餐 60 現金');
     await user.click(screen.getByRole('button', { name: '送出' }));
 
@@ -314,7 +319,7 @@ describe('AI drafts on the transactions page', () => {
       '請選擇分類',
     );
     expect(screen.getByRole('button', { name: '確認草稿：名稱未提供' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '全部確認' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '全部確認' })).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: '編輯草稿：轉帳' }));
     const transferForm = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
@@ -381,7 +386,7 @@ describe('AI drafts on the transactions page', () => {
     expect(screen.getByRole('button', { name: '編輯草稿：早餐' })).toBeInTheDocument();
   });
 
-  it('W214 keeps drafts only in page state and ignores a response that arrives after leaving the page', async () => {
+  it('W250 keeps a response and its draft across route changes, but a fresh page lifetime starts empty', async () => {
     const user = userEvent.setup();
     let resolveParse: ((value: ParseTransactionResponse) => void) | undefined;
     requestApi.mockImplementation((path: string, options?: { method?: string; body?: unknown }) => {
@@ -393,18 +398,19 @@ describe('AI drafts on the transactions page', () => {
       return configureFallback(path, options);
     });
     const { unmount } = render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'AI 記帳' }, WAIT));
     const input = await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT);
     await user.type(input, '晚餐 180 現金');
     await user.click(screen.getByRole('button', { name: '送出' }));
     await user.click(screen.getByRole('link', { name: '帳戶' }));
     resolveParse?.({ drafts: [makeDraft({ title: '晚餐' })] });
     await user.click(await screen.findByRole('link', { name: '交易' }, WAIT));
-    expect(await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '編輯草稿：晚餐' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'AI 記帳' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '編輯草稿：晚餐' }, WAIT)).toBeInTheDocument();
 
     unmount();
     render(<App />);
-    expect(await screen.findByRole('textbox', { name: '用一句話記帳' }, WAIT)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'AI 記帳' }, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '編輯草稿：晚餐' })).not.toBeInTheDocument();
     expect(window.location.search).toBe('');
     expect(localStorage.getItem('ledger.aiDrafts')).toBeNull();

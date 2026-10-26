@@ -24,6 +24,8 @@ interface AiDraftListProps {
   items: AiDraftItem[];
   currentLedgerId: string;
   busyKeys?: ReadonlySet<string>;
+  blockedReasons?: ReadonlyMap<string, string>;
+  editingKey?: string | null;
   isConfirmingAll?: boolean;
   onConfirm: (item: AiDraftItem) => void;
   onDiscard: (key: string) => void;
@@ -36,6 +38,8 @@ export function AiDraftList({
   items,
   currentLedgerId,
   busyKeys = new Set<string>(),
+  blockedReasons = new Map<string, string>(),
+  editingKey = null,
   isConfirmingAll = false,
   onConfirm,
   onDiscard,
@@ -49,14 +53,17 @@ export function AiDraftList({
       Array.from(
         new Map(
           items
-            .filter(({ draft }) => draft.type !== 'TRANSFER' && draft.categoryId !== null)
+            .filter(
+              ({ key, draft }) =>
+                !blockedReasons.has(key) && draft.type !== 'TRANSFER' && draft.categoryId !== null,
+            )
             .map(({ draft }) => {
               const type: CategoryType = draft.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
               return [`${draft.ledgerId}:${type}`, { ledgerId: draft.ledgerId, type }];
             }),
         ).values(),
       ),
-    [items],
+    [blockedReasons, items],
   );
   const categoryQueries = useQueries({
     queries: categoryLookups.map(({ ledgerId, type }) => ({
@@ -70,7 +77,9 @@ export function AiDraftList({
       categoryQueries[index]?.data ?? [],
     ]),
   );
-  const completeItems = items.filter(({ draft }) => isDraftComplete(draft));
+  const completeItems = items.filter(
+    ({ key, draft }) => isDraftComplete(draft) && !blockedReasons.has(key),
+  );
 
   return (
     <section className={styles.section} aria-labelledby="ai-draft-list-title">
@@ -91,7 +100,9 @@ export function AiDraftList({
         {items.map((item) => {
           const { draft, key } = item;
           const complete = isDraftComplete(draft);
+          const blockedReason = blockedReasons.get(key);
           const busy = busyKeys.has(key) || isConfirmingAll;
+          const editing = editingKey === key;
           const type = draft.type === 'INCOME' ? 'INCOME' : 'EXPENSE';
           const categoryName =
             draft.categoryId === null
@@ -118,7 +129,7 @@ export function AiDraftList({
               <button
                 className={styles.draft}
                 type="button"
-                disabled={busy}
+                disabled={busy || editing || blockedReason !== undefined}
                 onClick={() => onSelect(item)}
                 aria-label={`編輯草稿：${title}`}
               >
@@ -184,7 +195,7 @@ export function AiDraftList({
                   className={styles.iconButton}
                   type="button"
                   aria-label={`確認草稿：${title}`}
-                  disabled={!complete || busy}
+                  disabled={!complete || busy || editing || blockedReason !== undefined}
                   onClick={() => onConfirm(item)}
                 >
                   ✓
@@ -203,6 +214,9 @@ export function AiDraftList({
                 <p className={styles.error} role="alert">
                   {item.error}
                 </p>
+              )}
+              {blockedReason !== undefined && (
+                <p className={styles.blockedReason}>{blockedReason}</p>
               )}
             </li>
           );

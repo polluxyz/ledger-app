@@ -77,6 +77,7 @@ export const ICON_PATHS = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  sparkle: <path d="M12 3.5 14.4 9.6 20.5 12l-6.1 2.4L12 20.5l-2.4-6.1L3.5 12l6.1-2.4z" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   calendar: (
     <>

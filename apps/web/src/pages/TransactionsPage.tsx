@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import {
-  isDraftComplete,
   MANUAL_TRANSACTION_TYPES,
-  type CreateTransactionRequest,
   type LedgerSummary,
   type ManualTransactionType,
   type Transaction,
-  type TransactionDraft,
 } from '@ledger/shared';
 import { useRightPanel } from '../app/right-panel-context';
 import { Button } from '../components/Button';
@@ -23,8 +20,9 @@ import { DebtHistoryView } from '../features/debts/DebtHistoryView';
 import { DebtsView } from '../features/debts/DebtsView';
 import { readOpenCounterpartyState } from '../features/linking/navigation';
 import { SharedSettlementsView } from '../features/settlements/SharedSettlementsView';
-import { AiDraftInput } from '../features/ai/AiDraftInput';
-import { AiDraftList, type AiDraftItem } from '../features/ai/AiDraftList';
+import { AiDraftSection } from '../features/ai/AiDraftSection';
+import { AiEntry } from '../features/ai/AiEntry';
+import { useAiSession } from '../features/ai/ai-session';
 import { readSettleIntentState } from '../features/settlements/settle-intent';
 import {
   TransactionFilterDrawer,
@@ -41,10 +39,7 @@ import {
   toListQuery,
   type TransactionFilters,
 } from '../features/transactions/transaction-query';
-import {
-  useCreateTransactionForLedger,
-  useTransactions,
-} from '../features/transactions/use-transactions';
+import { useTransactions } from '../features/transactions/use-transactions';
 import { useSetTransactionMark } from '../features/transactions/use-marks';
 import styles from './TransactionsPage.module.css';
 
@@ -135,6 +130,7 @@ type DebtsTab = 'overview' | 'personal' | 'shared' | 'history';
  */
 function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
+  const aiSession = useAiSession();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const settleIntent = readSettleIntentState(location.state);
@@ -188,16 +184,9 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     toListQuery(filters, page),
   );
   const setTransactionMark = useSetTransactionMark();
-  const createTransactionForLedger = useCreateTransactionForLedger();
-  const [aiDrafts, setAiDrafts] = useState<AiDraftItem[]>([]);
-  const [busyDraftKeys, setBusyDraftKeys] = useState<Set<string>>(() => new Set());
-  const [isConfirmingAllDrafts, setIsConfirmingAllDrafts] = useState(false);
-  const draftSequence = useRef(0);
-  const busyDraftKeysRef = useRef(new Set<string>());
-  const confirmingAllRef = useRef(false);
   // 面板顯示的目標：新增表單（預設）、編輯一般交易或檢視債務詳情（plan §2.5）。
   const [panelTarget, setPanelTarget] = useState<PanelTarget>({ kind: 'new' });
-  const activeDraftKey = panelTarget.kind === 'draft' ? panelTarget.item.key : null;
+  const activeDraftKey = isOpen && panelTarget.kind === 'draft' ? panelTarget.item.key : null;
   const [pendingCounterpartyId, setPendingCounterpartyId] = useState<string | null>(null);
   const [expandedCounterpartyId, setExpandedCounterpartyId] = useState<string | null>(null);
 
@@ -263,102 +252,15 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
     open();
   }
 
-  function addAiDrafts(drafts: TransactionDraft[]) {
-    const items = drafts.map((draft) => {
-      draftSequence.current += 1;
-      return { key: `${ledger.id}-ai-draft-${draftSequence.current}`, draft };
-    });
-    setAiDrafts((current) => [...current, ...items]);
-  }
-
-  function startEditingDraft(item: AiDraftItem) {
-    if (busyDraftKeysRef.current.has(item.key)) return;
+  function startEditingDraft(key: string) {
+    const item = aiSession.drafts.find((draftItem) => draftItem.key === key);
+    if (!item || aiSession.busyKeys.has(key)) return;
     setPanelTarget({ kind: 'draft', item });
     open();
   }
 
-  function discardAiDraft(key: string) {
-    setAiDrafts((current) => current.filter((item) => item.key !== key));
-    setPanelTarget((current) =>
-      current.kind === 'draft' && current.item.key === key ? { kind: 'new' } : current,
-    );
-  }
-
-  function setDraftFormSaving(key: string, saving: boolean) {
-    if (saving) busyDraftKeysRef.current.add(key);
-    else busyDraftKeysRef.current.delete(key);
-    setBusyDraftKeys(new Set(busyDraftKeysRef.current));
-  }
-
-  function draftRequest(draft: TransactionDraft): CreateTransactionRequest {
-    return {
-      type: draft.type,
-      amount: draft.amount!,
-      date: draft.date!,
-      ...(draft.type === 'TRANSFER'
-        ? {}
-        : draft.categoryId !== null
-          ? { categoryId: draft.categoryId }
-          : { newCategoryName: draft.newCategoryName! }),
-      accountId: draft.accountId!,
-      ...(draft.type === 'TRANSFER' ? { toAccountId: draft.toAccountId! } : {}),
-      ...(draft.title === null ? {} : { title: draft.title }),
-    };
-  }
-
-  async function writeAiDraft(item: AiDraftItem, fromConfirmAll = false): Promise<boolean> {
-    if (
-      !isDraftComplete(item.draft) ||
-      item.key === activeDraftKey ||
-      busyDraftKeysRef.current.size > 0 ||
-      (confirmingAllRef.current && !fromConfirmAll)
-    ) {
-      return false;
-    }
-
-    busyDraftKeysRef.current.add(item.key);
-    setBusyDraftKeys(new Set(busyDraftKeysRef.current));
-    try {
-      await createTransactionForLedger.mutateAsync({
-        ledgerId: item.draft.ledgerId,
-        input: draftRequest(item.draft),
-      });
-      setAiDrafts((current) => current.filter((draftItem) => draftItem.key !== item.key));
-      return true;
-    } catch {
-      setAiDrafts((current) =>
-        current.map((draftItem) =>
-          draftItem.key === item.key
-            ? { ...draftItem, error: '寫入失敗，請稍後再試。' }
-            : draftItem,
-        ),
-      );
-      return false;
-    } finally {
-      busyDraftKeysRef.current.delete(item.key);
-      setBusyDraftKeys(new Set(busyDraftKeysRef.current));
-    }
-  }
-
-  async function confirmAllAiDrafts() {
-    if (confirmingAllRef.current || busyDraftKeysRef.current.size > 0) return;
-    confirmingAllRef.current = true;
-    setIsConfirmingAllDrafts(true);
-    const candidates = aiDrafts.filter(
-      ({ key, draft }) => key !== activeDraftKey && isDraftComplete(draft),
-    );
-    try {
-      for (const item of candidates) {
-        if (!(await writeAiDraft(item, true))) break;
-      }
-    } finally {
-      confirmingAllRef.current = false;
-      setIsConfirmingAllDrafts(false);
-    }
-  }
-
   function handleDraftSaved(key: string) {
-    setAiDrafts((current) => current.filter((item) => item.key !== key));
+    aiSession.removeSavedDraft(key);
     setPanelTarget((current) =>
       current.kind === 'draft' && current.item.key === key ? { kind: 'new' } : current,
     );
@@ -442,6 +344,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
 
   return (
     <>
+      <AiEntry ledger={ledger} isVisible={view === 'details'} />
       <PageContent>
         <PageHeader title="交易" />
 
@@ -531,6 +434,12 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
           </div>
         )}
 
+        {view === 'debts' && (aiSession.isParsing || aiSession.drafts.length > 0) && (
+          <p className={styles.note} role="status">
+            {aiSession.isParsing ? 'AI 處理中' : `有 ${aiSession.drafts.length} 筆 AI 草稿`}
+          </p>
+        )}
+
         {view === 'debts' ? (
           debtsTab === 'shared' ? (
             <SharedSettlementsView settleIntent={sharedSettleIntent} />
@@ -550,19 +459,11 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         ) : (
           // 篩選是獨立的一張卡片，列表與分頁收在下面那一張。
           <>
-            <AiDraftInput ledgerId={ledger.id} onParsed={addAiDrafts} />
-            {aiDrafts.length > 0 && (
-              <AiDraftList
-                items={aiDrafts}
-                currentLedgerId={ledger.id}
-                busyKeys={new Set([...busyDraftKeys, ...(activeDraftKey ? [activeDraftKey] : [])])}
-                isConfirmingAll={isConfirmingAllDrafts}
-                onConfirm={(item) => void writeAiDraft(item)}
-                onDiscard={discardAiDraft}
-                onSelect={startEditingDraft}
-                onConfirmAll={() => void confirmAllAiDrafts()}
-              />
-            )}
+            <AiDraftSection
+              currentLedgerId={ledger.id}
+              activeDraftKey={activeDraftKey}
+              onSelect={startEditingDraft}
+            />
             <TransactionFilterDrawer
               open={filtersOpen}
               id={filterPanelId}
@@ -604,7 +505,7 @@ function LedgerTransactions({ ledger }: { ledger: LedgerSummary }) {
         target={panelTarget}
         onClose={closeWorkbench}
         onDraftSaved={handleDraftSaved}
-        onDraftSavingChange={setDraftFormSaving}
+        onDraftSavingChange={aiSession.markDraftSaving}
       />
     </>
   );

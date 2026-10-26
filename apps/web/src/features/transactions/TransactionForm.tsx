@@ -92,7 +92,7 @@ interface TransactionFormProps {
   /** 編輯成功或 AI 草稿新增成功後呼叫。 */
   onSaved?: () => void;
   /** 讓頁面在草稿表單送出期間鎖住同一筆。 */
-  onDraftSavingChange?: (saving: boolean) => void;
+  onDraftSavingChange?: (saving: boolean) => boolean | void;
   /**
    * 編輯模式的「取消」。有傳才渲染那顆按鈕——新增表單是常駐的，沒有「取消」
    * 可言（phase-2h · D9）。
@@ -1216,7 +1216,7 @@ function TransactionFormContent({
           ...(note === '' ? {} : { note }),
           ...(ledgerSplitInput === null ? {} : { ledgerSplit: ledgerSplitInput }),
         };
-        if (draft !== undefined) onDraftSavingChange?.(true);
+        if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
         try {
           await createTransaction.mutateAsync(input);
           if (draft !== undefined) {
@@ -1353,7 +1353,7 @@ function TransactionFormContent({
         return;
       }
 
-      if (draft !== undefined) onDraftSavingChange?.(true);
+      if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
       try {
         await createTransaction.mutateAsync({
           type,
