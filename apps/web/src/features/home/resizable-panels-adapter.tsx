@@ -2,8 +2,8 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
-  useState,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -14,6 +14,7 @@ import {
   Separator,
   type Layout,
   type LayoutChangedMeta,
+  useGroupRef,
 } from 'react-resizable-panels';
 import type { HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { HOME_LAYOUT_GAP_PX, minWidthOf } from './layout-math';
@@ -45,30 +46,33 @@ export function ResizableSplitView({
   renderChild: (child: HomeLayoutNode, childIndex: number) => ReactNode;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
+  const imperativeGroupRef = useGroupRef();
   const groupId = `home-layout-${path.bandIndex}-${path.nodePath.join('-') || 'root'}`;
-  const panelIds = node.children.map((_, index) => `${groupId}-panel-${index}`);
+  const panelCount = node.children.length;
+  const panelIds = useMemo(
+    () => Array.from({ length: panelCount }, (_, index) => `${groupId}-panel-${index}`),
+    [groupId, panelCount],
+  );
   const minimums = node.children.map((child) => minimumSizeOf(child, node.axis));
-  const [measuredGroupSize, setMeasuredGroupSize] = useState(0);
+  const defaultLayout = useMemo(
+    () =>
+      Object.fromEntries(
+        node.weights.map((weight, index) => [panelIds[index]!, (weight / 10_000) * 100]),
+      ),
+    [node.weights, panelIds],
+  );
 
+  // Group 是非受控元件；權重、取消、重設與載入最新都要同步回套件版面。
   useEffect(() => {
-    const element = groupRef.current;
-    if (!element) return;
-    const measure = () =>
-      setMeasuredGroupSize(node.axis === 'x' ? element.clientWidth : element.clientHeight);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [node.axis]);
-
-  const measuredAvailableSize = Math.max(
-    0,
-    measuredGroupSize - HOME_LAYOUT_GAP_PX * (node.children.length - 1),
-  );
-  const defaultLayout = Object.fromEntries(
-    node.weights.map((weight, index) => [panelIds[index]!, (weight / 10_000) * 100]),
-  );
+    const group = imperativeGroupRef.current;
+    if (!group) return;
+    const currentLayout = group.getLayout();
+    const layoutMatchesWeights = node.weights.every((weight, index) => {
+      const currentSize = currentLayout[panelIds[index]!];
+      return currentSize !== undefined && Math.abs(currentSize - (weight / 10_000) * 100) < 0.01;
+    });
+    if (!layoutMatchesWeights) group.setLayout(defaultLayout);
+  }, [defaultLayout, imperativeGroupRef, node.weights, panelIds]);
   const onLayoutChanged = useCallback(
     (nextLayout: Layout, meta: LayoutChangedMeta) => {
       if (disabled || !meta.isUserInteraction) return;
@@ -106,6 +110,7 @@ export function ResizableSplitView({
       defaultLayout={defaultLayout}
       disabled={disabled}
       elementRef={groupRef}
+      groupRef={imperativeGroupRef}
       id={groupId}
       orientation={node.axis === 'x' ? 'horizontal' : 'vertical'}
       onLayoutChanged={onLayoutChanged}
@@ -126,19 +131,6 @@ export function ResizableSplitView({
             <Separator
               aria-label={`${cardNames[index] ?? `第 ${index + 1} 張卡`}與${cardNames[index + 1] ?? `第 ${index + 2} 張卡`}分隔線`}
               aria-orientation={node.axis === 'x' ? 'vertical' : 'horizontal'}
-              aria-valuemax={separatorMaximumPercent(
-                node.weights,
-                minimums,
-                index,
-                measuredAvailableSize,
-              )}
-              aria-valuemin={separatorMinimumPercent(
-                node.weights,
-                minimums,
-                index,
-                measuredAvailableSize,
-              )}
-              aria-valuenow={Math.round(pairPercentage(node.weights, index))}
               aria-valuetext={`${cardNames[index] ?? `第 ${index + 1} 張卡`} ${Math.round(pairPercentage(node.weights, index))}%`}
               className={`${styles.resizableSeparator} ${node.axis === 'x' ? styles.verticalSeparator : styles.horizontalSeparator}`}
               disabled={disabled}
@@ -234,33 +226,6 @@ function firstChangedPair(
 function pairPercentage(weights: readonly number[], index: number) {
   const total = weights[index]! + weights[index + 1]!;
   return (weights[index]! / total) * 100;
-}
-
-function separatorMinimumPercent(
-  weights: readonly number[],
-  minimums: readonly number[],
-  index: number,
-  availableSize: number,
-) {
-  const pair = weights[index]! + weights[index + 1]!;
-  const pairSize = (pair / 10_000) * availableSize;
-  return pairSize > 0 ? Math.min(100, Math.ceil((minimums[index]! / pairSize) * 100)) : 0;
-}
-
-function separatorMaximumPercent(
-  weights: readonly number[],
-  minimums: readonly number[],
-  index: number,
-  availableSize: number,
-) {
-  const pair = weights[index]! + weights[index + 1]!;
-  const pairSize = (pair / 10_000) * availableSize;
-  return pairSize > 0
-    ? Math.max(
-        separatorMinimumPercent(weights, minimums, index, availableSize),
-        Math.floor(100 - (minimums[index + 1]! / pairSize) * 100),
-      )
-    : 100;
 }
 
 function minimumSizeOf(node: HomeLayoutNode, axis: 'x' | 'y'): number {

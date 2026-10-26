@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOME_LAYOUT_V1 } from '@ledger/shared';
 import { resizeSplit } from './layout-ops';
@@ -37,6 +37,7 @@ describe('ResizableSplitView', () => {
 
   const layout = DEFAULT_HOME_LAYOUT_V1;
   const node = layout.bands[1]!.root;
+  if (node.type !== 'split') throw new Error('預期測試版面第二列為分割。');
 
   it('maps arrows, Shift, Home, and End to 16px or 64px and legal boundaries', () => {
     expect(
@@ -91,19 +92,24 @@ describe('ResizableSplitView', () => {
     ).toBeNull();
   });
 
-  it('exposes an accessible separator and writes keyboard changes as HomeLayout weights', () => {
+  it('syncs keyboard weight changes back into the rendered panel layout', async () => {
     const onLayoutChange = vi.fn();
-    const { container } = render(
-      <ResizableSplitView
-        node={node as Extract<typeof node, { type: 'split' }>}
-        path={{ bandIndex: 1, nodePath: [] }}
-        layout={layout}
-        disabled={false}
-        cardNames={['資產趨勢', '本月支出']}
-        onLayoutChange={onLayoutChange}
-        renderChild={(child) => <span>{child.type === 'card' ? child.cardId : child.axis}</span>}
-      />,
-    );
+    const renderSplit = (currentLayout: typeof layout) => {
+      const currentNode = currentLayout.bands[1]!.root;
+      if (currentNode.type !== 'split') throw new Error('預期測試版面第二列為分割。');
+      return (
+        <ResizableSplitView
+          node={currentNode}
+          path={{ bandIndex: 1, nodePath: [] }}
+          layout={currentLayout}
+          disabled={false}
+          cardNames={['資產趨勢', '本月支出']}
+          onLayoutChange={onLayoutChange}
+          renderChild={(child) => <span>{child.type === 'card' ? child.cardId : child.axis}</span>}
+        />
+      );
+    };
+    const { container, rerender } = render(renderSplit(layout));
     const group = container.querySelector<HTMLElement>('[data-group]')!;
     Object.defineProperty(group, 'clientWidth', { configurable: true, value: 900 });
     const separator = screen.getByRole('separator', {
@@ -114,8 +120,56 @@ describe('ResizableSplitView', () => {
     expect(separator).toHaveAttribute('aria-valuetext', '資產趨勢 67%');
     fireEvent.keyDown(separator, { key: 'ArrowRight' });
 
-    expect(onLayoutChange).toHaveBeenCalledWith(
-      resizeSplit(layout, { bandIndex: 1, nodePath: [] }, 0, 16, 884, [352, 314]),
+    const changedLayout = resizeSplit(
+      layout,
+      { bandIndex: 1, nodePath: [] },
+      0,
+      16,
+      884,
+      [352, 314],
+    );
+    expect(onLayoutChange).toHaveBeenCalledWith(changedLayout);
+    rerender(renderSplit(changedLayout));
+    await waitFor(() => expect(separator).not.toHaveAttribute('aria-valuenow', '66.67'));
+    expect(separator).toHaveAttribute('aria-valuetext', expect.stringMatching(/^資產趨勢 \d+%$/));
+    expect(onLayoutChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('remounts cleanly when topology changes without changing weights', () => {
+    const nestedNode = {
+      ...node,
+      axis: 'y' as const,
+    };
+    const nestedLayout = {
+      ...layout,
+      bands: layout.bands.map((band, index) =>
+        index === 1 ? { ...band, root: nestedNode } : band,
+      ),
+    };
+    const renderSplit = (currentLayout: typeof layout, topology: string) => {
+      const currentNode = currentLayout.bands[1]!.root;
+      if (currentNode.type !== 'split') throw new Error('預期測試版面第二列為分割。');
+      return (
+        <ResizableSplitView
+          key={topology}
+          node={currentNode}
+          path={{ bandIndex: 1, nodePath: [] }}
+          layout={currentLayout}
+          disabled={false}
+          cardNames={['trend', 'categories']}
+          onLayoutChange={vi.fn()}
+          renderChild={(child) => <span>{child.type === 'card' ? child.cardId : child.axis}</span>}
+        />
+      );
+    };
+    const { rerender } = render(renderSplit(layout, 'horizontal'));
+    const separator = screen.getByRole('separator', { name: 'trend與categories分隔線' });
+    expect(separator).toHaveAttribute('aria-orientation', 'vertical');
+    expect(separator).toHaveAttribute('aria-valuetext', 'trend 67%');
+    rerender(renderSplit(nestedLayout, 'vertical'));
+    expect(screen.getByRole('separator', { name: 'trend與categories分隔線' })).toHaveAttribute(
+      'aria-orientation',
+      'horizontal',
     );
   });
 });
