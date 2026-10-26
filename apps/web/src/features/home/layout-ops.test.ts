@@ -16,6 +16,7 @@ import {
   resizeSplit,
   type HomeLayoutDropSide,
 } from './layout-ops';
+import { HOME_LAYOUT_GAP_PX, minWidthOfCard } from './layout-math';
 
 /**
  * 首頁版面運算測試以 parser 驗證每次產出，再檢查結構與權重；隨機移動使用固定 seed，
@@ -245,28 +246,32 @@ describe('home layout operations', () => {
   });
 
   it('checks the split half against registered widths and the documented height fallback', () => {
+    const horizontalBoundaryPx =
+      2 * Math.max(minWidthOfCard('accounts'), minWidthOfCard('categories')) + HOME_LAYOUT_GAP_PX;
+    const verticalBoundaryPx = HOME_LAYOUT_MIN_CARD_HEIGHT_PX * 2 + HOME_LAYOUT_GAP_PX;
+
     expect(
       canDrop(DEFAULT_HOME_LAYOUT_V1, 'accounts', 'categories', 'left', {
-        widthPx: 627,
+        widthPx: horizontalBoundaryPx - 1,
         heightPx: 500,
       }),
     ).toBe(false);
     expect(
       canDrop(DEFAULT_HOME_LAYOUT_V1, 'accounts', 'categories', 'left', {
-        widthPx: 628,
+        widthPx: horizontalBoundaryPx,
         heightPx: 500,
       }),
     ).toBe(true);
     expect(
       canDrop(DEFAULT_HOME_LAYOUT_V1, 'accounts', 'categories', 'top', {
-        widthPx: 1,
-        heightPx: HOME_LAYOUT_MIN_CARD_HEIGHT_PX * 2 - 1,
+        widthPx: horizontalBoundaryPx,
+        heightPx: verticalBoundaryPx - 1,
       }),
     ).toBe(false);
     expect(
       canDrop(DEFAULT_HOME_LAYOUT_V1, 'accounts', 'categories', 'top', {
-        widthPx: 1,
-        heightPx: HOME_LAYOUT_MIN_CARD_HEIGHT_PX * 2,
+        widthPx: horizontalBoundaryPx,
+        heightPx: verticalBoundaryPx,
       }),
     ).toBe(true);
     expect(

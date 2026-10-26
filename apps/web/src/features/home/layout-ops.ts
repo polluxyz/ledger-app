@@ -1,6 +1,6 @@
 import type { HomeCardId, HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { parseHomeLayoutV1 } from '@ledger/shared';
-import { minWidthOfCard } from './layout-math';
+import { HOME_LAYOUT_GAP_PX, minWidthOfCard } from './layout-math';
 
 /**
  * 首頁版面的純運算：移卡、落點檢查、列內分隔線與根列高度調整。
@@ -300,14 +300,12 @@ export function canDrop(
   }
 
   if (axisForSide(side) === 'x') {
-    const halfWidth = sizes.widthPx / 2;
+    const halfWidth = (sizes.widthPx - HOME_LAYOUT_GAP_PX) / 2;
     return halfWidth >= minWidthOfCard(cardId) && halfWidth >= minWidthOfCard(targetCardId);
   }
 
-  const halfHeight = sizes.heightPx / 2;
-  return (
-    halfHeight >= HOME_LAYOUT_MIN_CARD_HEIGHT_PX && halfHeight >= HOME_LAYOUT_MIN_CARD_HEIGHT_PX
-  );
+  const halfHeight = (sizes.heightPx - HOME_LAYOUT_GAP_PX) / 2;
+  return halfHeight >= HOME_LAYOUT_MIN_CARD_HEIGHT_PX;
 }
 
 interface SplitUpdateResult {
