@@ -4,6 +4,7 @@ import type { AuthTokenResponse, AuthUser, LoginRequest, RegisterRequest } from 
 import { apiRequest } from '../../lib/api-client';
 import { clearActiveLedgerId } from '../../lib/active-ledger-storage';
 import { clearToken, readToken, writeToken } from '../../lib/token-storage';
+import { homeLayoutEditStore } from '../../app/home-layout-edit-store';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 /**
@@ -39,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // 登出會使這位使用者的未完成版面與所有晚到請求失效。
+    homeLayoutEditStore.clearAll();
     clearToken();
     setToken(null);
     // 作用中帳本只是偏好設定，但它是別人帳本的 id，沒有理由留在瀏覽器裡。

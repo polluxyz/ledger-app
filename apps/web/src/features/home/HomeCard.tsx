@@ -14,6 +14,11 @@ export interface HomeCardProps {
   ariaLabel?: string;
   href?: string;
   extraHeightPx?: number;
+  editing?: boolean;
+  controls?: ReactNode;
+  isDragging?: boolean;
+  dropIndicator?: ReactNode;
+  cardRef?: (element: HTMLElement | null) => void;
 }
 
 export function HomeCard({
@@ -26,48 +31,88 @@ export function HomeCard({
   ariaLabel,
   href,
   extraHeightPx = 0,
+  editing = false,
+  controls,
+  isDragging = false,
+  dropIndicator,
+  cardRef,
 }: HomeCardProps) {
   const headingId = `home-card-${cardId}-heading`;
   const style = {
     '--home-card-extra-height': `${extraHeightPx}px`,
   } as CSSProperties;
+  const headerMain = headerContent ? (
+    <>
+      <h2 className={styles.srOnly} id={headingId}>
+        {title}
+      </h2>
+      <div className={styles.customHeader}>{headerContent}</div>
+    </>
+  ) : (
+    <>
+      <div className={styles.titleGroup}>
+        <h2 className={styles.heading} id={headingId}>
+          {title}
+        </h2>
+        {titleMeta}
+      </div>
+      {action && <div className={styles.action}>{action}</div>}
+    </>
+  );
+  const className =
+    `${styles.card} ${href ? styles.linkCard : ''} ${editing ? styles.editingCard : ''} ${isDragging ? styles.dragging : ''}`.trim();
+
+  if (editing) {
+    return (
+      <section
+        ref={cardRef}
+        className={className}
+        style={style}
+        data-home-card-id={cardId}
+        aria-labelledby={ariaLabel ? undefined : headingId}
+        aria-label={ariaLabel}
+      >
+        <header className={styles.header}>
+          <div
+            className={`${styles.controlsSlot} ${styles.editingControlsSlot}`}
+            data-home-card-controls=""
+          >
+            {controls}
+          </div>
+          <div className={styles.headerMain} inert>
+            {headerMain}
+          </div>
+        </header>
+        <div className={styles.body} data-home-card-body="" inert>
+          {children}
+        </div>
+        {dropIndicator}
+      </section>
+    );
+  }
+
   const content = (
     <>
       <header className={styles.header}>
         <span className={styles.controlsSlot} data-home-card-controls="" aria-hidden="true" />
-        {headerContent ? (
-          <>
-            <h2 className={styles.srOnly} id={headingId}>
-              {title}
-            </h2>
-            <div className={styles.customHeader}>{headerContent}</div>
-          </>
-        ) : (
-          <>
-            <div className={styles.titleGroup}>
-              <h2 className={styles.heading} id={headingId}>
-                {title}
-              </h2>
-              {titleMeta}
-            </div>
-            {action && <div className={styles.action}>{action}</div>}
-          </>
-        )}
+        {headerMain}
       </header>
-      <div className={styles.body}>{children}</div>
+      <div className={styles.body} data-home-card-body="">
+        {children}
+      </div>
     </>
   );
 
-  const className = `${styles.card} ${href ? styles.linkCard : ''}`.trim();
   if (href) {
     return (
-      <Link className={className} style={style} to={href} data-home-card-id={cardId}>
+      <Link ref={cardRef} className={className} style={style} to={href} data-home-card-id={cardId}>
         {content}
       </Link>
     );
   }
   return (
     <section
+      ref={cardRef}
       className={className}
       style={style}
       data-home-card-id={cardId}

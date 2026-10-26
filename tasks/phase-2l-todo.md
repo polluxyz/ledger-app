@@ -32,15 +32,15 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
 
 ## PR3：編輯模式（`feature/2l-home-layout-edit`）
 
-- [ ] **C0 拖動套件檢查點**（依賴 D1，可與 PR2 平行；`spike/2l-dnd`，不合併）：plan §3.1。
+- [x] **C0 拖動套件檢查點**（依賴 D1，可與 PR2 平行；`spike/2l-dnd`，不合併）：plan §3.1。
       派工前：向開發者確認試裝 3 個套件。
       驗收：spec §6.3 的 8 條各有過或不過與證據；兩個套件的整合成本；協調者選定並寫進 plan §6；跟開發者報告。
-- [ ] **E1 版面運算**（依賴 D2；`2l-layout-ops`）：plan §3.2。
+- [x] **E1 版面運算**（依賴 D2；`2l-layout-ops`）：plan §3.2。
       驗收：`moveCard`、`canDrop`、`resizeSplit`、`resizeBand` 的單元測試涵蓋四方向、從各位置移出、收合、壓平、上下限；隨機 200 次移動的輸出都通過 `parseHomeLayoutV1`；Web 檢查全綠。
-- [ ] **E2 編輯模式介面**（依賴 C0、E1；`2l-layout-edit`）：plan §3.3。
-      驗收：新套件只有 C0 選定的、版本鎖定；套件只在轉接層；W280～W286 與決策 323～329 有元件測試（含草稿 store 清除時機與世代號碼、逾時 4 條路徑的結構比對、GET 不用快取、送出期間凍結草稿、≤900px 暫停不寫回、不換行畫布、`canDrop` 與「移到…」共用上限檢查）；SC-Y22、Y24 照樣過；Web 檢查全綠。
-- [ ] **E3 PR3 Web e2e**（依賴 E2；`2l-layout-edit-e2e`）：plan §3.4。
+- [x] **E2 編輯模式介面**（依賴 C0、E1；`2l-layout-edit`）：plan §3.3。
+      驗收：新套件只有 C0 選定的、版本鎖定；套件只在轉接層；W280～W286 與決策 323～329 有元件測試（含草稿 store 清除時機與世代號碼、逾時 4 條路徑的結構比對、GET 不用快取、送出期間凍結草稿、≤900px 暫停不寫回、不換行畫布、`canDrop` 與「移到…」共用上限檢查）；SC-Y22、Y24 照樣過；守 4a W256 的 3 條（plan §3.3：`inert` 不包 AI 草稿區、保留 2 個草稿回呼、首頁不加重建共用狀態的 `key`）；Web 檢查全綠。
+- [x] **E3 PR3 Web e2e**（依賴 E2；`2l-layout-edit-e2e`）：plan §3.4。
       派工前：確認 Web e2e 的埠沒被佔。
-      驗收：SC-Y14～Y21、Y23、Y26～Y29 有 e2e（Y26 含 8 張卡一列的舊版面）；兩套 Web e2e 全綠。
+      驗收：SC-Y14～Y21、Y23、Y26～Y29 有 e2e（Y26 含 8 張卡一列的舊版面）；「拖曳或調整卡片時 AI 結果到達，草稿區長高後落點仍正確」有 e2e（4a 要求；AI 入口還沒進 `main` 時移到 D3 補）；兩套 Web e2e 全綠。
 - [ ] **D3 PR3 驗收、PR、部署、收尾**（協調者）：plan §3.5。
-      驗收：存出去的 JSON 都過驗證；自己用鍵盤走一次 SC-Y20；全部檢查全綠；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；部署 dev，提醒 `Ctrl + Shift + R`；worker 都 `worker-release`，worktree、子分支、測試資料庫清掉（drop 資料庫前先問）；plan 與 todo 移到 `tasks/archive/`。
+      驗收：存出去的 JSON 都過驗證；自己用鍵盤走一次 SC-Y20；PR3 比 4a AI 入口後合併時，解 `HomePage.tsx` 衝突並跑首頁整合驗收（編輯版面時 AI 區仍能操作、表單儲存後草稿移除、切帳本與換頁不丟草稿，4a SC-P29 第 1、5 項）；全部檢查全綠；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；部署 dev，提醒 `Ctrl + Shift + R`；worker 都 `worker-release`，worktree、子分支、測試資料庫清掉（drop 資料庫前先問）；plan 與 todo 移到 `tasks/archive/`。

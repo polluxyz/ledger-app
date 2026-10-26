@@ -1,4 +1,5 @@
 import type { APIRequestContext, APIResponse } from '@playwright/test';
+import { parseHomeLayoutV1 } from '@ledger/shared';
 import type {
   Account,
   AddMemberRequest,
@@ -15,6 +16,7 @@ import type {
   CreateTransactionRequest,
   FriendRequest,
   ForgiveCounterpartyRequest,
+  HomeLayoutResponse,
   LedgerMemberInfo,
   LedgerPerson,
   LedgerRemovalPreview,
@@ -22,6 +24,7 @@ import type {
   LedgerRole,
   LedgerSummary,
   Paginated,
+  PutHomeLayoutRequest,
   RecordDefaults,
   Split,
   Transaction,
@@ -468,4 +471,31 @@ export async function mergeCounterparties(
     data: { sourceId },
   });
   return readJson<Counterparty>(response, '合併對象');
+}
+
+/** 讀取使用者的首頁版面，供 e2e 準備跨頁與舊版面情境。 */
+export async function getHomeLayout(
+  request: APIRequestContext,
+  token: string,
+): Promise<HomeLayoutResponse> {
+  const response = await request.get(`${API_BASE_URL}/users/me/home-layout/web`, {
+    headers: authHeaders(token),
+  });
+  return readJson<HomeLayoutResponse>(response, '讀取首頁版面');
+}
+
+/** 以正式 API 預置版面；呼叫端仍須用瀏覽器驗證被測的編輯操作。 */
+export async function putHomeLayout(
+  request: APIRequestContext,
+  token: string,
+  body: PutHomeLayoutRequest,
+): Promise<HomeLayoutResponse> {
+  if (body.layout !== null && !parseHomeLayoutV1(body.layout).ok) {
+    throw new Error('測試前置的首頁版面未通過 parseHomeLayoutV1。');
+  }
+  const response = await request.put(`${API_BASE_URL}/users/me/home-layout/web`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return readJson<HomeLayoutResponse>(response, '儲存首頁版面');
 }
