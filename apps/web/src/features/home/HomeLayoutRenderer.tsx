@@ -153,7 +153,7 @@ export function HomeLayoutRenderer({
           data-home-layout="editing"
           data-testid="home-layout-edit-viewport"
         >
-          <div className={styles.editCanvas} style={{ minWidth: `${canvasMinWidth}px` }}>
+          <div className={styles.editCanvas} style={{ width: `max(100%, ${canvasMinWidth}px)` }}>
             <div className={styles.layout} data-home-wrap="none">
               {layout.bands.map((band, index) => (
                 <Fragment key={`band-${index}`}>
