@@ -159,16 +159,15 @@ describe('AI entry', () => {
     } satisfies ParseTransactionResponse);
     renderEntry();
 
-    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    const toggle = screen.getByRole('button', { name: 'AI 記帳' });
+    await user.click(toggle);
     const input = screen.getByRole('textbox', { name: '用一句話記帳' });
     await user.type(input, '早餐 60 現金');
     await user.click(screen.getByRole('button', { name: '送出' }));
 
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(screen.getByRole('button', { name: 'AI 記帳' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -254,6 +253,55 @@ describe('AI entry', () => {
     expect(within(screen.getByTestId('page-toolbar-slot')).getByRole('alert')).toHaveTextContent(
       'AI 暫時沒有回應，請稍後再試。',
     );
+  });
+
+  it('does not steal focus when a successful parse completes after the entry is collapsed', async () => {
+    const user = userEvent.setup();
+    const request = deferred<ParseTransactionResponse>();
+    mocks.parse.mockReturnValueOnce(request.promise);
+    render(
+      <AiSessionProvider>
+        <PageToolbarSlotProvider>
+          <ToolbarSlot />
+          <AiEntry ledger={ledger} />
+          <button type="button">篩選欄位</button>
+        </PageToolbarSlotProvider>
+      </AiSessionProvider>,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'AI 記帳' });
+    await user.click(toggle);
+    const input = screen.getByRole('textbox', { name: '用一句話記帳' });
+    await user.type(input, '晚餐 300 現金');
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    expect(input).toBeDisabled();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const filterField = screen.getByRole('button', { name: '篩選欄位' });
+    await user.click(filterField);
+    expect(filterField).toHaveFocus();
+
+    request.resolve({
+      drafts: [
+        {
+          ledgerId: ledger.id,
+          type: 'EXPENSE',
+          amount: 30000,
+          date: '2026-10-26',
+          title: '晚餐',
+          categoryId: 'category-1',
+          newCategoryName: null,
+          accountId: 'account-1',
+          toAccountId: null,
+        },
+      ],
+    } satisfies ParseTransactionResponse);
+
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(input).toHaveAttribute('tabindex', '-1');
+    expect(filterField).toHaveFocus();
   });
 
   it('shares the parsing lock across two page entries', async () => {

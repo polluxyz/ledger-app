@@ -26,6 +26,7 @@ export function AiEntry({
   const { element } = usePageToolbarSlot();
   const { error, isParsing, parse, setText, text } = useAiSession();
   const [isExpanded, setIsExpanded] = useState(false);
+  const isExpandedRef = useRef(false);
   const inputId = useId();
   const errorId = `${inputId}-error`;
   const tooltipId = `${inputId}-tooltip`;
@@ -42,12 +43,14 @@ export function AiEntry({
 
   function collapse() {
     cancelPendingFocus();
+    isExpandedRef.current = false;
     setIsExpanded(false);
     toggleRef.current?.focus();
   }
 
   function expand() {
     cancelPendingFocus();
+    isExpandedRef.current = true;
     setIsExpanded(true);
     // 等原生按鈕的點擊預設行為結束後，再把焦點移進新展開的輸入欄。
     focusTimeoutRef.current = window.setTimeout(() => {
@@ -64,7 +67,7 @@ export function AiEntry({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ledger || !isWritable || isParsing || text.trim() === '') return;
-    if (await parse(text, ledger.id)) collapse();
+    if ((await parse(text, ledger.id)) && isExpandedRef.current) collapse();
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
