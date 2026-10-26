@@ -23,11 +23,11 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
 
 ## PR2：伺服器儲存（`feature/2l-home-layout-api`）
 
-- [ ] **S2 紅燈測試**（協調者；依賴 D1）：plan §2.1。
+- [x] **S2 紅燈測試**（協調者；依賴 D1）：plan §2.1。
       驗收：`home-layout.test.ts` 涵蓋 spec §3.2、§3.3 每一條；`home-layout-isolation.e2e-spec.ts` 涵蓋 SC-Y10、Y13；兩支都跑過、確認紅燈。
-- [ ] **B1 驗證函式、資料表、API**（依賴 S2；`2l-layout-api`；`backend`）：plan §2.2。
+- [x] **B1 驗證函式、資料表、API**（依賴 S2；`2l-layout-api`；`backend`）：plan §2.2。
       驗收：S2 兩支轉綠；migration 只建表、enum、外鍵；PUT 用條件更新與 `P2002`，沒有先讀再寫；禁鍵 guard 在 pipe 之前擋 `__proto__`、`constructor`、`prototype`，用明確堆疊、超過 32 層 400，有單元測試；存一份再讀回樹完整；DTO 錯誤照既有格式；SC-Y11（含兩組並發）、SC-Y12 的 6 條 400（禁鍵用原始 JSON 字串）且資料庫不變；`HOME_LAYOUT_REVISION_CONFLICT` 加進 `error-codes.ts`；OpenAPI 有兩個端點；API 檢查與 API e2e 全綠。
-- [ ] **D2 PR2 驗收、PR、部署**（協調者）：plan §2.3。
+- [x] **D2 PR2 驗收、PR、部署**（協調者）：plan §2.3。
       驗收：逐行看 migration SQL、service、controller、DTO；隔離與並發 e2e 自己各跑 3 次；全部檢查全綠；PR 依模板、CI 全綠、squash merge；部署 dev（先 migration）。
 
 ## PR3：編輯模式（`feature/2l-home-layout-edit`）
