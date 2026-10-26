@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
 import type { LedgerSummary } from '@ledger/shared';
@@ -31,15 +31,34 @@ export function AiEntry({
   const tooltipId = `${inputId}-tooltip`;
   const inputRef = useRef<HTMLInputElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const focusTimeoutRef = useRef<number | null>(null);
   const isWritable = isLedgerWritable(ledger);
 
-  useEffect(() => {
-    if (isExpanded) inputRef.current?.focus();
-  }, [element, isExpanded]);
+  function cancelPendingFocus() {
+    if (focusTimeoutRef.current === null) return;
+    window.clearTimeout(focusTimeoutRef.current);
+    focusTimeoutRef.current = null;
+  }
 
   function collapse() {
+    cancelPendingFocus();
     setIsExpanded(false);
     toggleRef.current?.focus();
+  }
+
+  function expand() {
+    cancelPendingFocus();
+    setIsExpanded(true);
+    // 等原生按鈕的點擊預設行為結束後，再把焦點移進新展開的輸入欄。
+    focusTimeoutRef.current = window.setTimeout(() => {
+      focusTimeoutRef.current = null;
+      if (
+        toggleRef.current?.getAttribute('aria-expanded') === 'true' &&
+        toggleRef.current.getAttribute('aria-disabled') !== 'true'
+      ) {
+        inputRef.current?.focus();
+      }
+    }, 50);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -120,7 +139,7 @@ export function AiEntry({
         onClick={() => {
           if (!isWritable) return;
           if (isExpanded) collapse();
-          else setIsExpanded(true);
+          else expand();
         }}
       >
         <Icon name="sparkle" size={24} />

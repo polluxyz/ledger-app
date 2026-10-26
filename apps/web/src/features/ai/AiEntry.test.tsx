@@ -120,7 +120,7 @@ describe('AI entry', () => {
     const form = document.getElementById(toggle.getAttribute('aria-controls')!);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveAttribute('aria-controls', form?.id);
-    expect(input).toHaveFocus();
+    await waitFor(() => expect(input).toHaveFocus());
     expect(input).toHaveAttribute('maxLength', String(AI_TEXT_MAX_LENGTH));
     expect(input).toHaveAttribute('tabindex', '0');
     expect(form).toHaveAttribute('aria-hidden', 'false');

@@ -113,9 +113,16 @@ test.describe('AI 記帳圖示入口', () => {
 
     const viewerEntry = page.getByRole('button', { name: 'AI 記帳：只能檢視', exact: true });
     await expect(viewerEntry).toHaveAttribute('aria-disabled', 'true');
-    await viewerEntry.focus();
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+    for (let index = 0; index < 40; index += 1) {
+      await page.keyboard.press('Tab');
+      if (await viewerEntry.evaluate((element) => document.activeElement === element)) break;
+    }
+    await expect(viewerEntry).toBeFocused();
     await expect(page.getByRole('tooltip', { name: '只能檢視' })).toBeVisible();
-    await viewerEntry.click();
+    await viewerEntry.evaluate((element) => (element as HTMLButtonElement).click());
     await expect(page.getByRole('textbox', { name: '用一句話記帳' })).toHaveCount(0);
     expect(parseRequests).toBe(0);
 
@@ -199,7 +206,7 @@ test.describe('AI 記帳圖示入口', () => {
     try {
       await page.reload();
       await openTransactions(page);
-      await submitFromCurrentPage(page, '早餐 60 現金');
+      await submitFromCurrentPage(page, TWO_MEALS_TEXT);
       await expect.poll(() => parseRequests).toBe(1);
 
       await switchLedger(page, otherLedger.name);
@@ -207,7 +214,7 @@ test.describe('AI 記帳圖示入口', () => {
       await page.getByRole('button', { name: 'AI 記帳', exact: true }).click();
       const input = page.getByRole('textbox', { name: '用一句話記帳' });
       await expect(input).toBeDisabled();
-      await expect(page.getByRole('button', { name: '送出', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: '處理中…', exact: true })).toBeDisabled();
       expect(parseRequests).toBe(1);
 
       releaseParse?.();
@@ -244,7 +251,7 @@ test.describe('AI 記帳圖示入口', () => {
     try {
       await page.reload();
       await openDashboard(page);
-      await submitFromCurrentPage(page, '早餐 60 現金');
+      await submitFromCurrentPage(page, TWO_MEALS_TEXT);
       const parseResponse = page.waitForResponse((response) =>
         response.url().includes('/ai/parse-transaction'),
       );
@@ -311,13 +318,15 @@ test.describe('AI 記帳圖示入口', () => {
       await page.getByRole('button', { name: '全部確認', exact: true }).click();
       await expect.poll(() => transactionPosts).toBe(1);
 
-      await submitFromCurrentPage(page, '早餐 60 現金');
+      await submitFromCurrentPage(page, '衛生紙 189');
       await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(3);
       releaseFirstWrite?.();
 
       await expect.poll(() => transactionPosts).toBe(2);
       await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(1);
-      await expect(page.getByRole('button', { name: '編輯草稿：早餐', exact: true })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: '編輯草稿：衛生紙', exact: true }),
+      ).toBeVisible();
     } finally {
       releaseFirstWrite?.();
     }
@@ -400,13 +409,11 @@ test.describe('AI 記帳圖示入口', () => {
       name: '機票',
       type: 'EXPENSE',
     });
-    await createAccount(request, userA.token, { name: '信用卡' });
-
     await page.reload();
     await openTransactions(page);
     await submitFromCurrentPage(page, '旅行基金 機票 8000 刷卡');
     await expect(page.getByRole('button', { name: '編輯草稿：機票', exact: true })).toBeVisible();
-    await submitFromCurrentPage(page, '早餐 60 現金');
+    await submitFromCurrentPage(page, TWO_MEALS_TEXT);
     await expect(page.getByRole('button', { name: '編輯草稿：早餐', exact: true })).toBeVisible();
 
     await updateMemberRole(request, userB.token, shared.id, userA.id, 'VIEWER');
@@ -425,9 +432,13 @@ test.describe('AI 記帳圖示入口', () => {
     await page.getByRole('button', { name: '全部確認', exact: true }).click();
     await expect(page.getByRole('button', { name: '編輯草稿：機票', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '編輯草稿：早餐', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '編輯草稿：午餐', exact: true })).toHaveCount(0);
 
     const personalTransactions = await listLedgerTransactions(request, userA.token, personal.id);
     expect(personalTransactions.items.some((transaction) => transaction.title === '早餐')).toBe(
+      true,
+    );
+    expect(personalTransactions.items.some((transaction) => transaction.title === '午餐')).toBe(
       true,
     );
     expect(personalTransactions.items.some((transaction) => transaction.title === '機票')).toBe(

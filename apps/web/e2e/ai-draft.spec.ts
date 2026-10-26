@@ -319,6 +319,7 @@ async function submitAiText(page: import('@playwright/test').Page, text: string)
   // 測試資料由 API 建好後重新載入，讓畫面重新讀到新帳本與分類清單。
   await page.reload();
   await openTransactions(page);
+  await page.getByRole('button', { name: 'AI 記帳', exact: true }).click();
   await page.getByRole('textbox', { name: '用一句話記帳' }).fill(text);
   await page.getByRole('button', { name: '送出', exact: true }).click();
 }
