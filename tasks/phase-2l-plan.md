@@ -219,3 +219,6 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - 2026-10-25 PR1 驗收：`activity` 卡寬 309px 時，借還列的名稱寬度是 0。advisor 建議合併前修，開發者同意。spec 加決策 336、SC-Y30，本檔加 §1.3a W-A3。
 - 2026-10-26 PR2 驗收：`expectedRevision` 送超過 2147483647 的值回 500（資料庫欄位是 32 位元整數）。DTO 加 `@Max(2147483647)` 改回 400，加 1 條 e2e（`b612421`）。revision 本身到上限後再存一次仍會溢位回 500。正常使用不會發生，記為已知限制，沒有處理。
 - 2026-10-26 PR2 部署：套 migration 前沒有先 `pg_dump` `ledger_dev`。這個 migration 只新增表與 enum，不動既有資料，所以沒有補做。
+- 2026-10-26 E1：專案沒有通用的卡片最小高度。`canDrop` 的上下落點借用 W274 趨勢圖面的 180px（`HOME_LAYOUT_MIN_CARD_HEIGHT_PX`）。根列會隨內容長高，這個值只擋太矮的落點。`resizeBand` 依決策 332 拿掉 `minPx` 參數。
+- 2026-10-26 E1 驗收：`canDrop` 的半邊尺寸沒扣卡片間的 16px，寬 628px 被判可以放，實際每半 306px，小於 314px。退回修成（寬或高 − 16）/ 2，上下間距 16px 出處是 `HomeLayoutRenderer.module.css:30`（`c64448f`）。協調者重跑 lint、typecheck、format:check、test：shared 160、web 1,050、api 902 全過。
+- 2026-10-26 C0（`polluxyz/2l-dnd-spike` `c5f290c`，不合併）：協調者重跑 Playwright，18 條 17 過。`@dnd-kit/core` 6.3.1 的 §6.3 八條全過；`@dnd-kit/react` 0.5.1 只有第 1 條不過：拖動時注入 3 個 inline `<style>`，違反正式 CSP 的 `style-src 'self'`。它的 `StyleInjector` 由 `@dnd-kit/dom` 的 manager 無條件加入，從 `plugins` 拿掉不夠；只能用 nonce 或改套件，兩者都不採用。RRP 4.14.8 在兩頁都過（滑鼠、方向鍵、`role="separator"`、沒有 CSP 違規）。依決策 335 選 `@dnd-kit/core` 6.3.1 與 RRP 4.14.8。整合注意：core 的拖動縮圖會撐到來源卡寬（量到 589.5px），要限制寬度；左右上下由產品層用指標座標判斷，套件只給目標卡。
