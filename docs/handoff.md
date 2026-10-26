@@ -14,7 +14,7 @@
 | ---------- | ----------------- | ------------------------------- | ------------------- | ------------------------------------------------------------------------ |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                                      |
 | `stats-2j` | 2l 各 PR 分支     | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2l PR1、PR2 已合併部署（#172、#175），下一步 PR3 的 C0（先確認試裝套件） |
-| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | AI 入口改圖示：spec 已合併（#178），下一步派 Codex 做 T1（`ai-icon`）    |
+| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | AI 入口改圖示：spec 已合併（#178），Codex 在 `ai-icon` 做 T1、T2         |
 
 ## 跨工作區的規則
 

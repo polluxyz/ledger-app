@@ -33,18 +33,18 @@
 - T5：glm-5.3 跑 SC-P27（10 筆 3 次，加 SC-P17、4a SC-P10 第 5、6、8 步各 3 次），27/27，都沒有被截斷。10 筆最多用 609 個輸出 token，所以上限維持 2048。思考 token 算在輸出 token 裡。表的次數與 token 和 provider 回報一致。
 - 新的環境變數：`AI_PARSE_DAILY_LIMIT_PER_USER`（50）、`AI_DAILY_LIMIT_GLOBAL`（500）、`AI_PARSE_MAX_OUTPUT_TOKENS`（2048）。空白就用預設值。
 
-## AI 入口改成圖示（2026-10-26 進行中：T0 完成，T1 待派）
+## AI 入口改成圖示（2026-10-26 進行中：T0 完成，T1、T2 已派）
 
 - 定案：1 號星芒圖示；B 案（輸入欄從圖示向左展開，有動畫）；首頁承接用丁案（兩頁都能送出、編輯、確認，草稿放在路由外層共用）。advisor 兩輪交流後定案，開發者 10-26 回「1 採用丁案 / 2 可以」，spec、plan、todo 回「好」核可。
 - 文件：spec `docs/specs/phase-4a-ai-text.md` §2.4（W246～W256、SC-P28～P32），plan `tasks/ai-icon-entry-plan.md`，todo `tasks/ai-icon-entry-todo.md`。docs PR #178 已合併（`679a0f2`）。
 - T0 已做完：
   - 已通知 stats-2j（它在做 2l PR3）：首頁 3 個接點、W256 的 3 條界線、PR3 要加「拖曳中 AI 結果到達，草稿區長高後落點仍正確」的驗收。通知全文 `/tmp/aiicon/notify-2j.md`。
   - ai-icon worktree 的 `apps/api/.env` 與 `.env.test` 都改指向新建的 `ledger_aiicon_test`（原本 `.env` 指向 `ledger_dev`）。
-- T1、T2 的 Task spec 已寫好：`/tmp/aiicon/t1.md`（Codex `default`，同一個 worker 先做 T1 再做 T2；e2e 前要先問協調者）。
-- **卡住**：10-26 派工時，`orca terminal create ... --command "codex --dangerously-bypass-approvals-and-sandbox ..."` 被 Claude Code 的 auto mode 擋下（`Create Unsafe Agents`）。沒有改寫法繞過。新 session 用 `claude --dangerously-skip-permissions` 開就不受 auto mode 限制；若仍被擋，請開發者決定加允許規則或自己用 `!` 開終端機。
+- T1、T2 的 Task spec：`/tmp/aiicon/t1.md`（Codex `default`，同一個 worker 先做 T1 再做 T2；e2e 前要先問協調者）。10-26 晚上已派出：終端機 `term_47e00d48-d377-46ba-b338-aab57f6a0ad1`（標題「ai-icon Codex T1/T2」），dispatch `ctx_ae61d0242f5a`。
+- 10-26 派工曾被 Claude Code 的 auto mode 擋下（`Create Unsafe Agents`）。用 bypass permissions 模式開 session 就不受影響。
 - worktree `C:/Users/Administrator/orca/workspaces/ledger-app/ai-icon`，分支 `feature/ai-icon-entry` 在 `1df1276`，沒有 commit。Task spec 第 1 步會 `git pull --no-rebase origin main` 拿到 spec。預覽頁 `docs/artifacts/step-ai-icon-entry-preview.html` 只當參考。
 - 這份交接的改動在本地分支 `docs/ai-4a-handoff-icon`（ai-4a worktree，沒有 push）。T4 時併進 `feature/ai-icon-entry` 的 PR，不單獨開 PR。
-- Orca run：`run_8a5582ad901e`（舊的 `run_50f41e6dc0fb` 不能用，Orca 沒有關閉指令所以還留著）。目前沒有 worker。
+- Orca run：`run_b0d1069e24d7`（協調者 `term_90de4fdd-cdc6-43f0-9db9-9d3f878cba4a`）。舊的 `run_8a5582ad901e`、`run_50f41e6dc0fb` 不再用，Orca 沒有關閉指令所以還留著。
 
 ## 下一步
 
