@@ -6,11 +6,26 @@
   gap: 16px;
 }
 
+.naturalMeasureSurface {
+  position: fixed;
+  z-index: -1;
+  top: 0;
+  left: -100000px;
+  display: block;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .band {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+}
+
+.bandRoot {
+  min-width: 0;
 }
 
 .horizontalSplit {
@@ -45,4 +60,275 @@
 
 .pendingSlot {
   min-width: 0;
+}
+
+.editViewport {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.editCanvas {
+  width: max-content;
+  min-width: 100%;
+  padding-bottom: 8px;
+}
+
+.editBand {
+  position: relative;
+  min-width: 0;
+}
+
+.dragHandle {
+  display: inline-flex;
+  min-width: 2rem;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-lg);
+  cursor: grab;
+  touch-action: none;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandle:focus-visible,
+.moveMenuTrigger:focus-visible,
+.moveMenuPopover button:focus-visible,
+.moveMenuPopover select:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.moveMenu {
+  position: relative;
+  flex: none;
+}
+
+.moveMenuTrigger {
+  min-height: 2.25rem;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.moveMenuPopover {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--space-xs));
+  left: 0;
+  display: grid;
+  min-width: 12rem;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.moveMenuTarget {
+  display: grid;
+  gap: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.moveMenuTarget select {
+  min-height: 2.5rem;
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.moveMenuDirections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.moveMenuDirections legend {
+  margin-bottom: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.moveMenuDirections button {
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.moveMenuDirections button:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dropIndicator {
+  position: absolute;
+  z-index: 2;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  pointer-events: none;
+}
+
+.dropIndicatorLeft {
+  inset: 0 50% 0 0;
+}
+
+.dropIndicatorRight {
+  inset: 0 0 0 50%;
+}
+
+.dropIndicatorTop {
+  inset: 0 0 50%;
+}
+
+.dropIndicatorBottom {
+  inset: 50% 0 0;
+}
+
+.editingCard {
+  position: relative;
+}
+
+.dragging {
+  opacity: 0.5;
+}
+
+.dragPreview {
+  box-sizing: border-box;
+  width: min(20rem, calc(100vw - 2rem));
+  max-width: 20rem;
+  min-height: 3rem;
+  padding: var(--space-sm) var(--space-md);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-weight: 700;
+  opacity: 0.94;
+}
+
+.dragOverlay {
+  pointer-events: none;
+}
+
+.resizableGroup {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.resizablePanel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.resizableSeparator {
+  z-index: 1;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.resizableSeparator:hover,
+.resizableSeparator:focus-visible,
+.resizableSeparator[data-separator='active'] {
+  background: var(--color-accent);
+}
+
+.resizableSeparator:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.verticalSeparator {
+  width: 16px;
+  cursor: col-resize;
+}
+
+.horizontalSeparator {
+  height: 16px;
+  cursor: row-resize;
+}
+
+.bandResizeHandle {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: -8px;
+  left: 0;
+  display: flex;
+  width: 100%;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.bandResizeHandle span {
+  width: 3rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-border);
+}
+
+.bandResizeHandle:hover span,
+.bandResizeHandle:focus-visible span {
+  background: var(--color-accent);
+}
+
+.bandResizeHandle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.bandResizeHandle:disabled {
+  cursor: not-allowed;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

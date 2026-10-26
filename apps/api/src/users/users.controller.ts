@@ -14,6 +14,8 @@ import { HomeLayoutResponseDto } from './dto/home-layout-response.dto';
 /**
  * 個人資料端點。只操作「自己」——目標使用者一律取自 JWT（`user.sub`），
  * 而非路徑或 body 參數，因此不可能藉由改 id 去讀寫別人的資料。
+ * 首頁版面（2l）也在這裡：GET／PUT `me/home-layout/web`，以 revision 偵測同時編輯；
+ * PUT 先經 `HomeLayoutBodyGuard` 擋禁用鍵，版面內容交給 `HomeLayoutService` 驗證。
  */
 @ApiTags('users')
 @ApiBearerAuth('jwt')

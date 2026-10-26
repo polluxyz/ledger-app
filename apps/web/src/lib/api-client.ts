@@ -37,10 +37,12 @@ interface RequestOptions {
   body?: unknown;
   /** 設 true 可略過附帶 token（供登入／註冊等公開端點使用）。 */
   anonymous?: boolean;
+  /** 讓具逾時或生命週期管理的呼叫端中止傳輸；一般呼叫不受影響。 */
+  signal?: AbortSignal;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, anonymous = false } = options;
+  const { method = 'GET', body, anonymous = false, signal } = options;
 
   const headers: Record<string, string> = {};
   if (body !== undefined) {
@@ -57,6 +59,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {

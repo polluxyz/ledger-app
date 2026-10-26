@@ -110,4 +110,14 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/ledgers/l1/transactions/t1')).resolves.toBeUndefined();
   });
+
+  it('passes an optional AbortSignal to fetch', async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: 'u1' }));
+
+    await apiRequest('/users/me', { signal: controller.signal });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
+  });
 });

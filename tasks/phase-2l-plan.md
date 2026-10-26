@@ -156,6 +156,11 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - ≤900px 暫停編輯、草稿保留，暫停期間不寫回草稿、不更新原始 revision（決策 323）；編輯畫布用渲染器的不換行模式，寬度不夠時畫布橫向捲動（決策 324）。
 - `canDrop` 與「移到…」共用一個檢查：結果的深度與節點數不超過 `parseHomeLayoutV1` 的上限（決策 327、SC-Y28）。不檢查最小寬度。
 - 不是編輯模式時，首頁行為與 PR1 相同（SC-Y22）。
+- 與 4a AI 入口（`feature/ai-icon-entry`，4a spec W246～W256）的界線，照 4a 的 W256（ai-4a 協調者 2026-10-26 通知）：
+  - 編輯模式若用 `inert` 鎖住首頁其他部分，不可包住 AI 草稿區（`<AiDraftSection>`，在 PageHeader 之後、`HomeLayoutRenderer` 之前）。
+  - 重寫 `TransactionWorkbench` 時保留 `onDraftSaved` 與 `onDraftSavingChange` 兩個回呼。
+  - 首頁不加會重建共用狀態的 `key`（例如帳本 id 當 `key`），否則 AI 草稿會退回頁面生命週期。
+  - 拖動或調整卡片期間 AI 結果到達、草稿區長高把版面往下推，落點仍要正確：落點依放開當下量到的位置判斷，不用開始拖動時快取的座標。
 
 ### 3.4 E3：PR3 的 Web e2e（`2l-layout-edit-e2e`，Codex）
 
@@ -167,6 +172,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - SC-Y18 的兩個分頁：同一個 context 開兩個 page。
 - SC-Y19 的 4 條路徑：PUT 直接失敗；`page.route` 擋住 PUT 超過 10 秒（還沒存進去）；同上再讓 GET 也失敗；`route.fetch()` 先送到後端、再延遲回應（已存進去）。
 - SC-Y23：沿用 `csp.spec.ts` 的做法，打 `vite preview`，進編輯模式拖一次，console 沒有 CSP 違規。
+- AI 結果在拖動中到達（4a 要求的驗收）：拖動或調整卡片時，讓 AI 解析的回應到達、草稿區長高，放開後落點仍正確。4a 還沒合併時，這條等 AI 入口進 `main` 再補（見 §3.5）。
 
 ### 3.5 PR3 驗收（協調者）
 
@@ -174,6 +180,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - 存出去的 JSON 都過 `parseHomeLayoutV1`（看 e2e 攔到的請求內容）。
 - 自己用鍵盤走一次 SC-Y20。
 - lint、typecheck、test、build、format:check、兩套 Web e2e 全綠。
+- 與 4a AI 入口誰後合併誰解衝突（`HomePage.tsx` 會被兩邊改）。PR3 後合併時，協調者跑首頁整合驗收：編輯版面時 AI 區仍能操作、表單儲存後草稿移除、切帳本與換頁不丟草稿（4a SC-P29 第 1、5 項），並補上 §3.4 的「AI 結果在拖動中到達」。
 - 合併後部署 dev，先 `pnpm install`，提醒按 `Ctrl + Shift + R`。
 
 ## 4. 風險與對策
@@ -190,6 +197,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 | 卡片內容高度變動造成列高跳動                             | 列高＝內容最小高度＋`extraHeightPx`，內容變長時列自動長高，不存內容高度            |
 | PR1 拆卡時破壞 2k 的「切帳本不重打」與「寫入後一起更新」 | 資料仍由 `LedgerView`／`Dashboard` 打，卡片只吃 props；2k 的請求增量測試必須照樣過 |
 | Codex 週額度用完                                         | 網頁不換層，停下來問開發者；PR2 是 `backend` 角色，不受影響                        |
+| 與 4a AI 入口在首頁語意衝突（git 合併成功但行為壞掉）    | 守 4a W256 的 3 條（§3.3）；後合併的一方跑首頁整合驗收（§3.5）                     |
 
 ## 5. 部署順序
 
@@ -211,3 +219,19 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - 2026-10-25 PR1 驗收：`activity` 卡寬 309px 時，借還列的名稱寬度是 0。advisor 建議合併前修，開發者同意。spec 加決策 336、SC-Y30，本檔加 §1.3a W-A3。
 - 2026-10-26 PR2 驗收：`expectedRevision` 送超過 2147483647 的值回 500（資料庫欄位是 32 位元整數）。DTO 加 `@Max(2147483647)` 改回 400，加 1 條 e2e（`b612421`）。revision 本身到上限後再存一次仍會溢位回 500。正常使用不會發生，記為已知限制，沒有處理。
 - 2026-10-26 PR2 部署：套 migration 前沒有先 `pg_dump` `ledger_dev`。這個 migration 只新增表與 enum，不動既有資料，所以沒有補做。
+- 2026-10-26 E1：專案沒有通用的卡片最小高度。`canDrop` 的上下落點借用 W274 趨勢圖面的 180px（`HOME_LAYOUT_MIN_CARD_HEIGHT_PX`）。根列會隨內容長高，這個值只擋太矮的落點。`resizeBand` 依決策 332 拿掉 `minPx` 參數。
+- 2026-10-26 E1 驗收：`canDrop` 的半邊尺寸沒扣卡片間的 16px，寬 628px 被判可以放，實際每半 306px，小於 314px。退回修成（寬或高 − 16）/ 2，上下間距 16px 出處是 `HomeLayoutRenderer.module.css:30`（`c64448f`）。協調者重跑 lint、typecheck、format:check、test：shared 160、web 1,050、api 902 全過。
+- 2026-10-26 C0（`polluxyz/2l-dnd-spike` `c5f290c`，不合併）：協調者重跑 Playwright，18 條 17 過。`@dnd-kit/core` 6.3.1 的 §6.3 八條全過；`@dnd-kit/react` 0.5.1 只有第 1 條不過：拖動時注入 3 個 inline `<style>`，違反正式 CSP 的 `style-src 'self'`。它的 `StyleInjector` 由 `@dnd-kit/dom` 的 manager 無條件加入，從 `plugins` 拿掉不夠；只能用 nonce 或改套件，兩者都不採用。RRP 4.14.8 在兩頁都過（滑鼠、方向鍵、`role="separator"`、沒有 CSP 違規）。依決策 335 選 `@dnd-kit/core` 6.3.1 與 RRP 4.14.8。整合注意：core 的拖動縮圖會撐到來源卡寬（量到 589.5px），要限制寬度；左右上下由產品層用指標座標判斷，套件只給目標卡。
+- 2026-10-26 開發者核可 PR3 安裝 `@dnd-kit/core` 6.3.1 與 RRP 4.14.8（版本鎖死）。協調者在 `packages/shared` 補 `HomeLayoutResponse`、`PutHomeLayoutRequest` 兩個型別（`3d5a4cd`），PR2 只有 API 端的 DTO，前端沒有共用型別可用。E2 從 `feature/2l-home-layout-edit` 開出 `polluxyz/2l-layout-edit` 派 Codex。4a AI 入口還沒進 `main`，W256 的 3 條以「讓 `<AiDraftSection>` 之後能直接插進來」驗收。
+- 2026-10-26 E2 驗收（`ba67501`、`8e6e685`，Codex）：新套件只有 `@dnd-kit/core` 6.3.1 與 RRP 4.14.8，版本鎖死，lockfile 只多它們與 `@dnd-kit/accessibility`、`@dnd-kit/utilities`；套件只出現在 `dnd-adapter.tsx` 與 `resizable-panels-adapter.tsx`。協調者重跑 lint、typecheck、test（shared 160、API 902、Web 1,092）、format:check、build 全過。Web JS 728.99 kB（gzip 221.19），比基準多 112.84 kB（gzip 35.92）；build 有 500 kB chunk 警告，PR3 不拆 chunk。`inert` 只包卡片標題與內容；`TransactionWorkbench` 的 props 不變，首頁沒有新的 `key`；登出時 store 先推進世代號碼、中止請求，再 `queryClient.clear()`。`canDrop` 照 E1 原樣使用（半邊最小尺寸照決策 327 檢查，不限制整個版面的不換行最小寬度），拖動與「移到…」都用放開當下量到的目標卡尺寸。退件一次：`HomeLayoutRenderer.tsx` 一行註解混了日文，Codex 改成繁體中文（`8e6e685`）。
+- 2026-10-26 E3 派工（Codex，worktree `2l-layout-edit-e2e`，分支 `polluxyz/2l-layout-edit-e2e`，從 `22e57b9` 開）：只寫 Web e2e，不改產品程式；涵蓋 SC-Y14～Y21、Y23、Y26～Y29，存出去的非 null 版面都用 `parseHomeLayoutV1` 驗過。「AI 結果在拖動中到達」不在本單，留給 D3（4a 進 `main` 之後）。
+- 2026-10-26 E3 抓到 E2 的產品 bug：在分隔線上按方向鍵，草稿權重會變，但畫面上的 Panel 不動，套件算的 `aria-valuenow` 也不變。原因：`<Group>` 只給 `defaultLayout`，是非受控元件；`ResizableSplitView` 的 key 是 `topologyKey`，只看結構不看權重，所以權重改了不會重新排版。「取消」、「重設為預設」、「載入最新」只換權重時也會中。E2 的單元測試只驗 `onLayoutChange` 被呼叫，沒有用新版面 rerender，所以沒抓到。另外，套件會用自己的值蓋掉我們傳的 `aria-valuenow`、`aria-valuemin`、`aria-valuemax`。處理：在計畫範圍內修，交給 E3 的 Codex 另開 `fix:` commit。權重改變時用 `groupRef.setLayout` 同步，拿掉會被蓋掉的 aria 屬性，單元測試改成 rerender 後驗證，e2e 補「取消／重設後分隔線回到原位」。
+- 2026-10-26 E3 抓到 E2 的第二個產品 bug：先用 API 把第 2 帶設成 `y[trend,categories]`，再進編輯模式，把 `accounts` 拖到 `categories` 左側。結果 4 個方向都沒有落點指示，放開後版面不變。Codex 量到指標在 `categories` 的矩形內，但 `findDropTarget` 用的 `document.elementFromPoint(...)?.closest('[data-home-card-id]')` 找不到卡。`.dragOverlay` 已經是 `pointer-events: none`，所以根因還沒確定；嫌疑是 `inert` 子元素或其他蓋在上面的層。處理：在計畫範圍內修，同樣交給 E3 的 Codex 另開 `fix:` commit。先用 `elementsFromPoint` 印出整疊元素確認根因再修；落點仍在拖動中與放開時重新量矩形，`canDrop` 與 `layout-ops.ts` 不動。
+- 2026-10-26 E3 回報 SC-Y21 自動捲動不動：視窗高 640px，把指標拖到視窗底緣，`window.scrollY` 一直是 0。協調者判斷是測試前提不成立：整頁高度等於視窗高度（640），window 本來就沒有地方捲。請 Codex 改測試設定，讓頁面比視窗高，並先斷言這個前提；仍然驗 `scrollY`，不改成驗畫布的 `scrollTop`。同一份診斷另外量到 edit viewport 有 8px 直向溢出（`scrollHeight` 365、`clientHeight` 357），有東西超出了高度 auto 的容器，畫布會多一條直向捲軸。這是產品瑕疵，授權另開 `fix:` commit 修，要讓內容收在容器裡，不用 `overflow-y: hidden`，並補 e2e 驗證。
+- 2026-10-26 落點 bug 根因（Codex 用 `elementsFromPoint` 確認）：不是拖動縮圖，也不是 `inert`。編輯模式的上下分割（RRP vertical `Group`）拿不到確定的高度，整組只剩分隔線的 16px，Panel 高 0，卡片被 Panel 的 `overflow: auto` 裁掉。指標所在的位置看起來在卡片矩形裡，其實是被裁掉的溢出區，所以命中不到卡。影響不只測試：spec §1 步驟 3 的上下落點一放，兩張卡在編輯模式就看不見。另外，閱讀模式的 `VerticalSplit` 完全不看權重。修法依決策 332 與 W279 推得：`y` 的總高由外層決定，子節點照權重分，至少是內容需要的高度；分隔線只在有多餘高度時一增一減；閱讀與編輯模式用同一套規則。不採用掃描卡片矩形的做法，因為它會讓看不見的卡接受落點。Codex 先送方案，協調者核可後再另開 `fix:` commit。
+- 2026-10-26 上下分割高度方案核可（Codex 提、協調者調整）：卡片外面包一層不受分配高度影響的量測容器，用 ResizeObserver 量自然高度。最低高度遞迴算：`x` 取子節點最大值，`y` 取總和加間距。根列總高＝最低高度＋`extraHeightPx`。分配由上往下：`x` 子節點拿整個高度，`y` 依權重分，夾在最低高度後剩下的再依權重分給其他子節點，所以多出來的高度都照權重分，不是全給最後一個。分配寫成純函式並加單元測試。沒有多餘高度時分隔線不用 `disabled`，保持可聚焦（SC-Y20），最小值等於最大值。還沒量到高度前用自然高度排，不能出現 0 高或閃一下。只在差距超過 0.5px 時 setState，e2e 斷言 console 沒有 `ResizeObserver loop`。不動 ≤900px 一欄、閱讀模式換行、`canDrop` 的 180px、W274 趨勢圖。高度修正自成 `fix:` commit；落點與 8px 溢出修完後重量，自然消失的只在回報寫明。
+- 2026-10-26 E3 抓到 E2 的第三個產品 bug：內容寬 1152px 時，`activity` 卡在閱讀模式寬 373.28px、高 145.5px，進編輯模式後變成寬 309px、高 157px，文字換行多了 11.5px。根因：JSX 的 inline `minWidth=canvasMinWidth` 蓋掉 CSS `.editCanvas` 的 `min-width: 100%`，`width: max-content` 讓畫布在寬視窗也縮到卡片最小寬度。處理：畫布寬度至少是 max(100%, canvasMinWidth)，另開 `fix:` commit，不併進高度修正。e2e 斷言閱讀與編輯模式每張卡寬高差都 ≤1px，SC-Y26 窄視窗橫向捲動不退步。
+- 2026-10-26 E3 驗收（Codex）：6 個 commit 拿到 `feature/2l-home-layout-edit`：4 個 `fix:`（`c819954` 分隔線跟著權重、`a8dd82d` 畫布寬度、`b037f53` 列高把手收在 edit viewport 裡、`4dd9ef5` 上下分割高度）、1 個 `test:`（`df3deac`）、1 個 `fix:`（`c527245`，見下一段）。第一次整套重跑有退步：`home.spec.ts:113` SC-Y1 的 trend 卡 y 是 439.78，應為 301；`debt-linking.spec.ts:101`、`:308` 與 `phase-3c-split.spec.ts:37` 點不到按鈕，分類卡蓋住了指標事件。這 4 條在 `22e57b9` 基準上都過。
+- 2026-10-26 E3 退步根因：`HomePage` 的 `cards` 沒有 memo，4a 的 `useAiSession` 每打一個字就讓它重新渲染，卡片節點被換掉。量測用的 MutationObserver 只看第一次掛上的卡片子樹，換掉的卡量不到，高度停在舊值。修法（`c527245`）：MutationObserver 看整個 surface 子樹，新的卡片根節點補掛 ResizeObserver，用 WeakSet 記住已掛過的；落點指示的 DOM 變動不觸發重量。worker 回報：`home-layout-edit.spec.ts` 29/29 連跑 3 次，相關 40 條 40/40。另一個早先的 `070b5dd`（註解改繁體）不需要：HEAD 的 `HomeLayoutRenderer.tsx:220` 已經是繁體中文。
+- 2026-10-26 E3 協調者重跑：lint、typecheck、format:check 全過；單元測試 shared 160/160、API 902/902（58 個 suite）、Web 1,100/1,100（135 個檔）；整套 Web e2e 120/120（6.0 分鐘）。spec §9 的文件影響在 `26dbf8c`。
+- 2026-10-26 D3 驗收（進行中）：存出去的 JSON 都過驗證。`watchHomeLayoutRequests` 對每個非 null 的瀏覽器 PUT 跑 `parseHomeLayoutV1`，`home-layout-edit.spec.ts` 的 25 個 test 裡，按「完成」的都掛了它。SC-Y20 用 `home-layout-edit.spec.ts:906` 驗收：全程 Tab 與 Enter 完成 4 個方向的「移到…」、分隔線與列高調整、儲存。每次移動後焦點留在被移動卡的拖動把手，`aria-live="polite"` 區（`HomeLayoutRenderer.tsx:377`）出現「帳戶 已移到 …」。協調者沒有另外手動走一次。

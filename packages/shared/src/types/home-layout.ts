@@ -85,3 +85,27 @@ export const DEFAULT_HOME_LAYOUT_V1: HomeLayoutV1 = {
     },
   ],
 };
+
+/**
+ * `GET /users/me/home-layout/web` 與 `PUT` 成功時的回應（spec §4）。
+ *
+ * `revision` 為 0 表示還沒存過；`layout: null` 表示用預設版面。
+ * 型別寫的是契約，前端讀到的 `layout` 仍要先過 `parseHomeLayoutV1`，不合格就用預設（SC-Y24）。
+ */
+export interface HomeLayoutResponse {
+  schemaVersion: 1;
+  revision: number;
+  layout: HomeLayoutV1 | null;
+}
+
+/**
+ * `PUT /users/me/home-layout/web` 的請求。
+ *
+ * `expectedRevision` 帶進編輯時的 revision，對不上伺服器回 409（決策 329）。
+ * `layout: null` 是「重設為預設」，revision 照樣加 1（決策 333）。
+ */
+export interface PutHomeLayoutRequest {
+  schemaVersion: 1;
+  expectedRevision: number;
+  layout: HomeLayoutV1 | null;
+}

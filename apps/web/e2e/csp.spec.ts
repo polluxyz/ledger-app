@@ -5,10 +5,16 @@ import {
   listCategories,
   personalLedger,
   registerUser,
+  putHomeLayout,
   TEST_PASSWORD,
 } from './api';
 import { PREVIEW_ORIGIN } from './env';
 import { homeActivityRow, openUserMenu } from './ui';
+import {
+  movePointerToCardSide,
+  watchHomeLayoutRequests,
+  wideCategoriesDefaultLayout,
+} from './home-layout-edit-helpers';
 
 /**
  * CSP（Content Security Policy）的 e2e：政策由 `vite.config.ts` 的插件注入
@@ -102,4 +108,42 @@ test('inline script 被 CSP 擋下', async ({ page }) => {
   // 不是「執行了但被忽略」。
   const probe = await page.evaluate(() => (window as { __cspProbe?: string }).__cspProbe);
   expect(probe).toBeUndefined();
+});
+
+test('SC-Y23：CSP build 下拖動與調整首頁版面沒有違規', async ({ page, request }) => {
+  const user = await registerUser(request, `csp-layout-${Date.now()}@example.com`, 'CSP 版面');
+  await putHomeLayout(request, user.token, {
+    schemaVersion: 1,
+    expectedRevision: 0,
+    layout: wideCategoriesDefaultLayout(),
+  });
+  await page.setViewportSize({ width: 2800, height: 1600 });
+  const consoleTexts: string[] = [];
+  page.on('console', (message) => consoleTexts.push(message.text()));
+  const network = await watchHomeLayoutRequests(page);
+
+  await page.goto(PREVIEW_ORIGIN);
+  await page.getByRole('button', { name: '登入', exact: true }).click();
+  const login = page.getByRole('dialog', { name: '登入' });
+  await login.getByLabel('Email').fill(user.email);
+  await login.getByLabel('密碼').fill(TEST_PASSWORD);
+  await login.getByRole('button', { name: '登入' }).click();
+
+  await expect(page.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
+  await movePointerToCardSide(page, 'accounts', 'categories', 'right');
+  await expect(page.locator('[data-home-card-id="categories"] > [aria-hidden="true"]')).toHaveCount(
+    1,
+  );
+  await page.mouse.up();
+
+  const separator = page.getByRole('separator', { name: '本月支出與帳戶分隔線' });
+  await separator.focus();
+  await separator.press('ArrowRight');
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  expect(network.puts).toHaveLength(1);
+  const violations = consoleTexts.filter((text) => text.includes('Content Security Policy'));
+  expect(violations, `出現 CSP 違規：${violations.join('｜')}`).toEqual([]);
 });
