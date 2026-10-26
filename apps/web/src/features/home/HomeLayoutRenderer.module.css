@@ -6,11 +6,26 @@
   gap: 16px;
 }
 
+.naturalMeasureSurface {
+  position: fixed;
+  z-index: -1;
+  top: 0;
+  left: -100000px;
+  display: block;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .band {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+}
+
+.bandRoot {
+  min-width: 0;
 }
 
 .horizontalSplit {
@@ -57,8 +72,8 @@
 
 .editCanvas {
   width: max-content;
-  padding-bottom: 8px;
   min-width: 100%;
+  padding-bottom: 8px;
 }
 
 .editBand {

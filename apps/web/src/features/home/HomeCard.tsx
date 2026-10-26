@@ -83,7 +83,7 @@ export function HomeCard({
             {headerMain}
           </div>
         </header>
-        <div className={styles.body} inert>
+        <div className={styles.body} data-home-card-body="" inert>
           {children}
         </div>
         {dropIndicator}
@@ -97,7 +97,9 @@ export function HomeCard({
         <span className={styles.controlsSlot} data-home-card-controls="" aria-hidden="true" />
         {headerMain}
       </header>
-      <div className={styles.body}>{children}</div>
+      <div className={styles.body} data-home-card-body="">
+        {children}
+      </div>
     </>
   );
 

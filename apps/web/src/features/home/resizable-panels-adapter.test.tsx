@@ -103,6 +103,7 @@ describe('ResizableSplitView', () => {
           path={{ bandIndex: 1, nodePath: [] }}
           layout={currentLayout}
           disabled={false}
+          heightPlan={null}
           cardNames={['資產趨勢', '本月支出']}
           onLayoutChange={onLayoutChange}
           renderChild={(child) => <span>{child.type === 'card' ? child.cardId : child.axis}</span>}
@@ -156,6 +157,7 @@ describe('ResizableSplitView', () => {
           path={{ bandIndex: 1, nodePath: [] }}
           layout={currentLayout}
           disabled={false}
+          heightPlan={null}
           cardNames={['trend', 'categories']}
           onLayoutChange={vi.fn()}
           renderChild={(child) => <span>{child.type === 'card' ? child.cardId : child.axis}</span>}

@@ -1,11 +1,20 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Fragment,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { HomeCardId, HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { HOME_CARD_REGISTRY, type HomeCardRenderProps } from './card-registry';
-import { HOME_LAYOUT_GAP_PX, minWidthOf, wrapSplit } from './layout-math';
+import { HOME_LAYOUT_GAP_PX, minWidthOf, wrapSplit, type WrappedSplitLine } from './layout-math';
 import { canDrop, moveCard, type HomeLayoutDropSide, type HomeLayoutCardSize } from './layout-ops';
 import { HomeBandResizeHandle } from './HomeBandResizeHandle';
 import { HomeLayoutDndProvider, useHomeCardDrag, type DragPoint } from './dnd-adapter';
 import { ResizableSplitView } from './resizable-panels-adapter';
+import { planHomeLayoutHeight, type PlannedHomeLayoutNode } from './home-layout-size';
 import { sideAtPoint } from './drop-side';
 import { useHomeViewportIsNarrow } from './use-home-viewport';
 import styles from './HomeLayoutRenderer.module.css';
@@ -50,6 +59,111 @@ export function HomeLayoutRenderer({
   const [liveMessage, setLiveMessage] = useState('');
   const pendingFocusCardRef = useRef<HomeCardId | null>(null);
   const activeLayout = layout ?? null;
+  const { ref: layoutSurfaceRef, widthPx: layoutWidthPx } = useObservedWidth();
+  const [naturalCardSizes, setNaturalCardSizes] = useState<
+    Partial<Record<HomeCardId, { widthPx: number; heightPx: number }>>
+  >({});
+  const naturalCardSizesRef = useRef(naturalCardSizes);
+  const naturalCardHeightsPx = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(naturalCardSizes).map(([cardId, size]) => [cardId, size.heightPx]),
+      ) as Partial<Record<HomeCardId, number>>,
+    [naturalCardSizes],
+  );
+  const heightPlans = useMemo(
+    () =>
+      activeLayout?.bands.map((band) =>
+        planHomeLayoutHeight(
+          band.root,
+          layoutWidthPx,
+          naturalCardHeightsPx,
+          band.extraHeightPx,
+          editorEnabled ? 'none' : wrapMode,
+        ),
+      ) ?? [],
+    [activeLayout, editorEnabled, layoutWidthPx, naturalCardHeightsPx, wrapMode],
+  );
+
+  useLayoutEffect(() => {
+    naturalCardSizesRef.current = naturalCardSizes;
+  }, [naturalCardSizes]);
+
+  useLayoutEffect(() => {
+    const surface = layoutSurfaceRef.current;
+    if (!surface || !activeLayout || isNarrow) return;
+
+    let animationFrame = 0;
+    const measureCards = () => {
+      animationFrame = 0;
+      const measured: Partial<Record<HomeCardId, { widthPx: number; heightPx: number }>> = {};
+      surface.querySelectorAll<HTMLElement>('[data-home-card-id]').forEach((card) => {
+        const cardId = card.dataset.homeCardId;
+        if (!isHomeCardId(cardId)) return;
+        const rectangle = card.getBoundingClientRect();
+        if (rectangle.width <= 0) return;
+        const heightPx = measureNaturalCardHeight(card, rectangle.width);
+        if (heightPx > 0) measured[cardId] = { widthPx: rectangle.width, heightPx };
+      });
+
+      setNaturalCardSizes((current) => {
+        const changed = Object.entries(measured).some(([cardId, size]) => {
+          const previous = current[cardId as HomeCardId];
+          return (
+            !previous ||
+            Math.abs(previous.widthPx - size.widthPx) >= 0.5 ||
+            Math.abs(previous.heightPx - size.heightPx) >= 0.5
+          );
+        });
+        if (!changed) return current;
+        return { ...current, ...measured };
+      });
+    };
+    const scheduleMeasurement = () => {
+      if (animationFrame) return;
+      animationFrame = window.requestAnimationFrame(measureCards);
+    };
+
+    measureCards();
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            if (
+              entries.some((entry) => {
+                const card = entry.target as HTMLElement;
+                const cardId = card.dataset.homeCardId;
+                if (!isHomeCardId(cardId)) return false;
+                const previous = naturalCardSizesRef.current[cardId];
+                return (
+                  !previous ||
+                  Math.abs(previous.widthPx - card.getBoundingClientRect().width) >= 0.5
+                );
+              })
+            ) {
+              scheduleMeasurement();
+            }
+          });
+    const cardsInSurface = surface.querySelectorAll<HTMLElement>('[data-home-card-id]');
+    cardsInSurface.forEach((card) => resizeObserver?.observe(card));
+    const mutationObserver =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(scheduleMeasurement);
+    cardsInSurface.forEach((card) =>
+      mutationObserver?.observe(card, {
+        attributes: true,
+        attributeFilter: ['class', 'aria-expanded'],
+        characterData: true,
+        childList: true,
+        subtree: true,
+      }),
+    );
+
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [activeLayout, cards, editorEnabled, isNarrow, layoutSurfaceRef, wrapMode]);
 
   useLayoutEffect(() => {
     const cardId = pendingFocusCardRef.current;
@@ -154,11 +268,12 @@ export function HomeLayoutRenderer({
           data-testid="home-layout-edit-viewport"
         >
           <div className={styles.editCanvas} style={{ width: `max(100%, ${canvasMinWidth}px)` }}>
-            <div className={styles.layout} data-home-wrap="none">
+            <div className={styles.layout} data-home-wrap="none" ref={layoutSurfaceRef}>
               {layout.bands.map((band, index) => (
                 <Fragment key={`band-${index}`}>
                   <EditableBand
                     band={band}
+                    heightPlan={heightPlans[index] ?? null}
                     bandIndex={index}
                     layout={layout}
                     cards={cards}
@@ -180,17 +295,29 @@ export function HomeLayoutRenderer({
     }
 
     return (
-      <div className={styles.layout} data-home-layout="tree" data-home-wrap={wrapMode}>
+      <div
+        className={styles.layout}
+        data-home-layout="tree"
+        data-home-wrap={wrapMode}
+        ref={layoutSurfaceRef}
+      >
         {layout.bands.map((band, index) => (
           <div className={styles.band} key={`band-${index}`}>
-            <LayoutNodeView
-              node={band.root}
-              cards={cards}
-              extraHeightPx={band.extraHeightPx}
-              wrapMode={wrapMode}
-              bandIndex={index}
-              nodePath={[]}
-            />
+            <div
+              className={styles.bandRoot}
+              style={
+                heightPlans[index] ? { height: `${heightPlans[index].heightPx}px` } : undefined
+              }
+            >
+              <LayoutNodeView
+                node={band.root}
+                cards={cards}
+                heightPlan={heightPlans[index] ?? null}
+                wrapMode={wrapMode}
+                bandIndex={index}
+                nodePath={[]}
+              />
+            </div>
             {index === 0 && pendingCard && <div className={styles.pendingSlot}>{pendingCard}</div>}
           </div>
         ))}
@@ -245,6 +372,7 @@ function FixedGroup({
 
 function EditableBand({
   band,
+  heightPlan,
   bandIndex,
   layout,
   cards,
@@ -255,6 +383,7 @@ function EditableBand({
   wrapMode,
 }: {
   band: HomeLayoutV1['bands'][number];
+  heightPlan: PlannedHomeLayoutNode | null;
   bandIndex: number;
   layout: HomeLayoutV1;
   cards: HomeCardContents;
@@ -267,7 +396,7 @@ function EditableBand({
   const bandRef = useRef<HTMLDivElement>(null);
   const [heightPx, setHeightPx] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = bandRef.current;
     if (!element) return;
     const updateHeight = () => setHeightPx(element.getBoundingClientRect().height);
@@ -280,11 +409,15 @@ function EditableBand({
 
   return (
     <div className={styles.editBand}>
-      <div className={styles.band} ref={bandRef}>
+      <div
+        className={styles.band}
+        ref={bandRef}
+        style={heightPlan ? { height: `${heightPlan.heightPx}px` } : undefined}
+      >
         <LayoutNodeView
           node={band.root}
           cards={cards}
-          extraHeightPx={band.extraHeightPx}
+          heightPlan={heightPlan}
           wrapMode={wrapMode}
           bandIndex={bandIndex}
           nodePath={[]}
@@ -310,7 +443,7 @@ function EditableBand({
 function LayoutNodeView({
   node,
   cards,
-  extraHeightPx = 0,
+  heightPlan,
   wrapMode,
   bandIndex,
   nodePath,
@@ -323,7 +456,7 @@ function LayoutNodeView({
 }: {
   node: HomeLayoutNode;
   cards: HomeCardContents;
-  extraHeightPx?: number;
+  heightPlan?: PlannedHomeLayoutNode | null;
   wrapMode: 'responsive' | 'none';
   bandIndex: number;
   nodePath: readonly number[];
@@ -339,7 +472,6 @@ function LayoutNodeView({
       <CardView
         cardId={node.cardId}
         cards={cards}
-        extraHeightPx={extraHeightPx}
         editing={editing}
         disabled={editorDisabled}
         layout={layout}
@@ -358,15 +490,14 @@ function LayoutNodeView({
         path={{ bandIndex, nodePath }}
         layout={layout}
         disabled={editorDisabled}
+        heightPlan={heightPlan ?? null}
         cardNames={cardNames}
         onLayoutChange={onLayoutChange}
         renderChild={(child, index) => (
           <LayoutNodeView
             node={child}
             cards={cards}
-            extraHeightPx={
-              node.axis === 'y' && index < node.children.length - 1 ? 0 : extraHeightPx
-            }
+            heightPlan={childHeightPlan(heightPlan, index)}
             wrapMode="none"
             bandIndex={bandIndex}
             nodePath={[...nodePath, index]}
@@ -386,7 +517,7 @@ function LayoutNodeView({
     <HorizontalSplit
       node={node}
       cards={cards}
-      extraHeightPx={extraHeightPx}
+      heightPlan={heightPlan ?? null}
       wrapMode={wrapMode}
       bandIndex={bandIndex}
       nodePath={nodePath}
@@ -395,7 +526,7 @@ function LayoutNodeView({
     <VerticalSplit
       node={node}
       cards={cards}
-      extraHeightPx={extraHeightPx}
+      heightPlan={heightPlan ?? null}
       wrapMode={wrapMode}
       bandIndex={bandIndex}
       nodePath={nodePath}
@@ -406,7 +537,6 @@ function LayoutNodeView({
 function CardView({
   cardId,
   cards,
-  extraHeightPx,
   editing = false,
   disabled = false,
   layout,
@@ -415,7 +545,6 @@ function CardView({
 }: {
   cardId: HomeCardId;
   cards: HomeCardContents;
-  extraHeightPx?: number;
   editing?: boolean;
   disabled?: boolean;
   layout?: HomeLayoutV1;
@@ -468,7 +597,7 @@ function CardView({
   return (
     <RegisteredCard
       {...card}
-      extraHeightPx={Math.max(card.extraHeightPx ?? 0, extraHeightPx ?? 0)}
+      extraHeightPx={card.extraHeightPx ?? 0}
       editing={editing}
       controls={editorControls}
       cardRef={cardRef}
@@ -561,14 +690,14 @@ function MoveCardMenu({
 function HorizontalSplit({
   node,
   cards,
-  extraHeightPx,
+  heightPlan,
   wrapMode,
   bandIndex,
   nodePath,
 }: {
   node: Extract<HomeLayoutNode, { type: 'split' }>;
   cards: HomeCardContents;
-  extraHeightPx: number;
+  heightPlan: PlannedHomeLayoutNode | null;
   wrapMode: 'responsive' | 'none';
   bandIndex: number;
   nodePath: readonly number[];
@@ -588,29 +717,23 @@ function HorizontalSplit({
           }));
 
   return (
-    <div className={styles.horizontalSplit} ref={ref}>
+    <div
+      className={styles.horizontalSplit}
+      ref={ref}
+      style={heightPlan ? { height: `${heightPlan.heightPx}px` } : undefined}
+    >
       {lines.map((line, lineIndex) => (
         <div
           className={styles.horizontalLine}
           key={`line-${lineIndex}`}
-          style={{
-            gridTemplateColumns: line.indices
-              .map((_, columnIndex) => {
-                const minimum =
-                  wrapMode === 'none'
-                    ? line.minWidthsPx[columnIndex]!
-                    : Math.min(line.minWidthsPx[columnIndex]!, widthPx);
-                return `minmax(${minimum}px, ${line.weights[columnIndex]}fr)`;
-              })
-              .join(' '),
-          }}
+          style={horizontalLineStyle(line, lineIndex, heightPlan, wrapMode, widthPx)}
         >
           {line.indices.map((childIndex) => (
             <LayoutNodeView
               key={childIndex}
               node={node.children[childIndex]!}
               cards={cards}
-              extraHeightPx={extraHeightPx}
+              heightPlan={childHeightPlan(heightPlan, childIndex)}
               wrapMode={wrapMode}
               bandIndex={bandIndex}
               nodePath={[...nodePath, childIndex]}
@@ -625,33 +748,76 @@ function HorizontalSplit({
 function VerticalSplit({
   node,
   cards,
-  extraHeightPx,
+  heightPlan,
   wrapMode,
   bandIndex,
   nodePath,
 }: {
   node: Extract<HomeLayoutNode, { type: 'split' }>;
   cards: HomeCardContents;
-  extraHeightPx: number;
+  heightPlan: PlannedHomeLayoutNode | null;
   wrapMode: 'responsive' | 'none';
   bandIndex: number;
   nodePath: readonly number[];
 }) {
   const { ref } = useObservedWidth();
   return (
-    <div className={styles.verticalSplit} ref={ref}>
+    <div className={styles.verticalSplit} ref={ref} style={verticalSplitStyle(heightPlan)}>
       {node.children.map((child, index) => (
         <LayoutNodeView
           key={index}
           node={child}
           cards={cards}
-          extraHeightPx={index === node.children.length - 1 ? extraHeightPx : 0}
+          heightPlan={heightPlan?.children?.[index] ?? null}
           wrapMode={wrapMode}
           bandIndex={bandIndex}
           nodePath={[...nodePath, index]}
         />
       ))}
     </div>
+  );
+}
+
+function horizontalLineStyle(
+  line: WrappedSplitLine,
+  lineIndex: number,
+  heightPlan: PlannedHomeLayoutNode | null,
+  wrapMode: 'responsive' | 'none',
+  widthPx: number,
+): CSSProperties {
+  const style: CSSProperties = {
+    gridTemplateColumns: line.indices
+      .map((_, columnIndex) => {
+        const minimum =
+          wrapMode === 'none'
+            ? line.minWidthsPx[columnIndex]!
+            : Math.min(line.minWidthsPx[columnIndex]!, widthPx);
+        return `minmax(${minimum}px, ${line.weights[columnIndex]}fr)`;
+      })
+      .join(' '),
+  };
+  const height = heightPlan?.rows?.[lineIndex]?.heightPx;
+  if (height !== undefined) style.height = `${height}px`;
+  return style;
+}
+
+function verticalSplitStyle(heightPlan: PlannedHomeLayoutNode | null): CSSProperties | undefined {
+  if (!heightPlan) return undefined;
+  return {
+    height: `${heightPlan.heightPx}px`,
+    gridTemplateRows: heightPlan.children?.map((child) => `${child.heightPx}px`).join(' '),
+  };
+}
+
+function childHeightPlan(
+  heightPlan: PlannedHomeLayoutNode | null | undefined,
+  childIndex: number,
+): PlannedHomeLayoutNode | null {
+  if (!heightPlan) return null;
+  if (heightPlan.children) return heightPlan.children[childIndex] ?? null;
+  return (
+    heightPlan.rows?.flatMap((row) => row.children).find(({ index }) => index === childIndex)
+      ?.plan ?? null
   );
 }
 
@@ -675,6 +841,37 @@ function sizeOfCard(cardId: HomeCardId): HomeLayoutCardSize | null {
   if (!element) return null;
   const rectangle = element.getBoundingClientRect();
   return { widthPx: rectangle.width, heightPx: rectangle.height };
+}
+
+function measureNaturalCardHeight(card: HTMLElement, widthPx: number): number {
+  const surface = document.createElement('div');
+  surface.className = styles.naturalMeasureSurface ?? '';
+  surface.setAttribute('aria-hidden', 'true');
+  surface.inert = true;
+  surface.style.width = `${widthPx}px`;
+
+  const clone = card.cloneNode(true) as HTMLElement;
+  clone.style.height = 'auto';
+  clone.style.minHeight = '0';
+  clone.style.maxHeight = 'none';
+  clone.style.removeProperty('--home-card-extra-height');
+  // 編輯控制是操作工具，不應改變內容本身的自然最低高度。
+  clone.querySelector('[data-home-card-controls]')?.replaceChildren();
+  clone.querySelector<HTMLElement>('[data-home-card-body]')?.style.setProperty('flex', '0 0 auto');
+  const body = clone.querySelector<HTMLElement>('[data-home-card-body]');
+  if (body) {
+    body.style.height = 'auto';
+    body.style.minHeight = '0';
+  }
+  clone.querySelectorAll('[aria-hidden="true"]').forEach((element) => {
+    if (element.classList.contains(styles.dropIndicator ?? '')) element.remove();
+  });
+
+  surface.append(clone);
+  document.body.append(surface);
+  const heightPx = clone.getBoundingClientRect().height;
+  surface.remove();
+  return heightPx;
 }
 
 function cardTitleOf(node: HomeLayoutNode): string {
@@ -716,7 +913,7 @@ function useObservedWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [widthPx, setWidthPx] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const updateWidth = (width: number) => {

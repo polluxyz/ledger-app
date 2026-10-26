@@ -18,12 +18,9 @@ import {
 } from 'react-resizable-panels';
 import type { HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { HOME_LAYOUT_GAP_PX, minWidthOf } from './layout-math';
-import {
-  HOME_LAYOUT_MIN_CARD_HEIGHT_PX,
-  resizeSplit,
-  type HomeLayoutSplitPath,
-} from './layout-ops';
+import { resizeSplit, type HomeLayoutSplitPath } from './layout-ops';
 import { splitResizeDeltaForKey } from './home-layout-resize-keys';
+import type { PlannedHomeLayoutNode } from './home-layout-size';
 import styles from './HomeLayoutRenderer.module.css';
 
 /** `react-resizable-panels` 僅在此轉接層使用；回寫時轉成專案的整數權重格式。 */
@@ -33,6 +30,7 @@ export function ResizableSplitView({
   path,
   layout,
   disabled,
+  heightPlan,
   cardNames,
   onLayoutChange,
   renderChild,
@@ -41,6 +39,7 @@ export function ResizableSplitView({
   path: HomeLayoutSplitPath;
   layout: HomeLayoutV1;
   disabled: boolean;
+  heightPlan: PlannedHomeLayoutNode | null;
   cardNames: readonly string[];
   onLayoutChange: (layout: HomeLayoutV1) => void;
   renderChild: (child: HomeLayoutNode, childIndex: number) => ReactNode;
@@ -53,7 +52,9 @@ export function ResizableSplitView({
     () => Array.from({ length: panelCount }, (_, index) => `${groupId}-panel-${index}`),
     [groupId, panelCount],
   );
-  const minimums = node.children.map((child) => minimumSizeOf(child, node.axis));
+  const minimums = node.children.map((child, index) =>
+    node.axis === 'x' ? minWidthOf(child) : (heightPlanChild(heightPlan, index)?.minHeightPx ?? 0),
+  );
   const defaultLayout = useMemo(
     () =>
       Object.fromEntries(
@@ -115,6 +116,7 @@ export function ResizableSplitView({
       orientation={node.axis === 'x' ? 'horizontal' : 'vertical'}
       onLayoutChanged={onLayoutChanged}
       resizeTargetMinimumSize={{ coarse: 24, fine: 16 }}
+      style={heightPlan ? { height: `${heightPlan.heightPx}px` } : undefined}
     >
       {node.children.map((child, index) => (
         <Fragment key={`panel-${index}`}>
@@ -131,7 +133,22 @@ export function ResizableSplitView({
             <Separator
               aria-label={`${cardNames[index] ?? `第 ${index + 1} 張卡`}與${cardNames[index + 1] ?? `第 ${index + 2} 張卡`}分隔線`}
               aria-orientation={node.axis === 'x' ? 'vertical' : 'horizontal'}
-              aria-valuetext={`${cardNames[index] ?? `第 ${index + 1} 張卡`} ${Math.round(pairPercentage(node.weights, index))}%`}
+              aria-valuemin={
+                node.axis === 'y'
+                  ? verticalSeparatorValue(heightPlan, index, minimums).min
+                  : undefined
+              }
+              aria-valuemax={
+                node.axis === 'y'
+                  ? verticalSeparatorValue(heightPlan, index, minimums).max
+                  : undefined
+              }
+              aria-valuenow={
+                node.axis === 'y'
+                  ? verticalSeparatorValue(heightPlan, index, minimums).now
+                  : undefined
+              }
+              aria-valuetext={`${cardNames[index] ?? `第 ${index + 1} 張卡`} ${Math.round(node.axis === 'y' ? verticalSeparatorValue(heightPlan, index, minimums).now : pairPercentage(node.weights, index))}%`}
               className={`${styles.resizableSeparator} ${node.axis === 'x' ? styles.verticalSeparator : styles.horizontalSeparator}`}
               disabled={disabled}
               id={`home-layout-separator-${path.bandIndex}-${path.nodePath.join('-')}-${index}`}
@@ -143,6 +160,7 @@ export function ResizableSplitView({
                   path,
                   layout,
                   minimums,
+                  heightPlan,
                   groupRef,
                   disabled,
                   onLayoutChange,
@@ -163,6 +181,7 @@ function handleSeparatorKeyDown({
   path,
   layout,
   minimums,
+  heightPlan,
   groupRef,
   disabled,
   onLayoutChange,
@@ -173,6 +192,7 @@ function handleSeparatorKeyDown({
   path: HomeLayoutSplitPath;
   layout: HomeLayoutV1;
   minimums: number[];
+  heightPlan: PlannedHomeLayoutNode | null;
   groupRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   onLayoutChange: (layout: HomeLayoutV1) => void;
@@ -183,9 +203,31 @@ function handleSeparatorKeyDown({
   const groupSize = node.axis === 'x' ? element.clientWidth : element.clientHeight;
   const availableSize = Math.max(0, groupSize - HOME_LAYOUT_GAP_PX * (node.children.length - 1));
   if (availableSize <= 0) return;
+  const isRelevantArrow =
+    node.axis === 'x'
+      ? event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+      : event.key === 'ArrowUp' || event.key === 'ArrowDown';
+  if (!isRelevantArrow && event.key !== 'Home' && event.key !== 'End') return;
+
+  if (
+    node.axis === 'y' &&
+    availableSize <= minimums.reduce((sum, minimum) => sum + minimum, 0) + 0.5
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
   const pairWeight = node.weights[index]! + node.weights[index + 1]!;
-  const pairSize = (pairWeight / 10_000) * availableSize;
-  const currentFirstSize = (node.weights[index]! / 10_000) * availableSize;
+  const storedFirstSize = (node.weights[index]! / 10_000) * availableSize;
+  const firstChildHeight = heightPlanChild(heightPlan, index)?.heightPx;
+  const secondChildHeight = heightPlanChild(heightPlan, index + 1)?.heightPx;
+  const currentFirstSize =
+    node.axis === 'y' && firstChildHeight !== undefined ? firstChildHeight : storedFirstSize;
+  const pairSize =
+    node.axis === 'y' && firstChildHeight !== undefined && secondChildHeight !== undefined
+      ? firstChildHeight + secondChildHeight
+      : (pairWeight / 10_000) * availableSize;
   const delta = splitResizeDeltaForKey({
     key: event.key,
     shiftKey: event.shiftKey,
@@ -195,15 +237,11 @@ function handleSeparatorKeyDown({
     secondMinimum: minimums[index + 1]!,
   });
   if (delta === null) return;
-  const isRelevantArrow =
-    node.axis === 'x'
-      ? event.key === 'ArrowLeft' || event.key === 'ArrowRight'
-      : event.key === 'ArrowUp' || event.key === 'ArrowDown';
-  if (!isRelevantArrow && event.key !== 'Home' && event.key !== 'End') return;
   event.preventDefault();
   // 套件會在 document 層也處理 Separator 鍵盤事件；此處已用專案格式計算，不能再讓它改內部版面。
   event.stopPropagation();
-  onLayoutChange(resizeSplit(layout, path, index, delta, availableSize, minimums));
+  const resizeDelta = currentFirstSize + delta - storedFirstSize;
+  onLayoutChange(resizeSplit(layout, path, index, resizeDelta, availableSize, minimums));
 }
 
 function firstChangedPair(
@@ -228,20 +266,29 @@ function pairPercentage(weights: readonly number[], index: number) {
   return (weights[index]! / total) * 100;
 }
 
-function minimumSizeOf(node: HomeLayoutNode, axis: 'x' | 'y'): number {
-  if (node.type === 'card') return axis === 'x' ? minWidthOf(node) : HOME_LAYOUT_MIN_CARD_HEIGHT_PX;
-  if (axis === 'x') {
-    return node.axis === 'x'
-      ? node.children.reduce(
-          (sum, child) => sum + minimumSizeOf(child, axis),
-          HOME_LAYOUT_GAP_PX * (node.children.length - 1),
-        )
-      : Math.max(...node.children.map((child) => minimumSizeOf(child, axis)));
-  }
-  return node.axis === 'y'
-    ? node.children.reduce(
-        (sum, child) => sum + minimumSizeOf(child, axis),
-        HOME_LAYOUT_GAP_PX * (node.children.length - 1),
-      )
-    : Math.max(...node.children.map((child) => minimumSizeOf(child, axis)));
+function heightPlanChild(
+  heightPlan: PlannedHomeLayoutNode | null,
+  childIndex: number,
+): PlannedHomeLayoutNode | undefined {
+  if (heightPlan?.children) return heightPlan.children[childIndex];
+  return heightPlan?.rows?.flatMap((row) => row.children).find(({ index }) => index === childIndex)
+    ?.plan;
+}
+
+function verticalSeparatorValue(
+  heightPlan: PlannedHomeLayoutNode | null,
+  index: number,
+  minimums: readonly number[],
+) {
+  const firstMinimum = minimums[index] ?? 0;
+  const secondMinimum = minimums[index + 1] ?? 0;
+  const firstHeight = heightPlan?.children?.[index]?.heightPx ?? firstMinimum;
+  const secondHeight = heightPlan?.children?.[index + 1]?.heightPx ?? secondMinimum;
+  const pairHeight = firstHeight + secondHeight;
+  if (pairHeight <= 0) return { min: 0, max: 100, now: 50 };
+  return {
+    min: (firstMinimum / pairHeight) * 100,
+    max: ((pairHeight - secondMinimum) / pairHeight) * 100,
+    now: (firstHeight / pairHeight) * 100,
+  };
 }
