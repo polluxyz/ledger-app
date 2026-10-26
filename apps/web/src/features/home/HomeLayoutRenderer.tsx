@@ -144,26 +144,56 @@ export function HomeLayoutRenderer({
               scheduleMeasurement();
             }
           });
-    const cardsInSurface = surface.querySelectorAll<HTMLElement>('[data-home-card-id]');
-    cardsInSurface.forEach((card) => resizeObserver?.observe(card));
+    const observedCards = new WeakSet<HTMLElement>();
+    const observeCards = () => {
+      surface.querySelectorAll<HTMLElement>('[data-home-card-id]').forEach((card) => {
+        if (observedCards.has(card)) return;
+        observedCards.add(card);
+        resizeObserver?.observe(card);
+      });
+    };
+    const isDropIndicator = (element: Element) =>
+      Boolean(styles.dropIndicator && element.classList.contains(styles.dropIndicator));
+    const isWithinDropIndicator = (node: Node) => {
+      let element: Element | null = node instanceof Element ? node : node.parentElement;
+      while (element) {
+        if (isDropIndicator(element)) return true;
+        element = element.parentElement;
+      }
+      return false;
+    };
+    const isDropIndicatorMutation = (record: MutationRecord) => {
+      if (isWithinDropIndicator(record.target)) return true;
+      if (record.type !== 'childList') return false;
+      const changedNodes = [...record.addedNodes, ...record.removedNodes];
+      return (
+        changedNodes.length > 0 &&
+        changedNodes.every((node) => node instanceof Element && isDropIndicator(node))
+      );
+    };
     const mutationObserver =
-      typeof MutationObserver === 'undefined' ? null : new MutationObserver(scheduleMeasurement);
-    cardsInSurface.forEach((card) =>
-      mutationObserver?.observe(card, {
-        attributes: true,
-        attributeFilter: ['class', 'aria-expanded'],
-        characterData: true,
-        childList: true,
-        subtree: true,
-      }),
-    );
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver((records) => {
+            if (records.every(isDropIndicatorMutation)) return;
+            observeCards();
+            scheduleMeasurement();
+          });
+    mutationObserver?.observe(surface, {
+      attributes: true,
+      attributeFilter: ['class', 'aria-expanded'],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    observeCards();
 
     return () => {
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };
-  }, [activeLayout, cards, editorEnabled, isNarrow, layoutSurfaceRef, wrapMode]);
+  }, [activeLayout, editorEnabled, isNarrow, layoutSurfaceRef, wrapMode]);
 
   useLayoutEffect(() => {
     const cardId = pendingFocusCardRef.current;
