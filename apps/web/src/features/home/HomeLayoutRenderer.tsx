@@ -73,7 +73,7 @@ export function HomeLayoutRenderer({
     const targetId = targetElement?.dataset.homeCardId;
     if (!targetElement || !isHomeCardId(targetId) || targetId === cardId) return null;
 
-    // DOM 矩形を移動中も放開時にも取得する。拖動期間卡片高度改變時，落點不會使用起始快取。
+    // 拖動中與放開時都重新量 DOM 矩形。拖動期間卡片高度改變時，落點不會使用起始快取。
     const rectangle = targetElement.getBoundingClientRect();
     const side = sideAtPoint(rectangle, point.clientX, point.clientY);
     if (
