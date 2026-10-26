@@ -37,7 +37,7 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
       驗收：spec §6.3 的 8 條各有過或不過與證據；兩個套件的整合成本；協調者選定並寫進 plan §6；跟開發者報告。
 - [ ] **E1 版面運算**（依賴 D2；`2l-layout-ops`）：plan §3.2。
       驗收：`moveCard`、`canDrop`、`resizeSplit`、`resizeBand` 的單元測試涵蓋四方向、從各位置移出、收合、壓平、上下限；隨機 200 次移動的輸出都通過 `parseHomeLayoutV1`；Web 檢查全綠。
-- [ ] **E2 編輯模式介面**（依賴 C0、E1；`2l-layout-edit`）：plan §3.3。
+- [x] **E2 編輯模式介面**（依賴 C0、E1；`2l-layout-edit`）：plan §3.3。
       驗收：新套件只有 C0 選定的、版本鎖定；套件只在轉接層；W280～W286 與決策 323～329 有元件測試（含草稿 store 清除時機與世代號碼、逾時 4 條路徑的結構比對、GET 不用快取、送出期間凍結草稿、≤900px 暫停不寫回、不換行畫布、`canDrop` 與「移到…」共用上限檢查）；SC-Y22、Y24 照樣過；守 4a W256 的 3 條（plan §3.3：`inert` 不包 AI 草稿區、保留 2 個草稿回呼、首頁不加重建共用狀態的 `key`）；Web 檢查全綠。
 - [ ] **E3 PR3 Web e2e**（依賴 E2；`2l-layout-edit-e2e`）：plan §3.4。
       派工前：確認 Web e2e 的埠沒被佔。
