@@ -42,6 +42,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   aiParseDailyUsages   AiParseDailyUsage[]
+  homeLayouts          UserHomeLayout[]
   memberships          LedgerMember[]
   ledgerPeople         LedgerPerson[]
   ledgerPersonPointers LedgerPersonPointer[]
@@ -68,6 +69,28 @@ model User {
   debtProposalsSent       DebtProposal[]     @relation("DebtProposalFrom")
   debtProposalsReceived   DebtProposal[]     @relation("DebtProposalTo")
   splits                  Split[]
+}
+
+enum HomeLayoutSurface {
+  WEB
+}
+
+/// 使用者自訂的首頁版面（2l 決策 330）；沒有列代表使用預設版面。
+model UserHomeLayout {
+  userId        String
+  surface       HomeLayoutSurface
+  /// JSON 格式版本，與並發編輯的 revision 分開。
+  schemaVersion Int
+  /// 每次寫入加一，讓條件更新偵測其他編輯工作階段的儲存。
+  revision      Int
+  /// 資料庫 NULL 代表重設為預設版面。
+  layout        Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, surface])
 }
 
 enum FriendRequestStatus {

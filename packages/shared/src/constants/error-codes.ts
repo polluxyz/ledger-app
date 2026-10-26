@@ -19,6 +19,8 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   /** 請求與目前狀態衝突（重複、破壞不變量）。 */
   CONFLICT: 'CONFLICT',
+  /** 首頁版面已被其他編輯工作階段更新。 */
+  HOME_LAYOUT_REVISION_CONFLICT: 'HOME_LAYOUT_REVISION_CONFLICT',
   /** 註冊時用了已被占用的 email。 */
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
   /** 以某 email 加入成員，但沒有已註冊的使用者用該 email。 */
