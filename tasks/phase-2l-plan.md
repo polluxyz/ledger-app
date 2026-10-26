@@ -156,6 +156,11 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - ≤900px 暫停編輯、草稿保留，暫停期間不寫回草稿、不更新原始 revision（決策 323）；編輯畫布用渲染器的不換行模式，寬度不夠時畫布橫向捲動（決策 324）。
 - `canDrop` 與「移到…」共用一個檢查：結果的深度與節點數不超過 `parseHomeLayoutV1` 的上限（決策 327、SC-Y28）。不檢查最小寬度。
 - 不是編輯模式時，首頁行為與 PR1 相同（SC-Y22）。
+- 與 4a AI 入口（`feature/ai-icon-entry`，4a spec W246～W256）的界線，照 4a 的 W256（ai-4a 協調者 2026-10-26 通知）：
+  - 編輯模式若用 `inert` 鎖住首頁其他部分，不可包住 AI 草稿區（`<AiDraftSection>`，在 PageHeader 之後、`HomeLayoutRenderer` 之前）。
+  - 重寫 `TransactionWorkbench` 時保留 `onDraftSaved` 與 `onDraftSavingChange` 兩個回呼。
+  - 首頁不加會重建共用狀態的 `key`（例如帳本 id 當 `key`），否則 AI 草稿會退回頁面生命週期。
+  - 拖動或調整卡片期間 AI 結果到達、草稿區長高把版面往下推，落點仍要正確：落點依放開當下量到的位置判斷，不用開始拖動時快取的座標。
 
 ### 3.4 E3：PR3 的 Web e2e（`2l-layout-edit-e2e`，Codex）
 
@@ -167,6 +172,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - SC-Y18 的兩個分頁：同一個 context 開兩個 page。
 - SC-Y19 的 4 條路徑：PUT 直接失敗；`page.route` 擋住 PUT 超過 10 秒（還沒存進去）；同上再讓 GET 也失敗；`route.fetch()` 先送到後端、再延遲回應（已存進去）。
 - SC-Y23：沿用 `csp.spec.ts` 的做法，打 `vite preview`，進編輯模式拖一次，console 沒有 CSP 違規。
+- AI 結果在拖動中到達（4a 要求的驗收）：拖動或調整卡片時，讓 AI 解析的回應到達、草稿區長高，放開後落點仍正確。4a 還沒合併時，這條等 AI 入口進 `main` 再補（見 §3.5）。
 
 ### 3.5 PR3 驗收（協調者）
 
@@ -174,6 +180,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 - 存出去的 JSON 都過 `parseHomeLayoutV1`（看 e2e 攔到的請求內容）。
 - 自己用鍵盤走一次 SC-Y20。
 - lint、typecheck、test、build、format:check、兩套 Web e2e 全綠。
+- 與 4a AI 入口誰後合併誰解衝突（`HomePage.tsx` 會被兩邊改）。PR3 後合併時，協調者跑首頁整合驗收：編輯版面時 AI 區仍能操作、表單儲存後草稿移除、切帳本與換頁不丟草稿（4a SC-P29 第 1、5 項），並補上 §3.4 的「AI 結果在拖動中到達」。
 - 合併後部署 dev，先 `pnpm install`，提醒按 `Ctrl + Shift + R`。
 
 ## 4. 風險與對策
@@ -190,6 +197,7 @@ spec：`docs/specs/phase-2l-home-layout.md`（決策 313～335、W272～W287、S
 | 卡片內容高度變動造成列高跳動                             | 列高＝內容最小高度＋`extraHeightPx`，內容變長時列自動長高，不存內容高度            |
 | PR1 拆卡時破壞 2k 的「切帳本不重打」與「寫入後一起更新」 | 資料仍由 `LedgerView`／`Dashboard` 打，卡片只吃 props；2k 的請求增量測試必須照樣過 |
 | Codex 週額度用完                                         | 網頁不換層，停下來問開發者；PR2 是 `backend` 角色，不受影響                        |
+| 與 4a AI 入口在首頁語意衝突（git 合併成功但行為壞掉）    | 守 4a W256 的 3 條（§3.3）；後合併的一方跑首頁整合驗收（§3.5）                     |
 
 ## 5. 部署順序
 
