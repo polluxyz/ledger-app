@@ -61,7 +61,7 @@ export interface TransactionWorkbenchProps {
   /** AI 草稿表單寫入成功後由頁面移除對應草稿。 */
   onDraftSaved?: (key: string) => void;
   /** 讓草稿列在表單送出期間鎖住同一筆，避免兩個入口同時寫入。 */
-  onDraftSavingChange?: (key: string, saving: boolean) => void;
+  onDraftSavingChange?: (key: string, saving: boolean) => boolean | void;
   /** @deprecated 相容舊的 onEditDone prop */
   onEditDone?: () => void;
 }

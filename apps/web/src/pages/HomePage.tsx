@@ -26,6 +26,9 @@ import { AccountsQueryProvider, useAccounts } from '../features/accounts/use-acc
 import { HomeAccountList } from '../features/accounts/HomeAccountList';
 import { useCounterparties } from '../features/debts/use-debts';
 import { DEBTS_OVERVIEW_HREF, DebtsCard } from '../features/debts/DebtsCard';
+import { AiDraftSection } from '../features/ai/AiDraftSection';
+import { AiEntry } from '../features/ai/AiEntry';
+import { useAiSession } from '../features/ai/ai-session';
 import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
@@ -215,6 +218,7 @@ function Dashboard({
   onSwitchToMarkedLedger,
 }: DashboardProps) {
   const { close, isOpen, open, requestFocus } = useRightPanel();
+  const aiSession = useAiSession();
   const currentUser = useCurrentUser();
   const homeLayout = useHomeLayout(currentUser.data?.id ?? null, true);
   const period = currentTaiwanMonthRange();
@@ -237,6 +241,7 @@ function Dashboard({
     panelTargetState.ledgerId === ledger.id
       ? panelTargetState.target
       : targetForPendingAction(pendingMarkedAction, ledger.id);
+  const activeDraftKey = isOpen && panelTarget.kind === 'draft' ? panelTarget.item.key : null;
 
   const recent = useTransactions(ledger.id, { page: 1, limit: RECENT_LIMIT });
   const setTransactionMark = useSetTransactionMark();
@@ -452,6 +457,7 @@ function Dashboard({
 
   return (
     <>
+      <AiEntry ledger={ledger} />
       <PageContent>
         <div className={styles.dashboard}>
           <PageHeader
@@ -491,6 +497,16 @@ function Dashboard({
               </>
             }
           />
+          <AiDraftSection
+            currentLedgerId={ledger.id}
+            activeDraftKey={activeDraftKey}
+            onSelect={(key) => {
+              const item = aiSession.drafts.find((draftItem) => draftItem.key === key);
+              if (!item || aiSession.busyKeys.has(key)) return;
+              setCurrentPanelTarget({ kind: 'draft', item });
+              open();
+            }}
+          />
           {homeLayout.error && <FormError error={homeLayout.error} />}
           <HomeLayoutRenderer
             layout={homeLayout.layout ?? DEFAULT_HOME_LAYOUT_V1}
@@ -512,7 +528,16 @@ function Dashboard({
         onOverwrite={homeLayout.overwriteConflict}
         onClose={homeLayout.closeConflict}
       />
-      <TransactionWorkbench ledger={ledger} target={panelTarget} onClose={closeWorkbench} />
+      <TransactionWorkbench
+        ledger={ledger}
+        target={panelTarget}
+        onClose={closeWorkbench}
+        onDraftSaved={(key) => {
+          aiSession.removeSavedDraft(key);
+          setCurrentPanelTarget({ kind: 'new' });
+        }}
+        onDraftSavingChange={aiSession.markDraftSaving}
+      />
     </>
   );
 }

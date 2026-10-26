@@ -1,7 +1,7 @@
 # 實作計畫：AI 記帳入口改成圖示，首頁也能用
 
-spec：[`docs/specs/phase-4a-ai-text.md`](../docs/specs/phase-4a-ai-text.md) §2.4（W246～W256）、SC-P28～P32；[`docs/specs/phase-2i-web-layout-v2.md`](../docs/specs/phase-2i-web-layout-v2.md) SC-38 的現況註記。
-todo：[`tasks/ai-icon-entry-todo.md`](ai-icon-entry-todo.md)。
+spec：[`docs/specs/phase-4a-ai-text.md`](../../docs/specs/phase-4a-ai-text.md) §2.4（W246～W256）、SC-P28～P32；[`docs/specs/phase-2i-web-layout-v2.md`](../../docs/specs/phase-2i-web-layout-v2.md) SC-38 的現況註記。
+todo：[`tasks/archive/ai-icon-entry-todo.md`](ai-icon-entry-todo.md)。
 
 ## 0. 起點
 
@@ -148,4 +148,31 @@ advisor 第 2 輪補充的並行規則（解析鎖與寫入鎖分開、候選名
 
 ## 8. 實作紀錄
 
-（動工後填寫。）
+### T1、T2（Codex `default`，10-26）
+
+- commits：`aba7ce4`（共用狀態、圖示入口、兩頁接線）、`0763d9b`（焦點與 e2e 補強）、`ae9e6e3`（T3 退回後的焦點修正）。只改 `apps/web`，22 個檔。
+- 新增 `features/ai/ai-session.tsx`（Provider，放在 `App.tsx` 的 `AppProviders` 內、`RightPanelProvider` 外）、`AiEntry.tsx`、`AiDraftSection.tsx`。刪除 `AiDraftInput.*`，它的測試改寫到 `AiEntry.test.tsx`。
+- `HomePage.tsx` 只改 §2.5 的 3 處（入口、草稿區、記帳表單的 2 個草稿回呼），沒有加 `key`。
+- Codex 自己判斷的 2 點，和 spec 不衝突：
+  - 展開後延 50ms 再把焦點移進輸入欄。原生按鈕的點擊預設行為會把焦點拉回按鈕，不延後會失敗。
+  - W251 不能寫入的原因，spec 只列 3 種。帳本清單載入中顯示「載入中…」，載入失敗顯示「找不到草稿的帳本，請重新解析。」，兩種情況 ✓ 都停用。
+- `TransactionForm` 的 `onDraftSavingChange` 改成可以回傳 `false`，表示寫入鎖被別的入口拿走，表單就不送出。這是 W254 (b) 要的。
+
+### T3 驗收（協調者）
+
+- 退回 1 項：解析中收起輸入欄、焦點移到別處後，解析成功會把焦點拉回圖示。修法是用 ref 讀最新的展開狀態，已收起就不動焦點，並補 1 個元件測試（`ae9e6e3`）。
+- 逐行看過鎖與世代判斷：解析鎖在 `parse` 開頭同步取得；寫入鎖分 form、confirm、confirmAll 三種擁有者；換使用者時世代加 1，舊回應丟掉，進行中的寫入鎖保留到請求結束。token 只在登入與登出時改變，不會因自動更新誤清草稿。
+- 重跑結果（修正後）：
+  - lint、typecheck、format:check、build 通過。
+  - 單元測試 2,113：shared 160、API 902、web 1,051（128 檔）。
+  - API e2e 58 檔、611 tests 通過（`ledger_aiicon_test`）。
+  - Web e2e 99/99 通過，沒有重跑。含 SC-P28～P31 與首頁的 §1 第 1～4 步。
+- SC-P32（用一次性 Playwright 腳本量測加截圖，腳本沒有進版控）：390、900、901px × 首頁、交易頁 × 右側欄開、關，共 12 種。
+  - 12 種都沒有橫向捲動。
+  - 看得到圖示的 8 種：輸入欄與錯誤浮層都在畫面內，用 `elementFromPoint` 確認它們在毛玻璃橫條之上，沒有被蓋住。
+  - 900px 以下右側欄打開時，右側欄是蓋在頁面上的抽屜，會蓋住圖示。這是右側欄原本的行為，關掉右側欄就能用，不算這次的問題。
+  - 手機虛擬鍵盤：Playwright 模擬不了。輸入欄在畫面最上方（390px 時 y = 63～105），鍵盤從下方彈出不會蓋到。沒有實機驗證，部署後請開發者用手機確認。
+
+### 與 plan 的偏離
+
+無。
