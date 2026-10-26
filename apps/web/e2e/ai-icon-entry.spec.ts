@@ -8,9 +8,16 @@ import {
   listAccounts,
   listLedgerTransactions,
   personalLedger,
+  putHomeLayout,
   updateMemberRole,
 } from './api';
 import { expect, test } from './fixtures';
+import {
+  expectCardOrder,
+  movePointerToCardSide,
+  wideCategoriesDefaultLayout,
+  watchHomeLayoutRequests,
+} from './home-layout-edit-helpers';
 import {
   homeActivityRow,
   newTransactionForm,
@@ -183,6 +190,162 @@ test.describe('AI 記帳圖示入口', () => {
     await expect(page.getByLabel(`${credit.name}餘額`)).toHaveText(
       formatMoney(creditAfterLunch.balance),
     );
+  });
+
+  test('SC-P29：版面編輯模式仍可送出 AI 並確認或移除草稿', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    await createPersonalAiCatalog(request, userA.token);
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.reload();
+    await openDashboard(page);
+    await enterHomeLayoutEditor(page);
+
+    await submitFromCurrentPage(page, TWO_MEALS_TEXT);
+    const breakfastConfirm = page.getByRole('button', {
+      name: '確認草稿：早餐',
+      exact: true,
+    });
+    const lunchEdit = page.getByRole('button', { name: '編輯草稿：午餐', exact: true });
+    await expect(breakfastConfirm).toBeVisible();
+    await expect(lunchEdit).toBeVisible();
+
+    await breakfastConfirm.click();
+    await expect(breakfastConfirm).toHaveCount(0);
+    await expect(lunchEdit).toBeVisible();
+    await page.getByRole('button', { name: '移除草稿：午餐', exact: true }).click();
+    await expect(lunchEdit).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '完成', exact: true })).toBeVisible();
+  });
+
+  test('SC-P29：版面編輯模式透過表單新增後移除草稿', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    await createPersonalAiCatalog(request, userA.token);
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.reload();
+    await openDashboard(page);
+    await enterHomeLayoutEditor(page);
+
+    await submitFromCurrentPage(page, TWO_MEALS_TEXT);
+    const lunchEdit = page.getByRole('button', { name: '編輯草稿：午餐', exact: true });
+    await lunchEdit.click();
+    const form = newTransactionForm(page);
+    await expect(form).toBeVisible();
+    await form.getByLabel('金額').fill('125');
+    await form.getByRole('button', { name: '新增', exact: true }).click();
+
+    await expect(lunchEdit).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '完成', exact: true })).toBeVisible();
+  });
+
+  test('SC-P29：編輯模式中切帳本及往返交易頁後草稿仍在', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const { personal } = await createPersonalAiCatalog(request, userA.token);
+    const otherLedger = await createLedger(request, userA.token, { name: '草稿跨帳本測試' });
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.reload();
+    await openDashboard(page);
+    await enterHomeLayoutEditor(page);
+
+    await submitFromCurrentPage(page, TWO_MEALS_TEXT);
+    const breakfastEdit = page.getByRole('button', { name: '編輯草稿：早餐', exact: true });
+    await expect(breakfastEdit).toBeVisible();
+    await switchLedger(page, otherLedger.name);
+    await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
+    const breakfastRow = page.getByRole('listitem').filter({ has: breakfastEdit });
+    await expect(breakfastRow).toContainText(personal.name);
+
+    await openTransactions(page);
+    await openDashboard(page);
+    await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
+    await expect(breakfastEdit).toBeVisible();
+    await expect(page.getByRole('button', { name: '完成', exact: true })).toBeVisible();
+  });
+
+  test('SC-P29、2l §3.4：AI 回應推高草稿區後依放開當下位置拖放', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    await createPersonalAiCatalog(request, userA.token);
+    await page.setViewportSize({ width: 2800, height: 2200 });
+    await putHomeLayout(request, userA.token, {
+      schemaVersion: 1,
+      expectedRevision: 0,
+      layout: wideCategoriesDefaultLayout(),
+    });
+    await page.reload();
+    await openDashboard(page);
+    const network = await watchHomeLayoutRequests(page);
+    await enterHomeLayoutEditor(page);
+
+    let releaseParse: (() => void) | undefined;
+    const parseGate = new Promise<void>((resolve) => {
+      releaseParse = resolve;
+    });
+    let parseRequests = 0;
+    await page.route('**/ai/parse-transaction', async (route) => {
+      parseRequests += 1;
+      await parseGate;
+      await route.continue();
+    });
+
+    try {
+      await submitFromCurrentPage(page, TWO_MEALS_TEXT);
+      await expect.poll(() => parseRequests).toBe(1);
+
+      const categories = page.locator('[data-home-card-id="categories"]');
+      const targetBefore = await categories.boundingBox();
+      if (!targetBefore) throw new Error('找不到首頁支出分類卡。');
+      await movePointerToCardSide(page, 'accounts', 'categories', 'bottom');
+      await expect(
+        page.locator('[aria-hidden="true"]').filter({ hasText: '帳戶' }).last(),
+      ).toBeVisible();
+
+      releaseParse?.();
+      releaseParse = undefined;
+      await expect(page.getByRole('button', { name: '確認草稿：早餐', exact: true })).toBeVisible();
+      await expect
+        .poll(async () => (await categories.boundingBox())?.y ?? -1)
+        .toBeGreaterThan(targetBefore.y + 50);
+
+      const targetAfter = await categories.boundingBox();
+      if (!targetAfter) throw new Error('AI 草稿出現後找不到首頁支出分類卡。');
+      await page.mouse.move(
+        targetAfter.x + targetAfter.width / 2,
+        targetAfter.y + targetAfter.height * 0.85,
+        { steps: 14 },
+      );
+      await expect(
+        page.locator('[data-home-card-id="categories"] > [aria-hidden="true"]'),
+      ).toBeVisible();
+      await page.mouse.up();
+
+      await expectCardOrder(page, [
+        'expense',
+        'income',
+        'net',
+        'trend',
+        'categories',
+        'accounts',
+        'activity',
+        'debts',
+      ]);
+      await page.getByRole('button', { name: '完成', exact: true }).click();
+      await expect(page.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+      expect(network.puts).toHaveLength(1);
+    } finally {
+      releaseParse?.();
+      await page.mouse.up();
+    }
   });
 
   test('SC-P29/30：解析中切換帳本與頁面不丟回應，第二頁不能再送解析', async ({
@@ -473,6 +636,11 @@ async function submitFromCurrentPage(page: import('@playwright/test').Page, text
   if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
   await page.getByRole('textbox', { name: '用一句話記帳' }).fill(text);
   await page.getByRole('button', { name: '送出', exact: true }).click();
+}
+
+async function enterHomeLayoutEditor(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByRole('button', { name: '編輯', exact: true }).click();
+  await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
 }
 
 async function toolbarHeight(toggle: import('@playwright/test').Locator): Promise<number> {
