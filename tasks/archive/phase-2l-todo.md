@@ -1,6 +1,6 @@
 # 2l 任務清單
 
-plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。網頁的 worker 都是 Codex（`default` 角色）；PR2 的後端是 `backend` 角色。
+plan：`tasks/archive/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。網頁的 worker 都是 Codex（`default` 角色）；PR2 的後端是 `backend` 角色。
 
 ## docs
 
@@ -42,5 +42,5 @@ plan：`tasks/phase-2l-plan.md`；spec：`docs/specs/phase-2l-home-layout.md`。
 - [x] **E3 PR3 Web e2e**（依賴 E2；`2l-layout-edit-e2e`）：plan §3.4。
       派工前：確認 Web e2e 的埠沒被佔。
       驗收：SC-Y14～Y21、Y23、Y26～Y29 有 e2e（Y26 含 8 張卡一列的舊版面）；「拖曳或調整卡片時 AI 結果到達，草稿區長高後落點仍正確」有 e2e（4a 要求；AI 入口還沒進 `main` 時移到 D3 補）；兩套 Web e2e 全綠。
-- [ ] **D3 PR3 驗收、PR、部署、收尾**（協調者）：plan §3.5。
+- [x] **D3 PR3 驗收、PR、部署、收尾**（協調者）：plan §3.5。4a 還沒進 `main`，AI 結果在拖動中到達的 e2e 與 4a SC-P29 第 1、5 項改由合併 4a 的人補（plan §6）。
       驗收：存出去的 JSON 都過驗證；自己用鍵盤走一次 SC-Y20；PR3 比 4a AI 入口後合併時，解 `HomePage.tsx` 衝突並跑首頁整合驗收（編輯版面時 AI 區仍能操作、表單儲存後草稿移除、切帳本與換頁不丟草稿，4a SC-P29 第 1、5 項）；全部檢查全綠；spec §9 的文件影響都改了；PR 依模板、CI 全綠、squash merge；部署 dev，提醒 `Ctrl + Shift + R`；worker 都 `worker-release`，worktree、子分支、測試資料庫清掉（drop 資料庫前先問）；plan 與 todo 移到 `tasks/archive/`。
