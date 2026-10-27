@@ -1,8 +1,23 @@
-# 交接：2j 統計、2k 首頁改版、2l 可編輯版面（`stats-2j`）
+# 交接：2j 統計、2k～2m 首頁改版（`stats-2j`）
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
 ## 現況（2026-10-27）
+
+### 2m 實裝完成，交 Claude Code 驗收
+
+- 開發者逐次確認首頁預覽，最後要求「好 幫我實裝」，並追加「實裝完畢後交給 claude code 做驗收」。Codex 已完成程式與必要驗證，交接後停止寫入；驗收通過前不得合併。
+- 分支：`feature/home-visual-refresh`，程式 commit `823428a`，基底 `d8b8720`。PR [#189](https://github.com/polluxyz/ledger-app/pull/189) 是 draft；後續交接 commit 只有文件，不改程式或測試。
+- 規格：[2m](../specs/phase-2m-home-visual-refresh.md)；[plan](../../tasks/home-visual-refresh-plan.md) 的實作紀錄及結果、[todo](../../tasks/home-visual-refresh-todo.md) V1～V3 完成，V4 留給驗收者。沒有改 schema、API、shared、套件、環境變數或 CI，也沒有部署 dev。
+- 實作：首頁沿用八卡與儲存版面；趨勢左「總資產變化」、右「每月結餘」，只畫柱圖，滑動底板／柱高／零線動畫；原資產與月結餘取既有兩組 API。借還改左右圓形頭像與姓名、中央支付箭頭與精確金額。其他卡片調整數字、淡金結餘、進度條與清單間距。
+- 本機品質檢查：format、lint、typecheck、build 全部 exit 0；`pnpm test`：shared 160、API 902、Web 1118（共 2180）通過。最後圖表微調後 3 檔相關元件／首頁測試 45／45 通過。
+- 本機 Web e2e：首頁與版面編輯首輪 39／41，修正兩條後針對失敗案例重跑 2／2 通過；最後手機標籤／留白調整再驗 SC-V1、Y4、H14，3／3 通過。不是最後一次單批執行 41／41，完整過程與測試斷言變更理由見 plan。
+- 請特別檢查原 SC-Y16 滑鼠來回 50 vs 49.997 的次像素誤差：滑鼠斷言改 `toBeCloseTo(initialValue, 2)`；鍵盤精確恢復、總高 0.5px 內斷言保留，版面調整器沒有改動。新圖表測試改等手機版面穩定後檢查溢出。
+- 本機截圖：`docs/artifacts/2l-aplus-shots/home-1280px-light-gold.png`、`home-390px-light-gold.png`、`home-1280px-dark-gold.png`；最後手機趨勢截圖在 `apps/web/test-results/`。均為測試虛構資料、不進版控。使用者核可的完整預覽為 `docs/artifacts/home-refresh-20261027/index.html`。
+- CI 在 PR 建立後已啟動，交接時待完成。尚未在本機重跑全站 Web e2e／API e2e。請自行讀最新 head 的 CI、依 SC-V1～V8 做獨立驗收；通過後再將 draft ready、依 §10 完成合併及文件歸檔。失敗則列可重現問題，網頁修正仍交 Codex。
+- e2e 使用本工作區 `ledger_stats_test`，port 3100／5273／5274 由測試啟閉；再次執行前確認沒有其他工作區使用。指令一律 `fnm exec --using=24.22.1 ...`，不要碰 dev 資料庫。
+
+### 已完成的前置工作
 
 - 2j 已以 PR #154 合進 `main`，程式隨 4a 部署到 dev（#156）。plan 與 todo 在 `tasks/archive/phase-2j-*.md`，驗收數字在 plan §6。
 - 2k 首頁改版已以 PR #163（`ad1471f`）合進 `main` 並部署到 dev（只改前端）。部署後在 dev 用無頭瀏覽器點過：首頁版面、展開與收起、最近｜標註切換、三種配色切換、重整後配色保留、390px，沒有 console 錯誤或 4xx／5xx。spec `docs/specs/phase-2k-home-redesign.md`，plan 與 todo 在 `tasks/archive/phase-2k-*.md`，W1～W7 的驗收數字在 plan §6。
@@ -13,7 +28,7 @@
 
 ## 2l 進度（2026-10-26）
 
-2l 全部完成，3 個 PR 都已合併並部署到 dev。這個工作區目前沒有進行中的工作。
+2l 全部完成，3 個 PR 都已合併並部署到 dev。後續 2m 狀態見本檔最上方。
 
 - PR1（A+ 版面）：#172（`2454a0d`）。含 W-A3（決策 336、SC-Y30）：卡窄於 360px 時交易列改成兩行。
 - PR1 的交接 #173（`83c5cf3`）已合併。CI 原本卡在首頁 e2e `getRect` 偶發失敗，#174（`db7cb2f`）已修好：量之前先等元素可見並重試，斷言沒放寬。
