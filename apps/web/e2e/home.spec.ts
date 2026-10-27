@@ -415,12 +415,12 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     });
   });
 
-  test('SC-Y8：六個帳戶的展開清單依 439px／440px 容器寬換欄，收起時保持一欄', async ({
+  test('SC-Y8：六個帳戶依 439px／440px 容器寬換欄，五個以下保持一欄', async ({
     signedInPage: page,
     userA,
     request,
   }, testInfo) => {
-    for (let index = 2; index <= 6; index += 1) {
+    for (let index = 2; index <= 5; index += 1) {
       await createAccount(request, userA.token, {
         name: `首頁帳戶 ${String(index).padStart(2, '0')}`,
       });
@@ -429,6 +429,29 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
 
     const accountsCard = page.locator('[data-home-card-id="accounts"]');
     const list = accountsCard.getByRole('list', { name: '帳戶' });
+    const fiveAccountApiOrder = (await listAccounts(request, userA.token))
+      .filter((account) => !account.isTemporary || account.hasTransactions)
+      .map((account) => account.name);
+    expect(fiveAccountApiOrder).toHaveLength(5);
+    await expect(list.getByRole('listitem')).toHaveCount(5);
+    for (const [index, name] of fiveAccountApiOrder.entries()) {
+      await expect(list.getByRole('listitem').nth(index)).toContainText(name);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await list.evaluate((element) => {
+      (element as HTMLElement).style.width = '440px';
+    });
+    await expect.poll(() => list.evaluate((element) => element.clientWidth)).toBe(440);
+    const fiveAccountFirst = await getRect(list.getByRole('listitem').nth(0));
+    const fiveAccountSecond = await getRect(list.getByRole('listitem').nth(1));
+    expectAccountColumns(fiveAccountFirst, fiveAccountSecond, 1);
+    await list.evaluate((element) => {
+      (element as HTMLElement).style.width = '';
+    });
+
+    await createAccount(request, userA.token, { name: '首頁帳戶 06' });
+    await page.reload();
     const apiOrder = (await listAccounts(request, userA.token))
       .filter((account) => !account.isTemporary || account.hasTransactions)
       .map((account) => account.name);
@@ -443,7 +466,6 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     }> = [];
     for (const viewportWidth of [1280, 390]) {
       await page.setViewportSize({ width: viewportWidth, height: 900 });
-      await accountsCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
       await expect(list.getByRole('listitem')).toHaveCount(6);
       for (const [index, name] of apiOrder.entries()) {
         await expect(list.getByRole('listitem').nth(index)).toContainText(name);
@@ -464,19 +486,11 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       }
 
       await list.evaluate((element) => {
-        (element as HTMLElement).style.width = '440px';
-      });
-      await accountsCard.getByRole('button', { name: '收起', exact: true }).click();
-      const firstCollapsed = await getRect(list.getByRole('listitem').nth(0));
-      const secondCollapsed = await getRect(list.getByRole('listitem').nth(1));
-      expectAccountColumns(firstCollapsed, secondCollapsed, 1);
-      await list.evaluate((element) => {
         (element as HTMLElement).style.width = '';
       });
     }
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await accountsCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
     await openNewTransaction(page);
     const panelListWidth = await list.evaluate((element) => element.clientWidth);
     expect(panelListWidth).toBeLessThan(440);
@@ -503,6 +517,12 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y8',
+      fiveAccountWideCard: {
+        contentWidth: 440,
+        columns: 1,
+        first: fiveAccountFirst,
+        second: fiveAccountSecond,
+      },
       widthMeasurements: widths,
       rightPanel: {
         viewportWidth: 1280,
@@ -651,7 +671,6 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         name: '全部 15 類',
         exact: true,
       });
-      const accountToggle = page.getByRole('button', { name: '全部 12 個', exact: true });
       const accountList = assetCard.getByRole('list', { name: '帳戶' });
       await expect(
         page
@@ -662,10 +681,8 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
           .first(),
       ).toBeVisible();
       await expect(categoryToggle).toBeVisible();
-      await expect(accountToggle).toBeVisible();
-
+      await expect(accountList.getByRole('listitem')).toHaveCount(12);
       await categoryToggle.click();
-      await accountToggle.click();
       await expect(page.getByRole('list', { name: '支出分類' }).getByRole('listitem')).toHaveCount(
         15,
       );
@@ -728,11 +745,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       const categoryToggleHeight = (
         await getRect(categorySection.getByRole('button', { name: '收起', exact: true }))
       ).height;
-      const accountToggleHeight = (
-        await getRect(assetCard.getByRole('button', { name: '收起', exact: true }).last())
-      ).height;
       expect(categoryToggleHeight).toBeGreaterThanOrEqual(44);
-      expect(accountToggleHeight).toBeGreaterThanOrEqual(44);
 
       const dimensions = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
@@ -748,7 +761,6 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         dateHeadingPadding,
         tabHeights,
         categoryToggleHeight,
-        accountToggleHeight,
       });
     }
 
@@ -763,9 +775,9 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     const desktopAccountsCard = page.locator('[data-home-card-id="accounts"]');
     const desktopDebtsCard = page.locator('[data-home-card-id="debts"]');
     await desktopCategoryCard.getByRole('button', { name: '全部 15 類', exact: true }).click();
-    await desktopAccountsCard.getByRole('button', { name: '全部 12 個', exact: true }).click();
     const desktopCategoryName = page.getByText(longCategoryName, { exact: true });
     const desktopAccountList = desktopAccountsCard.getByRole('list', { name: '帳戶' });
+    await expect(desktopAccountList.getByRole('listitem')).toHaveCount(12);
     const desktopAccountName = desktopAccountList.getByText(longAccountName, { exact: true });
     const desktopAccountAmount = desktopAccountList.getByText('$12,345,678', { exact: true });
     const desktopDebtName = desktopDebtsCard.getByText(longPersonName, { exact: true }).first();
@@ -1292,7 +1304,6 @@ async function runHomePaletteTheme(
       await expect.poll(() => readHomeCategoryColor(page)).toBe(homeColorBeforeReload);
 
       const accountCard = page.locator('[data-home-card-id="accounts"]');
-      await accountCard.getByRole('button', { name: '全部 6 個', exact: true }).click();
       await expect(
         accountCard.getByRole('list', { name: '帳戶' }).getByRole('listitem'),
       ).toHaveCount(6);

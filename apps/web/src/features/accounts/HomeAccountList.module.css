@@ -4,7 +4,7 @@
   list-style: none;
 }
 
-.expandedList {
+.multiColumnList {
   container-name: home-account-list;
   container-type: inline-size;
 }
@@ -35,23 +35,6 @@
   color: var(--color-expense);
 }
 
-.toggle {
-  min-height: 44px;
-  margin-top: var(--space-xs);
-  padding: 0 var(--space-sm);
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--color-accent);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-sm);
-}
-
-.toggle:hover {
-  background-color: var(--color-primary-soft);
-}
-
 .empty {
   margin: 0;
   padding: var(--space-sm) var(--space-md);
@@ -62,7 +45,7 @@
 }
 
 @container home-account-list (min-width: 440px) {
-  .expandedItem {
+  .item {
     display: inline-flex;
     width: 50%;
     vertical-align: top;
