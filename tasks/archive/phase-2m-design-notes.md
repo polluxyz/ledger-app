@@ -1,6 +1,6 @@
 # 首頁風格改版：設計討論紀錄
 
-狀態：開發者已確認預覽並指示實裝。正式程式已完成，規格見 [2m spec](../docs/specs/phase-2m-home-visual-refresh.md)，實作與證據見 [plan](home-visual-refresh-plan.md)；依使用者追加指示，待 Claude Code 獨立驗收後才合併。下列預覽驗證是設計階段紀錄，不取代正式程式測試。
+狀態：開發者已確認預覽並指示實裝。正式程式已完成，規格見 [2m spec](../../docs/specs/phase-2m-home-visual-refresh.md)，實作與證據見 [plan](phase-2m-plan.md)；依使用者追加指示，Claude Code 獨立驗收後已以 PR #189 合併。下列預覽驗證是設計階段紀錄，不取代正式程式測試。
 
 ## 使用者需求
 

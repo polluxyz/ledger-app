@@ -1,6 +1,6 @@
 # 首頁風格實裝計畫
 
-依據：[2m spec](../docs/specs/phase-2m-home-visual-refresh.md)。開發者已核可最後預覽並要求實裝，另指定完成後由 Claude Code 驗收。
+依據：[2m spec](../../docs/specs/phase-2m-home-visual-refresh.md)。開發者已核可最後預覽並要求實裝，另指定完成後由 Claude Code 驗收。
 
 ## 實作順序
 
@@ -44,6 +44,14 @@
 
 測試資料庫：`ledger_stats_test`。本機證據：`docs/artifacts/home-refresh-20261027/unit-tests.log`、`apps/web/test-results/`、`docs/artifacts/2l-aplus-shots/home-1280px-light-gold.png`（皆不進版控）。沒有重新跑全站 Web e2e 或 API e2e；完整 CI 與獨立驗收由接手的 Claude Code 確認。
 
-## 待 Claude Code 驗收
+## Claude Code 驗收紀錄（2026-10-27）
 
-請依 SC-V1～V8 檢查 diff、實際版面與動畫，特別核對兩組統計範圍、長名稱／金額、自訂版面與鍵盤。確認上述滑鼠次像素斷言的修正合理；如需更強證據，維持像素總高條件並補驗。驗收通過前保持 PR 待驗收狀態，不合併、不部署。
+結論：SC-V1～V8 通過，PR #189 可合併。唯一的不合格是 SC-Y8 的 e2e 競態，只改測試，產品行為符合 spec。
+
+- diff：程式 commit `823428a` 共 29 檔，+1219／−924。沒有 schema、API、shared、套件、環境變數或 CI 變更。
+- 自己重跑：`format:check`、Web lint、Web typecheck exit 0；Web vitest 1118／1118；build exit 0。build 的 PostCSS「沒傳 `from`」警告在基底 `d8b8720` 的 CI 就有，不是本次引入。
+- 暫存驗收 e2e（驗完刪除，不進版控）3／3 通過：趨勢顯示 API 原值（含 `-$3,000.01`）；負值柱由零線向下；動畫中途切換與改寬度不殘留；站內動畫開關生效，系統 reduced-motion 不影響；換帳本不殘留前一本資料；鍵盤取月份金額；借還雙向、長姓名、精確金額在 1280／390／309px 不溢出；深淺主題下趨勢卡不溢出。
+- SC-Y16 滑鼠來回改 `toBeCloseTo(initialValue, 2)`：差異是 50 對 49.997 的次像素換算。鍵盤精確恢復與總高 0.5px 內的斷言都保留，版面調整器沒改。判定合理。
+- SC-Y8（計畫外）：PR 的 CI 兩次都在這條失敗。原斷言要求「右側面板打開時清單 <440px、一欄」，只有在面板轉場中取樣才成立。面板開完後內容約 601px，卡片最小寬 309px 排不下兩欄，帳戶卡變全寬，清單 551px 排兩欄；基底 `d8b8720` 一樣。這符合 2l SC-Y8 與 2k SC-H8 的「照清單寬度判斷」。派 Codex 修測試（`c975aac`）：等面板與清單寬度穩定，再依實際寬度推欄數，並斷言面板打開後內容變窄。
+- 修正後：`home.spec.ts` 加 `home-layout-edit.spec.ts` 41／41 通過（3.5 分）；SC-Y8 `--repeat-each=3` 3／3 通過。
+- 小問題，不擋合併：姓名是空字串時頭像沒有字；版控內的 e2e 對動畫中途狀態的證據偏弱，本次由暫存驗收補驗。
