@@ -169,6 +169,8 @@ Codex 用到沒有為止（開發者 2026-10-19）：`usedPercent` 只當參考�
 - 跳過許可的代價是 worker 在 worktree 裡做什麼都不會問。驗收時看完整的 `git status` 與 `git diff`，範圍外的改動一律退回。
 - 用 `--terminal` 接到不在協調者 worktree 的終端機，要同時帶 `--worktree path:<那個 worktree>`，否則回 `terminal_worktree_mismatch`。
 - Orca 自動更新或重啟後，舊的終端機 handle 會回 `terminal_handle_stale`，用 `orca terminal list` 依標題找新 handle。重啟前開的兩段式終端機可能派工逾時（`agent_readiness` timeout），或 Codex 每個指令都失敗（`helper_unknown_error: setup refresh had errors`）。遇到就 `worker-stop`、`orca terminal close`，開新終端機用 `--retry-of` 重派（2026-10-25）。
+- 沒有重啟也可能遇到 `agent_readiness`：2026-10-27 在 `stats-2j` worktree 開的兩段式 Codex，畫面看起來閒置，連派 3 次都失敗。改開新的 worktree 再派就成功，原因不明。同一個 worktree 重派一次仍失敗，就換 worktree。
+- 重派時 `worker-start` 用 `--retry-of <dispatch> --task <task>`，不要再帶 `--spec`。兩者同時帶會回 `--task and --spec are mutually exclusive`。
 
 **Codex**
 

@@ -2,7 +2,7 @@
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
-## 現況（2026-10-25）
+## 現況（2026-10-27）
 
 - 2j 已以 PR #154 合進 `main`，程式隨 4a 部署到 dev（#156）。plan 與 todo 在 `tasks/archive/phase-2j-*.md`，驗收數字在 plan §6。
 - 2k 首頁改版已以 PR #163（`ad1471f`）合進 `main` 並部署到 dev（只改前端）。部署後在 dev 用無頭瀏覽器點過：首頁版面、展開與收起、最近｜標註切換、三種配色切換、重整後配色保留、390px，沒有 console 錯誤或 4xx／5xx。spec `docs/specs/phase-2k-home-redesign.md`，plan 與 todo 在 `tasks/archive/phase-2k-*.md`，W1～W7 的驗收數字在 plan §6。
@@ -23,17 +23,18 @@
 - 已清掉：worktree `2l-aplus`、`home-design`、`home-e2e-flake`、`2l-layout-api`、`2l-layout-ops`、`2l-layout-edit`、`2l-layout-edit-e2e` 與對應分支；本機分支 `feature/2l-home-layout-edit`、`polluxyz/2l-dnd-spike`；遠端分支 `polluxyz/2l-aplus`；測試資料庫 `ledger_2laplus_test`、`ledger_homedesign_test`、`ledger_flake_test`、`ledger_layout_test`。保留 stats-2j 自己的 `ledger_stats_test`。
 - 專案 Node 已改成 24.22.1（#176）。指令用 `fnm exec --using=24.22.1 ...`。
 
-### 待開發者決定
+## 2l 之後的收尾（2026-10-27）
 
-- 要不要請 Codex 重產已刪的 A+ 預覽頁（選用，實作以 spec 文字為準）。
+- Web code splitting：#184（`c810d55`）。登入、註冊以外的頁面改成按路由載入，build 不再有 500 kB 警告。最大 chunk 290.67 kB（gzip 92.11 kB），首頁首次載入 612.65 kB（改前 740.36 kB）。
+- A+ 預覽頁已請 Codex 重產，放在 `docs/artifacts/home-design-align/aplus.html`（不進版控）。只是參考，實作仍以 2l spec 文字為準。
+- 390px 借還卡長名稱：在 #184 的分支上用暫時的 e2e 量過，390px 與 309px、深淺兩色都是單行加省略號，沒有被擠成 4 行。2l #172 的首頁摘要箭頭已經處理掉。截圖與 Codex 做的 3 個改法比較在 `docs/artifacts/debt-card-390/`（不進版控）。
+- 已清掉：worktree `web-previews`、`web-code-split` 與對應分支，測試資料庫 `ledger_codesplit_test` 與誤建的 `ledger_test_codesplit`。e2e 只接受名稱以 `_test` 結尾的資料庫，命名要照這個規則。
 
 ## 已知問題
 
-- 390px 時，借還卡的長對象名稱（例：「搬移測試對象 1021」）被擠成 4 行。開發者還沒決定要不要改。
 - Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（2j plan §6）。再出現時先看是不是機器負載。
 - #174 的代價：首頁元件真的沒出現時，`getRect` 要多等 5 秒才失敗。
 - 4a 還沒驗的整合：「拖動或調整卡片時 AI 結果到達」的 e2e，以及 4a SC-P29 第 1、5 項的首頁整合驗收（編輯版面時 AI 區仍能操作、切帳本與換頁不丟草稿）。PR3 比 4a AI 入口（`feature/ai-icon-entry`）先合併，所以由合併 4a 的人解 `HomePage.tsx` 衝突並補這兩項（2l plan §6）。
-- Web build 有 500 kB chunk 警告：JS 734.63 kB（gzip 222.95），PR3 多了約 118 kB。還沒拆 chunk。
 - PR2 已知限制：revision 到 2147483647 後再存一次，資料庫整數溢位回 500。正常使用不會發生，沒有處理。
 - `packages/shared` 沒有 lint script；shared 的測試檔不在 typecheck 範圍內。
 

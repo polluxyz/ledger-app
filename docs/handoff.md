@@ -13,7 +13,7 @@
 | worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                                        |
 | ---------- | ----------------- | ------------------------------- | ------------------- | ----------------------------------------------------------- |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                         |
-| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2l 全部完成（#172、#175、#179），已部署；無進行中工作       |
+| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2l 全部完成並部署；收尾 code splitting #184；無進行中工作   |
 | `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | AI 入口改圖示已合併部署（#180）；下一步換模型 → 語音 → 匯入 |
 
 ## 跨工作區的規則
