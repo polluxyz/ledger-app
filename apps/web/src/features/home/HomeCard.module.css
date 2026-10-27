@@ -23,9 +23,9 @@
 }
 
 /* 裝飾在自己的裁切層內，避免裁掉卡片外的鍵盤焦點框與版面編輯控制。 */
+/* 不設定 z-index，讓較早出現在 DOM 的裝飾留在文字與圖示下方。 */
 .summaryDecoration {
   position: absolute;
-  z-index: 0;
   inset: 0;
   overflow: hidden;
   border-radius: inherit;
@@ -44,10 +44,10 @@
   box-shadow: 0 0 0 16px color-mix(in srgb, var(--color-accent) 4%, transparent);
 }
 
+/* header／body 不設 z-index，避免堆疊上下文限制「移到」選單的顯示範圍。 */
 .card[data-home-card-id='net'] > .header,
 .card[data-home-card-id='net'] > .body {
   position: relative;
-  z-index: 1;
 }
 
 .summaryIcon {

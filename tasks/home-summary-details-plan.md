@@ -15,6 +15,7 @@
 - 基底 `cab8b50`（#189 已合併），分支 `fix/home-summary-visual-details`。
 - #189 驗收結束後工作區乾淨，Claude Code 目前待命，本次 Codex 負責補正，完成後再交接。
 - 裝飾獨立裁切，不在整張卡設定 overflow 或隔離堆疊，保留焦點框與「移到」選單的原有顯示範圍。
+- 修正結餘卡的堆疊：裝飾層不設 `z-index`，header／body 僅設 `position: relative`；若替 header／body 設定 `z-index`，會建立堆疊上下文，讓「移到」選單受限於 header。
 
 ## 驗證結果
 
