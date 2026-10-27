@@ -10,11 +10,11 @@
 
 開發者 2026-10-21 決定：2j 統計與 4a AI 文字記帳**各開一條分支、各由一個 session 負責**，開發者分別到各工作區對話；需要管理時才回 main。
 
-| worktree   | 分支                          | 交接檔                          | 測試資料庫          | 狀態                                                              |
-| ---------- | ----------------------------- | ------------------------------- | ------------------- | ----------------------------------------------------------------- |
-| 主工作區   | `main`                        | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                               |
-| `stats-2j` | `feature/home-visual-refresh` | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2m 首頁風格已實裝，PR #189 draft，依開發者要求交 Claude Code 驗收 |
-| `ai-4a`    | 無（停在 `main`）             | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 換模型候選：Vertex 測試腳本等開發者執行；之後語音 → 匯入          |
+| worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                                                                               |
+| ---------- | ----------------- | ------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                                                                |
+| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 2m 首頁風格已驗收並合併（#189），尚未部署 dev；無進行中工作                                        |
+| `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 換模型：開發者傾向 Claude Haiku 5.5，等他決定是否加測（DeepSeek 答對但 17% 逾時）；之後語音 → 匯入 |
 
 ## 跨工作區的規則
 
