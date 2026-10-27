@@ -437,7 +437,7 @@ describe('Home dashboard', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getAllByText('$0')).toHaveLength(3);
+    expect(await screen.findAllByText('$0')).toHaveLength(3);
     expect(screen.getByText(/登入後即可開始記帳/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '最近交易' })).not.toBeInTheDocument();
     expect(countRequest('/accounts')).toBe(0);
