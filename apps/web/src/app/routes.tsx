@@ -1,18 +1,21 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import AccountsPage from '../pages/AccountsPage';
-import CategoriesPage from '../pages/CategoriesPage';
-import CounterpartiesPage from '../pages/CounterpartiesPage';
-import HomePage from '../pages/HomePage';
-import InvitePage from '../pages/InvitePage';
-import LedgerDetailPage from '../pages/LedgerDetailPage';
-import LedgersPage from '../pages/LedgersPage';
 import LoginPage from '../pages/LoginPage';
-import ProfilePage from '../pages/ProfilePage';
 import RegisterPage from '../pages/RegisterPage';
-import StatsPage from '../pages/StatsPage';
-import TransactionsPage from '../pages/TransactionsPage';
 import { GuestOnlyRoute } from './GuestOnlyRoute';
 import { ProtectedRoute } from './ProtectedRoute';
+
+// 登入與註冊是常用入口且程式量小，保留同步載入；其他頁面按路由載入。
+const AccountsPage = lazy(() => import('../pages/AccountsPage'));
+const CategoriesPage = lazy(() => import('../pages/CategoriesPage'));
+const CounterpartiesPage = lazy(() => import('../pages/CounterpartiesPage'));
+const HomePage = lazy(() => import('../pages/HomePage'));
+const InvitePage = lazy(() => import('../pages/InvitePage'));
+const LedgerDetailPage = lazy(() => import('../pages/LedgerDetailPage'));
+const LedgersPage = lazy(() => import('../pages/LedgersPage'));
+const ProfilePage = lazy(() => import('../pages/ProfilePage'));
+const StatsPage = lazy(() => import('../pages/StatsPage'));
+const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
 
 /**
  * 路由表。
@@ -26,33 +29,35 @@ import { ProtectedRoute } from './ProtectedRoute';
  */
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
 
-      {/* 登入轉址只保留路徑與查詢字串，會丟掉邀請 token 所在的 hash。 */}
-      <Route path="/invite" element={<InvitePage />} />
+        {/* 登入轉址只保留路徑與查詢字串，會丟掉邀請 token 所在的 hash。 */}
+        <Route path="/invite" element={<InvitePage />} />
 
-      <Route element={<GuestOnlyRoute />}>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-      </Route>
+        <Route element={<GuestOnlyRoute />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
 
-      <Route element={<ProtectedRoute />}>
-        {/* 交易表格從 2h 的首頁搬過來（spec 2i SC-34.2）；首頁改成 dashboard。 */}
-        <Route path="/transactions" element={<TransactionsPage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="/counterparties" element={<CounterpartiesPage />} />
-        <Route path="/accounts" element={<AccountsPage />} />
-        <Route path="/ledgers" element={<LedgersPage />} />
-        <Route path="/ledgers/:ledgerId" element={<LedgerDetailPage />} />
-        {/* 分類頁的帳本由 `?ledgerId=` 指定，不是路徑參數——它與側邊欄的作用中
+        <Route element={<ProtectedRoute />}>
+          {/* 交易表格從 2h 的首頁搬過來（spec 2i SC-34.2）；首頁改成 dashboard。 */}
+          <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/counterparties" element={<CounterpartiesPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
+          <Route path="/ledgers" element={<LedgersPage />} />
+          <Route path="/ledgers/:ledgerId" element={<LedgerDetailPage />} />
+          {/* 分類頁的帳本由 `?ledgerId=` 指定，不是路徑參數——它與側邊欄的作用中
             帳本各自獨立，網址帶得走才能從帳本明細頁直接連過來。 */}
-        <Route path="/categories" element={<CategoriesPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-      </Route>
+          <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Route>
 
-      {/* 未知路徑導回首頁。 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* 未知路徑導回首頁。 */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

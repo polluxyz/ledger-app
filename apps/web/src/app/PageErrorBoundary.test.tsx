@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -7,6 +8,12 @@ import { PageErrorBoundary } from './PageErrorBoundary';
 function BrokenPage(): never {
   throw new Error('render failed');
 }
+
+const ChunkLoadFailedPage = lazy(() =>
+  Promise.resolve().then(() => {
+    throw new Error('Failed to fetch dynamically imported module');
+  }),
+);
 
 /**
  * 頁面層級的錯誤邊界：某一頁出錯時，邊界外的導覽（這裡用一個 Link 代表側欄或站名）
@@ -40,6 +47,25 @@ describe('PageErrorBoundary', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('帳戶頁')).toBeInTheDocument();
+  });
+
+  it('catches a failed lazy page chunk inside the page boundary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/broken']}>
+        <PageErrorBoundary>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/broken" element={<ChunkLoadFailedPage />} />
+            </Routes>
+          </Suspense>
+        </PageErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: '畫面出錯了' })).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to fetch dynamically imported module'),
+    ).not.toBeInTheDocument();
   });
 
   it('recovers when navigating to the same path with a different query', async () => {

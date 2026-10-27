@@ -33,9 +33,14 @@ describe('AuthDialog on the home page', () => {
 
   const dialog = () => within(screen.getByRole('dialog'));
 
+  async function renderHome() {
+    render(<App />);
+    await screen.findByRole('button', { name: '登入' });
+  }
+
   it('opens the login form without leaving the page', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
 
@@ -47,7 +52,7 @@ describe('AuthDialog on the home page', () => {
 
   it('opens straight into the register form from the register button', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '註冊' }));
 
@@ -56,7 +61,7 @@ describe('AuthDialog on the home page', () => {
 
   it('switches between login and register inside the dialog', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
     expect(dialog().queryByLabelText('名稱')).not.toBeInTheDocument();
@@ -67,7 +72,7 @@ describe('AuthDialog on the home page', () => {
 
   it('closes without signing in', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
     await user.click(dialog().getByRole('button', { name: '關閉' }));
@@ -80,7 +85,7 @@ describe('AuthDialog on the home page', () => {
 
   it('discards what was typed when reopened', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
     await user.type(dialog().getByLabelText('Email'), 'typo@example.com');
@@ -100,7 +105,7 @@ describe('AuthDialog on the home page', () => {
       return Promise.resolve(jsonResponse(200, []));
     });
 
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
     await user.type(dialog().getByLabelText('Email'), 'alice@example.com');
@@ -125,7 +130,7 @@ describe('AuthDialog on the home page', () => {
       }),
     );
 
-    render(<App />);
+    await renderHome();
 
     await user.click(screen.getByRole('button', { name: '登入' }));
     await user.type(dialog().getByLabelText('Email'), 'alice@example.com');
