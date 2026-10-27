@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { Account } from '@ledger/shared';
 import styles from './HomeAccountList.module.css';
 import { HomeAccountList } from './HomeAccountList';
 
-/** 首頁帳戶清單直接吃 API 回應，驗證數量、順序、金額與原地展開行為。 */
+/** 首頁帳戶清單直接吃 API 回應，驗證可見規則、順序、金額與依數量套用的欄位容器。 */
 describe('HomeAccountList', () => {
   function makeAccounts(count: number): Account[] {
     return Array.from({ length: count }, (_, index) => ({
@@ -40,11 +40,12 @@ describe('HomeAccountList', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('shows all five accounts without an expansion control', () => {
+  it('shows all five accounts in one column without an expansion control', () => {
     render(<HomeAccountList accounts={makeAccounts(5)} />);
 
     const list = screen.getByRole('list', { name: '帳戶' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    expect(list.classList.contains(styles.multiColumnList ?? '')).toBe(false);
     expect(
       within(list)
         .getAllByRole('listitem')
@@ -58,35 +59,22 @@ describe('HomeAccountList', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('expands six accounts in place and collapses back to the first five', () => {
+  it('shows all six accounts immediately without expansion controls', () => {
     render(<HomeAccountList accounts={makeAccounts(6)} />);
 
     const list = screen.getByRole('list', { name: '帳戶' });
-    const toggle = screen.getByRole('button', { name: '全部 6 個' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-
-    fireEvent.click(toggle);
-    expect(toggle).toHaveTextContent('收起');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(list).getAllByRole('listitem')).toHaveLength(6);
-
-    fireEvent.click(toggle);
-    expect(toggle).toHaveTextContent('全部 6 個');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    expect(list.classList.contains(styles.multiColumnList ?? '')).toBe(true);
+    expect(screen.queryByRole('button', { name: /全部 \d+ 個|收起/ })).not.toBeInTheDocument();
   });
 
   it('does not display or count an empty temporary account', () => {
     render(<HomeAccountList accounts={[...makeAccounts(6), temporaryAccount(false)]} />);
 
     const list = screen.getByRole('list', { name: '帳戶' });
-    expect(screen.getByRole('button', { name: '全部 6 個' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '全部 7 個' })).not.toBeInTheDocument();
-    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-
-    fireEvent.click(screen.getByRole('button', { name: '全部 6 個' }));
     expect(within(list).getAllByRole('listitem')).toHaveLength(6);
     expect(within(list).queryByText('臨時帳戶')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /全部 \d+ 個|收起/ })).not.toBeInTheDocument();
   });
 
   it('shows an empty message when the only account is an empty temporary account', () => {
@@ -105,15 +93,10 @@ describe('HomeAccountList', () => {
     expect(within(list).queryByText('Internal temporary account')).not.toBeInTheDocument();
   });
 
-  it('shows twelve accounts in API order, labels the temporary account, and queries the list width', () => {
+  it('shows all twelve accounts in API order and applies the 440px container query', () => {
     render(<HomeAccountList accounts={makeAccounts(12)} />);
 
     const list = screen.getByRole('list', { name: '帳戶' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-    expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('帳戶 1');
-
-    fireEvent.click(screen.getByRole('button', { name: '全部 12 個' }));
-
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(12);
     expect(rows.map((row) => row.textContent)).toEqual([
@@ -130,7 +113,8 @@ describe('HomeAccountList', () => {
       '帳戶 11$1,100',
       '帳戶 12$1,200',
     ]);
-    expect(list.classList.contains(styles.expandedList ?? '')).toBe(true);
+    expect(list.classList.contains(styles.multiColumnList ?? '')).toBe(true);
+    expect(screen.queryByRole('button', { name: /全部 \d+ 個|收起/ })).not.toBeInTheDocument();
     expect(rows[7]).toHaveTextContent('臨時帳戶');
 
     const source = readFileSync(

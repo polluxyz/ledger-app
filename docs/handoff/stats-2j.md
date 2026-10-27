@@ -28,13 +28,13 @@
 - Web code splitting：#184（`c810d55`）。登入、註冊以外的頁面改成按路由載入，build 不再有 500 kB 警告。最大 chunk 290.67 kB（gzip 92.11 kB），首頁首次載入 612.65 kB（改前 740.36 kB）。
 - A+ 預覽頁已請 Codex 重產，放在 `docs/artifacts/home-design-align/aplus.html`（不進版控）。只是參考，實作仍以 2l spec 文字為準。
 - 390px 借還卡長名稱：在 #184 的分支上用暫時的 e2e 量過，390px 與 309px、深淺兩色都是單行加省略號，沒有被擠成 4 行。2l #172 的首頁摘要箭頭已經處理掉。截圖與 Codex 做的 3 個改法比較在 `docs/artifacts/debt-card-390/`（不進版控）。
+- 首頁帳戶卡一律列出全部帳戶（開發者 10-27）：拿掉「全部 N 個」與「收起」；6 個以上時清單 440px 排兩欄，5 個以下一欄。改了 2k W264、SC-H8 與 2l 決策 319、W276、SC-Y8。帳戶卡的視覺之後由開發者另請 Codex 設計。
 - 已清掉：worktree `web-previews`、`web-code-split` 與對應分支，測試資料庫 `ledger_codesplit_test` 與誤建的 `ledger_test_codesplit`。e2e 只接受名稱以 `_test` 結尾的資料庫，命名要照這個規則。
 
 ## 已知問題
 
 - Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（2j plan §6）。再出現時先看是不是機器負載。
 - #174 的代價：首頁元件真的沒出現時，`getRect` 要多等 5 秒才失敗。
-- 4a 還沒驗的整合：「拖動或調整卡片時 AI 結果到達」的 e2e，以及 4a SC-P29 第 1、5 項的首頁整合驗收（編輯版面時 AI 區仍能操作、切帳本與換頁不丟草稿）。PR3 比 4a AI 入口（`feature/ai-icon-entry`）先合併，所以由合併 4a 的人解 `HomePage.tsx` 衝突並補這兩項（2l plan §6）。
 - PR2 已知限制：revision 到 2147483647 後再存一次，資料庫整數溢位回 500。正常使用不會發生，沒有處理。
 - `packages/shared` 沒有 lint script；shared 的測試檔不在 typecheck 範圍內。
 
