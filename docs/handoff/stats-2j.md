@@ -4,15 +4,14 @@
 
 ## 現況（2026-10-27）
 
-### 2m 收支摘要漏項：補正完成，待 Claude Code 驗收
+### 2m 收支摘要漏項補正：已驗收、合併並部署 dev
 
-- 使用者提供核可預覽，指出三張卡的圖示及結餘背景沒有實裝。此為 Codex 在 #189 的實裝漏項，依原畫面補齊，不再要求使用者重複核可。
-- 分支 `fix/home-summary-visual-details`，程式 commit `095faa3`，基底 `cab8b50`。詳見 [補正計畫及驗證](../../tasks/home-summary-details-plan.md) 與 spec 第 4 項、SC-V9。後續提交僅更新交接文件。
-- 已補：支出／收入／結餘右上圖示、淡金雙圓弧、縮小貨幣符號、帳本月份／結餘副標；結餘卡標題明列「本月結餘」。保留所有金額格式、負號、小數及共享帳本個人份額。
-- 裝飾使用獨立裁切層，不裁掉整張卡的焦點框或拖動控制，不隔離卡片選單的堆疊。不改 schema、API、套件、CI、版面格式或其他頁面。
-- 驗證：相關 71／71；全 Web vitest 限制 2 workers 後 1121／1121；首頁與版面編輯 e2e 單批 41／41，最後堆疊調整後 SC-Y20 再驗 1／1。format、lint、typecheck、Web build 都 exit 0。預設併行 Web 測試首次與 e2e 同時跑有 28 條 5 秒逾時，沒有改 timeout 或斷言；重跑結果如上。
-- 真實測試頁面的深淺色已核對：`docs/artifacts/2l-aplus-shots/home-1280px-light-gold.png`、`home-1280px-dark-gold.png`，手機 `home-390px-light-gold.png`。請直接對照使用者原預覽核對圖示、底板、圓弧與副標，不能只看測試綠燈。
-- Codex 提交後交回既有 Claude Code 驗收。通過 SC-V9 且最新 head CI 全綠後才可合併，並按已授權的前端部署流程更新 dev；未通過時網頁修正仍由 Codex 負責。測試 DB `ledger_stats_test`，執行前查 3100／5273／5274，指令 `fnm exec --using=24.22.1 ...`。
+- PR [#190](https://github.com/polluxyz/ledger-app/pull/190)，squash 合併進 `main`。使用者指出 #189 漏做核可預覽中三張卡的圖示與結餘背景，Codex 依原畫面補齊（`095faa3`），基底 `cab8b50`。
+- 已補：支出斜上箭頭、收入斜下箭頭、結餘等號（右上底板內）；結餘卡右下淡金雙圓弧；縮小貨幣符號；帳本月份與結餘副標；標題「本月結餘」。金額直接用 `formatMoney` 原字串。沒有改 schema、API、shared、套件、CI。
+- 驗收紀錄在 [補正計畫](../../tasks/archive/home-summary-details-plan.md) 最後一節。驗收找到「結餘卡的移到選單被副標蓋住」，原因是 header／body 的 `z-index` 建立了堆疊上下文；Codex 修正（`a193936`）後重驗通過。
+- 驗收數字：Web vitest `--maxWorkers=2` 1121／1121；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 驗完刪除。
+- 既有問題（基底就有，未修）：「移到…」選單超出卡片底部的部分被下一列蓋住；Escape 關不掉該選單；309px 時 `PageHeader` 的主要按鈕超出畫面（`scrollWidth` 330）。
+- 已清掉：驗收修正用的 Codex 終端機（orca run `run_13e9dac7a485`）、本機與遠端分支 `fix/home-summary-visual-details`。
 
 ### 2m 首頁風格：已驗收並合併
 
@@ -21,7 +20,7 @@
 - 實作：首頁沿用八卡與儲存版面；趨勢左「總資產變化」、右「每月結餘」，只畫柱圖，切換時有滑動底板／柱高／零線動畫，只看站內動畫設定。借還改左右圓形頭像與姓名、中央支付箭頭與精確金額。
 - 驗收數字：Web vitest 1118／1118；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 3／3（驗完刪除）補驗了 API 原值、負值柱、動畫中途取消、站內動畫開關、換帳本、鍵盤、借還 1280／390／309px。
 - 計畫外：PR 的 CI 在 SC-Y8 失敗。原因是舊斷言在右側面板轉場中取樣，不是產品回歸；面板開完後清單 551px 排兩欄，符合 2l SC-Y8。Codex 改成等面板與清單寬度穩定再判斷（`c975aac`），只動測試。
-- **尚未部署 dev**。只改前端：主工作區 `git pull`、`pnpm install`、重新 build Web 或重開 Vite，再請開發者按 `Ctrl + Shift + R`。
+- 已部署 dev（只改前端，主工作區 `git pull` 後 Vite 自動更新）。
 - 小問題，不擋合併：姓名是空字串時頭像沒有字；版控內的 e2e 對動畫中途狀態的證據偏弱。build 的 PostCSS「沒傳 `from`」警告在基底就有。
 - 已清掉：驗收修正用的 Codex 終端機（orca run `run_49de4f0d628c`）。
 

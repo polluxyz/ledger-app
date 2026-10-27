@@ -1,6 +1,6 @@
 # 首頁收支圖卡視覺漏項補正
 
-使用者提供已核可預覽，指出正式頁面漏了圖示與背景。此為 2m 視覺實裝漏項修正，依 [spec 第 4 項及 SC-V9](../docs/specs/phase-2m-home-visual-refresh.md) 補齊。
+使用者提供已核可預覽，指出正式頁面漏了圖示與背景。此為 2m 視覺實裝漏項修正，依 [spec 第 4 項及 SC-V9](../../docs/specs/phase-2m-home-visual-refresh.md) 補齊。
 
 ## 範圍與驗收
 
@@ -35,3 +35,21 @@
 實際頁面已對照深淺色截圖：`docs/artifacts/2l-aplus-shots/home-1280px-light-gold.png`、`home-1280px-dark-gold.png`，手機對照 `home-390px-light-gold.png`。皆為真實前後端測試畫面的虛構帳務資料，不進版控；確認圖示、底板、圓弧、字級與副標已呈現。
 
 待 Claude Code 獨立驗收 SC-V9；驗收前不合併，不部署 dev。
+
+## Claude Code 驗收紀錄（2026-10-27）
+
+結論：SC-V9 通過，可合併。驗收時找到一個缺陷：結餘卡的「移到…」選單被副標蓋住。Codex 修正後（`a193936`）重驗通過。
+
+- diff：`095faa3` 只改 Web 的首頁卡片、Icon 與樣式。沒有 schema、API、shared、套件、環境變數或 CI 變更。
+- 正式畫面（暫存驗收 e2e，用共享帳本測試資料）：深淺色 × 1280／390／309px 都看過。三張卡的金額等於 `formatMoney` 原字串（結餘 `-$2,012.51`），副標正確，40px 圖示在右上。只有結餘卡有裝飾，裝飾層 `overflow: hidden`，卡片本身 `overflow: visible`。點圖示與右下圓弧都命中卡片連結。截圖與核可預覽一致。
+- 缺陷（計畫外）：1280px 編輯模式打開結餘卡的「移到…」選單，副標「收入與支出的差額」畫在選單上面；支出卡沒有。原因是 net 的 header／body 設了 `z-index: 1`，header 成為堆疊上下文，把選單關在裡面，body 又排在後面。這違反「不隔離選單堆疊」。派 Codex 拿掉該 `z-index`（`a193936`），只保留 `position: relative`。
+- 修正後：卡片範圍內的選單取樣點全部命中選單。換回舊 CSS 時同一條斷言在 9 點失敗，證明斷言抓得到原缺陷。結餘卡選單被蓋的點數從 36 降到 27／81，與支出卡相同；剩下的 27 點是下一節的既有問題。
+- 鍵盤：結餘卡「移到…」→ 目標「財務趨勢」→「上方」→ Enter，焦點回到拖動把手，提示「本月結餘 已移到 財務趨勢 上方」。滑鼠點支出卡「下方」也成功。
+- 自己重跑（Node 24.22.1，測試 DB `ledger_stats_test`）：`format:check`、Web lint、Web typecheck exit 0；Web vitest `--maxWorkers=2` 137 檔 1121／1121；build exit 0（PostCSS「沒傳 `from`」警告基底就有）；`home.spec.ts` 加 `home-layout-edit.spec.ts` 41／41（2.8 分）。Codex 原回報的數字都對得上。
+- 暫存驗收 e2e 驗完刪除，不進版控。
+
+既有問題（`cab8b50` 就有，不在本次範圍）：
+
+- 「移到…」選單超出卡片底部的部分，被下一列的卡片或列高調整把手蓋住。三張卡都一樣。
+- Escape 關不掉「移到…」選單，要再按一次按鈕。
+- 309px 時頁首的主要按鈕超出畫面，`scrollWidth` 330。來源是 `PageHeader`，本次沒有改到。
