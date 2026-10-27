@@ -554,29 +554,83 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     }
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await openNewTransaction(page);
-    const panelListWidth = await list.evaluate((element) => element.clientWidth);
-    expect(panelListWidth).toBeLessThan(440);
-    let panelRects: { first: Rect; second: Rect } | undefined;
+    const homeLayout = page.locator('[data-home-layout="tree"]');
+    let previousHomeContentWidth: number | undefined;
+    let stableHomeContentWidth: number | undefined;
     await expect
       .poll(async () => {
-        const [first, second] = await Promise.all([
-          getRect(list.getByRole('listitem').nth(0)),
-          getRect(list.getByRole('listitem').nth(1)),
+        const width = await homeLayout.evaluate((element) => element.clientWidth);
+        const widthIsStable = previousHomeContentWidth === width;
+        previousHomeContentWidth = width;
+        if (widthIsStable) stableHomeContentWidth = width;
+        return widthIsStable;
+      })
+      .toBe(true);
+    if (stableHomeContentWidth === undefined) {
+      throw new Error('新增交易面板開啟前的首頁內容寬度尚未穩定。');
+    }
+    const homeContentWidthBeforePanel = stableHomeContentWidth;
+    await openNewTransaction(page);
+    const rightPanel = page.locator('[data-registered][data-open]');
+    let previousListWidth: number | undefined;
+    let stablePanelLayout:
+      | {
+          listWidth: number;
+          columns: 1 | 2;
+          first: Rect;
+          second: Rect;
+          homeContentWidth: number;
+        }
+      | undefined;
+    // 面板寬度轉場中會量到暫時的一欄，所以要等清單寬度穩定且面板到位再判斷。
+    await expect
+      .poll(async () => {
+        const [listWidth, panelWidths] = await Promise.all([
+          list.evaluate((element) => element.clientWidth),
+          rightPanel.evaluate((element) => {
+            const inner = element.firstElementChild;
+            if (!(inner instanceof HTMLElement)) {
+              throw new Error('新增交易右側面板缺少內層容器。');
+            }
+            return {
+              current: element.getBoundingClientRect().width,
+              final: inner.getBoundingClientRect().width,
+            };
+          }),
         ]);
-        const sameColumn = Math.abs(first.x - second.x) <= 1;
-        if (sameColumn) panelRects = { first, second };
+        const listWidthStable = previousListWidth === listWidth;
+        previousListWidth = listWidth;
+        const panelAtFinalWidth = Math.abs(panelWidths.current - panelWidths.final) <= 1;
+        if (listWidthStable && panelAtFinalWidth) {
+          const [first, second, homeContentWidth] = await Promise.all([
+            getRect(list.getByRole('listitem').nth(0)),
+            getRect(list.getByRole('listitem').nth(1)),
+            homeLayout.evaluate((element) => element.clientWidth),
+          ]);
+          stablePanelLayout = {
+            listWidth,
+            columns: listWidth >= 440 ? 2 : 1,
+            first,
+            second,
+            homeContentWidth,
+          };
+        }
         return {
-          sameColumn,
-          first,
-          second,
-          listWidth: await list.evaluate((element) => element.clientWidth),
+          listWidthStable,
+          panelAtFinalWidth,
         };
       })
-      .toMatchObject({ sameColumn: true });
-    if (!panelRects) throw new Error('新增交易面板的帳戶清單尚未量測。');
-    const { first: panelFirst, second: panelSecond } = panelRects;
-    expectAccountColumns(panelFirst, panelSecond, 1);
+      .toMatchObject({ listWidthStable: true, panelAtFinalWidth: true });
+    if (!stablePanelLayout) throw new Error('新增交易面板的帳戶清單尚未穩定量測。');
+    const {
+      listWidth: panelListWidth,
+      columns: panelColumns,
+      first: panelFirst,
+      second: panelSecond,
+      homeContentWidth: homeContentWidthWithPanel,
+    } = stablePanelLayout;
+    expect(homeContentWidthWithPanel).toBeLessThan(homeContentWidthBeforePanel);
+    expectAccountColumns(panelFirst, panelSecond, panelColumns);
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y8',
@@ -590,7 +644,9 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       rightPanel: {
         viewportWidth: 1280,
         listWidth: panelListWidth,
-        columns: 1,
+        columns: panelColumns,
+        homeContentWidthBeforePanel,
+        homeContentWidthWithPanel,
       },
     });
   });
