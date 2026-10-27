@@ -57,19 +57,28 @@
 
 還沒做：advisor 意見、假設清單、spec。匯入的結果一律是草稿，要使用者確認才寫入。
 
-## 換模型候選：Vertex AI 測試腳本（2026-10-27，等開發者執行）
+## 換模型候選：Vertex AI 測試腳本（2026-10-27，已實測，等開發者決定是否加測）
 
 - 開發者想試 Vertex AI 的 DeepSeek-V4.1-Flash。他貼的範例用 `model.deploy()`，會開專用 GPU 機器、按小時計費。協調者先問過，開發者選「按次計費 API」（MaaS，Google 代管、按 token 收費）。不要部署專用機器。
 - 腳本在 repo 外：`C:\Users\Administrator\orca\scratch\vertex-test\`（`vertex-smoke.mjs`、`vertex.env.example`）。不進版控，任何建置或測試都不依賴它。
 - 做法：載入 `apps/api/dist` 的 `GlmLlmProvider`、`buildAiCatalog`、`validateAiDrafts`，網址換成 Vertex 的 OpenAI 相容端點，token 換成 Google access token。用 spec §1 的例子跑 SC-P10 的 5 句，逐欄比對。腳本依賴 dist，改了 `apps/api/src/ai` 要先 `pnpm --filter @ledger/api build`。
-- 已用本機假伺服器驗過比對邏輯（故意給錯的金額會被抓出來）。還沒打過真的 Vertex。
-- 開發者要先做：確認 Model Garden 上這個模型有按次計費版本；填 `vertex.env` 的專案 ID、區域、模型 ID；登入（這台沒裝 `gcloud`，可以裝 gcloud 或用服務帳戶金鑰）。執行 `node --env-file=vertex.env vertex-smoke.mjs`，通了再設 `ROUNDS=3` 跑滿 15 次。
-- 開發者貼回結果後：和 glm-5.3 的 SC-P10 結果比（4a plan §1.7）。這個腳本不測圖片與聲音。
+- 已用本機假伺服器驗過比對邏輯（故意給錯的金額會被抓出來）。
+- 環境已就緒：模型頁確認有按次計費 API（標示 experimental）。模型 ID `deepseek-ai/deepseek-v4.1-flash-maas`，區域 `global`，專案 `sunnetcybercom-2`（已開帳單）。開發者裝了 gcloud 並登入，`vertex.env` 的 token 欄位留空，腳本自己呼叫 gcloud 拿 token。gcloud 在 `C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin`，舊終端機的 PATH 沒有它，執行前要先加進 PATH。
+- 腳本加了 `ONLY_STEPS=5,6`，只跑指定步驟。另外可用 `TIMEOUT_MS` 改逾時。
+- 實測（10-27，逾時 25 秒、輸出上限 2048，跟正式環境一樣）。開發者跑 1 輪 5 句 4/5；協調者單獨重跑第 5 步 3 次（逾時 90 秒）3/3；完整 15 次 12/15。合計 23 次：
+  - 有回應的 19 次欄位全對，第 7 步「機票」也正確留 null。glm-5.3 定案那輪（4a plan §7 T6 第 5 輪）是 15/15。
+  - 逾時 4 次（約 17%），glm-5.3 定案那輪 0 次。失敗全是逾時，沒有答錯。
+  - 一般延遲 0.7～2.2 秒，比 glm-5.3 的 1.4～3.5 秒快。長尾 6.8、10.4、20.5 秒，輸出 token 也只有 58；連線檢查（只回 2 token）也有 1 次 13 秒。判斷是 Google 端排隊，不是模型思考太久。
+  - 輸入 726～735 token，輸出 7～107 token。今天共用約 1.4 萬輸入、1,100 輸出 token，另有 4 次逾時不確定是否計費。沒查單價，所以沒估金額。
+- 協調者判斷：答對率可以接受，17% 逾時不能直接上線。建議先多收 2 組資料再決定：改用單一區域（例如 `us-central1`，先在模型頁確認有開）、換時段各跑 15 次。開發者還沒回覆是否加測。
+- 開發者問過花費與餘額：要在 Console「帳單 → 報表」（篩專案、服務 Vertex AI、依 SKU 分組）與「帳單 → 抵免額」看，gcloud 查不到金額。建議設每月預算快訊。
+- 這個腳本不測圖片與聲音。模型頁寫能讀圖片與文字，沒寫能讀聲音，所以語音照 10-27 定案另接 STT。
+- 正式換成 Vertex 時，後端要用專用服務帳戶（只給 Vertex AI User），不能用開發者個人 gcloud 登入。測完開發者可以 `gcloud auth revoke` 收回這台的權限。
 
 ## 下一步
 
 1. 請開發者按 `Ctrl + Shift + R` 看新的 AI 圖示，並用手機確認虛擬鍵盤彈出時輸入欄的位置（SC-P32 唯一沒驗的項目）。
-2. 10-28 後換模型：候選先看 Vertex 腳本的結果（見上一節）。處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。這次也要確認新模型能不能讀圖片與聲音，結果會決定語音與匯入的做法。
+2. 10-28 後換模型：候選 Vertex DeepSeek-V4.1-Flash 答對但 17% 逾時（見上一節），先等開發者決定是否加測區域與時段。處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。這次也要確認新模型能不能讀圖片與聲音，結果會決定語音與匯入的做法。
 3. 語音輸入、匯入：各自走 spec → plan → todo。動筆前列假設清單、徵詢 advisor。
 
 ## 已知問題
