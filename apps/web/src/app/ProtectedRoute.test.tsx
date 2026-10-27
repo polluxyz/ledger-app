@@ -49,13 +49,13 @@ describe('ProtectedRoute', () => {
     expect(window.location.pathname).toBe('/login');
   });
 
-  it('lets a signed-in visitor through', () => {
+  it('lets a signed-in visitor through', async () => {
     localStorage.setItem('ledger.accessToken', 'jwt-abc');
     window.history.pushState({}, '', '/accounts');
 
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: '帳戶' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '帳戶' })).toBeInTheDocument();
   });
 
   it('returns the visitor to the page they were trying to reach', async () => {

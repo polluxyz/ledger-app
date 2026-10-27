@@ -12,9 +12,10 @@ describe('App', () => {
     window.history.pushState({}, '', '/');
   });
 
-  it('shows the signed-out preview on the public home page', () => {
+  it('shows the signed-out preview on the public home page', async () => {
     render(<App />);
 
+    await screen.findAllByText('$0');
     expect(screen.getByRole('heading', { name: '記帳系統' })).toBeInTheDocument();
     // 空狀態：統計卡片顯示 0，並引導登入 / 註冊。
     expect(screen.getAllByText('$0')).toHaveLength(3);
@@ -26,6 +27,7 @@ describe('App', () => {
     localStorage.setItem('ledger.accessToken', 'fake.jwt.token');
 
     render(<App />);
+    expect(await screen.findByRole('heading', { name: '總覽' })).toBeInTheDocument();
 
     // 登出移進使用者選單（2i SC-32），所以要先打開選單才看得到它。
     const user = userEvent.setup();
