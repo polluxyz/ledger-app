@@ -110,6 +110,69 @@ const APLUS_SHOTS_DIR = fileURLToPath(
  * 版面斷言直接量瀏覽器方框；量測值放 Playwright 輸出目錄，A+ 展示截圖放 gitignore 的 artifacts。
  */
 test.describe('2l 首頁 A+ 版面端對端', () => {
+  test('SC-V1～V4：資產與帳本結餘切換、動畫、鍵盤及手機版', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }, testInfo) => {
+    const setup = await getHomeSetup(request, userA);
+    await createTransaction(request, userA.token, setup.ledger.id, {
+      type: 'INCOME',
+      amount: 500000,
+      date: currentTaiwanDate(),
+      categoryId: setup.incomeCategory.id,
+      accountId: setup.account.id,
+      title: '財務趨勢驗收收入',
+    });
+    await createTransaction(request, userA.token, setup.ledger.id, {
+      type: 'EXPENSE',
+      amount: 125000,
+      date: currentTaiwanDate(),
+      categoryId: setup.expenseCategory.id,
+      accountId: setup.account.id,
+      title: '財務趨勢驗收支出',
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    const card = page.locator('[data-home-card-id="trend"]');
+    const assets = card.getByRole('button', { name: '總資產變化', exact: true }),
+      net = card.getByRole('button', { name: '每月結餘', exact: true });
+    await expect(assets).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      await card.getByRole('group', { name: '趨勢指標' }).getByRole('button').allTextContents(),
+    ).toEqual(['總資產變化', '每月結餘']);
+    await expect(card.locator('[data-trend-bar]')).toHaveCount(12);
+    await net.click();
+    await expect(card.getByLabel('本月結餘 $3,750', { exact: true })).toBeVisible();
+    await expect(card.locator('svg')).not.toHaveAttribute('data-animating', 'true');
+    const month = card.locator('g[role="button"]').first();
+    await month.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(card.locator('g[role="button"]').nth(1)).toBeFocused();
+    await assets.click();
+    await net.click();
+    await assets.click();
+    await expect(assets).toHaveAttribute('aria-pressed', 'true');
+    await expect(card.locator('svg')).not.toHaveAttribute('data-animating', 'true');
+    await page.evaluate(() => document.documentElement.setAttribute('data-motion', 'off'));
+    await net.click();
+    await expect(card.locator('svg')).not.toHaveAttribute('data-animating', 'true');
+    await expect(card.getByLabel('本月結餘 $3,750', { exact: true })).toBeVisible();
+    for (const width of [390, 309]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.locator('[data-home-layout="narrow"]')).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width);
+      await expectNoHorizontalPageOverflow(page);
+      await expect(card.locator('[data-trend-bar]')).toHaveCount(12);
+    }
+    await page.screenshot({
+      path: testInfo.outputPath('home-financial-trend-mobile.png'),
+      fullPage: true,
+    });
+  });
+
   test('SC-Y1：預設卡片在 1280px 展開與收合側欄時維持三列比例', async ({
     signedInPage: page,
     userA,
@@ -226,7 +289,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     const total = page.locator('[aria-label^="總資產 "] strong');
     const trend = page.locator('svg[role="group"][aria-label^="每月資產"]');
     const trendCard = page.locator('[data-home-card-id="trend"]');
-    const finalTrendPoint = trend.locator('circle[role="button"]').last();
+    const finalTrendPoint = trend.locator('g[role="button"]').last();
     const accountBalance = page.getByLabel('記帳驗收現金餘額');
 
     await expect(expenseStat).toContainText('$25');
@@ -491,29 +554,83 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     }
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await openNewTransaction(page);
-    const panelListWidth = await list.evaluate((element) => element.clientWidth);
-    expect(panelListWidth).toBeLessThan(440);
-    let panelRects: { first: Rect; second: Rect } | undefined;
+    const homeLayout = page.locator('[data-home-layout="tree"]');
+    let previousHomeContentWidth: number | undefined;
+    let stableHomeContentWidth: number | undefined;
     await expect
       .poll(async () => {
-        const [first, second] = await Promise.all([
-          getRect(list.getByRole('listitem').nth(0)),
-          getRect(list.getByRole('listitem').nth(1)),
+        const width = await homeLayout.evaluate((element) => element.clientWidth);
+        const widthIsStable = previousHomeContentWidth === width;
+        previousHomeContentWidth = width;
+        if (widthIsStable) stableHomeContentWidth = width;
+        return widthIsStable;
+      })
+      .toBe(true);
+    if (stableHomeContentWidth === undefined) {
+      throw new Error('新增交易面板開啟前的首頁內容寬度尚未穩定。');
+    }
+    const homeContentWidthBeforePanel = stableHomeContentWidth;
+    await openNewTransaction(page);
+    const rightPanel = page.locator('[data-registered][data-open]');
+    let previousListWidth: number | undefined;
+    let stablePanelLayout:
+      | {
+          listWidth: number;
+          columns: 1 | 2;
+          first: Rect;
+          second: Rect;
+          homeContentWidth: number;
+        }
+      | undefined;
+    // 面板寬度轉場中會量到暫時的一欄，所以要等清單寬度穩定且面板到位再判斷。
+    await expect
+      .poll(async () => {
+        const [listWidth, panelWidths] = await Promise.all([
+          list.evaluate((element) => element.clientWidth),
+          rightPanel.evaluate((element) => {
+            const inner = element.firstElementChild;
+            if (!(inner instanceof HTMLElement)) {
+              throw new Error('新增交易右側面板缺少內層容器。');
+            }
+            return {
+              current: element.getBoundingClientRect().width,
+              final: inner.getBoundingClientRect().width,
+            };
+          }),
         ]);
-        const sameColumn = Math.abs(first.x - second.x) <= 1;
-        if (sameColumn) panelRects = { first, second };
+        const listWidthStable = previousListWidth === listWidth;
+        previousListWidth = listWidth;
+        const panelAtFinalWidth = Math.abs(panelWidths.current - panelWidths.final) <= 1;
+        if (listWidthStable && panelAtFinalWidth) {
+          const [first, second, homeContentWidth] = await Promise.all([
+            getRect(list.getByRole('listitem').nth(0)),
+            getRect(list.getByRole('listitem').nth(1)),
+            homeLayout.evaluate((element) => element.clientWidth),
+          ]);
+          stablePanelLayout = {
+            listWidth,
+            columns: listWidth >= 440 ? 2 : 1,
+            first,
+            second,
+            homeContentWidth,
+          };
+        }
         return {
-          sameColumn,
-          first,
-          second,
-          listWidth: await list.evaluate((element) => element.clientWidth),
+          listWidthStable,
+          panelAtFinalWidth,
         };
       })
-      .toMatchObject({ sameColumn: true });
-    if (!panelRects) throw new Error('新增交易面板的帳戶清單尚未量測。');
-    const { first: panelFirst, second: panelSecond } = panelRects;
-    expectAccountColumns(panelFirst, panelSecond, 1);
+      .toMatchObject({ listWidthStable: true, panelAtFinalWidth: true });
+    if (!stablePanelLayout) throw new Error('新增交易面板的帳戶清單尚未穩定量測。');
+    const {
+      listWidth: panelListWidth,
+      columns: panelColumns,
+      first: panelFirst,
+      second: panelSecond,
+      homeContentWidth: homeContentWidthWithPanel,
+    } = stablePanelLayout;
+    expect(homeContentWidthWithPanel).toBeLessThan(homeContentWidthBeforePanel);
+    expectAccountColumns(panelFirst, panelSecond, panelColumns);
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y8',
@@ -527,7 +644,9 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       rightPanel: {
         viewportWidth: 1280,
         listWidth: panelListWidth,
-        columns: 1,
+        columns: panelColumns,
+        homeContentWidthBeforePanel,
+        homeContentWidthWithPanel,
       },
     });
   });
@@ -579,13 +698,12 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     expect(expandedSvg.height).toBeGreaterThan(initialSvg.height);
     expect(expandedSvg.height).toBeGreaterThanOrEqual(180);
 
-    const lastPoint = svg.locator('circle[role="button"]').last();
+    const lastPoint = svg.locator('g[role="button"]').last();
     await lastPoint.hover();
     const labels = svg.locator('text');
-    await expect(labels).toHaveCount(2);
-    const lastPointLabel = await getRect(labels.nth(1));
+    await expect(svg.locator('g[role="button"]')).toHaveCount(12);
+    const lastPointLabel = await getRect(labels.last());
     const children = await expectSvgChildrenInside(svg);
-    await expectFinalSegmentClearOfLabels(svg);
 
     await writeMeasurement(testInfo, {
       scenario: 'SC-Y4-height',
@@ -1530,119 +1648,9 @@ async function expectNoHorizontalPageOverflow(page: Page): Promise<void> {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
-async function expectFinalSegmentClearOfLabels(svg: Locator) {
-  const distances = await svg.evaluate((element) => {
-    type Point = { x: number; y: number };
-    type Box = { x: number; y: number; width: number; height: number };
-
-    const points = Array.from(element.querySelectorAll('circle[role="button"]'));
-    const labels = Array.from(element.querySelectorAll('text')).slice(0, 2);
-    const previous = points.at(-2);
-    const final = points.at(-1);
-    if (!previous || !final || labels.length !== 2) {
-      throw new Error('資產趨勢圖缺少最後一段折線或標籤。');
-    }
-
-    const start = {
-      x: Number(previous.getAttribute('cx')),
-      y: Number(previous.getAttribute('cy')),
-    };
-    const end = { x: Number(final.getAttribute('cx')), y: Number(final.getAttribute('cy')) };
-    const segmentIntersectsRect = (rect: Box) => {
-      const deltaX = end.x - start.x;
-      const deltaY = end.y - start.y;
-      let minimumRatio = 0;
-      let maximumRatio = 1;
-      const clipping: Array<[number, number]> = [
-        [-deltaX, start.x - rect.x],
-        [deltaX, rect.x + rect.width - start.x],
-        [-deltaY, start.y - rect.y],
-        [deltaY, rect.y + rect.height - start.y],
-      ];
-
-      for (const [direction, distance] of clipping) {
-        if (direction === 0) {
-          if (distance < 0) return false;
-          continue;
-        }
-        const ratio = distance / direction;
-        if (direction < 0) minimumRatio = Math.max(minimumRatio, ratio);
-        else maximumRatio = Math.min(maximumRatio, ratio);
-        if (minimumRatio > maximumRatio) return false;
-      }
-      return true;
-    };
-    const pointToSegmentDistance = (point: Point, segmentStart: Point, segmentEnd: Point) => {
-      const deltaX = segmentEnd.x - segmentStart.x;
-      const deltaY = segmentEnd.y - segmentStart.y;
-      const lengthSquared = deltaX * deltaX + deltaY * deltaY;
-      const ratio =
-        lengthSquared === 0
-          ? 0
-          : Math.max(
-              0,
-              Math.min(
-                1,
-                ((point.x - segmentStart.x) * deltaX + (point.y - segmentStart.y) * deltaY) /
-                  lengthSquared,
-              ),
-            );
-      return Math.hypot(
-        point.x - (segmentStart.x + ratio * deltaX),
-        point.y - (segmentStart.y + ratio * deltaY),
-      );
-    };
-    const segmentToSegmentDistance = (
-      firstStart: Point,
-      firstEnd: Point,
-      secondStart: Point,
-      secondEnd: Point,
-    ) =>
-      Math.min(
-        pointToSegmentDistance(firstStart, secondStart, secondEnd),
-        pointToSegmentDistance(firstEnd, secondStart, secondEnd),
-        pointToSegmentDistance(secondStart, firstStart, firstEnd),
-        pointToSegmentDistance(secondEnd, firstStart, firstEnd),
-      );
-    return labels.map((label) => {
-      const rect = label.getBBox();
-      const rectangleEdges: Array<[Point, Point]> = [
-        [
-          { x: rect.x, y: rect.y },
-          { x: rect.x + rect.width, y: rect.y },
-        ],
-        [
-          { x: rect.x + rect.width, y: rect.y },
-          { x: rect.x + rect.width, y: rect.y + rect.height },
-        ],
-        [
-          { x: rect.x + rect.width, y: rect.y + rect.height },
-          { x: rect.x, y: rect.y + rect.height },
-        ],
-        [
-          { x: rect.x, y: rect.y + rect.height },
-          { x: rect.x, y: rect.y },
-        ],
-      ];
-      const distance = segmentIntersectsRect(rect)
-        ? 0
-        : Math.min(
-            ...rectangleEdges.map(([edgeStart, edgeEnd]) =>
-              segmentToSegmentDistance(start, end, edgeStart, edgeEnd),
-            ),
-          );
-      return { label: label.textContent, distance };
-    });
-  });
-  for (const { label, distance } of distances) {
-    expect(distance, `最後一段折線與「${label ?? ''}」標籤的距離`).toBeGreaterThan(0);
-  }
-  return distances;
-}
-
 async function expectSvgChildrenInside(svg: Locator) {
   const svgBox = await getRect(svg);
-  const points = svg.locator('circle[role="button"]');
+  const points = svg.locator('g[role="button"]');
   const labels = svg.locator('text');
   const pointCount = await points.count();
   const labelCount = await labels.count();

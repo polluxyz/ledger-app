@@ -35,7 +35,7 @@ const HOME_CARD_TITLES: Record<HomeCardId, string> = {
   expense: '本月支出',
   income: '本月收入',
   net: '結餘',
-  trend: '資產趨勢',
+  trend: '財務趨勢',
   categories: '本月支出',
   activity: '最近｜標註',
   accounts: '帳戶',
@@ -120,7 +120,7 @@ async function adjustFirstSeparator(
   page: import('@playwright/test').Page,
   key?: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Home' | 'End',
 ): Promise<number> {
-  const separator = page.getByRole('separator', { name: '資產趨勢與本月支出分隔線' });
+  const separator = page.getByRole('separator', { name: '財務趨勢與本月支出分隔線' });
   await separator.focus();
   const before = Number(await separator.getAttribute('aria-valuenow'));
   const orientation = await separator.getAttribute('aria-orientation');
@@ -135,7 +135,7 @@ async function adjustFirstSeparator(
 async function firstSeparatorValue(page: import('@playwright/test').Page): Promise<number> {
   return Number(
     await page
-      .getByRole('separator', { name: '資產趨勢與本月支出分隔線' })
+      .getByRole('separator', { name: '財務趨勢與本月支出分隔線' })
       .getAttribute('aria-valuenow'),
   );
 }
@@ -341,7 +341,7 @@ test('SC-Y16：分隔線一增一減並停在最小值，各列高度獨立調�
   await page.setViewportSize({ width: 1600, height: 1800 });
   await enterEditor(page);
 
-  const firstSeparator = page.getByRole('separator', { name: '資產趨勢與本月支出分隔線' });
+  const firstSeparator = page.getByRole('separator', { name: '財務趨勢與本月支出分隔線' });
   await firstSeparator.focus();
   const initialValue = Number(await firstSeparator.getAttribute('aria-valuenow'));
   const initialTrend = await page.locator('[data-home-card-id="trend"]').boundingBox();
@@ -441,7 +441,7 @@ test('SC-Y16：上下分隔線以滑鼠和方向鍵一增一減且總高不變',
     ).toBeLessThanOrEqual(1);
   }
 
-  const separator = page.getByRole('separator', { name: '資產趨勢與本月支出分隔線' });
+  const separator = page.getByRole('separator', { name: '財務趨勢與本月支出分隔線' });
   const initialValue = Number(await separator.getAttribute('aria-valuenow'));
   const initialTrendHeight = editingDimensions.trend.height;
   const initialCategoriesHeight = editingDimensions.categories.height;
@@ -493,9 +493,10 @@ test('SC-Y16：上下分隔線以滑鼠和方向鍵一增一減且總高不變',
     { steps: 12 },
   );
   await page.mouse.up();
+  // 滑鼠位置經瀏覽器取整；百分比容許 0.005% 內的次像素誤差，下方仍驗證卡片總高。
   await expect
     .poll(async () => Number(await separator.getAttribute('aria-valuenow')))
-    .toBe(initialValue);
+    .toBeCloseTo(initialValue, 2);
   trend = await page.locator('[data-home-card-id="trend"]').boundingBox();
   categories = await page.locator('[data-home-card-id="categories"]').boundingBox();
   expect(trend!.height + categories!.height).toBeCloseTo(initialPairHeight, 0);
@@ -518,7 +519,7 @@ test('SC-Y16：無多餘高度時上下分隔線仍可聚焦且值域收合', as
   await expectCardOrder(page, ALL_CARD_IDS);
   await enterEditor(page);
 
-  const separator = page.getByRole('separator', { name: '資產趨勢與本月支出分隔線' });
+  const separator = page.getByRole('separator', { name: '財務趨勢與本月支出分隔線' });
   await expect(separator).toBeEnabled();
   await expect
     .poll(async () => Number(await separator.getAttribute('aria-valuemin')))
@@ -1058,7 +1059,7 @@ test('SC-Y26：預設會換行時畫布橫向捲動，仍可移動、調整、�
   const secondBandHandle = page.getByRole('separator', { name: '第 2 列高度' });
   await secondBandHandle.focus();
   await secondBandHandle.press('End');
-  const firstSeparator = page.getByRole('separator', { name: '資產趨勢與本月支出分隔線' });
+  const firstSeparator = page.getByRole('separator', { name: '財務趨勢與本月支出分隔線' });
   await firstSeparator.focus();
   const initialSplit = Number(await firstSeparator.getAttribute('aria-valuenow'));
   await firstSeparator.press('ArrowLeft');

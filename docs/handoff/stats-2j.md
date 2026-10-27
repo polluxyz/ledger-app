@@ -1,8 +1,21 @@
-# 交接：2j 統計、2k 首頁改版、2l 可編輯版面（`stats-2j`）
+# 交接：2j 統計、2k～2m 首頁改版（`stats-2j`）
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
 ## 現況（2026-10-27）
+
+### 2m 首頁風格：已驗收並合併
+
+- PR [#189](https://github.com/polluxyz/ledger-app/pull/189)，squash 合併進 `main`。程式 commit `823428a` 由 Codex 實裝，基底 `d8b8720`。開發者指定 Claude Code 驗收；驗收紀錄在 [plan](../../tasks/archive/phase-2m-plan.md) 最後一節。
+- 規格：[2m](../specs/phase-2m-home-visual-refresh.md)；plan、todo、設計討論紀錄已移到 `tasks/archive/phase-2m-*.md`。沒有改 schema、API、shared、套件、環境變數或 CI。
+- 實作：首頁沿用八卡與儲存版面；趨勢左「總資產變化」、右「每月結餘」，只畫柱圖，切換時有滑動底板／柱高／零線動畫，只看站內動畫設定。借還改左右圓形頭像與姓名、中央支付箭頭與精確金額。
+- 驗收數字：Web vitest 1118／1118；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 3／3（驗完刪除）補驗了 API 原值、負值柱、動畫中途取消、站內動畫開關、換帳本、鍵盤、借還 1280／390／309px。
+- 計畫外：PR 的 CI 在 SC-Y8 失敗。原因是舊斷言在右側面板轉場中取樣，不是產品回歸；面板開完後清單 551px 排兩欄，符合 2l SC-Y8。Codex 改成等面板與清單寬度穩定再判斷（`c975aac`），只動測試。
+- **尚未部署 dev**。只改前端：主工作區 `git pull`、`pnpm install`、重新 build Web 或重開 Vite，再請開發者按 `Ctrl + Shift + R`。
+- 小問題，不擋合併：姓名是空字串時頭像沒有字；版控內的 e2e 對動畫中途狀態的證據偏弱。build 的 PostCSS「沒傳 `from`」警告在基底就有。
+- 已清掉：驗收修正用的 Codex 終端機（orca run `run_49de4f0d628c`）。
+
+### 已完成的前置工作
 
 - 2j 已以 PR #154 合進 `main`，程式隨 4a 部署到 dev（#156）。plan 與 todo 在 `tasks/archive/phase-2j-*.md`，驗收數字在 plan §6。
 - 2k 首頁改版已以 PR #163（`ad1471f`）合進 `main` 並部署到 dev（只改前端）。部署後在 dev 用無頭瀏覽器點過：首頁版面、展開與收起、最近｜標註切換、三種配色切換、重整後配色保留、390px，沒有 console 錯誤或 4xx／5xx。spec `docs/specs/phase-2k-home-redesign.md`，plan 與 todo 在 `tasks/archive/phase-2k-*.md`，W1～W7 的驗收數字在 plan §6。
@@ -13,7 +26,7 @@
 
 ## 2l 進度（2026-10-26）
 
-2l 全部完成，3 個 PR 都已合併並部署到 dev。這個工作區目前沒有進行中的工作。
+2l 全部完成，3 個 PR 都已合併並部署到 dev。後續 2m 狀態見本檔最上方。
 
 - PR1（A+ 版面）：#172（`2454a0d`）。含 W-A3（決策 336、SC-Y30）：卡窄於 360px 時交易列改成兩行。
 - PR1 的交接 #173（`83c5cf3`）已合併。CI 原本卡在首頁 e2e `getRect` 偶發失敗，#174（`db7cb2f`）已修好：量之前先等元素可見並重試，斷言沒放寬。

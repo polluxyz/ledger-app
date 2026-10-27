@@ -33,9 +33,11 @@
 .statValue {
   display: block;
   margin-top: var(--space-xs);
-  font-size: var(--text-lg);
+  font-size: clamp(1.5rem, 3vw, 2rem);
   font-weight: 700;
   white-space: nowrap;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
 }
 
 .statMine {
@@ -160,27 +162,6 @@
   min-height: 180px;
   flex: 1;
   margin: 0;
-}
-
-.trendTotal {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: var(--space-xs);
-}
-
-.trendTotalValue {
-  font-size: var(--text-lg);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.trendTotalLabel,
-.trendTotalStatus {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
 }
 
 /* 訪客引導與找不到帳本的說明沿用中性的共用表面樣式。 */

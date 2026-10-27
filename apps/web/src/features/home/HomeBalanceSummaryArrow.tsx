@@ -7,46 +7,46 @@ export interface HomeBalanceSummaryArrowProps {
   amount: number;
 }
 
-/** 首頁借還列只出現一次對方姓名，以金額方向保留「我」的位置與摘要箭頭。 */
+/** 首頁借還用左右頭像表示付款方與收款方；金額集中在箭頭下方，不與姓名爭寬度。 */
 export function HomeBalanceSummaryArrow({ name, amount }: HomeBalanceSummaryArrowProps) {
-  if (amount === 0) {
+  const settled = amount === 0;
+  const otherOwesMe = amount >= 0;
+  const amountLabel = formatMoney(Math.abs(amount));
+  const spokenSummary = settled
+    ? `${name}與我兩清`
+    : otherOwesMe
+      ? `${name}欠你 ${amountLabel}`
+      : `你欠${name} ${amountLabel}`;
+
+  function person(label: string, self: boolean) {
     return (
-      <span className={styles.summary} aria-label={`${name}與我兩清`}>
-        <span className={styles.name}>{name}</span>
-        <span className={styles.settled}>兩清</span>
-        <span className={styles.person}>我</span>
+      <span className={`${styles.person} ${self ? styles.self : ''}`}>
+        <span className={styles.avatar} aria-hidden="true">
+          {self ? '我' : Array.from(label)[0]}
+        </span>
+        <span className={styles.name} title={label}>
+          {label}
+        </span>
       </span>
     );
   }
 
-  const otherOwesMe = amount > 0;
-  const amountLabel = formatMoney(Math.abs(amount));
-  const direction = '→';
-  const spokenSummary = otherOwesMe ? `${name}欠你 ${amountLabel}` : `你欠${name} ${amountLabel}`;
-
   return (
-    <span className={styles.summary} aria-label={spokenSummary}>
-      {otherOwesMe ? (
-        <>
-          <span className={styles.name}>{name}</span>
-          <span className={styles.direction} aria-hidden="true">
-            {direction}
-          </span>
-          <span className={styles.person}>我</span>
-        </>
-      ) : (
-        <>
-          <span className={styles.person}>我</span>
-          <span className={styles.direction} aria-hidden="true">
-            {direction}
-          </span>
-          <span className={styles.name}>{name}</span>
-        </>
-      )}
-      <span className={styles.amount}>
-        <span className={styles.label}>需要支付</span>
-        {amountLabel}
+    <span
+      className={`${styles.summary} ${settled ? styles.settled : ''}`}
+      aria-label={spokenSummary}
+    >
+      {person(otherOwesMe ? name : '我', !otherOwesMe)}
+      <span className={styles.middle}>
+        <span className={styles.label}>{settled ? '已結清' : '需要支付'}</span>
+        <span className={styles.direction} aria-hidden="true">
+          {settled ? '' : '→'}
+        </span>
+        <span className={`${styles.amount} ${amountLabel.length > 12 ? styles.largeAmount : ''}`}>
+          {settled ? '兩清' : amountLabel}
+        </span>
       </span>
+      {person(otherOwesMe ? '我' : name, otherOwesMe)}
     </span>
   );
 }
