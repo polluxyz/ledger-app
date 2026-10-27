@@ -121,6 +121,7 @@ describe('Home dashboard', () => {
       marked: countRequest('/transactions/marked'),
       recent: countRequest(`/ledgers/${ledgerId}/transactions`, { page: '1', limit: '5' }),
       statistics: countRequest(`/ledgers/${ledgerId}/statistics`),
+      monthlyTrend: countRequest(`/ledgers/${ledgerId}/statistics/trend`),
       categories: countRequest(`/ledgers/${ledgerId}/categories`),
     };
   }
@@ -299,6 +300,16 @@ describe('Home dashboard', () => {
           );
         }
         return response(balanceTrend());
+      }
+      if (path.endsWith('/statistics/trend')) {
+        const ledgerId = path.split('/')[2]!;
+        return response({
+          ledgerId,
+          months: balanceTrend().months.map(({ month }) => ({
+            month,
+            ...statisticsFor(ledgerId).ledger,
+          })),
+        });
       }
       if (path === '/accounts') {
         if (accountsFailure) {
@@ -550,9 +561,8 @@ describe('Home dashboard', () => {
     const firstPoint = screen.getByRole('button', { name: '2025年1月 $10,000' });
     await user.hover(firstPoint);
     expect(screen.getByLabelText('總資產 $11,100')).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: /每月資產/ })).toHaveTextContent(
-      '$10,000 · 2025年1月',
-    );
+    expect(firstPoint).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('資產趨勢圖')).toHaveTextContent('2025年1月');
   });
 
   it('does not leave an empty pending card on the home page', async () => {
@@ -561,6 +571,28 @@ describe('Home dashboard', () => {
 
     await waitForInitialHome();
     expect(screen.queryByRole('heading', { name: '待確認' })).not.toBeInTheDocument();
+  });
+
+  it('switches between personal assets and the selected ledger net without deriving money', async () => {
+    const user = userEvent.setup();
+    signIn();
+    availableLedgers = [ledger, otherLedger];
+    render(<App />);
+    await waitForInitialHome();
+    const controls = screen.getByRole('group', { name: '趨勢指標' });
+    expect(
+      within(controls)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['總資產變化', '每月結餘']);
+    const assetsRequests = countRequest('/accounts/balance-trend');
+    await user.click(within(controls).getByRole('button', { name: '每月結餘' }));
+    expect(await screen.findByLabelText('本月結餘 $49,297')).toBeInTheDocument();
+    await switchLedger(user, '家用');
+    expect(await screen.findByLabelText('本月結餘 -$1,000')).toBeInTheDocument();
+    await user.click(within(controls).getByRole('button', { name: '總資產變化' }));
+    expect(screen.getByLabelText('我的總資產 $11,100')).toBeInTheDocument();
+    expect(countRequest('/accounts/balance-trend')).toBe(assetsRequests);
   });
 
   it('shows at most five compact rows in recent activity', async () => {
@@ -944,8 +976,8 @@ describe('Home dashboard', () => {
     expect(screen.queryByRole('tab', { name: '標註 1' })).not.toBeInTheDocument();
 
     const delta = fetchMock.mock.calls.length - totalBefore;
-    // 總數為 POST 1 次、8 個首頁端點各 1 次、分類清單 1 次（4a W244）。
-    expect(delta).toBe(10);
+    // 新增月結餘趨勢後，POST 1 次、9 個首頁端點各 1 次、分類清單 1 次。
+    expect(delta).toBe(11);
     releaseRefetches?.();
     holdRefetches = null;
 
@@ -1098,7 +1130,7 @@ describe('Home dashboard', () => {
     await screen.findByRole('button', { name: '新增交易' }, WAIT);
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('統計暫時無法載入');
     expect(screen.getByRole('heading', { name: '帳戶' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '財務趨勢' })).toBeInTheDocument();
     expect(screen.queryByText('$0')).not.toBeInTheDocument();
   });
 
@@ -1120,7 +1152,7 @@ describe('Home dashboard', () => {
 
     expect(await screen.findByText('找不到任何帳本。', {}, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '帳戶' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '資產趨勢' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '財務趨勢' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '借還' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '我的' })).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: '支出分類' })).not.toBeInTheDocument();

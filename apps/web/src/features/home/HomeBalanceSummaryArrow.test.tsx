@@ -26,8 +26,16 @@ describe('HomeBalanceSummaryArrow', () => {
     render(<HomeBalanceSummaryArrow name="小明" amount={0} />);
 
     const summary = screen.getByLabelText('小明與我兩清');
-    expect(summary.textContent).toBe('小明兩清我');
+    expect(summary).toHaveTextContent('小明');
+    expect(summary).toHaveTextContent('兩清');
     expect(summary).not.toHaveTextContent('→');
     expect(summary).not.toHaveTextContent('←');
+  });
+
+  it('preserves cents and the full name in the spoken summary and tooltip', () => {
+    const name = '名字很長的往來對象';
+    render(<HomeBalanceSummaryArrow name={name} amount={166667} />);
+    expect(screen.getByLabelText(`${name}欠你 $1,666.67`)).toHaveTextContent('$1,666.67');
+    expect(screen.getByTitle(name)).toHaveTextContent(name);
   });
 });

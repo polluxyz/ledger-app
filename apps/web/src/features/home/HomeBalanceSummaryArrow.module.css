@@ -1,53 +1,102 @@
+/* 名稱各在頭像下方，中央預留完整金額；只影響首頁的摘要箭頭。 */
 .summary {
-  display: inline-flex;
+  display: grid;
+  width: 100%;
   min-width: 0;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  gap: var(--space-sm);
+  align-items: start;
+  container: home-debt-row / inline-size;
+}
+.person {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   align-items: center;
   gap: var(--space-xs);
-  vertical-align: middle;
 }
-
-.name,
-.person {
-  min-width: 0;
-  max-width: 8em;
+.avatar {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  border-radius: 50%;
+  background: var(--color-fill);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+.self .avatar {
+  background: var(--color-primary-soft);
+  font-weight: 650;
+}
+.name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.person {
-  flex: none;
-  color: var(--color-text);
-  font-weight: 600;
+.self .name {
+  color: var(--color-accent);
 }
-
-.direction {
-  flex: none;
-  color: var(--color-text-muted);
+.middle {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
 }
-
-.amount {
-  display: inline-flex;
-  flex: none;
-  align-items: baseline;
-  gap: var(--space-xs);
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .label {
   color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 400;
-}
-
-.settled {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  font-size: 11px;
+  line-height: 16px;
   white-space: nowrap;
+}
+.direction {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: var(--color-text-muted);
+  opacity: 0.65;
+  font-size: 0;
+}
+.direction::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3.5px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid var(--color-text-muted);
+}
+.amount {
+  color: var(--color-text);
+  font-size: clamp(0.9375rem, 6cqi, 1.1875rem);
+  line-height: 25px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+.largeAmount {
+  font-size: clamp(0.8125rem, 5cqi, 1.0625rem);
+}
+.settled .direction {
+  background: none;
+  border-top: 1px dashed var(--color-border);
+  opacity: 1;
+}
+.settled .direction::after {
+  display: none;
+}
+.settled .amount {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
 }

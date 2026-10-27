@@ -15,12 +15,14 @@
   justify-content: space-between;
   gap: var(--space-md);
   min-width: 0;
-  padding: var(--space-sm);
+  padding: var(--space-md) var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
 }
 
 .name {
   min-width: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 

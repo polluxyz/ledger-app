@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -38,12 +39,14 @@ import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { HomeLayoutRenderer, type HomeCardContents } from '../features/home/HomeLayoutRenderer';
 import { HomeLayoutConflictDialog } from '../features/home/HomeLayoutConflictDialog';
 import { useHomeLayout } from '../features/home/use-home-layout';
-import { BalanceTrendChart } from '../features/statistics/BalanceTrendChart';
+import { HomeFinancialTrendChart } from '../features/statistics/HomeFinancialTrendChart';
+import { HomeTrendHeader, type HomeTrendMetric } from '../features/statistics/HomeTrendHeader';
 import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
 import { currentTaiwanMonthRange } from '../features/statistics/stats-url';
 import { useBalanceTrend } from '../features/statistics/use-balance-trend';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
+import { useStatisticsTrend } from '../features/statistics/use-statistics-trend';
 import {
   TransactionWorkbench,
   type PanelTarget,
@@ -222,6 +225,16 @@ function Dashboard({
   const currentUser = useCurrentUser();
   const homeLayout = useHomeLayout(currentUser.data?.id ?? null, true);
   const period = currentTaiwanMonthRange();
+  const [trendMetric, setTrendMetric] = useState<HomeTrendMetric>('assets');
+  const monthlyTrend = useStatisticsTrend(ledger.id, {
+    endMonth: period.from.slice(0, 7),
+    months: 12,
+    perspective: 'LEDGER',
+  });
+  const monthlyTrendMonths = useMemo(
+    () => monthlyTrend.data?.months?.map(({ month, net }) => ({ month, total: net })),
+    [monthlyTrend.data],
+  );
   const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
   const { mode } = useHomeCategoryColors();
   const chartTheme = useChartTheme();
@@ -416,16 +429,18 @@ function Dashboard({
       children: <LedgerStatContent ledger={ledger} statistics={statistics} field="net" />,
     },
     trend: {
-      titleMeta: (
-        <TrendTotal balanceTrendQuery={balanceTrendQuery} shared={ledger.kind === 'SHARED'} />
+      title: '財務趨勢',
+      headerContent: (
+        <HomeTrendHeader metric={trendMetric} onChange={setTrendMetric} ledgerName={ledger.name} />
       ),
       children: (
-        <BalanceTrendChart
-          months={balanceTrendQuery.data?.months}
-          isLoading={balanceTrendQuery.isLoading}
-          error={balanceTrendQuery.error}
+        <HomeFinancialTrendChart
+          metric={trendMetric}
+          shared={ledger.kind === 'SHARED'}
+          months={trendMetric === 'net' ? monthlyTrendMonths : balanceTrendQuery.data?.months}
+          isLoading={trendMetric === 'net' ? monthlyTrend.isLoading : balanceTrendQuery.isLoading}
+          error={trendMetric === 'net' ? monthlyTrend.error : balanceTrendQuery.error}
           className={styles.trendChart}
-          showHeading={false}
         />
       ),
     },
@@ -859,14 +874,14 @@ function buildPersonalHomeCards({
 }): HomeCardContents {
   return {
     trend: {
-      titleMeta: <TrendTotal balanceTrendQuery={balanceTrendQuery} shared={false} />,
+      title: '財務趨勢',
+      headerContent: <HomeTrendHeader metric="assets" onChange={() => {}} />,
       children: (
-        <BalanceTrendChart
+        <HomeFinancialTrendChart
           months={balanceTrendQuery.data?.months}
           isLoading={balanceTrendQuery.isLoading}
           error={balanceTrendQuery.error}
           className={styles.trendChart}
-          showHeading={false}
         />
       ),
     },
@@ -902,29 +917,6 @@ function AccountCardContent({ accountsQuery }: { accountsQuery: ReturnType<typeo
     );
   }
   return <HomeAccountList accounts={accountsQuery.data ?? []} />;
-}
-
-function TrendTotal({
-  balanceTrendQuery,
-  shared,
-}: {
-  balanceTrendQuery: ReturnType<typeof useBalanceTrend>;
-  shared: boolean;
-}) {
-  const total = balanceTrendQuery.data?.months.at(-1)?.total;
-  const label = shared ? '我的總資產' : '總資產';
-  if (balanceTrendQuery.isLoading) {
-    return <span className={styles.trendTotalStatus}>載入中…</span>;
-  }
-  if (balanceTrendQuery.error || total === undefined) {
-    return <span className={styles.trendTotalStatus}>—</span>;
-  }
-  return (
-    <span className={styles.trendTotal} aria-label={`${label} ${formatMoney(total)}`}>
-      <strong className={styles.trendTotalValue}>{formatMoney(total)}</strong>
-      <span className={styles.trendTotalLabel}>{label}</span>
-    </span>
-  );
 }
 
 type HomeStatisticsField = keyof Pick<StatisticsTotals, 'expense' | 'income' | 'net'>;
