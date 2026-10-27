@@ -53,7 +53,7 @@
 - 語音：網頁加麥克風按鈕，錄音送後端辨識（STT，語音轉文字），轉成文字後走現有 AI 解析。不用瀏覽器內建辨識。原本語音排在階段五，和本地模型一起；這次把語音提前，本地模型不動。
 - 匯入來源 4 種都要：雲端發票匯出的 CSV、照片或截圖（紙本發票、收據、銀行 App）、銀行對帳單 CSV／Excel、銀行對帳單 PDF。開發者說「也許還有其他的」，所以來源要做成可擴充的介面。
 - 資料外送：可以送外部模型，但後端送出前先遮掉卡號與帳號。
-- 順序：換模型 → 語音 → 匯入。換模型時一起確認新模型能不能讀圖片與聲音。
+- 順序：換模型 → 語音 → 匯入。換模型時一起確認新模型能不能讀圖片（匯入有照片、截圖）。語音一律先 STT 再交給模型，所以不比模型能不能讀聲音（開發者 10-27 確認）。
 
 還沒做：advisor 意見、假設清單、spec。匯入的結果一律是草稿，要使用者確認才寫入。
 
@@ -75,10 +75,39 @@
 - 這個腳本不測圖片與聲音。模型頁寫能讀圖片與文字，沒寫能讀聲音，所以語音照 10-27 定案另接 STT。
 - 正式換成 Vertex 時，後端要用專用服務帳戶（只給 Vertex AI User），不能用開發者個人 gcloud 登入。測完開發者可以 `gcloud auth revoke` 收回這台的權限。
 
+## 換模型候選：Claude Haiku 5.5（2026-10-27 討論，等開發者決定是否加測）
+
+- 開發者看完 Vertex 定價頁，認為 Haiku 5.5「最便宜又是比較好的」，傾向選它。
+- 價格（Vertex 定價頁 global 區，每 100 萬 token，美元，輸入／輸出）。月費以全站上限估：500 次 × 30 天，每次輸入 1,000、輸出 600 token。
+
+  | 模型                  | 輸入／輸出   | 月費約 |
+  | --------------------- | ------------ | ------ |
+  | Claude Haiku 5.5      | 0.10 / 0.50  | 6      |
+  | gpt-oss-120b          | 0.09 / 0.36  | 4.6    |
+  | DeepSeek-V4.1-Flash   | 0.30 / 1.20  | 15     |
+  | Gemini 3.5 Flash-Lite | 0.30 / 2.50  | 27     |
+  | Gemini 3.5 Flash      | 1.50 / 9.00  | 104    |
+  | Claude Sonnet 5.5     | 2.00 / 10.00 | 120    |
+
+- 指定區域（us、asia-east1 等）貴 10%。Haiku 5.5 輸入 10 萬 token 以上改長脈絡費率 0.50 / 2.50，我們用不到。中文版定價頁 DeepSeek、GLM 表頭寫「每 100 萬個字元」，疑似翻譯錯誤，沒對英文版。
+- 協調者判斷：用量小，候選間每月只差幾美元。價格不是決定因素，準確率才是。
+- 技術事實（claude-api skill，沒打 API 驗證）：
+  - Vertex 模型 ID `claude-haiku-5-5`，region 建議 `global`。走 Anthropic Messages 格式，不是 OpenAI 相容格式，所以 `vertex-smoke.mjs` 現有路線不能直接用。
+  - 官方做法用 `@anthropic-ai/vertex-sdk` 的 `AnthropicVertex`，驗證走 GCP ADC。正式接入要新寫 provider，新增套件屬於 Ask first。
+  - 思考預設開啟（adaptive，effort `medium`），思考 token 算在輸出。effort 在 `high` 以下可以關掉思考，能壓延遲。
+  - `budget_tokens` 會回 400；不支援 assistant prefill；Vertex 上 refusal 沒有伺服器端 fallback。
+  - 能讀圖片與 PDF，不收聲音。Claude 模型在 Vertex 可能要先在 Model Garden 啟用，沒確認。
+- 協調者提的做法（開發者還沒回覆，不要自己開始）：
+  1. `vertex-smoke.mjs` 加一條 Claude 路線（scratch 腳本，不進版控）。
+  2. Haiku 5.5 跑 SC-P10 的 5 句 × 3 輪，和 glm-5.3（15/15）、DeepSeek-V4.1-Flash（有回應 19/19、逾時 17%）比準確率、延遲、實際 token。
+  3. 追平 glm-5.3 就選它，再補跑 SC-P17、SC-P27。
+  4. 定案前照 CLAUDE.md §5.6 先問 advisor（先 Codex 後 Argon）。
+- 原始筆記在 repo 外：`C:\Users\Administrator\orca\scratch\vertex-test\haiku-5-5-notes.md`。
+
 ## 下一步
 
 1. 請開發者按 `Ctrl + Shift + R` 看新的 AI 圖示，並用手機確認虛擬鍵盤彈出時輸入欄的位置（SC-P32 唯一沒驗的項目）。
-2. 10-28 後換模型：候選 Vertex DeepSeek-V4.1-Flash 答對但 17% 逾時（見上一節），先等開發者決定是否加測區域與時段。處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。這次也要確認新模型能不能讀圖片與聲音，結果會決定語音與匯入的做法。
+2. 10-28 後換模型：開發者傾向 Claude Haiku 5.5，等他決定是否加 Claude 路線實測（見上一節）。DeepSeek-V4.1-Flash 答對但 17% 逾時，加測區域與時段也還沒回覆。處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。這次也要確認新模型能不能讀圖片，結果會決定匯入照片與截圖的做法。語音一律先 STT，不看模型能不能讀聲音。
 3. 語音輸入、匯入：各自走 spec → plan → todo。動筆前列假設清單、徵詢 advisor。
 
 ## 已知問題
