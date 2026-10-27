@@ -952,12 +952,24 @@ function LedgerStatContent({
     );
   }
 
+  const formattedAmount = formatMoney(ledgerTotals[field]);
+  const currencyEnd = formattedAmount.indexOf('$') + 1;
+  const periodStart = statistics.data?.from ?? currentTaiwanMonthRange().from;
+
   return (
     <div className={styles.statContent}>
-      <strong className={styles.statValue}>{formatMoney(ledgerTotals[field])}</strong>
+      <strong className={styles.statValue}>
+        <span className={styles.statCurrency}>{formattedAmount.slice(0, currencyEnd)}</span>
+        {formattedAmount.slice(currencyEnd)}
+      </strong>
       {ledger.kind === 'SHARED' && (
         <span className={styles.statMine}>我 {formatMoney(mineTotals[field])}</span>
       )}
+      <span className={styles.statFooter}>
+        {field === 'net'
+          ? '收入與支出的差額'
+          : `${ledger.name} · ${periodStart.slice(0, 4)} 年 ${Number(periodStart.slice(5, 7))} 月`}
+      </span>
     </div>
   );
 }

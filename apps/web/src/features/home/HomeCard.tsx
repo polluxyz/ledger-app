@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { HomeCardId } from '@ledger/shared';
 import { Link } from 'react-router-dom';
+import { Icon } from '../../components/Icon';
 import styles from './HomeCard.module.css';
 
 /** 首頁共用卡片外框，統一標題、操作區和內容間距，並保留編輯模式的控制插槽。 */
@@ -38,6 +39,16 @@ export function HomeCard({
   cardRef,
 }: HomeCardProps) {
   const headingId = `home-card-${cardId}-heading`;
+  const summaryIcon =
+    cardId === 'expense'
+      ? 'arrowUpRight'
+      : cardId === 'income'
+        ? 'arrowDownLeft'
+        : cardId === 'net'
+          ? 'equal'
+          : null;
+  const decoration =
+    cardId === 'net' ? <span className={styles.summaryDecoration} aria-hidden="true" /> : null;
   const style = {
     '--home-card-extra-height': `${extraHeightPx}px`,
   } as CSSProperties;
@@ -57,6 +68,11 @@ export function HomeCard({
         {titleMeta}
       </div>
       {action && <div className={styles.action}>{action}</div>}
+      {summaryIcon && (
+        <span className={styles.summaryIcon} data-home-summary-icon={cardId} aria-hidden="true">
+          <Icon name={summaryIcon} size={18} />
+        </span>
+      )}
     </>
   );
   const className =
@@ -72,6 +88,7 @@ export function HomeCard({
         aria-labelledby={ariaLabel ? undefined : headingId}
         aria-label={ariaLabel}
       >
+        {decoration}
         <header className={styles.header}>
           <div
             className={`${styles.controlsSlot} ${styles.editingControlsSlot}`}
@@ -93,6 +110,7 @@ export function HomeCard({
 
   const content = (
     <>
+      {decoration}
       <header className={styles.header}>
         <span className={styles.controlsSlot} data-home-card-controls="" aria-hidden="true" />
         {headerMain}

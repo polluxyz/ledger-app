@@ -34,7 +34,7 @@ const ALL_CARD_IDS: readonly HomeCardId[] = [
 const HOME_CARD_TITLES: Record<HomeCardId, string> = {
   expense: '本月支出',
   income: '本月收入',
-  net: '結餘',
+  net: '本月結餘',
   trend: '財務趨勢',
   categories: '本月支出',
   activity: '最近｜標註',
