@@ -4,6 +4,16 @@
 
 ## 現況（2026-10-27）
 
+### 2m 收支摘要漏項：補正完成，待 Claude Code 驗收
+
+- 使用者提供核可預覽，指出三張卡的圖示及結餘背景沒有實裝。此為 Codex 在 #189 的實裝漏項，依原畫面補齊，不再要求使用者重複核可。
+- 分支 `fix/home-summary-visual-details`，程式 commit `095faa3`，基底 `cab8b50`。詳見 [補正計畫及驗證](../../tasks/home-summary-details-plan.md) 與 spec 第 4 項、SC-V9。後續提交僅更新交接文件。
+- 已補：支出／收入／結餘右上圖示、淡金雙圓弧、縮小貨幣符號、帳本月份／結餘副標；結餘卡標題明列「本月結餘」。保留所有金額格式、負號、小數及共享帳本個人份額。
+- 裝飾使用獨立裁切層，不裁掉整張卡的焦點框或拖動控制，不隔離卡片選單的堆疊。不改 schema、API、套件、CI、版面格式或其他頁面。
+- 驗證：相關 71／71；全 Web vitest 限制 2 workers 後 1121／1121；首頁與版面編輯 e2e 單批 41／41，最後堆疊調整後 SC-Y20 再驗 1／1。format、lint、typecheck、Web build 都 exit 0。預設併行 Web 測試首次與 e2e 同時跑有 28 條 5 秒逾時，沒有改 timeout 或斷言；重跑結果如上。
+- 真實測試頁面的深淺色已核對：`docs/artifacts/2l-aplus-shots/home-1280px-light-gold.png`、`home-1280px-dark-gold.png`，手機 `home-390px-light-gold.png`。請直接對照使用者原預覽核對圖示、底板、圓弧與副標，不能只看測試綠燈。
+- Codex 提交後交回既有 Claude Code 驗收。通過 SC-V9 且最新 head CI 全綠後才可合併，並按已授權的前端部署流程更新 dev；未通過時網頁修正仍由 Codex 負責。測試 DB `ledger_stats_test`，執行前查 3100／5273／5274，指令 `fnm exec --using=24.22.1 ...`。
+
 ### 2m 首頁風格：已驗收並合併
 
 - PR [#189](https://github.com/polluxyz/ledger-app/pull/189)，squash 合併進 `main`。程式 commit `823428a` 由 Codex 實裝，基底 `d8b8720`。開發者指定 Claude Code 驗收；驗收紀錄在 [plan](../../tasks/archive/phase-2m-plan.md) 最後一節。

@@ -1,6 +1,6 @@
 # Spec：2m — 首頁風格與財務趨勢
 
-狀態：開發者在逐次確認預覽後指示「好 幫我實裝」，並指定實裝完成後交由 Claude Code 驗收。此核可涵蓋下列已討論的介面；實作不另增加功能。Claude Code 已獨立驗收，以 PR #189 合併；plan 與 todo 在 `tasks/archive/phase-2m-*.md`。
+狀態：開發者在逐次確認預覽後指示「好 幫我實裝」，並指定實裝完成後交由 Claude Code 驗收。此核可涵蓋下列已討論的介面；實作不另增加功能。Claude Code 已獨立驗收，以 PR #189 合併；plan 與 todo 在 `tasks/archive/phase-2m-*.md`。使用者後續指出圖示與背景漏項，SC-V9 補正另由 `fix/home-summary-visual-details` 實裝，待 Claude Code 驗收。
 
 ## 目標與範圍
 
