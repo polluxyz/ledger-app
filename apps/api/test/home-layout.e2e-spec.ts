@@ -57,6 +57,14 @@ describe('Home layout — persistence and validation (e2e)', () => {
   const get = () => request(httpServer(app)).get(path).set(auth(alice.token));
   const snapshot = async () =>
     JSON.stringify(await prisma.userHomeLayout.findMany({ orderBy: { userId: 'asc' } }));
+  const seedRevision = async (revision: number) => {
+    await put(body()).expect(200);
+    // 直接設定邊界 fixture，避免為了到達 INTEGER 上限而重複呼叫數十億次 API。
+    await prisma.userHomeLayout.update({
+      where: { userId_surface: { userId: alice.userId, surface: 'WEB' } },
+      data: { revision },
+    });
+  };
 
   beforeAll(async () => {
     ({ app, prisma } = await createE2EApp());
@@ -95,15 +103,75 @@ describe('Home layout — persistence and validation (e2e)', () => {
     expect(rows).toEqual([{ isNull: true }]);
   });
 
-  it.each([0, 1])('SC-Y11: 同時以 revision %i 儲存恰有一個成功', async (revision) => {
-    if (revision === 1) await put(body()).expect(200);
+  it('SC-Y11: revision 從 INTEGER 上限前一版經上限回繞成 1，再遞增成 2', async () => {
+    await seedRevision(2147483646);
+    for (const [expectedRevision, revision] of [
+      [2147483646, 2147483647],
+      [2147483647, 1],
+      [1, 2],
+    ]) {
+      const saved = await put(body(DEFAULT_HOME_LAYOUT_V1, expectedRevision)).expect(200);
+      expect(saved.body).toEqual({ schemaVersion: 1, revision, layout: DEFAULT_HOME_LAYOUT_V1 });
+      expect((await get().expect(200)).body).toEqual(saved.body);
+    }
+  });
+
+  it('SC-Y11: INTEGER 上限時重設回繞成 1，GET 與 SQL 均為 NULL', async () => {
+    await seedRevision(2147483647);
+    const reset = await put(body(null, 2147483647)).expect(200);
+    expect(reset.body).toEqual({ schemaVersion: 1, revision: 1, layout: null });
+    expect((await get().expect(200)).body).toEqual(reset.body);
+    const rows = await prisma.$queryRaw<
+      { isNull: boolean }[]
+    >`SELECT "layout" IS NULL AS "isNull" FROM "UserHomeLayout" WHERE "userId" = ${alice.userId}`;
+    expect(rows).toEqual([{ isNull: true }]);
+  });
+
+  it('SC-Y11: 回繞後再帶 INTEGER 上限回 409，資料不變', async () => {
+    await seedRevision(2147483647);
+    await put(body(DEFAULT_HOME_LAYOUT_V1, 2147483647)).expect(200);
+    const before = await snapshot();
+    const conflict = await put(body(nested, 2147483647)).expect(409);
+    expect(conflict.body).toMatchObject({
+      statusCode: 409,
+      errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
+    });
+    expect(await snapshot()).toBe(before);
+    expect((await get().expect(200)).body).toEqual({
+      schemaVersion: 1,
+      revision: 1,
+      layout: DEFAULT_HOME_LAYOUT_V1,
+    });
+  });
+
+  it('SC-Y11: 資料列 revision 為 5 時帶 INTEGER 上限回 409，不回繞且資料不變', async () => {
+    await seedRevision(5);
+    const before = await snapshot();
+    const conflict = await put(body(DEFAULT_HOME_LAYOUT_V1, 2147483647)).expect(409);
+    expect(conflict.body).toMatchObject({
+      statusCode: 409,
+      errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
+    });
+    expect(await snapshot()).toBe(before);
+    expect((await get().expect(200)).body).toEqual({
+      schemaVersion: 1,
+      revision: 5,
+      layout: nested,
+    });
+  });
+
+  it.each([0, 1, 2147483647])('SC-Y11: 同時以 revision %i 儲存恰有一個成功', async (revision) => {
+    if (revision > 0) await seedRevision(revision);
     const responses = await Promise.all([
       put(body(nested, revision)),
       put(body(DEFAULT_HOME_LAYOUT_V1, revision)),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
     const winner = responses.find((response) => response.status === 200)!;
-    expect(winner.body).toMatchObject({ revision: revision + 1 });
+    expect(winner.body).toMatchObject({ revision: revision === 2147483647 ? 1 : revision + 1 });
+    expect(responses.find((response) => response.status === 409)!.body).toMatchObject({
+      errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
+    });
     expect((await get().expect(200)).body).toEqual(winner.body);
     expect(await prisma.userHomeLayout.count()).toBe(1);
   });
