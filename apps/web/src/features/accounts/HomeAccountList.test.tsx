@@ -32,6 +32,13 @@ describe('HomeAccountList', () => {
     };
   }
 
+  function readAccountListCss(): string {
+    return readFileSync(
+      join(process.cwd(), 'src/features/accounts/HomeAccountList.module.css'),
+      'utf8',
+    );
+  }
+
   it('shows an empty state for zero accounts', () => {
     render(<HomeAccountList accounts={[]} />);
 
@@ -57,6 +64,22 @@ describe('HomeAccountList', () => {
     expect(negativeBalance.className).toMatch(/negative/);
     expect(positiveBalance.className).not.toMatch(/negative/);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps long account names intact in the DOM while truncating them to one line', () => {
+    const longName = '年度海外旅行、家電與搬家預備基金';
+    const accounts = makeAccounts(1).map((account) => ({ ...account, name: longName }));
+
+    render(<HomeAccountList accounts={accounts} />);
+
+    const accountName = screen.getByText(longName);
+    expect(accountName.className).toContain(styles.name ?? 'name');
+
+    const nameRule = readAccountListCss().match(/\.name\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(nameRule).toContain('min-width: 0;');
+    expect(nameRule).toContain('overflow: hidden;');
+    expect(nameRule).toContain('text-overflow: ellipsis;');
+    expect(nameRule).toContain('white-space: nowrap;');
   });
 
   it('shows all six accounts immediately without expansion controls', () => {
@@ -117,11 +140,11 @@ describe('HomeAccountList', () => {
     expect(screen.queryByRole('button', { name: /全部 \d+ 個|收起/ })).not.toBeInTheDocument();
     expect(rows[7]).toHaveTextContent('臨時帳戶');
 
-    const source = readFileSync(
-      join(process.cwd(), 'src/features/accounts/HomeAccountList.module.css'),
-      'utf8',
-    );
+    const source = readAccountListCss();
     expect(source).toContain('container-type: inline-size');
     expect(source).toContain('@container home-account-list (min-width: 440px)');
+    expect(source).toContain('width: 100%');
+    expect(source).toContain('width: 50%');
+    expect(source).toContain('box-sizing: border-box');
   });
 });
