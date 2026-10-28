@@ -57,58 +57,26 @@
 
 還沒做：advisor 意見、假設清單、spec。匯入的結果一律是草稿，要使用者確認才寫入。
 
-## 換模型候選：Vertex AI 測試腳本（2026-10-27，已實測，等開發者決定是否加測）
+## 換模型到 Vertex AI 的 DeepSeek V4.1 Flash（2026-10-28 核可，進行中）
 
-- 開發者想試 Vertex AI 的 DeepSeek-V4.1-Flash。他貼的範例用 `model.deploy()`，會開專用 GPU 機器、按小時計費。協調者先問過，開發者選「按次計費 API」（MaaS，Google 代管、按 token 收費）。不要部署專用機器。
-- 腳本在 repo 外：`C:\Users\Administrator\orca\scratch\vertex-test\`（`vertex-smoke.mjs`、`vertex.env.example`）。不進版控，任何建置或測試都不依賴它。
-- 做法：載入 `apps/api/dist` 的 `GlmLlmProvider`、`buildAiCatalog`、`validateAiDrafts`，網址換成 Vertex 的 OpenAI 相容端點，token 換成 Google access token。用 spec §1 的例子跑 SC-P10 的 5 句，逐欄比對。腳本依賴 dist，改了 `apps/api/src/ai` 要先 `pnpm --filter @ledger/api build`。
-- 已用本機假伺服器驗過比對邏輯（故意給錯的金額會被抓出來）。
-- 環境已就緒：模型頁確認有按次計費 API（標示 experimental）。模型 ID `deepseek-ai/deepseek-v4.1-flash-maas`，區域 `global`，專案 `sunnetcybercom-2`（已開帳單）。開發者裝了 gcloud 並登入，`vertex.env` 的 token 欄位留空，腳本自己呼叫 gcloud 拿 token。gcloud 在 `C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin`，舊終端機的 PATH 沒有它，執行前要先加進 PATH。
-- 腳本加了 `ONLY_STEPS=5,6`，只跑指定步驟。另外可用 `TIMEOUT_MS` 改逾時。
-- 實測（10-27，逾時 25 秒、輸出上限 2048，跟正式環境一樣）。開發者跑 1 輪 5 句 4/5；協調者單獨重跑第 5 步 3 次（逾時 90 秒）3/3；完整 15 次 12/15。合計 23 次：
-  - 有回應的 19 次欄位全對，第 7 步「機票」也正確留 null。glm-5.3 定案那輪（4a plan §7 T6 第 5 輪）是 15/15。
-  - 逾時 4 次（約 17%），glm-5.3 定案那輪 0 次。失敗全是逾時，沒有答錯。
-  - 一般延遲 0.7～2.2 秒，比 glm-5.3 的 1.4～3.5 秒快。長尾 6.8、10.4、20.5 秒，輸出 token 也只有 58；連線檢查（只回 2 token）也有 1 次 13 秒。判斷是 Google 端排隊，不是模型思考太久。
-  - 輸入 726～735 token，輸出 7～107 token。今天共用約 1.4 萬輸入、1,100 輸出 token，另有 4 次逾時不確定是否計費。沒查單價，所以沒估金額。
-- 協調者判斷：答對率可以接受，17% 逾時不能直接上線。建議先多收 2 組資料再決定：改用單一區域（例如 `us-central1`，先在模型頁確認有開）、換時段各跑 15 次。開發者還沒回覆是否加測。
-- 開發者問過花費與餘額：要在 Console「帳單 → 報表」（篩專案、服務 Vertex AI、依 SKU 分組）與「帳單 → 抵免額」看，gcloud 查不到金額。建議設每月預算快訊。
-- 這個腳本不測圖片與聲音。模型頁寫能讀圖片與文字，沒寫能讀聲音，所以語音照 10-27 定案另接 STT。
-- 正式換成 Vertex 時，後端要用專用服務帳戶（只給 Vertex AI User），不能用開發者個人 gcloud 登入。測完開發者可以 `gcloud auth revoke` 收回這台的權限。
-
-## 換模型候選：Claude Haiku 5.5（2026-10-27 討論，等開發者決定是否加測）
-
-- 開發者看完 Vertex 定價頁，認為 Haiku 5.5「最便宜又是比較好的」，傾向選它。
-- 價格（Vertex 定價頁 global 區，每 100 萬 token，美元，輸入／輸出）。月費以全站上限估：500 次 × 30 天，每次輸入 1,000、輸出 600 token。
-
-  | 模型                  | 輸入／輸出   | 月費約 |
-  | --------------------- | ------------ | ------ |
-  | Claude Haiku 5.5      | 0.10 / 0.50  | 6      |
-  | gpt-oss-120b          | 0.09 / 0.36  | 4.6    |
-  | DeepSeek-V4.1-Flash   | 0.30 / 1.20  | 15     |
-  | Gemini 3.5 Flash-Lite | 0.30 / 2.50  | 27     |
-  | Gemini 3.5 Flash      | 1.50 / 9.00  | 104    |
-  | Claude Sonnet 5.5     | 2.00 / 10.00 | 120    |
-
-- 指定區域（us、asia-east1 等）貴 10%。Haiku 5.5 輸入 10 萬 token 以上改長脈絡費率 0.50 / 2.50，我們用不到。中文版定價頁 DeepSeek、GLM 表頭寫「每 100 萬個字元」，疑似翻譯錯誤，沒對英文版。
-- 協調者判斷：用量小，候選間每月只差幾美元。價格不是決定因素，準確率才是。
-- 技術事實（claude-api skill，沒打 API 驗證）：
-  - Vertex 模型 ID `claude-haiku-5-5`，region 建議 `global`。走 Anthropic Messages 格式，不是 OpenAI 相容格式，所以 `vertex-smoke.mjs` 現有路線不能直接用。
-  - 官方做法用 `@anthropic-ai/vertex-sdk` 的 `AnthropicVertex`，驗證走 GCP ADC。正式接入要新寫 provider，新增套件屬於 Ask first。
-  - 思考預設開啟（adaptive，effort `medium`），思考 token 算在輸出。effort 在 `high` 以下可以關掉思考，能壓延遲。
-  - `budget_tokens` 會回 400；不支援 assistant prefill；Vertex 上 refusal 沒有伺服器端 fallback。
-  - 能讀圖片與 PDF，不收聲音。Claude 模型在 Vertex 可能要先在 Model Garden 啟用，沒確認。
-- 協調者提的做法（開發者還沒回覆，不要自己開始）：
-  1. `vertex-smoke.mjs` 加一條 Claude 路線（scratch 腳本，不進版控）。
-  2. Haiku 5.5 跑 SC-P10 的 5 句 × 3 輪，和 glm-5.3（15/15）、DeepSeek-V4.1-Flash（有回應 19/19、逾時 17%）比準確率、延遲、實際 token。
-  3. 追平 glm-5.3 就選它，再補跑 SC-P17、SC-P27。
-  4. 定案前照 CLAUDE.md §5.6 先問 advisor（先 Codex 後 Argon）。
-- 原始筆記在 repo 外：`C:\Users\Administrator\orca\scratch\vertex-test\haiku-5-5-notes.md`。
+- spec `docs/specs/phase-4a-ai-vertex.md`（決策 337～345、SC-P33～P40），plan 與 todo 在 `tasks/ai-vertex-*.md`。開發者 10-28 回「同意」核可 spec 改版、plan、todo。
+- 經過：Claude Haiku 5.5 在這個 GCP 專案回 404（「haiku暫時不能用」）→ 先選 Gemini 3.5 Flash-Lite → 開發者改選 DeepSeek：「我還是決定用deepseek-v4.1-flash / gemini 3.5 flash-lite很笨」。各候選的實測表見 spec §1。
+- 模型 ID `deepseek-ai/deepseek-v4.1-flash-maas`，只能走 `global`；用 `us-central1` 回 400。
+- 10-28 實測（global、逾時 90 秒）：SC-P10 15/15；SC-P27 26/27。42 次中位數約 1.37 秒，超過 25 秒 6 次，最慢 54 秒。
+- 因長尾延遲，Vertex 時間上限改 60 秒、不重試，GLM 維持 25 秒（決策 341）。分類提議允許偶爾答錯、逐筆列出（決策 345）。advisor（Codex，`run_105770a2c589`）2 輪後雙方一致。
+- 實測腳本在 repo 外：`C:\Users\Administrator\orca\scratch\vertex-test\`（`vertex-smoke.mjs`、`vertex-p27.mjs`，用 `vertex.env` 執行；`vertex.env` 含帳號資訊，不要分享）。腳本依賴 `apps/api/dist`，改了 `apps/api/src/ai` 要先 build。gcloud 在 `C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin`，舊終端機要先加進 PATH。
+- 不要部署專用 GPU 機器（`model.deploy()`），只用按次計費 API。花費在 Console「帳單 → 報表」看，gcloud 查不到金額。
+- GLM 10-28 到期。這組 PR 合併並部署前，dev 的 AI 記帳不能用。
+- **11-21 前複查**：官方只保證 DeepSeek V4.1 Flash 供應到 2026-11-28（決策 344 (c)）。
 
 ## 下一步
 
-1. 請開發者按 `Ctrl + Shift + R` 看新的 AI 圖示，並用手機確認虛擬鍵盤彈出時輸入欄的位置（SC-P32 唯一沒驗的項目）。
-2. 10-28 後換模型：開發者傾向 Claude Haiku 5.5，等他決定是否加 Claude 路線實測（見上一節）。DeepSeek-V4.1-Flash 答對但 17% 逾時，加測區域與時段也還沒回覆。處理 `GLM_BASE_URL` 預設值（新分類 spec §10 第 5 項延到這次），重調提示詞，重跑 SC-P10、SC-P17、SC-P27（做法見額度 plan §7 T5）。換模型前照額度 spec 決策 298 (j) 核對 context 長度、單價、輸入大小、拒絕方式。這次也要確認新模型能不能讀圖片，結果會決定匯入照片與截圖的做法。語音一律先 STT，不看模型能不能讀聲音。
-3. 語音輸入、匯入：各自走 spec → plan → todo。動筆前列假設清單、徵詢 advisor。
+1. T0（協調者）：整合分支 `feature/ai-vertex` 上寫契約與先紅的隔離 e2e（plan §1.1）。
+2. T1：用 `orca orchestration` 派 `backend`，分支 `feature/aiv-provider`。Codex 開機卡在更新提示時，送 Esc 跳過再重派。
+3. T2：整合、spec §9 的上游文件加註、PR、部署 dev。
+4. T3：等開發者完成 spec §8 的 GCP 設定（專用服務帳戶，只給 Vertex AI User），跑 SC-P40 第 1～9 項。
+5. 之後：語音 → 匯入，各自走 spec → plan → todo（10-27 範圍見上一節）。開放給其他使用者前的阻擋項見 `../handoff.md`。
+6. 請開發者用手機確認虛擬鍵盤彈出時 AI 輸入欄的位置（SC-P32 唯一沒驗的項目）。
 
 ## 已知問題
 
@@ -117,4 +85,6 @@
 - `low` 時名稱（title）常是 null，使用者要自己補。
 - `apps/web/e2e/debts.spec.ts:258`（還款）合併後失敗過 1 次，重跑都過。與 4a 無關。
 - `apps/web/e2e/home-layout-edit.spec.ts:299`（2l 的 SC-Y15 right 側）在 #180 驗收時失敗 1 次：放開拖曳後立刻點「完成」，沒有送出儲存。單獨重跑 4 個方向各 10 次都過。與 4a 無關。
+- DeepSeek 在 SC-P27「旅行基金 機票 8000 刷卡」3 次中 1 次提議新分類「機票」，期望「交通」（決策 345 列為已知問題）。換 prompt 或模型時優先重測。
+- `apps/web/e2e/home.spec.ts:418`（SC-Y8）時好時壞，與 4a 無關。
 - `TransactionForm.tsx` 共享帳本送出路徑（約 1209 行）沒有帶 `newCategoryName` 的元件測試；API e2e 有覆蓋共享帳本寫入。
