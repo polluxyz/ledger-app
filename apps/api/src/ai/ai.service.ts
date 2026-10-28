@@ -8,7 +8,13 @@ import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { requireLedgerAccess } from '../ledgers/require-ledger-access';
-import { LLM_PROVIDER, LlmProviderError, type LLMProvider, type LlmUsage } from './llm-provider';
+import {
+  LLM_PROVIDER,
+  LlmProviderError,
+  type LLMProvider,
+  type LlmUsage,
+  type LlmTimings,
+} from './llm-provider';
 import { AiQuotaService } from './ai-quota.service';
 import { AI_QUOTA_LIMITS, type AiQuotaLimits } from './ai-quota.tokens';
 import { loadAiCatalog } from './ai-catalog';
@@ -75,6 +81,7 @@ export class AiService {
     }
     const started = Date.now();
     let usage: LlmUsage | null = null;
+    let timings: LlmTimings | undefined;
     let outcome = 'internal';
     let drafts = 0;
     let httpStatus: number | null = null;
@@ -86,6 +93,7 @@ export class AiService {
         maxOutputTokens: this.limits.maxOutputTokens,
       });
       usage = response.usage ?? null;
+      timings = response.timings;
       if (response.truncated) {
         outcome = 'truncated';
         return { drafts: [] };
@@ -106,6 +114,7 @@ export class AiService {
     } catch (error: unknown) {
       if (!(error instanceof LlmProviderError)) throw error;
       outcome = error.kind;
+      timings = error.timings;
       httpStatus = error.kind === 'http' ? error.status : null;
       // 不把原始例外與回應傳給 filter，避免模型資料進入日誌或 HTTP 回應。
       throw new AppException(
@@ -117,7 +126,7 @@ export class AiService {
       const durationMs = Date.now() - started;
       await this.quota.record(userId, day, usage);
       this.usageLogger.log(
-        `outcome=${outcome} ${identity} durationMs=${durationMs} promptTokens=${usage?.promptTokens ?? 'unknown'} completionTokens=${usage?.completionTokens ?? 'unknown'} drafts=${drafts} ${counts}${httpStatus === null ? '' : ` httpStatus=${httpStatus}`}`,
+        `outcome=${outcome} ${identity} durationMs=${durationMs} promptTokens=${usage?.promptTokens ?? 'unknown'} completionTokens=${usage?.completionTokens ?? 'unknown'} drafts=${drafts} ${counts}${httpStatus === null ? '' : ` httpStatus=${httpStatus}`} tokenMs=${timings?.tokenMs ?? 'unknown'} headersMs=${timings?.headersMs ?? 'unknown'} bodyMs=${timings?.bodyMs ?? 'unknown'} reasoningTokens=${usage?.reasoningTokens ?? 'unknown'}`,
       );
     }
   }

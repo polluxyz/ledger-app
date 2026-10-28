@@ -22,13 +22,30 @@ const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().trim().min(1).default('localhost'),
   ),
-  LLM_PROVIDER: z.enum(['glm', 'fake']).default('fake'),
+  LLM_PROVIDER: z.enum(['glm', 'fake', 'vertex']).default('fake'),
+  VERTEX_PROJECT_ID: z.preprocess(
+    blankAsUndefined,
+    z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/)
+      .optional(),
+  ),
+  VERTEX_LOCATION: z.preprocess(
+    blankAsUndefined,
+    z
+      .string()
+      .regex(/^[a-z0-9-]+$/)
+      .default('global'),
+  ),
+  VERTEX_MODEL: z.preprocess(blankAsUndefined, z.string().optional()),
+  // 明確保留給 ConfigService，避免 Zod 丟掉未列入 schema 的憑證設定。
+  GOOGLE_APPLICATION_CREDENTIALS: z.preprocess(blankAsUndefined, z.string().optional()),
   GLM_API_KEY: z.string().optional(),
   GLM_MODEL: z.string().optional(),
   AI_PARSE_DAILY_LIMIT_PER_USER: quotaNumber(0, 10000, 50),
   AI_DAILY_LIMIT_GLOBAL: quotaNumber(0, 1000000, 500),
   AI_PARSE_MAX_OUTPUT_TOKENS: quotaNumber(256, 32768, 2048),
-  GLM_BASE_URL: z.string().default('https://open.bigmodel.cn/api/paas/v4'),
+  GLM_BASE_URL: z.string().default('https://api.z.ai/api/paas/v4'),
   /**
    * GLM 的思考強度（`reasoning_effort`）。glm-5.3 一定會思考、預設 max，太慢；
    * 設 `low` 才能在逾時內回應（spec 決策 249）。留空就不送這個欄位，其他模型照舊。
@@ -64,6 +81,11 @@ const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+/** 空白等同未設定；非空的 project / location 不 trim，避免接受格式錯誤的網址片段。 */
+function blankAsUndefined(value: unknown): unknown {
+  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+}
 
 /** 空白代表未設定，不能讓數值轉型把它當成停用的 0。 */
 function quotaNumber(min: number, max: number, fallback: number) {
