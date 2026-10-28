@@ -57,9 +57,9 @@
 
 還沒做：advisor 意見、假設清單、spec。匯入的結果一律是草稿，要使用者確認才寫入。
 
-## 換模型到 Vertex AI 的 DeepSeek V4.1 Flash（2026-10-28 核可，T0～T2 完成，等 T3）
+## 換模型到 Vertex AI 的 DeepSeek V4.1 Flash（2026-10-28 完成，#192、#195）
 
-- spec `docs/specs/phase-4a-ai-vertex.md`（決策 337～345、SC-P33～P40），plan 與 todo 在 `tasks/ai-vertex-*.md`。開發者 10-28 回「同意」核可 spec 改版、plan、todo。
+- spec `docs/specs/phase-4a-ai-vertex.md`（決策 337～345、SC-P33～P40），plan 與 todo 在 `tasks/archive/ai-vertex-*.md`。開發者 10-28 回「同意」核可 spec 改版、plan、todo。
 - 經過：Claude Haiku 5.5 在這個 GCP 專案回 404（「haiku暫時不能用」）；gpt-oss-120b 只對 5/15；Gemini 3.5 Flash-Lite 15/15 與 27/27 → 先選 Gemini 3.5 Flash-Lite → 開發者改選 DeepSeek：「我還是決定用deepseek-v4.1-flash / gemini 3.5 flash-lite很笨」。各候選的實測表見 spec §1。
 - 模型 ID `deepseek-ai/deepseek-v4.1-flash-maas`，只能走 `global`；用 `us-central1` 回 400。
 - 10-28 實測（global、逾時 90 秒）：SC-P10 15/15；SC-P27 26/27。42 次中位數約 1.37 秒，超過 25 秒 6 次，最慢 54 秒。
@@ -68,18 +68,24 @@
 - T0（`72381f6`）：契約與先紅的隔離 e2e。T1：Codex（`backend`）做完 provider 與認證，協調者逐行看 diff 並重跑全部檢查。T2：上游 spec 加註、本 PR。各任務的數字、套件重試與日誌的調查結論、已核可的偏離見 plan §7。
 - 新的環境變數：`LLM_PROVIDER=vertex`、`VERTEX_PROJECT_ID`、`VERTEX_LOCATION`（預設 `global`）、`VERTEX_MODEL`、`GOOGLE_APPLICATION_CREDENTIALS`（選填，金鑰檔放 repo 外）。`GLM_BASE_URL` 預設值改成 z.ai。部署時不要開 `GOOGLE_SDK_NODE_LOGGING`。
 - 不要部署專用 GPU 機器（`model.deploy()`），只用按次計費 API。花費在 Console「帳單 → 報表」看，gcloud 查不到金額。
-- GLM 10-28 到期。這組 PR 合併並部署前，dev 的 AI 記帳不能用。
+- GLM 10-28 到期。主工作區 `apps/api/.env` 已改成 `LLM_PROVIDER=vertex`（改之前的備份在 `$TEMP/ledger-api-env.bak`）。
+- T3（10-28，#195）：在 worktree 用暫時的 e2e 跑 SC-P40 第 1～9 項。語意、用量、認證都過；第 1 項 41/42（1 次 60 秒逾時），第 8 項 token 有換新但推論逾時。數字見 plan §7。
+- 開發者 10-28 回「好 核可」：2 項逾時照實接受，只在自用期間有效，不算 SC-P40 全部通過（spec 決策 341 (h)）。「雜支 50」回「到時候有遇到問題再說」，不調 prompt（決策 345 (e)）。advisor 與協調者意見一致。
 - **11-21 前複查**：官方只保證 DeepSeek V4.1 Flash 供應到 2026-11-28（決策 344 (c)）。
 
 ## 下一步
 
-1. T3：等開發者完成 spec §8 的 GCP 設定（專用服務帳戶，只給 Vertex AI User）與代理登入，主工作區 `apps/api/.env` 改成 `LLM_PROVIDER=vertex` 後重啟 API，跑 SC-P40 第 1～9 項，結果填進 plan §7。
-2. 之後：語音 → 匯入，各自走 spec → plan → todo（10-27 範圍見上一節）。開放給其他使用者前的阻擋項見 `../handoff.md`。
-3. 請開發者用手機確認虛擬鍵盤彈出時 AI 輸入欄的位置（SC-P32 唯一沒驗的項目）。
+1. 第 8 項補驗：API 下次自然閒置滿 1 小時後送 1 句，看是否 200、token 有換新。結果補進 `tasks/archive/ai-vertex-plan.md` §7，原本的失敗紀錄保留。
+2. 2026-11-21 前複查 DeepSeek V4.1 Flash 的供應期限（決策 344 (c)）。
+3. 長尾延遲（偶爾超過 25 秒、少數超過 60 秒）可另案改善：先做等待提示與讓使用者自己重送，再考慮 hedged request。開放給其他使用者前要重新評估這個例外。
+4. 之後：語音 → 匯入，各自走 spec → plan → todo（10-27 範圍見上一節）。開放給其他使用者前的阻擋項見 `../handoff.md`。
+5. 請開發者用手機確認虛擬鍵盤彈出時 AI 輸入欄的位置（SC-P32 唯一沒驗的項目）。
 
 ## 已知問題
 
 - 假 provider 遇到固定句子、但帳本裡沒有對應的分類或帳戶時回 500（plan 核可的行為）。劇本以外的句子回 0 筆草稿。
+- DeepSeek V4.1 Flash 的長尾延遲：T3 中位數 4.2 秒、p95 56 秒，42 次中 1 次超過 60 秒回 503，使用者重送。慢在收到回應開頭之前。
+- DeepSeek 對「雜支 50」偶爾分類空著或提議「雜支」，空著時草稿不能確認，使用者要自己選。
 - glm-5.3 關不掉思考。`low` 時轉帳句偶爾要 16～19 秒，超過 25 秒回 503，使用者重送。
 - `low` 時名稱（title）常是 null，使用者要自己補。
 - `apps/web/e2e/debts.spec.ts:258`（還款）合併後失敗過 1 次，重跑都過。與 4a 無關。
