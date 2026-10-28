@@ -158,4 +158,23 @@ T1 只有一個 worker：provider、認證、組裝都改同一組檔案，拆�
 - `us-central1` 回 400：這個模型只能走 `global`。
 - Gemini 3.5 Flash-Lite：15/15、27/27，中位數約 0.85 秒。開發者覺得分類判斷太差，沒選。
 
-（之後的實作紀錄在實作時填）
+### T1 provider 與認證（2026-10-28）
+
+- 抽出 `OpenAiCompatibleLlmProvider`，保留 64 KiB 上限、禁止 redirect、JSON mode、usage 與截斷防線。Vertex 的固定 Google 網址由 factory 組成，推論不重試；每次呼叫都向來源取得當下 token。
+- `google-auth-library` 安裝版本 **11.3.1**；其 transporter 使用 **gaxios 8.3.2**，logging 使用 **google-logging-utils 2.1.0**。查核依據是這次 lockfile 對應的已安裝程式碼：`auth/authclient.js`、`auth/googleauth.js`、`auth/oauth2client.js`、`auth/impersonated.js`、`gtoken/getToken.js`，以及 gaxios 的 `gaxios.js` / `retry.js`。
+- **認證重試**：官方認證請求會指定 `retry: true` 或 POST 的 `retryConfig`；gaxios 預設最多重試 3 次（無回應預設 2 次），且預設沒有可依賴的總期限。以公開 `clientOptions.transporterOptions` 設 `retryConfig: { retry: 0, noResponseRetries: 0 }` 與單次 `timeout: 60000`；gaxios 深層合併設定，所以服務帳戶金鑰的 token 交換即使 HTTP 503 也只送一次，SC-P36.4 已以真的 GoogleAuth 與假 fetch 驗證。
+- **代理登入例外**：11.3.1 的 `GoogleAuth.fromImpersonatedJSON` 建立來源 client 時沒有傳入 `clientOptions`，來源 OAuth 與 IAM Credentials 請求仍可能按套件預設重試；ADC 的 metadata 探測也使用套件自己的傳輸。協調者確認採決策 341 (d) 的第二條路：不覆寫套件內部方法，以共用 provider 從開始拿 token 起的 **60000ms 外層期限**限制呼叫者等待，涵蓋所有認證路徑。逾時立刻回 `timeout`、不送推論；GoogleAuth 不收 AbortSignal，背景工作可繼續，但 token promise 的晚到 rejection 有接住且不記錄。SC-P37.1、P37.3 驗證卡住與 90 秒才失敗的來源都在 60 秒回應、fetch 為 0 次、沒有 unhandled rejection。
+- **套件日誌**：`google-logging-utils` 預設回傳空 logger；只有設 **`GOOGLE_SDK_NODE_LOGGING`**（namespace filter，例如 `*`）才建立預設輸出 backend，或外部主動呼叫 `setBackend` 時輸出。本程式不設此變數、不呼叫 `setBackend`、不新增 gaxios interceptor，並在可傳入設定的 client 上用公開 `useAuthRequestParameters: false` 關閉套件預設的認證攔截器；SC-P34.3 驗其 request / response interceptor 集合皆為空。代理登入來源未沿用此選項，仍依賴預設 logging 關閉；部署勿開此 debug 變數。
+- **已核可偏離**：GLM 現有成功回應的精確比對測試禁止修改，加入 enumerable `timings` 會破壞既有形狀。協調者同意 GLM 薄包裝只在成功回應移除 `timings`，日誌三段時間為 `unknown`；錯誤仍帶計時，通用 provider 與 Vertex 的成功、失敗都保留已走到的計時。新增回歸測試直接驗 GLM 成功不帶、Vertex 成功帶計時；`glm-llm.provider.spec.ts` 完全未改。
+- **已核可的併發補強**：套件的 `Impersonated.refreshToken` 未沿用 OAuth2Client 合併更新的 map。協調者同意認證來源共用 in-flight promise，成功／失敗 settle 時清除；不自行管理 token 或 expiry。共用工作滿 60 秒後，新請求重新呼叫底層，避免永久卡住；舊工作的 finally 不得清掉新的共用工作。補測試驗 5 次併發合併、失敗恢復、卡住 60 秒後重開及舊工作晚到隔離。
+- 日誌為讀取 provider 計時，除最後一行外，僅新增 `timings` 的區域變數及成功／失敗賦值；既有欄位順序、API 形狀與額度規則維持原樣。僅新增 `google-auth-library@^11.3.1` 一個直接相依。
+- **驗證結果**：`pnpm --filter @ledger/api test --runInBand` **60 suites / 952 tests 通過**（7.462 秒）；`pnpm --filter @ledger/api test:e2e -- ai-vertex-isolation` **1 suite / 3 tests 通過**；`pnpm --filter @ledger/api test:e2e` 對專屬 `ledger_aiv_provider_test` **59 suites / 614 tests 通過**（357.240 秒）。根目錄 `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 與 API `build` 皆通過；`git diff --check` 無問題。未改 GLM 回歸測試與隔離 e2e，未跑 Web e2e、未連 Google。真實模型與部署屬 T2／T3，留給協調者。
+
+### T2 整合與文件（2026-10-28）
+
+- 協調者逐行看完 T1 的 diff（`3305849`），沒有退回。T1 以 fast-forward 併進 `feature/ai-vertex`。
+- 協調者在 worker 的 worktree 重跑：typecheck、lint、format:check 通過；API 單元測試 60 suites／952 tests；API e2e 59 suites／614 tests。
+- 整合分支在 `3305849` 重跑：根目錄 lint、typecheck、format:check、build 通過；API 單元測試 60／952、shared 160、Web 1121 全過；API e2e 對 `ledger_ai_test` 59 suites／614 tests，含隔離 e2e 3 條。Web e2e 交給 CI。
+- spec §9 的上游文件已加註：文字 spec 決策 248、額度 spec 決策 298 (g)、新分類 spec §10 第 5 項。交接檔已更新。
+- 沒遇到 Zod 丟掉未列變數的問題，所以 `apps/api/CLAUDE.md` 不加提醒。
+- 已清掉：worker 終端機、`aiv-provider` worktree、分支 `feature/aiv-provider`、資料庫 `ledger_aiv_provider_test`。

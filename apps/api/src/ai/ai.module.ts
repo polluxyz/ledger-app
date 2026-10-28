@@ -4,11 +4,13 @@ import { UsersService } from '../users/users.service';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiUserThrottleGuard } from './ai-user-throttle.guard';
+import { unavailableTokenSource, VERTEX_TOKEN_SOURCE } from './access-token-source';
 import { LLM_PROVIDER } from './llm-provider';
 import { createLlmProvider } from './llm-provider.factory';
 import { AiQuotaService } from './ai-quota.service';
 import { AI_CLOCK, AI_QUOTA_LIMITS } from './ai-quota.tokens';
 import type { Env } from '../config/env.validation';
+import { GoogleAccessTokenSource } from './google-access-token-source';
 
 /** provider 以 token 注入，測試與日後模型替換均不改解析流程。 */
 @Module({
@@ -18,7 +20,21 @@ import type { Env } from '../config/env.validation';
     AiQuotaService,
     UsersService,
     AiUserThrottleGuard,
-    { provide: LLM_PROVIDER, inject: [ConfigService], useFactory: createLlmProvider },
+    {
+      provide: LLM_PROVIDER,
+      inject: [ConfigService, VERTEX_TOKEN_SOURCE],
+      useFactory: createLlmProvider,
+    },
+    {
+      provide: VERTEX_TOKEN_SOURCE,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) =>
+        config.get('LLM_PROVIDER', { infer: true }) === 'vertex'
+          ? new GoogleAccessTokenSource(
+              config.get('GOOGLE_APPLICATION_CREDENTIALS', { infer: true }),
+            )
+          : unavailableTokenSource,
+    },
     { provide: AI_CLOCK, useValue: () => new Date() },
     {
       provide: AI_QUOTA_LIMITS,
