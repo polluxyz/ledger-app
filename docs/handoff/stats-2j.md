@@ -67,8 +67,8 @@
 
 ## 已知問題
 
-- Web e2e 有 1 條統計頁版面斷言偶發失敗：W7 的 Codex 第一輪跑到 88/89，單獨重跑與協調者重跑都沒有重現（2j plan §6）。再出現時先看是不是機器負載。
-- #174 的代價：首頁元件真的沒出現時，`getRect` 要多等 5 秒才失敗。
+- 統計頁 e2e 偶發失敗一直沒有重現（`--repeat-each=10 --workers=1` 加 CPU 負載 50/50）。`stats.spec.ts` 一次量測就斷言的地方已全部改成整段重試，數值沒放寬。再出現時保留失敗的 trace。`--workers=4` 會因共用資料庫互撞（409 EMAIL_ALREADY_EXISTS、外鍵）失敗，不是版面問題。
+- `home.spec.ts` 在外層 `expect.poll`／`toPass` 裡的量測改用只量一次的 `measureRectOnce`，其餘維持會重試的 `getRect`。
 - PR2 已知限制：revision 到 2147483647 後再存一次，資料庫整數溢位回 500。正常使用不會發生，沒有處理。
 - `packages/shared` 沒有 lint script；shared 的測試檔不在 typecheck 範圍內。
 

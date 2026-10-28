@@ -674,8 +674,8 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         const panelAtFinalWidth = Math.abs(panelWidths.current - panelWidths.final) <= 1;
         if (listWidthStable && panelAtFinalWidth) {
           const [first, second, homeContentWidth] = await Promise.all([
-            getRect(list.getByRole('listitem').nth(0)),
-            getRect(list.getByRole('listitem').nth(1)),
+            measureRectOnce(list.getByRole('listitem').nth(0)),
+            measureRectOnce(list.getByRole('listitem').nth(1)),
             homeLayout.evaluate((element) => element.clientWidth),
           ]);
           stablePanelLayout = {
@@ -1668,6 +1668,7 @@ type HomeLayoutKind = 'tree' | 'narrow';
 async function readHomeCards(
   page: Page,
   layoutKind: HomeLayoutKind = 'tree',
+  measureRect: (locator: Locator) => Promise<Rect> = getRect,
 ): Promise<{
   layout: Rect;
   cardIds: HomeCardId[];
@@ -1677,9 +1678,9 @@ async function readHomeCards(
   await expect(layout).toBeVisible();
   const cards = {} as Record<HomeCardId, Rect>;
   for (const cardId of HOME_CARD_IDS) {
-    cards[cardId] = await getRect(layout.locator(`[data-home-card-id="${cardId}"]`));
+    cards[cardId] = await measureRect(layout.locator(`[data-home-card-id="${cardId}"]`));
   }
-  return { layout: await getRect(layout), cardIds: await readCardIds(layout), cards };
+  return { layout: await measureRect(layout), cardIds: await readCardIds(layout), cards };
 }
 
 type HomeCardsSnapshot = Awaited<ReturnType<typeof readHomeCards>>;
@@ -1692,7 +1693,7 @@ async function waitForHomeCards(
 ): Promise<HomeCardsSnapshot> {
   let snapshot: HomeCardsSnapshot | undefined;
   await expect(async () => {
-    snapshot = await readHomeCards(page, layoutKind);
+    snapshot = await readHomeCards(page, layoutKind, measureRectOnce);
     verify(snapshot);
   }).toPass({ timeout: 5_000 });
   if (!snapshot) throw new Error('首頁卡片版面尚未穩定。');
@@ -1857,11 +1858,15 @@ async function getRect(locator: Locator): Promise<Rect> {
   // 視窗或側欄剛改變版面時，元素可能短暫沒有方框；重試整個定位與量測流程。
   let rect: Rect | null = null;
   await expect(async () => {
-    const measuredRect = await locator.boundingBox();
-    expect(measuredRect).not.toBeNull();
-    if (!measuredRect) throw new Error('無法取得首頁元件的實際方框。');
-    rect = measuredRect;
+    rect = await measureRectOnce(locator);
   }).toPass({ timeout: 5_000 });
+  if (!rect) throw new Error('無法取得首頁元件的實際方框。');
+  return rect;
+}
+
+/** 外層已用 expect.poll 或 toPass 重試時，單次量測方框以免巢狀等待。 */
+async function measureRectOnce(locator: Locator): Promise<Rect> {
+  const rect = await locator.boundingBox();
   if (!rect) throw new Error('無法取得首頁元件的實際方框。');
   return rect;
 }
