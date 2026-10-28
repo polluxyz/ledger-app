@@ -68,7 +68,7 @@ afterEach(() => {
   }
 });
 
-/** Renderer 測試涵蓋窄視窗的固定順序、待處理卡位置與無帳本固定版面。 */
+/** Renderer 測試涵蓋窄視窗版面、編輯操作、移動選單關閉與焦點返回。 */
 describe('HomeLayoutRenderer', () => {
   it('uses one fixed column at 900px and places the pending card after the third summary card', () => {
     setViewportWidthMatches(true);
@@ -401,6 +401,48 @@ describe('HomeLayoutRenderer', () => {
       ),
     );
     expect(screen.getByText('本月支出 已移到 本月收入 上方')).toBeInTheDocument();
+  });
+
+  it('closes the move menu on Escape and returns focus to its trigger', () => {
+    setViewportWidthMatches(false);
+    render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing
+        narrowViewport={false}
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getAllByRole('button', { name: '移到…' })[0]!;
+    fireEvent.click(trigger);
+    const targetSelect = screen.getByRole('combobox', { name: '目標卡' });
+    targetSelect.focus();
+    fireEvent.keyDown(targetSelect, { key: 'Escape' });
+
+    expect(screen.queryByRole('combobox', { name: '目標卡' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes the move menu after clicking outside it', () => {
+    setViewportWidthMatches(false);
+    render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing
+        narrowViewport={false}
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: '移到…' })[0]!);
+    expect(screen.getByRole('combobox', { name: '目標卡' })).toBeInTheDocument();
+
+    fireEvent.click(document.body);
+
+    expect(screen.queryByRole('combobox', { name: '目標卡' })).not.toBeInTheDocument();
   });
 
   it('shows the one-column paused view without editor handles at 900px', () => {

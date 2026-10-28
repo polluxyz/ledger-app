@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -654,6 +655,7 @@ function MoveCardMenu({
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
     null,
   );
+  const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const targetSize = targetCardId ? sizeOfCard(targetCardId) : null;
@@ -682,6 +684,35 @@ function MoveCardMenu({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeWhenClickingOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        !(target instanceof Node) ||
+        menuRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsOpen(false);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener('click', closeWhenClickingOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('click', closeWhenClickingOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
   function isAllowed(side: HomeLayoutDropSide) {
     return Boolean(
       targetCardId && targetSize && canDrop(layout, cardId, targetCardId, side, targetSize),
@@ -696,7 +727,7 @@ function MoveCardMenu({
   }
 
   return (
-    <div className={styles.moveMenu}>
+    <div className={styles.moveMenu} ref={menuRef}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="true"
