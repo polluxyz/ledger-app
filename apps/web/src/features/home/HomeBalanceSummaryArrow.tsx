@@ -26,7 +26,7 @@ export function HomeBalanceSummaryArrow({ name, amount }: HomeBalanceSummaryArro
     return (
       <span className={`${styles.person} ${self ? styles.self : ''}`}>
         <span className={styles.avatar} aria-hidden="true">
-          {self ? '我' : nameIsBlank ? '?' : Array.from(label)[0]}
+          {self ? '我' : nameIsBlank ? '?' : Array.from(name.trim())[0]}
         </span>
         <span className={styles.name} title={displayedName}>
           {displayedName}

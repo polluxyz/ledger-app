@@ -49,13 +49,18 @@ describe('HomeBalanceSummaryArrow', () => {
 
   it.each([
     { name: '小明', initial: '小' },
+    { name: ' 小明', initial: '小' },
     { name: '😀小明', initial: '😀' },
   ])('keeps the first visible character for $name', ({ name, initial }) => {
     render(<HomeBalanceSummaryArrow name={name} amount={12500} />);
 
-    const summary = screen.getByLabelText(`${name}欠你 $125`);
-    expect(summary.children[0]?.children[0]?.textContent).toBe(initial);
-    expect(summary.children[0]?.children[1]?.textContent).toBe(name);
-    expect(screen.getByTitle(name)).toHaveTextContent(name);
+    const summary = document.querySelector<HTMLElement>('span[aria-label]');
+    const nameElement = summary?.children[0]?.children[1];
+
+    expect(nameElement?.textContent).toBe(name);
+    expect(nameElement?.getAttribute('title')).toBe(name);
+    expect(summary?.getAttribute('aria-label')).toBe(`${name}欠你 $125`);
+    expect(summary?.children[0]?.children[0]?.textContent).toBe(initial);
+    expect(summary?.children[0]?.children[1]?.textContent).toBe(name);
   });
 });
