@@ -69,7 +69,8 @@ export async function saveHomeLayoutWithRecovery({
       return { kind: 'saved', response: latest };
     if (putError instanceof ApiError && putError.statusCode === 409)
       return { kind: 'conflict', latest };
-    if (latest.revision > expectedRevision) return { kind: 'conflict', latest };
+    // revision 到上限會回繞成 1，所以用是否相等判斷，不比較大小。
+    if (latest.revision !== expectedRevision) return { kind: 'conflict', latest };
     return { kind: 'failed', error: putError };
   }
 }

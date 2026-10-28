@@ -177,6 +177,37 @@ describe('useHomeLayout', () => {
     expect(homeLayoutEditStore.getSnapshot('user-a')).toBeNull();
   });
 
+  it('writes a wrapped revision from a successful PUT into the React Query cache', async () => {
+    const submittedLayout = changedWeightLayout(3000);
+    requestApi.mockImplementation((_path, options) => {
+      if (options?.method === 'PUT') {
+        expect(options.body).toMatchObject({ expectedRevision: 2147483647 });
+        return Promise.resolve({
+          schemaVersion: 1,
+          revision: 1,
+          layout: submittedLayout,
+        });
+      }
+      return Promise.resolve({
+        schemaVersion: 1,
+        revision: 2147483647,
+        layout: DEFAULT_HOME_LAYOUT_V1,
+      });
+    });
+    const { result } = renderHook(() => useHomeLayout('user-a', true), { wrapper });
+    await waitFor(() => expect(result.current.canStartEditing).toBe(true));
+
+    act(() => result.current.startEditing());
+    act(() => result.current.updateDraft(submittedLayout));
+    act(() => result.current.finishEditing());
+    await waitFor(() => expect(homeLayoutEditStore.getSnapshot('user-a')).toBeNull());
+
+    expect(queryClient.getQueryData(HOME_LAYOUT_QUERY_KEY)).toMatchObject({
+      revision: 1,
+      layout: submittedLayout,
+    });
+  });
+
   it('uses a fresh direct GET after a network failure instead of the cached query result', async () => {
     const customLayout = {
       ...DEFAULT_HOME_LAYOUT_V1,

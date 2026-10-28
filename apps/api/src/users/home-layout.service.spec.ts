@@ -39,11 +39,31 @@ describe('HomeLayoutService', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('先條件更新使用者與 revision，再讀回結果', async () => {
-    await expect(service.put('alice', dto)).resolves.toEqual(row);
+  it.each([1, 2, 2147483646])('revision %i 先條件遞增，再讀回結果', async (expectedRevision) => {
+    await expect(service.put('alice', { ...dto, expectedRevision })).resolves.toEqual(row);
     expect(updateMany).toHaveBeenCalledWith({
-      where: { userId: 'alice', surface: 'WEB', revision: 2 },
+      where: { userId: 'alice', surface: 'WEB', revision: expectedRevision },
       data: { schemaVersion: 1, layout: dto.layout, revision: { increment: 1 } },
+    });
+    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      findUnique.mock.invocationCallOrder[0]!,
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: '儲存版面', layout: dto.layout },
+    { name: '重設版面', layout: null },
+  ])('revision 到 INTEGER 上限時 $name 原子回繞成 1', async ({ layout }) => {
+    const wrapped = { ...row, revision: 1, layout };
+    findUnique.mockResolvedValue(wrapped);
+    await expect(
+      service.put('alice', { ...dto, expectedRevision: 2147483647, layout }),
+    ).resolves.toEqual(wrapped);
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { userId: 'alice', surface: 'WEB', revision: 2147483647 },
+      data: { schemaVersion: 1, layout: layout === null ? Prisma.DbNull : layout, revision: 1 },
     });
     expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
       findUnique.mock.invocationCallOrder[0]!,

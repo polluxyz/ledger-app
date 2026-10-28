@@ -116,6 +116,77 @@ describe('home layout save recovery', () => {
     ).resolves.toEqual({ kind: 'conflict', latest });
   });
 
+  it.each([
+    { failure: 'timeout', error: new HomeLayoutRequestTimeoutError() },
+    { failure: 'network error', error: new TypeError('offline') },
+  ])(
+    'treats a $failure PUT as saved when the recovery GET matches after revision wraparound',
+    async ({ error }) => {
+      const latest = {
+        schemaVersion: 1 as const,
+        revision: 1,
+        layout: DEFAULT_HOME_LAYOUT_V1,
+      };
+      const put = vi.fn((body: PutHomeLayoutRequest) => {
+        expect(body.expectedRevision).toBe(2147483647);
+        return Promise.reject(error);
+      });
+      const get = vi.fn(() => Promise.resolve(latest));
+      await expect(
+        saveHomeLayoutWithRecovery({
+          services: { put, get },
+          submittedLayout: DEFAULT_HOME_LAYOUT_V1,
+          expectedRevision: 2147483647,
+          timeoutMs: 20,
+        }),
+      ).resolves.toEqual({ kind: 'saved', response: latest });
+      expect(get).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { failure: 'timeout', error: new HomeLayoutRequestTimeoutError() },
+    { failure: 'network error', error: new TypeError('offline') },
+  ])(
+    'keeps the draft after a $failure PUT when a different layout still has revision r',
+    async ({ error }) => {
+      const latest = { schemaVersion: 1 as const, revision: 2147483647, layout: null };
+      const put = vi.fn((body: PutHomeLayoutRequest) => {
+        expect(body.expectedRevision).toBe(2147483647);
+        return Promise.reject(error);
+      });
+      const get = vi.fn(() => Promise.resolve(latest));
+      const result = await saveHomeLayoutWithRecovery({
+        services: { put, get },
+        submittedLayout: DEFAULT_HOME_LAYOUT_V1,
+        expectedRevision: 2147483647,
+        timeoutMs: 20,
+      });
+      expect(result.kind).toBe('failed');
+      if (result.kind === 'failed') expect(result.error).toBe(error);
+    },
+  );
+
+  it.each([
+    { failure: 'timeout', error: new HomeLayoutRequestTimeoutError() },
+    { failure: 'network error', error: new TypeError('offline') },
+  ])(
+    'opens a conflict after a $failure PUT when a different layout has a wrapped revision',
+    async ({ error }) => {
+      const latest = { schemaVersion: 1 as const, revision: 1, layout: null };
+      const put = vi.fn().mockRejectedValue(error);
+      const get = vi.fn(() => Promise.resolve(latest));
+      await expect(
+        saveHomeLayoutWithRecovery({
+          services: { put, get },
+          submittedLayout: DEFAULT_HOME_LAYOUT_V1,
+          expectedRevision: 2147483647,
+          timeoutMs: 20,
+        }),
+      ).resolves.toEqual({ kind: 'conflict', latest });
+    },
+  );
+
   it('resolves timeout to success when the network GET matches the submitted layout', async () => {
     const latest = { schemaVersion: 1 as const, revision: 6, layout: null };
     const put = vi.fn().mockRejectedValue(new HomeLayoutRequestTimeoutError());
