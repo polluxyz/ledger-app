@@ -4,7 +4,12 @@ import { DEFAULT_HOME_LAYOUT_V1, parseHomeLayoutV1 } from '@ledger/shared';
 import type { HomeLayoutResponse, HomeLayoutV1, PutHomeLayoutRequest } from '@ledger/shared';
 import { homeLayoutEditStore } from '../../app/home-layout-edit-store';
 import { apiRequest } from '../../lib/api-client';
-import { getLatestHomeLayout, saveHomeLayoutWithRecovery } from './home-layout-save';
+import {
+  getLatestHomeLayout,
+  isSameSavedLayout,
+  saveHomeLayoutWithRecovery,
+} from './home-layout-save';
+import type { HomeLayoutSaveResult } from './home-layout-save';
 import { useHomeViewportIsNarrow } from './use-home-viewport';
 
 export const HOME_LAYOUT_QUERY_KEY = ['home-layout', 'web'] as const;
@@ -97,16 +102,27 @@ export function useHomeLayout(userId: string | null, hasLedger: boolean) {
           get: (signal: AbortSignal) =>
             apiRequest<HomeLayoutResponse>(HOME_LAYOUT_ENDPOINT, { signal }),
         };
-        const revision = refreshRevision
-          ? (await getLatestHomeLayout(services, controller.signal)).revision
-          : expectedRevision;
+        // 舊分頁的 revision 可能在完整回繞後重複；送出前連同原版面一起比對。
+        // 這次網路讀取不會更新草稿基準，GET 到 PUT 的並發仍由後端 revision 把關。
+        const latest = await getLatestHomeLayout(services, controller.signal);
         if (!homeLayoutEditStore.isCurrentGeneration(userId, snapshot.generation)) return;
-        const result = await saveHomeLayoutWithRecovery({
-          submittedLayout,
-          expectedRevision: revision,
-          signal: controller.signal,
-          services,
-        });
+        let result: HomeLayoutSaveResult;
+        if (!refreshRevision && isSameSavedLayout(latest.layout, submittedLayout)) {
+          result = { kind: 'saved', response: latest };
+        } else if (
+          !refreshRevision &&
+          (latest.revision !== expectedRevision ||
+            !isSameSavedLayout(latest.layout, snapshot.initialStoredLayout))
+        ) {
+          result = { kind: 'conflict', latest };
+        } else {
+          result = await saveHomeLayoutWithRecovery({
+            submittedLayout,
+            expectedRevision: refreshRevision ? latest.revision : expectedRevision,
+            signal: controller.signal,
+            services,
+          });
+        }
         if (!homeLayoutEditStore.isCurrentGeneration(userId, snapshot.generation)) return;
 
         if (result.kind === 'saved') {
