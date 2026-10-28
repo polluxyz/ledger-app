@@ -34,7 +34,7 @@ test('情境 1：建立帳本不設定計入餘額；共享帳本交易仍記入
   const cashBefore = (await listAccounts(request, userA.token)).find(
     (account) => account.name === '現金',
   )!.balance;
-  await page.getByRole('link', { name: '帳本' }).click();
+  await page.getByRole('link', { name: '帳本', exact: true }).click();
   await page.getByRole('button', { name: '建立帳本' }).click();
 
   const dialog = page.getByRole('dialog', { name: '建立帳本' });
@@ -46,7 +46,7 @@ test('情境 1：建立帳本不設定計入餘額；共享帳本交易仍記入
 
   await expect(page.getByRole('link', { name: TRIP_LEDGER_NAME })).toBeVisible();
 
-  await page.getByRole('link', { name: '首頁' }).click();
+  await page.getByRole('link', { name: '首頁', exact: true }).click();
   await switchLedger(page, TRIP_LEDGER_NAME);
   // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
   await openNewTransaction(page);
@@ -158,7 +158,7 @@ test('情境 3：加入成員、變更角色，對方就看得到這本帳本', 
 
   // SC-8：換一個瀏覽器 context（等同另一台電腦），B 現在看得到這本帳本。
   const pageB = await openAs(userB);
-  await pageB.getByRole('link', { name: '帳本' }).click();
+  await pageB.getByRole('link', { name: '帳本', exact: true }).click();
   await expect(pageB.getByRole('link', { name: TRIP_LEDGER_NAME })).toBeVisible();
 });
 
@@ -212,7 +212,7 @@ test('情境 5：封存後帳本從切換器消失，勾選「顯示已封存」
   await openDashboard(page);
   await expect(page.getByLabel('作用中帳本')).not.toContainText(TRIP_LEDGER_NAME);
 
-  await page.getByRole('link', { name: '帳本' }).click();
+  await page.getByRole('link', { name: '帳本', exact: true }).click();
   await expect(page.getByRole('link', { name: TRIP_LEDGER_NAME })).toHaveCount(0);
 
   await page.getByLabel('顯示已封存的帳本').check();

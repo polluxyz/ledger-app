@@ -14,7 +14,7 @@ import { newTransactionForm, openNewTransaction } from './ui';
  */
 
 test('新增的分類與圖示立刻出現在記帳表單的選單裡', async ({ signedInPage: page }) => {
-  await page.getByRole('link', { name: '分類' }).click();
+  await page.getByRole('link', { name: '分類', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: '分類' })).toBeVisible();
 
@@ -31,7 +31,7 @@ test('新增的分類與圖示立刻出現在記帳表單的選單裡', async ({
   // 先確認它真的進了支出那一組。
   await expect(page.getByRole('listitem').filter({ hasText: '寵物' })).toBeVisible();
 
-  await page.getByRole('link', { name: '首頁' }).click();
+  await page.getByRole('link', { name: '首頁', exact: true }).click();
   // 右側欄預設關閉（spec 2i 修訂 5），先打開新增表單。
   await openNewTransaction(page);
 
@@ -46,7 +46,7 @@ test('更新後的分類在記帳表單的選單裡顯示新名字', async ({ si
   const categories = await listCategories(request, userA.token, ledger.id);
   const expense = categories.find((category) => category.type === 'EXPENSE')!;
 
-  await page.getByRole('link', { name: '分類' }).click();
+  await page.getByRole('link', { name: '分類', exact: true }).click();
 
   await page.getByRole('button', { name: `改名${expense.name}` }).click();
 
@@ -56,7 +56,7 @@ test('更新後的分類在記帳表單的選單裡顯示新名字', async ({ si
 
   await expect(page.getByRole('listitem').filter({ hasText: '外食' })).toBeVisible();
 
-  await page.getByRole('link', { name: '首頁' }).click();
+  await page.getByRole('link', { name: '首頁', exact: true }).click();
   await openNewTransaction(page);
 
   const form = newTransactionForm(page);

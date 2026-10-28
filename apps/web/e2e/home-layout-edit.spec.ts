@@ -1151,8 +1151,8 @@ test('SC-Y27：離開首頁、切帳本與窄螢幕時保留草稿，另一帳�
   await enterEditor(page);
   const draftedWeight = await adjustFirstSeparator(page);
 
-  await page.getByRole('link', { name: '統計' }).click();
-  await page.getByRole('link', { name: '首頁' }).click();
+  await page.getByRole('link', { name: '統計', exact: true }).click();
+  await page.getByRole('link', { name: '首頁', exact: true }).click();
   await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
   await expect.poll(() => firstSeparatorValue(page)).toBe(draftedWeight);
   await switchLedger(page, '草稿測試帳本');
@@ -1196,10 +1196,10 @@ test('SC-Y27：離開首頁期間外部存檔，回來完成時顯示 409', asyn
   const network = await watchHomeLayoutRequests(page);
   await enterEditor(page);
   await adjustFirstSeparator(page);
-  await page.getByRole('link', { name: '統計' }).click();
+  await page.getByRole('link', { name: '統計', exact: true }).click();
   const current = await getHomeLayout(request, userA.token);
   await putHomeLayout(request, userA.token, layoutPut(eightCardsInOneRow(), current.revision));
-  await page.getByRole('link', { name: '首頁' }).click();
+  await page.getByRole('link', { name: '首頁', exact: true }).click();
   await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
   await expectCardOrder(page, ALL_CARD_IDS);
   await page.getByRole('button', { name: '完成', exact: true }).click();
