@@ -25,6 +25,24 @@ export interface LlmRequest {
 export interface LlmUsage {
   promptTokens: number;
   completionTokens: number;
+  /**
+   * 思考 token（`completion_tokens_details.reasoning_tokens`，Vertex 決策 344 (f)）。
+   * 只給日誌用；額度只看上面兩個欄位。provider 沒回這個欄位就不帶。
+   */
+  reasoningTokens?: number;
+}
+
+/**
+ * provider 內部 3 段耗時（Vertex 決策 341 (g)），從呼叫 `complete` 起算，單位毫秒。
+ * 只用來判斷長尾出在哪一段，只進日誌。沒走到的段不帶，日誌記 `unknown`。
+ */
+export interface LlmTimings {
+  /** 拿到 access token 的時間點（GLM 用固定金鑰，也算這一段）。 */
+  tokenMs?: number;
+  /** 收到回應標頭的時間點。 */
+  headersMs?: number;
+  /** 讀完回應 body 的時間點。 */
+  bodyMs?: number;
 }
 
 export interface LlmResponse {
@@ -37,6 +55,7 @@ export interface LlmResponse {
    * JSON 也算截斷。`false` 只代表沒有截斷訊號，不保證內容完整。
    */
   truncated: boolean;
+  timings?: LlmTimings;
 }
 
 /**
@@ -54,21 +73,27 @@ export interface LLMProvider {
   complete(request: LlmRequest): Promise<LlmResponse>;
 }
 
-export type LlmProviderErrorKind = 'http' | 'timeout' | 'network';
+/**
+ * `auth`：拿不到 access token（Vertex 決策 341 (c)）。`AiService` 直接把 kind 當成日誌的
+ * 結果分類，所以不必另外處理。
+ */
+export type LlmProviderErrorKind = 'http' | 'timeout' | 'network' | 'auth';
 
 /**
- * provider 呼叫失敗（HTTP 錯誤、逾時、網路錯誤）。`AiService` 只把這一種錯誤轉成
+ * provider 呼叫失敗（HTTP 錯誤、逾時、網路錯誤、拿不到 token）。`AiService` 只把這一種錯誤轉成
  * 503 `AI_UNAVAILABLE`；其他例外照原本的路徑走。
  *
- * 為什麼只帶這三個欄位（決策 252）：錯誤物件會進日誌與例外 filter。句子、模型回應、
+ * 為什麼只帶這幾個數字欄位（決策 252）：錯誤物件會進日誌與例外 filter。句子、模型回應、
  * URL、原始 `cause` 都可能帶使用者的消費內容或金鑰，所以一律不放。
- * message 也只由這三個欄位組成。
+ * `auth` 也一樣：認證套件的例外可能帶金鑰路徑或服務帳戶 email（Vertex 決策 342 (b)）。
+ * message 只由 kind、status、durationMs 組成。
  */
 export class LlmProviderError extends Error {
   constructor(
     readonly kind: LlmProviderErrorKind,
     readonly status: number | null,
     readonly durationMs: number,
+    readonly timings?: LlmTimings,
   ) {
     super(`LLM provider ${kind} error (status ${status ?? 'none'}, ${durationMs}ms)`);
     this.name = 'LlmProviderError';

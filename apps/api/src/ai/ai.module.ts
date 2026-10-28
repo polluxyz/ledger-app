@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiUserThrottleGuard } from './ai-user-throttle.guard';
+import { unavailableTokenSource, VERTEX_TOKEN_SOURCE } from './access-token-source';
 import { LLM_PROVIDER } from './llm-provider';
 import { createLlmProvider } from './llm-provider.factory';
 import { AiQuotaService } from './ai-quota.service';
@@ -19,6 +20,8 @@ import type { Env } from '../config/env.validation';
     UsersService,
     AiUserThrottleGuard,
     { provide: LLM_PROVIDER, inject: [ConfigService], useFactory: createLlmProvider },
+    // T0 佔位：一律丟錯。T1 改成只在 LLM_PROVIDER=vertex 時建立真的認證來源。
+    { provide: VERTEX_TOKEN_SOURCE, useValue: unavailableTokenSource },
     { provide: AI_CLOCK, useValue: () => new Date() },
     {
       provide: AI_QUOTA_LIMITS,

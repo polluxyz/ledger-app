@@ -2,7 +2,7 @@
 
 plan：`tasks/ai-vertex-plan.md`；spec：`docs/specs/phase-4a-ai-vertex.md`。
 
-- [ ] **T0 契約與先紅的測試**（協調者）：plan §1.1。
+- [x] **T0 契約與先紅的測試**（協調者）：plan §1.1。
       驗收：API typecheck 通過；既有測試行為不變；`ai-vertex-isolation.e2e-spec.ts` 的 Vertex 斷言紅、fake 對照綠；e2e 不連 Google。
 - [ ] **T1 provider 與認證**（依賴 T0；`aiv-provider`，`backend`）：plan §1.2。
       驗收：SC-P33～P37 單元測試綠；`vertex` 上限 60 秒、`glm` 25 秒；日誌最後面多 `tokenMs`、`headersMs`、`bodyMs`、`reasoningTokens`；`glm-llm.provider.spec.ts` 的斷言沒改且綠；隔離 e2e 轉綠；既有 API e2e 全綠；只新增 `google-auth-library` 一個套件；套件的重試與日誌設定寫進 plan §7；原始認證例外不往外傳。
