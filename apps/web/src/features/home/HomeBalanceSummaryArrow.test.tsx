@@ -38,4 +38,24 @@ describe('HomeBalanceSummaryArrow', () => {
     expect(screen.getByLabelText(`${name}欠你 $1,666.67`)).toHaveTextContent('$1,666.67');
     expect(screen.getByTitle(name)).toHaveTextContent(name);
   });
+
+  it.each(['', '   '])('shows a fallback avatar and name when the name is %j', (name) => {
+    render(<HomeBalanceSummaryArrow name={name} amount={12500} />);
+
+    const summary = screen.getByLabelText('未命名對象欠你 $125');
+    expect(summary.children[0]?.children[0]?.textContent).toBe('?');
+    expect(screen.getByTitle('—')).toHaveTextContent('—');
+  });
+
+  it.each([
+    { name: '小明', initial: '小' },
+    { name: '😀小明', initial: '😀' },
+  ])('keeps the first visible character for $name', ({ name, initial }) => {
+    render(<HomeBalanceSummaryArrow name={name} amount={12500} />);
+
+    const summary = screen.getByLabelText(`${name}欠你 $125`);
+    expect(summary.children[0]?.children[0]?.textContent).toBe(initial);
+    expect(summary.children[0]?.children[1]?.textContent).toBe(name);
+    expect(screen.getByTitle(name)).toHaveTextContent(name);
+  });
 });
