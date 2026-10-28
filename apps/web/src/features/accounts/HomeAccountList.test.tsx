@@ -74,6 +74,7 @@ describe('HomeAccountList', () => {
 
     const accountName = screen.getByText(longName);
     expect(accountName.className).toContain(styles.name ?? 'name');
+    expect(accountName).toHaveAttribute('title', longName);
 
     const nameRule = readAccountListCss().match(/\.name\s*\{([\s\S]*?)\}/)?.[1] ?? '';
     expect(nameRule).toContain('min-width: 0;');

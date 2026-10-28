@@ -25,7 +25,9 @@ export function HomeAccountList({ accounts }: HomeAccountListProps) {
         const name = account.isTemporary ? '臨時帳戶' : account.name;
         return (
           <li className={styles.item} key={account.id}>
-            <span className={styles.name}>{name}</span>
+            <span className={styles.name} title={name}>
+              {name}
+            </span>
             <span
               className={`${styles.balance} ${account.balance < 0 ? styles.negative : ''}`}
               aria-label={`${name}餘額`}
