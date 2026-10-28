@@ -169,3 +169,12 @@ T1 只有一個 worker：provider、認證、組裝都改同一組檔案，拆�
 - **已核可的併發補強**：套件的 `Impersonated.refreshToken` 未沿用 OAuth2Client 合併更新的 map。協調者同意認證來源共用 in-flight promise，成功／失敗 settle 時清除；不自行管理 token 或 expiry。共用工作滿 60 秒後，新請求重新呼叫底層，避免永久卡住；舊工作的 finally 不得清掉新的共用工作。補測試驗 5 次併發合併、失敗恢復、卡住 60 秒後重開及舊工作晚到隔離。
 - 日誌為讀取 provider 計時，除最後一行外，僅新增 `timings` 的區域變數及成功／失敗賦值；既有欄位順序、API 形狀與額度規則維持原樣。僅新增 `google-auth-library@^11.3.1` 一個直接相依。
 - **驗證結果**：`pnpm --filter @ledger/api test --runInBand` **60 suites / 952 tests 通過**（7.462 秒）；`pnpm --filter @ledger/api test:e2e -- ai-vertex-isolation` **1 suite / 3 tests 通過**；`pnpm --filter @ledger/api test:e2e` 對專屬 `ledger_aiv_provider_test` **59 suites / 614 tests 通過**（357.240 秒）。根目錄 `pnpm lint`、`pnpm typecheck`、`pnpm format:check` 與 API `build` 皆通過；`git diff --check` 無問題。未改 GLM 回歸測試與隔離 e2e，未跑 Web e2e、未連 Google。真實模型與部署屬 T2／T3，留給協調者。
+
+### T2 整合與文件（2026-10-28）
+
+- 協調者逐行看完 T1 的 diff（`3305849`），沒有退回。T1 以 fast-forward 併進 `feature/ai-vertex`。
+- 協調者在 worker 的 worktree 重跑：typecheck、lint、format:check 通過；API 單元測試 60 suites／952 tests；API e2e 59 suites／614 tests。
+- 整合分支在 `3305849` 重跑：根目錄 lint、typecheck、format:check、build 通過；API 單元測試 60／952、shared 160、Web 1121 全過；API e2e 對 `ledger_ai_test` 59 suites／614 tests，含隔離 e2e 3 條。Web e2e 交給 CI。
+- spec §9 的上游文件已加註：文字 spec 決策 248、額度 spec 決策 298 (g)、新分類 spec §10 第 5 項。交接檔已更新。
+- 沒遇到 Zod 丟掉未列變數的問題，所以 `apps/api/CLAUDE.md` 不加提醒。
+- 已清掉：worker 終端機、`aiv-provider` worktree、分支 `feature/aiv-provider`、資料庫 `ledger_aiv_provider_test`。
