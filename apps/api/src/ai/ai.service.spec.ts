@@ -62,7 +62,7 @@ describe('AiService', () => {
     expect(users.getRecordDefaults).toHaveBeenCalledWith('me', 'own');
     expect(provider.complete.mock.calls[0]).toEqual([expect.objectContaining({ user: '早餐 60' })]);
   });
-  it.each(['http', 'network', 'timeout'] as const)(
+  it.each(['http', 'network', 'timeout', 'auth'] as const)(
     'maps provider %s errors to a safe 503',
     async (kind) => {
       const { service, provider } = setup();
@@ -124,5 +124,46 @@ describe('AiService', () => {
     expect(quota.record).toHaveBeenCalledTimes(1);
     expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', usage);
     expect(log).toHaveBeenCalledWith(expect.stringContaining('outcome=truncated'));
+  });
+
+  it('SC-P37.5 / SC-P37.6: appends timings and reasoning tokens without changing quota usage', async () => {
+    const { service, provider, quota } = setup();
+    const usage = { promptTokens: 10, completionTokens: 20, reasoningTokens: 7 };
+    provider.complete.mockResolvedValue({
+      content: { drafts: [] },
+      truncated: false,
+      usage,
+      timings: { tokenMs: 1, headersMs: 12, bodyMs: 14 },
+    });
+    await service.parseTransaction('me', dto);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(/tokenMs=1 headersMs=12 bodyMs=14 reasoningTokens=7$/),
+    );
+    expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', usage);
+  });
+
+  it('SC-P37.5: logs only the auth duration when token acquisition fails', async () => {
+    const { service, provider, quota } = setup();
+    provider.complete.mockRejectedValue(new LlmProviderError('auth', null, 5, { tokenMs: 5 }));
+    await expect(service.parseTransaction('me', dto)).rejects.toMatchObject({
+      status: 503,
+      errorCode: 'AI_UNAVAILABLE',
+    });
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(/tokenMs=5 headersMs=unknown bodyMs=unknown reasoningTokens=unknown$/),
+    );
+    expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', null);
+  });
+
+  it('SC-P37.6: absent diagnostics are unknown, never zero', async () => {
+    const { service } = setup();
+    await service.parseTransaction('me', dto);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /tokenMs=unknown headersMs=unknown bodyMs=unknown reasoningTokens=unknown$/,
+      ),
+    );
   });
 });

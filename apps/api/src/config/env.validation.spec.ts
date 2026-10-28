@@ -43,7 +43,7 @@ describe('validateEnv', () => {
   it('defaults AI to fake without requiring external credentials', () => {
     expect(validateEnv(base)).toMatchObject({
       LLM_PROVIDER: 'fake',
-      GLM_BASE_URL: 'https://open.bigmodel.cn/api/paas/v4',
+      GLM_BASE_URL: 'https://api.z.ai/api/paas/v4',
     });
   });
 
@@ -67,6 +67,53 @@ describe('validateEnv', () => {
 
   it('rejects unknown providers instead of silently selecting fake', () => {
     expect(() => validateEnv({ ...base, LLM_PROVIDER: 'unknown' })).toThrow(/LLM_PROVIDER/);
+  });
+
+  it('SC-P33: accepts Vertex, defaults global, and retains the explicit credential path', () => {
+    expect(
+      validateEnv({
+        ...base,
+        LLM_PROVIDER: 'vertex',
+        GOOGLE_APPLICATION_CREDENTIALS: '/outside/test.json',
+      }),
+    ).toMatchObject({
+      LLM_PROVIDER: 'vertex',
+      VERTEX_LOCATION: 'global',
+      GOOGLE_APPLICATION_CREDENTIALS: '/outside/test.json',
+    });
+  });
+
+  it.each(['/', '?', '@', '.', 'A', ' '])(
+    'SC-P33: rejects unsafe project and location characters %s',
+    (character) => {
+      for (const key of ['VERTEX_PROJECT_ID', 'VERTEX_LOCATION']) {
+        expect(() => validateEnv({ ...base, [key]: `test${character}project` })).toThrow(key);
+      }
+    },
+  );
+
+  it('SC-P33: validates project boundaries and treats blank Vertex values as unset', () => {
+    for (const project of ['a12345', 'a' + '1'.repeat(29)]) {
+      expect(validateEnv({ ...base, VERTEX_PROJECT_ID: project }).VERTEX_PROJECT_ID).toBe(project);
+    }
+    for (const project of ['a1234', 'a' + '1'.repeat(30), '1abcde', 'abcde-']) {
+      expect(() => validateEnv({ ...base, VERTEX_PROJECT_ID: project })).toThrow(
+        'VERTEX_PROJECT_ID',
+      );
+    }
+    for (const blank of ['', '  ']) {
+      const env = validateEnv({
+        ...base,
+        VERTEX_PROJECT_ID: blank,
+        VERTEX_LOCATION: blank,
+        VERTEX_MODEL: blank,
+        GOOGLE_APPLICATION_CREDENTIALS: blank,
+      });
+      expect(env.VERTEX_LOCATION).toBe('global');
+      expect(env.VERTEX_PROJECT_ID).toBeUndefined();
+      expect(env.VERTEX_MODEL).toBeUndefined();
+      expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+    }
   });
 
   it('keeps a single origin as a one-item list', () => {
