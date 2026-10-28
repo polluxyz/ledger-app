@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -659,6 +660,7 @@ function MoveCardMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const targetSelectRef = useRef<HTMLSelectElement>(null);
+  const focusSelectWhenMountedRef = useRef(false);
   const targetSize = targetCardId ? sizeOfCard(targetCardId) : null;
   const sides: readonly HomeLayoutDropSide[] = ['left', 'right', 'top', 'bottom'];
 
@@ -696,8 +698,13 @@ function MoveCardMenu({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !popoverPosition || !focusSelectWhenMountedRef.current) return;
     targetSelectRef.current?.focus();
+    focusSelectWhenMountedRef.current = false;
+  }, [isOpen, popoverPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     const closeWhenClickingOutside = (event: MouseEvent) => {
       const target = event.target;
@@ -708,12 +715,16 @@ function MoveCardMenu({
       ) {
         return;
       }
+      focusSelectWhenMountedRef.current = false;
       setIsOpen(false);
+      setTargetCardId('');
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      focusSelectWhenMountedRef.current = false;
       setIsOpen(false);
+      setTargetCardId('');
       triggerRef.current?.focus();
     };
 
@@ -734,18 +745,45 @@ function MoveCardMenu({
   function chooseSide(side: HomeLayoutDropSide) {
     if (!targetCardId || disabled || !isAllowed(side)) return;
     if (!onMove(targetCardId, side)) return;
+    focusSelectWhenMountedRef.current = false;
     setIsOpen(false);
     setTargetCardId('');
   }
 
+  function closeWhenFocusLeavesMenu(event: ReactFocusEvent<HTMLDivElement>) {
+    if (!isOpen) return;
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof Node &&
+      (menuRef.current?.contains(nextTarget) || popoverRef.current?.contains(nextTarget))
+    ) {
+      return;
+    }
+    focusSelectWhenMountedRef.current = false;
+    setIsOpen(false);
+    setTargetCardId('');
+    triggerRef.current?.focus();
+  }
+
+  function toggleMenu() {
+    if (isOpen) {
+      focusSelectWhenMountedRef.current = false;
+      setIsOpen(false);
+      setTargetCardId('');
+      return;
+    }
+    focusSelectWhenMountedRef.current = true;
+    setIsOpen(true);
+  }
+
   return (
-    <div className={styles.moveMenu} ref={menuRef}>
+    <div className={styles.moveMenu} onBlurCapture={closeWhenFocusLeavesMenu} ref={menuRef}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="true"
         className={styles.moveMenuTrigger}
         disabled={disabled}
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={toggleMenu}
         ref={triggerRef}
         type="button"
       >

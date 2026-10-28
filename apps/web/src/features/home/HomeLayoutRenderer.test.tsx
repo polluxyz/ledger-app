@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HOME_LAYOUT_V1, HOME_CARD_IDS, type HomeCardId } from '@ledger/shared';
 import { HomeLayoutRenderer, type HomeCardContents } from './HomeLayoutRenderer';
@@ -423,6 +424,74 @@ describe('HomeLayoutRenderer', () => {
 
     expect(screen.queryByRole('combobox', { name: '目標卡' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it('focuses the target select when the move menu first opens', async () => {
+    setViewportWidthMatches(false);
+    render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing
+        narrowViewport={false}
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: '移到…' })[0]!);
+
+    const targetSelect = await screen.findByRole('combobox', { name: '目標卡' });
+    await waitFor(() => expect(targetSelect).toHaveFocus());
+  });
+
+  it('closes and returns focus when Tab leaves the last move direction', async () => {
+    setViewportWidthMatches(false);
+    const user = userEvent.setup();
+    render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing
+        narrowViewport={false}
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getAllByRole('button', { name: '移到…' })[0]!;
+    await user.click(trigger);
+    await user.selectOptions(screen.getByRole('combobox', { name: '目標卡' }), 'income');
+    const lastDirection = screen.getByRole('button', { name: '下方' });
+    lastDirection.focus();
+    await user.tab();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('combobox', { name: '目標卡' })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+  });
+
+  it('closes and returns focus when focus leaves the target select', async () => {
+    setViewportWidthMatches(false);
+    const user = userEvent.setup();
+    render(
+      <HomeLayoutRenderer
+        layout={DEFAULT_HOME_LAYOUT_V1}
+        cards={cardContents()}
+        editing
+        narrowViewport={false}
+        onLayoutChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getAllByRole('button', { name: '移到…' })[0]!;
+    await user.click(trigger);
+    const targetSelect = screen.getByRole('combobox', { name: '目標卡' });
+    fireEvent.blur(targetSelect, { relatedTarget: document.body });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('combobox', { name: '目標卡' })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
   });
 
   it('closes the move menu after clicking outside it', () => {

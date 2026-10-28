@@ -212,9 +212,9 @@ async function moveWithKeyboard(
   const sourceCardId: HomeCardId = 'accounts';
   await tabToMoveMenu(page, sourceCardId);
   await page.keyboard.press('Enter');
-  await tabTo(page, { role: 'combobox', name: '目標卡', cardId: sourceCardId });
   const menu = page.locator(`[data-home-card-menu-for="${sourceCardId}"]`);
   const targetSelect = menu.getByRole('combobox', { name: '目標卡' });
+  await expect(targetSelect).toBeFocused();
   for (let count = 0; count < 10; count += 1) {
     if ((await targetSelect.inputValue()) === targetCardId) break;
     await page.keyboard.press('ArrowDown');
