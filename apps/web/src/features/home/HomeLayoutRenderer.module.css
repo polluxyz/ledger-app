@@ -129,12 +129,12 @@
 }
 
 .moveMenuPopover {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + var(--space-xs));
-  left: 0;
+  position: fixed;
+  z-index: 20;
   display: grid;
   min-width: 12rem;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border: var(--card-border);

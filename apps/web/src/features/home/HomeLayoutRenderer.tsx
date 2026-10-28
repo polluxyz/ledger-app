@@ -1,12 +1,15 @@
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { HomeCardId, HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { HOME_CARD_REGISTRY, type HomeCardRenderProps } from './card-registry';
 import { HOME_LAYOUT_GAP_PX, minWidthOf, wrapSplit, type WrappedSplitLine } from './layout-math';
@@ -650,8 +653,88 @@ function MoveCardMenu({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [targetCardId, setTargetCardId] = useState<HomeCardId | ''>('');
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const targetSelectRef = useRef<HTMLSelectElement>(null);
+  const focusSelectWhenMountedRef = useRef(false);
   const targetSize = targetCardId ? sizeOfCard(targetCardId) : null;
   const sides: readonly HomeLayoutDropSide[] = ['left', 'right', 'top', 'bottom'];
+
+  // 編輯畫布的橫向捲動會裁切垂直溢出，選單以視窗座標定位並在捲動時跟著觸發鈕移動。
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rectangle = trigger.getBoundingClientRect();
+      const popover = popoverRef.current?.getBoundingClientRect();
+      const popoverHeight = popover?.height ?? 0;
+      const popoverWidth = popover?.width ?? 0;
+      const spaceBelow = window.innerHeight - rectangle.bottom - 8;
+      const spaceAbove = rectangle.top - 8;
+      const openAbove = popoverHeight > spaceBelow && spaceAbove > spaceBelow;
+      const preferredTop = openAbove ? rectangle.top - popoverHeight - 4 : rectangle.bottom + 4;
+      const top = Math.max(8, Math.min(preferredTop, window.innerHeight - popoverHeight - 8));
+      const left = Math.max(8, Math.min(rectangle.left, window.innerWidth - popoverWidth - 8));
+      setPopoverPosition((current) =>
+        current?.top === top && current.left === left ? current : { top, left },
+      );
+    };
+
+    updatePosition();
+    const positionFrame = window.requestAnimationFrame(updatePosition);
+    document.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.cancelAnimationFrame(positionFrame);
+      document.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !popoverPosition || !focusSelectWhenMountedRef.current) return;
+    targetSelectRef.current?.focus();
+    focusSelectWhenMountedRef.current = false;
+  }, [isOpen, popoverPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeWhenClickingOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        !(target instanceof Node) ||
+        menuRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      focusSelectWhenMountedRef.current = false;
+      setIsOpen(false);
+      setTargetCardId('');
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      focusSelectWhenMountedRef.current = false;
+      setIsOpen(false);
+      setTargetCardId('');
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener('click', closeWhenClickingOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('click', closeWhenClickingOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
 
   function isAllowed(side: HomeLayoutDropSide) {
     return Boolean(
@@ -662,57 +745,94 @@ function MoveCardMenu({
   function chooseSide(side: HomeLayoutDropSide) {
     if (!targetCardId || disabled || !isAllowed(side)) return;
     if (!onMove(targetCardId, side)) return;
+    focusSelectWhenMountedRef.current = false;
     setIsOpen(false);
     setTargetCardId('');
   }
 
+  function closeWhenFocusLeavesMenu(event: ReactFocusEvent<HTMLDivElement>) {
+    if (!isOpen) return;
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof Node &&
+      (menuRef.current?.contains(nextTarget) || popoverRef.current?.contains(nextTarget))
+    ) {
+      return;
+    }
+    focusSelectWhenMountedRef.current = false;
+    setIsOpen(false);
+    setTargetCardId('');
+    triggerRef.current?.focus();
+  }
+
+  function toggleMenu() {
+    if (isOpen) {
+      focusSelectWhenMountedRef.current = false;
+      setIsOpen(false);
+      setTargetCardId('');
+      return;
+    }
+    focusSelectWhenMountedRef.current = true;
+    setIsOpen(true);
+  }
+
   return (
-    <div className={styles.moveMenu}>
+    <div className={styles.moveMenu} onBlurCapture={closeWhenFocusLeavesMenu} ref={menuRef}>
       <button
         aria-expanded={isOpen}
         aria-haspopup="true"
         className={styles.moveMenuTrigger}
         disabled={disabled}
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={toggleMenu}
+        ref={triggerRef}
         type="button"
       >
         移到…
       </button>
-      {isOpen && (
-        <div className={styles.moveMenuPopover}>
-          <label className={styles.moveMenuTarget}>
-            <span>目標卡</span>
-            <select
-              aria-label="目標卡"
-              disabled={disabled}
-              onChange={(event) => setTargetCardId(event.currentTarget.value as HomeCardId | '')}
-              value={targetCardId}
-            >
-              <option value="">選擇卡片</option>
-              {Object.entries(HOME_CARD_REGISTRY)
-                .filter(([id]) => id !== cardId)
-                .map(([id, registration]) => (
-                  <option key={id} value={id}>
-                    {registration.title}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <fieldset className={styles.moveMenuDirections} disabled={disabled || !targetCardId}>
-            <legend>方向</legend>
-            {sides.map((side) => (
-              <button
-                key={side}
-                disabled={!isAllowed(side)}
-                onClick={() => chooseSide(side)}
-                type="button"
+      {isOpen &&
+        popoverPosition &&
+        createPortal(
+          <div
+            className={styles.moveMenuPopover}
+            data-home-card-menu-for={cardId}
+            ref={popoverRef}
+            style={{ left: `${popoverPosition.left}px`, top: `${popoverPosition.top}px` }}
+          >
+            <label className={styles.moveMenuTarget}>
+              <span>目標卡</span>
+              <select
+                aria-label="目標卡"
+                disabled={disabled}
+                onChange={(event) => setTargetCardId(event.currentTarget.value as HomeCardId | '')}
+                ref={targetSelectRef}
+                value={targetCardId}
               >
-                {sideLabel(side)}
-              </button>
-            ))}
-          </fieldset>
-        </div>
-      )}
+                <option value="">選擇卡片</option>
+                {Object.entries(HOME_CARD_REGISTRY)
+                  .filter(([id]) => id !== cardId)
+                  .map(([id, registration]) => (
+                    <option key={id} value={id}>
+                      {registration.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <fieldset className={styles.moveMenuDirections} disabled={disabled || !targetCardId}>
+              <legend>方向</legend>
+              {sides.map((side) => (
+                <button
+                  key={side}
+                  disabled={!isAllowed(side)}
+                  onClick={() => chooseSide(side)}
+                  type="button"
+                >
+                  {sideLabel(side)}
+                </button>
+              ))}
+            </fieldset>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -2,7 +2,18 @@
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
-## 現況（2026-10-27）
+## 現況（2026-10-28）
+
+### 首頁 4 項網頁修正：已驗收、合併並部署 dev
+
+- PR [#193](https://github.com/polluxyz/ledger-app/pull/193)，squash 合併進 `main`，基底 `b0cae3b`。開發者要求修 #190 留下的既有問題，加上「標註」分頁色條壓到分類圖示。Codex 實作（orca run `run_eba369c91658`）。沒有改 schema、API、shared、套件、CI。
+- 「移到…」選單被下一列蓋住：原因是編輯畫布的橫向捲動容器裁掉了往下超出的部分。選單改用 portal 掛到 `body`、以視窗座標定位，空間不夠時往上開或夾在視窗內（`947c78c`、`c04c61c`）。
+- Escape 與點外面都會關選單，Escape 後焦點回「移到…」（`5dbbb79`）。
+- 鍵盤：選單移到 `body` 後 Tab 順序斷掉，違反 2l SC-Y20。驗收退件 2 次：第一次要求打開時聚焦；第二次我用臨時測試證實「第一次打開」焦點仍停在按鈕上（選單還沒掛上就呼叫 focus），e2e 的 `tabTo` 一路按 Tab 把問題蓋掉。修正後每次打開都聚焦「目標卡」，焦點離開選單就關閉並回到按鈕；e2e 改成按 Enter 後直接斷言聚焦（`a15cf25`）。
+- 309px `PageHeader`：`.header` 與 `.actions` 加 `min-width: 0`、`max-width: 100%`（`cbd8abd`）。e2e SC-Y32 量 9 個頁面的頁首。
+- 色條壓圖示：交易列左內距至少 `3px + var(--space-xs)`（7px），標註與未標註列圖示對齊；首頁與交易頁、標註與選取都量過（`2d0c49e`）。
+- 驗收數字：Web vitest `--maxWorkers=2` 1126／1126；lint、typecheck、format:check、web build exit 0；全站 Web e2e 136／136。第一次全站跑時我同時跑 vitest，`csp.spec.ts` 2 條失敗；單獨重跑 4／4、無負載重跑全站 136／136。
+- Codex 更新提示要選「3 Skip until next version」才會進入工作畫面。把退件直接打進 Codex 輸入框時，它只在畫面上回報、不發 `worker_done`，要讀畫面確認。
 
 ### 2m 收支摘要漏項補正：已驗收、合併並部署 dev
 
@@ -11,7 +22,7 @@
 - 驗收紀錄在 [補正計畫](../../tasks/archive/home-summary-details-plan.md) 最後一節。驗收找到「結餘卡的移到選單被副標蓋住」，原因是 header／body 的 `z-index` 建立了堆疊上下文；Codex 修正（`a193936`）後重驗通過。
 - 驗收數字：Web vitest `--maxWorkers=2` 1121／1121；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 驗完刪除。
 - CI 抓到 3 條全站 e2e 失敗（驗收時漏跑全站）：副標進了卡片連結名稱、金額多了貨幣 span，舊測試的定位與計行被打破。Codex 只改 e2e 修正（`f3d175d`），重跑全站 Web e2e 134／134。之後驗收網頁改動要跑全站 e2e。
-- 既有問題（基底就有，未修）：「移到…」選單超出卡片底部的部分被下一列蓋住；Escape 關不掉該選單；309px 時 `PageHeader` 的主要按鈕超出畫面（`scrollWidth` 330）。
+- 既有問題（基底就有）：「移到…」選單超出卡片底部的部分被下一列蓋住；Escape 關不掉該選單；309px 時 `PageHeader` 的主要按鈕超出畫面（`scrollWidth` 330）。2026-10-28 已修，見上一節。
 - 已清掉：驗收修正用的 Codex 終端機（orca run `run_13e9dac7a485`）、本機與遠端分支 `fix/home-summary-visual-details`。
 
 ### 2m 首頁風格：已驗收並合併

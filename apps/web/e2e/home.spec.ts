@@ -25,6 +25,7 @@ import {
   openNewTransaction,
   openUserMenu,
   selectCategory,
+  switchLedger,
 } from './ui';
 
 interface HomeSetup {
@@ -69,6 +70,7 @@ interface ActivityRowCase {
   badge?: 'cleared' | 'split';
   expand?: boolean;
   temporaryAccount?: boolean;
+  marked?: boolean;
 }
 
 interface MeasuredBox extends Rect {
@@ -110,6 +112,75 @@ const APLUS_SHOTS_DIR = fileURLToPath(
  * 版面斷言直接量瀏覽器方框；量測值放 Playwright 輸出目錄，A+ 展示截圖放 gitignore 的 artifacts。
  */
 test.describe('2l 首頁 A+ 版面端對端', () => {
+  test('SC-Y32：309px 寬時所有共用頁首與主要按鈕都在視窗內', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const ledger = await personalLedger(request, userA.token);
+    const longLedgerName = '309px 窄版頁首驗收用的超長家庭帳本名稱請勿擠出主要按鈕';
+    await createLedger(request, userA.token, { name: longLedgerName, kind: 'SHARED' });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await switchLedger(page, longLedgerName);
+
+    const routes: { path: string; title: string; action?: string }[] = [
+      { path: '/', title: '總覽', action: '新增交易' },
+      { path: '/transactions', title: '交易' },
+      { path: '/stats', title: '統計' },
+      { path: '/counterparties', title: '對象' },
+      { path: '/accounts', title: '帳戶', action: '新增帳戶' },
+      { path: '/ledgers', title: '帳本', action: '建立帳本' },
+      { path: `/ledgers/${ledger.id}`, title: '帳本' },
+      { path: '/categories', title: '分類' },
+      { path: '/profile', title: '個人資料' },
+    ];
+
+    async function expectHeaderToFit(route: (typeof routes)[number]): Promise<void> {
+      await page.goto(route.path);
+      const title = page.getByRole('heading', { level: 2, name: route.title }).first();
+      await expect(title).toBeVisible();
+      const header = title.locator('xpath=ancestor::header[1]');
+      await expect(header).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(309);
+
+      const buttons = await header.locator('button').evaluateAll((elements) =>
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            left: bounds.left,
+            right: bounds.right,
+            disabled: (element as HTMLButtonElement).disabled,
+          };
+        }),
+      );
+      for (const button of buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(0);
+        expect(button.right).toBeLessThanOrEqual(309);
+        expect(button.disabled).toBe(false);
+      }
+
+      if (route.action) {
+        const action = header.getByRole('button', { name: route.action, exact: true });
+        await expect(action).toBeVisible();
+        await expect(action).toBeEnabled();
+        await action.click({ trial: true });
+      }
+    }
+
+    const [homeRoute, ...otherRoutes] = routes;
+    if (!homeRoute) throw new Error('SC-Y32 缺少首頁頁首驗收路由。');
+    await page.setViewportSize({ width: 309, height: 900 });
+    await expectHeaderToFit(homeRoute);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await switchLedger(page, ledger.name);
+    await page.setViewportSize({ width: 309, height: 900 });
+    for (const route of otherRoutes) await expectHeaderToFit(route);
+  });
+
   test('SC-V1～V4：資產與帳本結餘切換、動畫、鍵盤及手機版', async ({
     signedInPage: page,
     userA,
@@ -828,7 +899,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
           height: element.getBoundingClientRect().height,
         };
       });
-      expect(recentRowLayout.paddingLeft).toBe('0px');
+      expect(recentRowLayout.paddingLeft).toBe('7px');
       expect(recentRowLayout.paddingRight).toBe('0px');
       expect(recentRowLayout.height).toBeGreaterThanOrEqual(52);
 
@@ -841,7 +912,7 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         const style = window.getComputedStyle(element);
         return { left: style.paddingLeft, right: style.paddingRight };
       });
-      expect(markedRowPadding).toEqual({ left: '0px', right: '0px' });
+      expect(markedRowPadding).toEqual({ left: '7px', right: '0px' });
       const dateHeading = markedPanel.locator('div[class*="dateGroup"] > p').first();
       await expect(dateHeading).toBeVisible();
       const dateHeadingPadding = await dateHeading.evaluate((element) => {
@@ -1049,6 +1120,14 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       await markTransaction(request, userA.token, ledger.id, transactionId);
       await markTransaction(request, userB.token, ledger.id, transactionId);
     }
+    await createTransaction(request, userA.token, ledger.id, {
+      type: 'EXPENSE',
+      amount: 9_000,
+      date,
+      title: '未標註',
+      categoryId: expenseCategory.id,
+      accountId: account.id,
+    });
 
     // B 是代付列的付款人，因此他的檢視會顯示本人待補的臨時帳戶操作。
     page = await openAs(userB);
@@ -1061,8 +1140,11 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       { name: '標註' },
       { name: '細項', badge: 'split', expand: true, temporaryAccount: true },
     ];
-    // 最近頁固定只呈現 RECENT_LIMIT=5 筆，量它實際顯示的五列；標註頁則檢查全部六種案例。
-    const recentRowCases = rowCases.filter(({ name }) => name !== '分帳');
+    // 最近頁固定只呈現 RECENT_LIMIT=5 筆；新建的未標註列取代最早的標註列。
+    const recentRowCases = [
+      ...rowCases.filter(({ name }) => name !== '分帳' && name !== '標註'),
+      { name: '未標註', marked: false },
+    ];
     const viewportCases = [
       { name: '309px', width: 1280, layout: 'tree' as const },
       { name: '390px', width: 390, layout: 'narrow' as const },
@@ -1124,7 +1206,11 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
             tabCase.rows.length,
           );
 
-          const rowMeasurements = [];
+          const rowMeasurements: Array<{
+            name: string;
+            marked: boolean;
+            geometry: HomeActivityRowGeometry;
+          }> = [];
           for (const rowCase of tabCase.rows) {
             const namePart = panel
               .locator('[data-home-activity-part="name"]')
@@ -1133,6 +1219,11 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
             await expect(namePart).toHaveText(rowCase.name);
             const row = namePart.locator('xpath=ancestor::li[1]');
             await expect(row).toBeVisible();
+            const rowClassNames = (await row.getAttribute('class')) ?? '';
+            const isMarked = rowClassNames
+              .split(/\s+/)
+              .some((className) => className.includes('marked'));
+            expect(isMarked, `${rowCase.name} 標註狀態`).toBe(rowCase.marked !== false);
             await expect(row.locator('[data-home-activity-part="category"]')).toBeVisible();
             await expect(row.locator('[data-home-activity-part="amount"]')).toBeVisible();
             await expect(row.locator('[data-home-activity-part="actions"]')).toBeVisible();
@@ -1160,10 +1251,23 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
             expect(geometry.category.width).toBeGreaterThan(0);
             expect(geometry.name.box.width).toBeGreaterThan(0);
             expect(geometry.amount.width).toBeGreaterThan(0);
-            expect([...rowCase.name]).toHaveLength(2);
+            expect([...rowCase.name]).toHaveLength(rowCase.name === '未標註' ? 3 : 2);
             expect(geometry.name.scrollWidth).toBeLessThanOrEqual(geometry.name.clientWidth);
             expectActivityRowGeometry(geometry, cardBox);
-            rowMeasurements.push({ name: rowCase.name, geometry });
+            if (isMarked) {
+              expect(
+                geometry.icon.x - (geometry.row.x + 3),
+                `${rowCase.name} 色條與分類圖示間距`,
+              ).toBeGreaterThanOrEqual(4);
+            }
+            rowMeasurements.push({ name: rowCase.name, marked: isMarked, geometry });
+          }
+
+          if (tabCase.name === 'recent') {
+            expect(rowMeasurements.some(({ marked }) => marked)).toBe(true);
+            expect(rowMeasurements.some(({ marked }) => !marked)).toBe(true);
+            const iconLefts = rowMeasurements.map(({ geometry }) => geometry.icon.x);
+            expect(Math.max(...iconLefts) - Math.min(...iconLefts)).toBeLessThanOrEqual(1);
           }
 
           const screenshotPath = testInfo.outputPath(
@@ -1183,6 +1287,52 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
         }
       }
     }
+
+    // 選取色條也保留同一個圖示間距；首頁與完整交易頁共用同一列樣式。
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const activityCard = page.locator('[data-home-card-id="activity"]');
+    await activityCard.getByRole('tab', { name: '最近', exact: true }).click();
+    const homeUnmarkedName = activityCard
+      .locator('[data-home-activity-part="name"]')
+      .filter({ hasText: '未標註' });
+    const homeSelectedRow = homeUnmarkedName.locator('xpath=ancestor::li[1]');
+    await homeSelectedRow.locator('[class*="mainButton"]').click();
+    await expect(homeSelectedRow).toHaveClass(/selected/);
+    const selectedHomeGeometry = await measureHomeActivityRow(homeSelectedRow);
+    expect(selectedHomeGeometry.icon.x - (selectedHomeGeometry.row.x + 3)).toBeGreaterThanOrEqual(
+      4,
+    );
+
+    await page.goto('/transactions');
+    const transactionMarkedButton = page.getByRole('button', {
+      name: /編輯(?!.*未標註).*標註/,
+    });
+    const transactionMarkedRow = transactionMarkedButton.locator('xpath=ancestor::li[1]');
+    await expect(transactionMarkedRow).toBeVisible();
+    const transactionUnmarkedButton = page.getByRole('button', { name: /編輯.*未標註/ });
+    const transactionUnmarkedRow = transactionUnmarkedButton.locator('xpath=ancestor::li[1]');
+    await expect(transactionUnmarkedRow).toBeVisible();
+    const transactionGeometry = async (row: Locator) =>
+      row.evaluate((element) => {
+        const rowRect = element.getBoundingClientRect();
+        const icon = element.querySelector<HTMLElement>('[class*="iconBadge"]');
+        if (!icon) throw new Error('交易列缺少分類圖示。');
+        return { rowX: rowRect.x, iconX: icon.getBoundingClientRect().x };
+      });
+    const markedTransactionGeometry = await transactionGeometry(transactionMarkedRow);
+    const unmarkedTransactionGeometry = await transactionGeometry(transactionUnmarkedRow);
+    expect(
+      markedTransactionGeometry.iconX - (markedTransactionGeometry.rowX + 3),
+    ).toBeGreaterThanOrEqual(4);
+    await transactionUnmarkedButton.click();
+    await expect(transactionUnmarkedRow).toHaveClass(/selected/);
+    const selectedTransactionGeometry = await transactionGeometry(transactionUnmarkedRow);
+    expect(
+      selectedTransactionGeometry.iconX - (selectedTransactionGeometry.rowX + 3),
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      Math.abs(markedTransactionGeometry.iconX - unmarkedTransactionGeometry.iconX),
+    ).toBeLessThanOrEqual(1);
 
     await writeMeasurement(testInfo, { scenario: 'SC-Y30', screenshots, measurements });
   });
