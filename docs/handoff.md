@@ -13,7 +13,7 @@
 | worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                                                                               |
 | ---------- | ----------------- | ------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                                                                |
-| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 首頁 4 項網頁修正（移到選單、Escape、309px 頁首、色條壓圖示）已合併並部署 dev，待命                |
+| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 首頁 4 項網頁修正（#193）已合併並部署 dev，待命                                                    |
 | `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 換模型：開發者傾向 Claude Haiku 5.5，等他決定是否加測（DeepSeek 答對但 17% 逾時）；之後語音 → 匯入 |
 
 ## 跨工作區的規則
