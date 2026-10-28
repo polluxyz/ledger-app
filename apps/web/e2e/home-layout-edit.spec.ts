@@ -80,9 +80,10 @@ async function moveWithMenu(
 ): Promise<void> {
   const source = page.locator(`[data-home-card-id="${sourceCardId}"]`);
   await source.getByRole('button', { name: '移到…' }).click();
-  await source.getByRole('combobox', { name: '目標卡' }).selectOption(targetCardId);
+  const popover = page.locator('[class*="moveMenuPopover"]');
+  await popover.getByRole('combobox', { name: '目標卡' }).selectOption(targetCardId);
   const label = { left: '左側', right: '右側', top: '上方', bottom: '下方' }[side];
-  const direction = source.getByRole('button', { name: label, exact: true });
+  const direction = popover.getByRole('button', { name: label, exact: true });
   await expect(direction).toBeEnabled();
   await direction.click();
   await expect(source.getByRole('button', { name: /^拖動 / })).toBeFocused();
@@ -180,7 +181,9 @@ async function tabTo(page: import('@playwright/test').Page, target: FocusTarget)
         active.getAttribute('role') ??
         (active.tagName === 'BUTTON' ? 'button' : active.tagName === 'SELECT' ? 'combobox' : null);
       const name = active.getAttribute('aria-label') ?? active.innerText?.trim() ?? '';
-      const cardId = active.closest<HTMLElement>('[data-home-card-id]')?.dataset.homeCardId;
+      const cardId =
+        active.closest<HTMLElement>('[data-home-card-menu-for]')?.dataset.homeCardMenuFor ??
+        active.closest<HTMLElement>('[data-home-card-id]')?.dataset.homeCardId;
       return (
         tagRole === expected.role &&
         (!expected.name || name === expected.name) &&
@@ -210,9 +213,8 @@ async function moveWithKeyboard(
   await tabToMoveMenu(page, sourceCardId);
   await page.keyboard.press('Enter');
   await tabTo(page, { role: 'combobox', name: '目標卡', cardId: sourceCardId });
-  const targetSelect = page.locator(
-    `[data-home-card-id="${sourceCardId}"] select[aria-label="目標卡"]`,
-  );
+  const menu = page.locator(`[data-home-card-menu-for="${sourceCardId}"]`);
+  const targetSelect = menu.getByRole('combobox', { name: '目標卡' });
   for (let count = 0; count < 10; count += 1) {
     if ((await targetSelect.inputValue()) === targetCardId) break;
     await page.keyboard.press('ArrowDown');
@@ -1234,8 +1236,9 @@ test('SC-Y28：超出深度上限時拖動沒有落點且移到方向停用', as
 
   const source = page.locator('[data-home-card-id="expense"]');
   await source.getByRole('button', { name: '移到…' }).click();
-  await source.getByRole('combobox', { name: '目標卡' }).selectOption('accounts');
-  await expect(source.getByRole('button', { name: '右側', exact: true })).toBeDisabled();
+  const menu = page.locator('[class*="moveMenuPopover"]');
+  await menu.getByRole('combobox', { name: '目標卡' }).selectOption('accounts');
+  await expect(menu.getByRole('button', { name: '右側', exact: true })).toBeDisabled();
   expect(network.puts).toHaveLength(0);
 });
 
@@ -1330,6 +1333,22 @@ test('SC-Y31：最上列移動選單浮在下列卡片與結餘卡文字上方',
   await expect(direction).toBeEnabled();
   await direction.click();
   await expect(source.getByRole('button', { name: /^拖動 / })).toBeFocused();
+
+  await page.setViewportSize({ width: 5000, height: 320 });
+  const trigger = source.getByRole('button', { name: '移到…' });
+  await trigger.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await popover.boundingBox();
+      return box !== null && box.y + box.height <= 320;
+    })
+    .toBe(true);
+  const popoverBox = await popover.boundingBox();
+  expect(popoverBox).not.toBeNull();
+  expect(popoverBox?.y).toBeGreaterThanOrEqual(0);
+  expect((popoverBox?.y ?? 0) + (popoverBox?.height ?? 0)).toBeLessThanOrEqual(320);
 });
 
 async function setContentWidth(

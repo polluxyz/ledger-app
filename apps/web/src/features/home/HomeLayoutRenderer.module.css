@@ -133,6 +133,8 @@
   z-index: 20;
   display: grid;
   min-width: 12rem;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border: var(--card-border);

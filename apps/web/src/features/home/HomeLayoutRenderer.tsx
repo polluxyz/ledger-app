@@ -658,27 +658,38 @@ function MoveCardMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const targetSelectRef = useRef<HTMLSelectElement>(null);
   const targetSize = targetCardId ? sizeOfCard(targetCardId) : null;
   const sides: readonly HomeLayoutDropSide[] = ['left', 'right', 'top', 'bottom'];
 
   // 編輯畫布的橫向捲動會裁切垂直溢出，選單以視窗座標定位並在捲動時跟著觸發鈕移動。
   useLayoutEffect(() => {
-    if (!isOpen) {
-      setPopoverPosition(null);
-      return;
-    }
+    if (!isOpen) return;
 
     const updatePosition = () => {
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rectangle = trigger.getBoundingClientRect();
-      setPopoverPosition({ top: rectangle.bottom + 4, left: rectangle.left });
+      const popover = popoverRef.current?.getBoundingClientRect();
+      const popoverHeight = popover?.height ?? 0;
+      const popoverWidth = popover?.width ?? 0;
+      const spaceBelow = window.innerHeight - rectangle.bottom - 8;
+      const spaceAbove = rectangle.top - 8;
+      const openAbove = popoverHeight > spaceBelow && spaceAbove > spaceBelow;
+      const preferredTop = openAbove ? rectangle.top - popoverHeight - 4 : rectangle.bottom + 4;
+      const top = Math.max(8, Math.min(preferredTop, window.innerHeight - popoverHeight - 8));
+      const left = Math.max(8, Math.min(rectangle.left, window.innerWidth - popoverWidth - 8));
+      setPopoverPosition((current) =>
+        current?.top === top && current.left === left ? current : { top, left },
+      );
     };
 
     updatePosition();
+    const positionFrame = window.requestAnimationFrame(updatePosition);
     document.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
     return () => {
+      window.cancelAnimationFrame(positionFrame);
       document.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
@@ -686,6 +697,7 @@ function MoveCardMenu({
 
   useEffect(() => {
     if (!isOpen) return;
+    targetSelectRef.current?.focus();
 
     const closeWhenClickingOutside = (event: MouseEvent) => {
       const target = event.target;
@@ -744,6 +756,7 @@ function MoveCardMenu({
         createPortal(
           <div
             className={styles.moveMenuPopover}
+            data-home-card-menu-for={cardId}
             ref={popoverRef}
             style={{ left: `${popoverPosition.left}px`, top: `${popoverPosition.top}px` }}
           >
@@ -753,6 +766,7 @@ function MoveCardMenu({
                 aria-label="目標卡"
                 disabled={disabled}
                 onChange={(event) => setTargetCardId(event.currentTarget.value as HomeCardId | '')}
+                ref={targetSelectRef}
                 value={targetCardId}
               >
                 <option value="">選擇卡片</option>
