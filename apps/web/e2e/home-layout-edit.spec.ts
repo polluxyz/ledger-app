@@ -1239,6 +1239,99 @@ test('SC-Y28：超出深度上限時拖動沒有落點且移到方向停用', as
   expect(network.puts).toHaveLength(0);
 });
 
+test('SC-Y31：最上列移動選單浮在下列卡片與結餘卡文字上方', async ({
+  signedInPage: page,
+  userA,
+  request,
+}) => {
+  const roomyTargetLayout: HomeLayoutV1 = {
+    bands: DEFAULT_HOME_LAYOUT_V1.bands.map((band, index) =>
+      index === 1 && band.root.type === 'split'
+        ? { ...band, root: { ...band.root, weights: [8000, 2000] } }
+        : band,
+    ),
+  };
+  await putHomeLayout(request, userA.token, layoutPut(roomyTargetLayout));
+  await page.reload();
+  await page.setViewportSize({ width: 5000, height: 2200 });
+  await enterEditor(page);
+
+  const source = page.locator('[data-home-card-id="net"]');
+  const sourceTop = await source.evaluate((element) => element.getBoundingClientRect().top);
+  const firstRowTop = await page
+    .locator('[data-testid="home-layout-edit-viewport"] [data-home-card-id]')
+    .evaluateAll((cards) => Math.min(...cards.map((card) => card.getBoundingClientRect().top)));
+  expect(Math.abs(sourceTop - firstRowTop)).toBeLessThanOrEqual(1);
+
+  await source.getByRole('button', { name: '移到…' }).click();
+  const popover = page.locator('[class*="moveMenuPopover"]');
+  await expect(popover).toBeVisible();
+
+  const overlap = await page.evaluate(() => {
+    const sourceCard = document.querySelector<HTMLElement>('[data-home-card-id="net"]');
+    const popoverElement = document.querySelector<HTMLElement>('[class*="moveMenuPopover"]');
+    const sourceBody = sourceCard?.querySelector<HTMLElement>('[data-home-card-body]');
+    if (!sourceCard || !popoverElement || !sourceBody) return null;
+
+    const sourceRect = sourceCard.getBoundingClientRect();
+    const popoverRect = popoverElement.getBoundingClientRect();
+    const bodyRect = sourceBody.getBoundingClientRect();
+    const nextCard = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-testid="home-layout-edit-viewport"] [data-home-card-id]',
+      ),
+    )
+      .filter((card) => card !== sourceCard)
+      .map((card) => ({ card, rect: card.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.top >= sourceRect.bottom - 1 &&
+          rect.top < popoverRect.bottom &&
+          rect.bottom > popoverRect.top &&
+          rect.left < popoverRect.right &&
+          rect.right > popoverRect.left,
+      )
+      .sort((first, second) => first.rect.top - second.rect.top)[0];
+    if (!nextCard) return null;
+
+    function hitPopover(left: number, top: number, right: number, bottom: number): boolean {
+      if (right - left < 2 || bottom - top < 2) return false;
+      const point = { x: (left + right) / 2, y: (top + bottom) / 2 };
+      const target = document.elementFromPoint(point.x, point.y);
+      return target?.closest('[class*="moveMenuPopover"]') === popoverElement;
+    }
+
+    return {
+      extendsBelowSource: popoverRect.bottom > sourceRect.bottom,
+      overlapsNextCard: popoverRect.bottom > nextCard.rect.top,
+      hitsMenuOverNextCard: hitPopover(
+        Math.max(popoverRect.left, nextCard.rect.left),
+        Math.max(popoverRect.top, nextCard.rect.top),
+        Math.min(popoverRect.right, nextCard.rect.right),
+        Math.min(popoverRect.bottom, nextCard.rect.bottom),
+      ),
+      hitsMenuOverSourceBody: hitPopover(
+        Math.max(popoverRect.left, bodyRect.left),
+        Math.max(popoverRect.top, bodyRect.top),
+        Math.min(popoverRect.right, bodyRect.right),
+        Math.min(popoverRect.bottom, bodyRect.bottom),
+      ),
+    };
+  });
+
+  expect(overlap).not.toBeNull();
+  expect(overlap?.extendsBelowSource).toBe(true);
+  expect(overlap?.overlapsNextCard).toBe(true);
+  expect(overlap?.hitsMenuOverNextCard).toBe(true);
+  expect(overlap?.hitsMenuOverSourceBody).toBe(true);
+
+  await page.getByRole('combobox', { name: '目標卡' }).selectOption('trend');
+  const direction = page.getByRole('button', { name: '左側', exact: true });
+  await expect(direction).toBeEnabled();
+  await direction.click();
+  await expect(source.getByRole('button', { name: /^拖動 / })).toBeFocused();
+});
+
 async function setContentWidth(
   page: import('@playwright/test').Page,
   targetWidth: number,

@@ -129,10 +129,8 @@
 }
 
 .moveMenuPopover {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + var(--space-xs));
-  left: 0;
+  position: fixed;
+  z-index: 20;
   display: grid;
   min-width: 12rem;
   gap: var(--space-sm);

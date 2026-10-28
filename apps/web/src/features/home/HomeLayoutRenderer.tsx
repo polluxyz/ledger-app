@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { HomeCardId, HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import { HOME_CARD_REGISTRY, type HomeCardRenderProps } from './card-registry';
 import { HOME_LAYOUT_GAP_PX, minWidthOf, wrapSplit, type WrappedSplitLine } from './layout-math';
@@ -650,8 +651,36 @@ function MoveCardMenu({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [targetCardId, setTargetCardId] = useState<HomeCardId | ''>('');
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const targetSize = targetCardId ? sizeOfCard(targetCardId) : null;
   const sides: readonly HomeLayoutDropSide[] = ['left', 'right', 'top', 'bottom'];
+
+  // 編輯畫布的橫向捲動會裁切垂直溢出，選單以視窗座標定位並在捲動時跟著觸發鈕移動。
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPopoverPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rectangle = trigger.getBoundingClientRect();
+      setPopoverPosition({ top: rectangle.bottom + 4, left: rectangle.left });
+    };
+
+    updatePosition();
+    document.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      document.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
 
   function isAllowed(side: HomeLayoutDropSide) {
     return Boolean(
@@ -674,45 +703,53 @@ function MoveCardMenu({
         className={styles.moveMenuTrigger}
         disabled={disabled}
         onClick={() => setIsOpen((open) => !open)}
+        ref={triggerRef}
         type="button"
       >
         移到…
       </button>
-      {isOpen && (
-        <div className={styles.moveMenuPopover}>
-          <label className={styles.moveMenuTarget}>
-            <span>目標卡</span>
-            <select
-              aria-label="目標卡"
-              disabled={disabled}
-              onChange={(event) => setTargetCardId(event.currentTarget.value as HomeCardId | '')}
-              value={targetCardId}
-            >
-              <option value="">選擇卡片</option>
-              {Object.entries(HOME_CARD_REGISTRY)
-                .filter(([id]) => id !== cardId)
-                .map(([id, registration]) => (
-                  <option key={id} value={id}>
-                    {registration.title}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <fieldset className={styles.moveMenuDirections} disabled={disabled || !targetCardId}>
-            <legend>方向</legend>
-            {sides.map((side) => (
-              <button
-                key={side}
-                disabled={!isAllowed(side)}
-                onClick={() => chooseSide(side)}
-                type="button"
+      {isOpen &&
+        popoverPosition &&
+        createPortal(
+          <div
+            className={styles.moveMenuPopover}
+            ref={popoverRef}
+            style={{ left: `${popoverPosition.left}px`, top: `${popoverPosition.top}px` }}
+          >
+            <label className={styles.moveMenuTarget}>
+              <span>目標卡</span>
+              <select
+                aria-label="目標卡"
+                disabled={disabled}
+                onChange={(event) => setTargetCardId(event.currentTarget.value as HomeCardId | '')}
+                value={targetCardId}
               >
-                {sideLabel(side)}
-              </button>
-            ))}
-          </fieldset>
-        </div>
-      )}
+                <option value="">選擇卡片</option>
+                {Object.entries(HOME_CARD_REGISTRY)
+                  .filter(([id]) => id !== cardId)
+                  .map(([id, registration]) => (
+                    <option key={id} value={id}>
+                      {registration.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <fieldset className={styles.moveMenuDirections} disabled={disabled || !targetCardId}>
+              <legend>方向</legend>
+              {sides.map((side) => (
+                <button
+                  key={side}
+                  disabled={!isAllowed(side)}
+                  onClick={() => chooseSide(side)}
+                  type="button"
+                >
+                  {sideLabel(side)}
+                </button>
+              ))}
+            </fieldset>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
