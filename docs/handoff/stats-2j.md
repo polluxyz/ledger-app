@@ -10,6 +10,7 @@
 - 已補：支出斜上箭頭、收入斜下箭頭、結餘等號（右上底板內）；結餘卡右下淡金雙圓弧；縮小貨幣符號；帳本月份與結餘副標；標題「本月結餘」。金額直接用 `formatMoney` 原字串。沒有改 schema、API、shared、套件、CI。
 - 驗收紀錄在 [補正計畫](../../tasks/archive/home-summary-details-plan.md) 最後一節。驗收找到「結餘卡的移到選單被副標蓋住」，原因是 header／body 的 `z-index` 建立了堆疊上下文；Codex 修正（`a193936`）後重驗通過。
 - 驗收數字：Web vitest `--maxWorkers=2` 1121／1121；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 驗完刪除。
+- CI 抓到 3 條全站 e2e 失敗（驗收時漏跑全站）：副標進了卡片連結名稱、金額多了貨幣 span，舊測試的定位與計行被打破。Codex 只改 e2e 修正（`f3d175d`），重跑全站 Web e2e 134／134。之後驗收網頁改動要跑全站 e2e。
 - 既有問題（基底就有，未修）：「移到…」選單超出卡片底部的部分被下一列蓋住；Escape 關不掉該選單；309px 時 `PageHeader` 的主要按鈕超出畫面（`scrollWidth` 330）。
 - 已清掉：驗收修正用的 Codex 終端機（orca run `run_13e9dac7a485`）、本機與遠端分支 `fix/home-summary-visual-details`。
 

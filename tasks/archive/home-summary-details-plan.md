@@ -49,6 +49,14 @@
 - 自己重跑（Node 24.22.1，測試 DB `ledger_stats_test`）：`format:check`、Web lint、Web typecheck exit 0；Web vitest `--maxWorkers=2` 137 檔 1121／1121；build exit 0（PostCSS「沒傳 `from`」警告基底就有）；`home.spec.ts` 加 `home-layout-edit.spec.ts` 41／41（2.8 分）。Codex 原回報的數字都對得上。
 - 暫存驗收 e2e 驗完刪除，不進版控。
 
+CI 失敗與修正（計畫外）：
+
+- 我驗收時只跑了首頁兩檔 e2e，沒跑全站。PR 的 CI（head `fbc96c0`）全站 Web e2e 131 通過、3 失敗，都是測試被新標記打破，產品沒有問題。
+- `ledgers.spec.ts:215`、`ledger-delete-archive.spec.ts:155`：副標「甲 的帳本 · 2026 年 10 月」進了卡片連結的名稱，`getByRole('link', { name: '帳本' })` 部分比對同時命中側欄與兩張卡。
+- `stats.spec.ts`「首頁長金額保持單行」：金額多了貨幣 `<span>`，`getClientRects().length` 不再等於行數。截圖上金額實際是單行。
+- Codex 修正（`f3d175d`，只改 e2e）：側欄連結改精確比對（5 檔 13 處）；單行判斷改成把垂直重疊的矩形算同一行，文字與水平溢出條件保留。暫時強制換行時新斷言照預期失敗。
+- 我重跑（`f3d175d`）：全站 Web e2e 134／134（7.0 分）；`format:check`、Web lint、Web typecheck exit 0。
+
 既有問題（`cab8b50` 就有，不在本次範圍）：
 
 - 「移到…」選單超出卡片底部的部分，被下一列的卡片或列高調整把手蓋住。三張卡都一樣。
