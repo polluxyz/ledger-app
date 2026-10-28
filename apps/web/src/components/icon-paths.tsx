@@ -77,6 +77,10 @@ export const ICON_PATHS = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  /* 首頁收支摘要以金流方向區別支出與收入；結餘使用等號。 */
+  arrowUpRight: <path d="M7 17 17 7M7 7h10v10" />,
+  arrowDownLeft: <path d="M17 7 7 17M7 7v10h10" />,
+  equal: <path d="M5 8h14M5 16h14" />,
   sparkle: <path d="M12 3.5 14.4 9.6 20.5 12l-6.1 2.4L12 20.5l-2.4-6.1L3.5 12l6.1-2.4z" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   calendar: (

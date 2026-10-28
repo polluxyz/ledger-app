@@ -17,8 +17,58 @@
 
 /* 首頁以表面與數字建立層次，強調結餘，避免所有圖卡使用同一種視覺重量。 */
 .card[data-home-card-id='net'] {
+  position: relative;
   background-color: var(--color-primary-soft);
   border-color: color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+}
+
+/* 裝飾在自己的裁切層內，避免裁掉卡片外的鍵盤焦點框與版面編輯控制。 */
+/* 不設定 z-index，讓較早出現在 DOM 的裝飾留在文字與圖示下方。 */
+.summaryDecoration {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.summaryDecoration::after {
+  content: '';
+  position: absolute;
+  right: -33px;
+  bottom: -55px;
+  width: 150px;
+  height: 150px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 16px color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+
+/* header／body 不設 z-index，避免堆疊上下文限制「移到」選單的顯示範圍。 */
+.card[data-home-card-id='net'] > .header,
+.card[data-home-card-id='net'] > .body {
+  position: relative;
+}
+
+.summaryIcon {
+  display: grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-fill);
+  color: var(--color-expense);
+  pointer-events: none;
+}
+
+.card[data-home-card-id='income'] .summaryIcon {
+  color: var(--color-income);
+}
+
+.card[data-home-card-id='net'] .summaryIcon {
+  background-color: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-accent);
 }
 
 .card[data-home-card-id='expense'],

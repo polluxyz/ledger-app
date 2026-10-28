@@ -4,6 +4,16 @@
 
 ## 現況（2026-10-27）
 
+### 2m 收支摘要漏項補正：已驗收、合併並部署 dev
+
+- PR [#190](https://github.com/polluxyz/ledger-app/pull/190)，squash 合併進 `main`。使用者指出 #189 漏做核可預覽中三張卡的圖示與結餘背景，Codex 依原畫面補齊（`095faa3`），基底 `cab8b50`。
+- 已補：支出斜上箭頭、收入斜下箭頭、結餘等號（右上底板內）；結餘卡右下淡金雙圓弧；縮小貨幣符號；帳本月份與結餘副標；標題「本月結餘」。金額直接用 `formatMoney` 原字串。沒有改 schema、API、shared、套件、CI。
+- 驗收紀錄在 [補正計畫](../../tasks/archive/home-summary-details-plan.md) 最後一節。驗收找到「結餘卡的移到選單被副標蓋住」，原因是 header／body 的 `z-index` 建立了堆疊上下文；Codex 修正（`a193936`）後重驗通過。
+- 驗收數字：Web vitest `--maxWorkers=2` 1121／1121；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 驗完刪除。
+- CI 抓到 3 條全站 e2e 失敗（驗收時漏跑全站）：副標進了卡片連結名稱、金額多了貨幣 span，舊測試的定位與計行被打破。Codex 只改 e2e 修正（`f3d175d`），重跑全站 Web e2e 134／134。之後驗收網頁改動要跑全站 e2e。
+- 既有問題（基底就有，未修）：「移到…」選單超出卡片底部的部分被下一列蓋住；Escape 關不掉該選單；309px 時 `PageHeader` 的主要按鈕超出畫面（`scrollWidth` 330）。
+- 已清掉：驗收修正用的 Codex 終端機（orca run `run_13e9dac7a485`）、本機與遠端分支 `fix/home-summary-visual-details`。
+
 ### 2m 首頁風格：已驗收並合併
 
 - PR [#189](https://github.com/polluxyz/ledger-app/pull/189)，squash 合併進 `main`。程式 commit `823428a` 由 Codex 實裝，基底 `d8b8720`。開發者指定 Claude Code 驗收；驗收紀錄在 [plan](../../tasks/archive/phase-2m-plan.md) 最後一節。
@@ -11,7 +21,7 @@
 - 實作：首頁沿用八卡與儲存版面；趨勢左「總資產變化」、右「每月結餘」，只畫柱圖，切換時有滑動底板／柱高／零線動畫，只看站內動畫設定。借還改左右圓形頭像與姓名、中央支付箭頭與精確金額。
 - 驗收數字：Web vitest 1118／1118；format、lint、typecheck、build exit 0；首頁與版面編輯 e2e 41／41。暫存驗收 e2e 3／3（驗完刪除）補驗了 API 原值、負值柱、動畫中途取消、站內動畫開關、換帳本、鍵盤、借還 1280／390／309px。
 - 計畫外：PR 的 CI 在 SC-Y8 失敗。原因是舊斷言在右側面板轉場中取樣，不是產品回歸；面板開完後清單 551px 排兩欄，符合 2l SC-Y8。Codex 改成等面板與清單寬度穩定再判斷（`c975aac`），只動測試。
-- **尚未部署 dev**。只改前端：主工作區 `git pull`、`pnpm install`、重新 build Web 或重開 Vite，再請開發者按 `Ctrl + Shift + R`。
+- 已部署 dev（只改前端，主工作區 `git pull` 後 Vite 自動更新）。
 - 小問題，不擋合併：姓名是空字串時頭像沒有字；版控內的 e2e 對動畫中途狀態的證據偏弱。build 的 PostCSS「沒傳 `from`」警告在基底就有。
 - 已清掉：驗收修正用的 Codex 終端機（orca run `run_49de4f0d628c`）。
 

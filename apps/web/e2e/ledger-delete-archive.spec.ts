@@ -152,7 +152,7 @@ test('封存不用輸入名稱；取消封存後帳本回到切換器並可再�
   const switcher = page.getByRole('group', { name: '作用中帳本' });
   await expect(switcher).not.toContainText(ledger.name);
 
-  await page.getByRole('link', { name: '帳本' }).click();
+  await page.getByRole('link', { name: '帳本', exact: true }).click();
   await page.getByLabel('顯示已封存的帳本').check();
   await page.getByRole('link', { name: ledger.name, exact: true }).click();
   await page.getByRole('button', { name: '取消封存', exact: true }).click();

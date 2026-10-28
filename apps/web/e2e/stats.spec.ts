@@ -406,9 +406,22 @@ async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
             metrics = await value.evaluate((element) => {
               const range = document.createRange();
               range.selectNodeContents(element);
+              const lineRects: { top: number; bottom: number }[] = [];
+              for (const rect of range.getClientRects()) {
+                // 貨幣符號字級較小，同一行的 top 不同；用垂直重疊合併同一行字形。
+                const line = lineRects.find(
+                  (candidate) => rect.top < candidate.bottom && rect.bottom > candidate.top,
+                );
+                if (line) {
+                  line.top = Math.min(line.top, rect.top);
+                  line.bottom = Math.max(line.bottom, rect.bottom);
+                } else {
+                  lineRects.push({ top: rect.top, bottom: rect.bottom });
+                }
+              }
               return {
                 text: element.textContent?.trim(),
-                lineCount: range.getClientRects().length,
+                lineCount: lineRects.length,
                 scrollWidth: element.scrollWidth,
                 clientWidth: element.clientWidth,
               };
