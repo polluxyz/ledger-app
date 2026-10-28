@@ -65,11 +65,14 @@
 - 首頁帳戶卡一律列出全部帳戶（開發者 10-27）：拿掉「全部 N 個」與「收起」；6 個以上時清單 440px 排兩欄，5 個以下一欄。改了 2k W264、SC-H8 與 2l 決策 319、W276、SC-Y8。帳戶卡的視覺之後由開發者另請 Codex 設計。
 - 已清掉：worktree `web-previews`、`web-code-split` 與對應分支，測試資料庫 `ledger_codesplit_test` 與誤建的 `ledger_test_codesplit`。e2e 只接受名稱以 `_test` 結尾的資料庫，命名要照這個規則。
 
+## 已知問題收尾（2026-10-28）
+
+- 統計頁 e2e 偶發失敗：#194（`38ddbe3`）。一直沒有重現（`--repeat-each=10 --workers=1` 加 CPU 負載 50/50）。`stats.spec.ts` 一次量測就斷言的地方已全部改成整段重試，數值沒放寬。再出現時保留失敗的 trace。`--workers=4` 會因共用資料庫互撞（409 EMAIL_ALREADY_EXISTS、外鍵）失敗，不是版面問題。
+- `getRect` 巢狀等待：#194。在外層 `expect.poll`／`toPass` 裡的 4 處改用只量一次的 `measureRectOnce`，其餘 24 處維持會重試的 `getRect`。
+- 首頁版面 revision 到 2147483647 再存回 500：改成回繞成 1（2l 決策 333、SC-Y11，開發者 10-28 核可 advisor 與協調者的共識）。網頁補查時改成「revision 不等於 r 才算衝突」。advisor 提醒：首頁查詢 `staleTime: Infinity`，停著不重新整理的分頁在回繞後可能用舊 revision 蓋掉新版面，機率極低但不是零。
+
 ## 已知問題
 
-- 統計頁 e2e 偶發失敗一直沒有重現（`--repeat-each=10 --workers=1` 加 CPU 負載 50/50）。`stats.spec.ts` 一次量測就斷言的地方已全部改成整段重試，數值沒放寬。再出現時保留失敗的 trace。`--workers=4` 會因共用資料庫互撞（409 EMAIL_ALREADY_EXISTS、外鍵）失敗，不是版面問題。
-- `home.spec.ts` 在外層 `expect.poll`／`toPass` 裡的量測改用只量一次的 `measureRectOnce`，其餘維持會重試的 `getRect`。
-- PR2 已知限制：revision 到 2147483647 後再存一次，資料庫整數溢位回 500。正常使用不會發生，沒有處理。
 - `packages/shared` 沒有 lint script；shared 的測試檔不在 typecheck 範圍內。
 
 ## 開發者在這次討論給的偏好
