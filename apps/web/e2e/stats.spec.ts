@@ -41,8 +41,12 @@ async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
     const [, year, monthNumber] = monthMatch;
     const month = Number(monthNumber);
     const expected = `${month}月${index === 0 || month === 1 ? year : ''}`;
-    expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
-    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+    await expect(async () => {
+      expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
+      expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe(
+        'nowrap',
+      );
+    }).toPass({ timeout: 5_000 });
   }
 }
 
@@ -56,11 +60,17 @@ async function expectResponsiveLineMonthLabels(
   await expect(controls).toHaveCount(count);
 
   const visibleIndices: number[] = [];
-  for (let index = 0; index < count; index += 1) {
-    if (await labels.nth(index).isVisible()) {
-      visibleIndices.push(index);
-    }
-  }
+  await expect
+    .poll(async () => {
+      visibleIndices.length = 0;
+      for (let index = 0; index < count; index += 1) {
+        if (await labels.nth(index).isVisible()) {
+          visibleIndices.push(index);
+        }
+      }
+      return visibleIndices.length;
+    })
+    .toBe(expectedVisibleCount);
   expect(visibleIndices.length).toBeGreaterThan(0);
   expect(visibleIndices.length).toBe(expectedVisibleCount);
 
@@ -77,10 +87,14 @@ async function expectResponsiveLineMonthLabels(
     const showYear = previousVisibleYear === null || previousVisibleYear !== year;
     const expectedDigits = [Number(monthNumber), ...(showYear ? [Number(year)] : [])];
     const label = labels.nth(index);
-    const labelDigits = (await label.innerText()).match(/\d+/g) ?? [];
-    expect(labelDigits.map(Number)).toEqual(expectedDigits);
-    expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
-    expect(await label.evaluate((element) => element.children.length)).toBe(2);
+    await expect(async () => {
+      const labelDigits = (await label.innerText()).match(/\d+/g) ?? [];
+      expect(labelDigits.map(Number)).toEqual(expectedDigits);
+      expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe(
+        'nowrap',
+      );
+      expect(await label.evaluate((element) => element.children.length)).toBe(2);
+    }).toPass({ timeout: 5_000 });
     previousVisibleYear = year!;
   }
 }
@@ -95,22 +109,24 @@ async function expectResponsiveLineMonthPositions(labels: Locator, points: Locat
       continue;
     }
 
-    const labelRect = await label.evaluate((element) => {
-      const { left, right } = element.getBoundingClientRect();
-      return { left, right };
-    });
-    const pointRect = await points.nth(index * 2).evaluate((element) => {
-      const { left, right } = element.getBoundingClientRect();
-      return { left, right };
-    });
-    const alignedLabelX =
-      index === 0
-        ? labelRect.left
-        : index === count - 1
-          ? labelRect.right
-          : (labelRect.left + labelRect.right) / 2;
-    const incomePointX = (pointRect.left + pointRect.right) / 2;
-    expect(Math.abs(alignedLabelX - incomePointX)).toBeLessThanOrEqual(6);
+    await expect(async () => {
+      const labelRect = await label.evaluate((element) => {
+        const { left, right } = element.getBoundingClientRect();
+        return { left, right };
+      });
+      const pointRect = await points.nth(index * 2).evaluate((element) => {
+        const { left, right } = element.getBoundingClientRect();
+        return { left, right };
+      });
+      const alignedLabelX =
+        index === 0
+          ? labelRect.left
+          : index === count - 1
+            ? labelRect.right
+            : (labelRect.left + labelRect.right) / 2;
+      const incomePointX = (pointRect.left + pointRect.right) / 2;
+      expect(Math.abs(alignedLabelX - incomePointX)).toBeLessThanOrEqual(6);
+    }).toPass({ timeout: 5_000 });
   }
 }
 
@@ -118,16 +134,18 @@ async function expectMonthLabelGaps(labels: Locator): Promise<void> {
   const visibleLabels = labels.filter({ visible: true });
   const count = await visibleLabels.count();
   expect(count).toBeGreaterThan(0);
-  const gaps = await visibleLabels.evaluateAll((elements) =>
-    elements.slice(1).map((element, index) => {
-      const current = element.getBoundingClientRect();
-      const previous = elements[index]!.getBoundingClientRect();
-      return current.left - previous.right;
-    }),
-  );
-  for (const gap of gaps) {
-    expect(gap).toBeGreaterThanOrEqual(4);
-  }
+  await expect(async () => {
+    const gaps = await visibleLabels.evaluateAll((elements) =>
+      elements.slice(1).map((element, index) => {
+        const current = element.getBoundingClientRect();
+        const previous = elements[index]!.getBoundingClientRect();
+        return current.left - previous.right;
+      }),
+    );
+    for (const gap of gaps) {
+      expect(gap).toBeGreaterThanOrEqual(4);
+    }
+  }).toPass({ timeout: 5_000 });
 }
 
 interface TaiwanMonth {
@@ -373,11 +391,15 @@ function chartSwitch(page: Page, label: string) {
 }
 
 async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
-  const dimensions = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  await expect
+    .poll(async () => {
+      const dimensions = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      return dimensions.scrollWidth - dimensions.clientWidth;
+    })
+    .toBeLessThanOrEqual(0);
 }
 
 async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
@@ -447,54 +469,56 @@ async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
 }
 
 async function expectTrendMonthRows(monthCells: Locator, singleLine: boolean): Promise<void> {
-  const layouts = await monthCells.evaluateAll((cells) =>
-    cells.map((cell) => {
-      const parts = Array.from(cell.children);
-      const year = parts[0];
-      const month = parts[1];
-      if (!year || !month) {
-        return null;
+  await expect(async () => {
+    const layouts = await monthCells.evaluateAll((cells) =>
+      cells.map((cell) => {
+        const parts = Array.from(cell.children);
+        const year = parts[0];
+        const month = parts[1];
+        if (!year || !month) {
+          return null;
+        }
+
+        const yearRect = year.getBoundingClientRect();
+        const monthRect = month.getBoundingClientRect();
+        const yearRange = document.createRange();
+        yearRange.selectNodeContents(year);
+        const monthRange = document.createRange();
+        monthRange.selectNodeContents(month);
+        const distinctLineCount = (range: Range) =>
+          new Set(Array.from(range.getClientRects(), (rect) => rect.top)).size;
+        return {
+          yearText: year.textContent?.trim(),
+          monthText: month.textContent?.trim(),
+          yearTop: yearRect.top,
+          monthTop: monthRect.top,
+          yearLineCount: distinctLineCount(yearRange),
+          monthLineCount: distinctLineCount(monthRange),
+          yearWhiteSpace: getComputedStyle(year).whiteSpace,
+          monthWhiteSpace: getComputedStyle(month).whiteSpace,
+        };
+      }),
+    );
+
+    expect(layouts).toHaveLength(12);
+    for (const layout of layouts) {
+      expect(layout).not.toBeNull();
+      if (!layout) {
+        continue;
       }
 
-      const yearRect = year.getBoundingClientRect();
-      const monthRect = month.getBoundingClientRect();
-      const yearRange = document.createRange();
-      yearRange.selectNodeContents(year);
-      const monthRange = document.createRange();
-      monthRange.selectNodeContents(month);
-      const distinctLineCount = (range: Range) =>
-        new Set(Array.from(range.getClientRects(), (rect) => rect.top)).size;
-      return {
-        yearText: year.textContent?.trim(),
-        monthText: month.textContent?.trim(),
-        yearTop: yearRect.top,
-        monthTop: monthRect.top,
-        yearLineCount: distinctLineCount(yearRange),
-        monthLineCount: distinctLineCount(monthRange),
-        yearWhiteSpace: getComputedStyle(year).whiteSpace,
-        monthWhiteSpace: getComputedStyle(month).whiteSpace,
-      };
-    }),
-  );
-
-  expect(layouts).toHaveLength(12);
-  for (const layout of layouts) {
-    expect(layout).not.toBeNull();
-    if (!layout) {
-      continue;
+      expect(layout.yearText).toMatch(/^\d{4}年$/);
+      expect(layout.monthText).toMatch(/^\d{1,2}月$/);
+      expect(layout.yearLineCount).toBe(1);
+      expect(layout.monthLineCount).toBe(1);
+      expect(layout.yearWhiteSpace).toBe('nowrap');
+      expect(layout.monthWhiteSpace).toBe('nowrap');
+      expect(layout.monthTop).toBeGreaterThanOrEqual(layout.yearTop);
+      if (singleLine) {
+        expect(Math.abs(layout.monthTop - layout.yearTop)).toBeLessThanOrEqual(1);
+      }
     }
-
-    expect(layout.yearText).toMatch(/^\d{4}年$/);
-    expect(layout.monthText).toMatch(/^\d{1,2}月$/);
-    expect(layout.yearLineCount).toBe(1);
-    expect(layout.monthLineCount).toBe(1);
-    expect(layout.yearWhiteSpace).toBe('nowrap');
-    expect(layout.monthWhiteSpace).toBe('nowrap');
-    expect(layout.monthTop).toBeGreaterThanOrEqual(layout.yearTop);
-    if (singleLine) {
-      expect(Math.abs(layout.monthTop - layout.yearTop)).toBeLessThanOrEqual(1);
-    }
-  }
+  }).toPass({ timeout: 5_000 });
 }
 
 async function expectStatsTouchTargets(page: Page): Promise<void> {
@@ -502,32 +526,40 @@ async function expectStatsTouchTargets(page: Page): Promise<void> {
   const tabCount = await tabButtons.count();
   expect(tabCount).toBeGreaterThanOrEqual(2);
   for (let index = 0; index < tabCount; index += 1) {
-    const height = await tabButtons
-      .nth(index)
-      .evaluate((element) => element.getBoundingClientRect().height);
-    expect(height).toBeGreaterThanOrEqual(44);
+    await expect
+      .poll(() =>
+        tabButtons.nth(index).evaluate((element) => element.getBoundingClientRect().height),
+      )
+      .toBeGreaterThanOrEqual(44);
   }
 
   const chartGroups = page.getByRole('group', { name: /圖型$/ });
   const chartGroupCount = await chartGroups.count();
   expect(chartGroupCount).toBeGreaterThan(0);
   const visibleChartGroups: Locator[] = [];
-  for (let index = 0; index < chartGroupCount; index += 1) {
-    const chartGroup = chartGroups.nth(index);
-    if (await chartGroup.isVisible()) {
-      visibleChartGroups.push(chartGroup);
-    }
-  }
+  await expect
+    .poll(async () => {
+      visibleChartGroups.length = 0;
+      for (let index = 0; index < chartGroupCount; index += 1) {
+        const chartGroup = chartGroups.nth(index);
+        if (await chartGroup.isVisible()) {
+          visibleChartGroups.push(chartGroup);
+        }
+      }
+      return visibleChartGroups.length;
+    })
+    .toBe(1);
   expect(visibleChartGroups).toHaveLength(1);
 
   const chartButtons = visibleChartGroups[0]!.getByRole('button');
   const chartButtonCount = await chartButtons.count();
   expect(chartButtonCount).toBeGreaterThanOrEqual(2);
   for (let index = 0; index < chartButtonCount; index += 1) {
-    const height = await chartButtons
-      .nth(index)
-      .evaluate((element) => element.getBoundingClientRect().height);
-    expect(height).toBeGreaterThanOrEqual(44);
+    await expect
+      .poll(() =>
+        chartButtons.nth(index).evaluate((element) => element.getBoundingClientRect().height),
+      )
+      .toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -933,15 +965,19 @@ test.describe('2j 統計頁端對端', () => {
       await expect(longCategoryButton).toHaveAccessibleName(
         new RegExp(`^${LONG_CATEGORY_NAME}，\\$123,456,789，`),
       );
-      const categoryTextMetrics = await longCategoryText.evaluate((element) => ({
-        text: element.textContent?.trim(),
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-        textOverflow: getComputedStyle(element).textOverflow,
-      }));
-      expect(categoryTextMetrics.text).toBe(LONG_CATEGORY_NAME);
-      expect(categoryTextMetrics.scrollWidth).toBeLessThanOrEqual(categoryTextMetrics.clientWidth);
-      expect(categoryTextMetrics.textOverflow).not.toBe('ellipsis');
+      await expect(async () => {
+        const categoryTextMetrics = await longCategoryText.evaluate((element) => ({
+          text: element.textContent?.trim(),
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          textOverflow: getComputedStyle(element).textOverflow,
+        }));
+        expect(categoryTextMetrics.text).toBe(LONG_CATEGORY_NAME);
+        expect(categoryTextMetrics.scrollWidth).toBeLessThanOrEqual(
+          categoryTextMetrics.clientWidth,
+        );
+        expect(categoryTextMetrics.textOverflow).not.toBe('ellipsis');
+      }).toPass({ timeout: 5_000 });
 
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
@@ -964,16 +1000,20 @@ test.describe('2j 統計頁端對端', () => {
       await expect(lineChart).toBeVisible();
       const polylines = lineChart.locator('svg polyline');
       await expect(polylines).toHaveCount(2);
-      expect(
-        await polylines.evaluateAll((elements) =>
-          elements.map((element) => getComputedStyle(element).fill),
-        ),
-      ).toEqual(['none', 'none']);
-      const pointFills = await lineChart
-        .locator('svg circle')
-        .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill));
-      expect(pointFills.length).toBeGreaterThan(0);
-      expect(pointFills).not.toContain('none');
+      await expect(async () => {
+        expect(
+          await polylines.evaluateAll((elements) =>
+            elements.map((element) => getComputedStyle(element).fill),
+          ),
+        ).toEqual(['none', 'none']);
+      }).toPass({ timeout: 5_000 });
+      await expect(async () => {
+        const pointFills = await lineChart
+          .locator('svg circle')
+          .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill));
+        expect(pointFills.length).toBeGreaterThan(0);
+        expect(pointFills).not.toContain('none');
+      }).toPass({ timeout: 5_000 });
       const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
       const linePoints = lineChart.locator('svg circle');
       await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 6);
@@ -1019,15 +1059,17 @@ test.describe('2j 統計頁端對端', () => {
       await expect(longMember).toBeVisible();
       const longMemberText = longMember.getByText(LONG_MEMBER_NAME, { exact: true });
       await expect(longMemberText).toBeVisible();
-      const memberTextMetrics = await longMemberText.evaluate((element) => ({
-        text: element.textContent?.trim(),
-        scrollWidth: element.scrollWidth,
-        clientWidth: element.clientWidth,
-        textOverflow: getComputedStyle(element).textOverflow,
-      }));
-      expect(memberTextMetrics.text).toBe(LONG_MEMBER_NAME);
-      expect(memberTextMetrics.scrollWidth).toBeLessThanOrEqual(memberTextMetrics.clientWidth);
-      expect(memberTextMetrics.textOverflow).not.toBe('ellipsis');
+      await expect(async () => {
+        const memberTextMetrics = await longMemberText.evaluate((element) => ({
+          text: element.textContent?.trim(),
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          textOverflow: getComputedStyle(element).textOverflow,
+        }));
+        expect(memberTextMetrics.text).toBe(LONG_MEMBER_NAME);
+        expect(memberTextMetrics.scrollWidth).toBeLessThanOrEqual(memberTextMetrics.clientWidth);
+        expect(memberTextMetrics.textOverflow).not.toBe('ellipsis');
+      }).toPass({ timeout: 5_000 });
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       await chartSwitch(page, '成員圖型').getByRole('button', { name: '圓餅' }).click();
