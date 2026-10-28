@@ -25,6 +25,7 @@ import {
   openNewTransaction,
   openUserMenu,
   selectCategory,
+  switchLedger,
 } from './ui';
 
 interface HomeSetup {
@@ -110,6 +111,75 @@ const APLUS_SHOTS_DIR = fileURLToPath(
  * 版面斷言直接量瀏覽器方框；量測值放 Playwright 輸出目錄，A+ 展示截圖放 gitignore 的 artifacts。
  */
 test.describe('2l 首頁 A+ 版面端對端', () => {
+  test('SC-Y32：309px 寬時所有共用頁首與主要按鈕都在視窗內', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const ledger = await personalLedger(request, userA.token);
+    const longLedgerName = '309px 窄版頁首驗收用的超長家庭帳本名稱請勿擠出主要按鈕';
+    await createLedger(request, userA.token, { name: longLedgerName, kind: 'SHARED' });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload();
+    await switchLedger(page, longLedgerName);
+
+    const routes: { path: string; title: string; action?: string }[] = [
+      { path: '/', title: '總覽', action: '新增交易' },
+      { path: '/transactions', title: '交易' },
+      { path: '/stats', title: '統計' },
+      { path: '/counterparties', title: '對象' },
+      { path: '/accounts', title: '帳戶', action: '新增帳戶' },
+      { path: '/ledgers', title: '帳本', action: '建立帳本' },
+      { path: `/ledgers/${ledger.id}`, title: '帳本' },
+      { path: '/categories', title: '分類' },
+      { path: '/profile', title: '個人資料' },
+    ];
+
+    async function expectHeaderToFit(route: (typeof routes)[number]): Promise<void> {
+      await page.goto(route.path);
+      const title = page.getByRole('heading', { level: 2, name: route.title }).first();
+      await expect(title).toBeVisible();
+      const header = title.locator('xpath=ancestor::header[1]');
+      await expect(header).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(309);
+
+      const buttons = await header.locator('button').evaluateAll((elements) =>
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            left: bounds.left,
+            right: bounds.right,
+            disabled: (element as HTMLButtonElement).disabled,
+          };
+        }),
+      );
+      for (const button of buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(0);
+        expect(button.right).toBeLessThanOrEqual(309);
+        expect(button.disabled).toBe(false);
+      }
+
+      if (route.action) {
+        const action = header.getByRole('button', { name: route.action, exact: true });
+        await expect(action).toBeVisible();
+        await expect(action).toBeEnabled();
+        await action.click({ trial: true });
+      }
+    }
+
+    const [homeRoute, ...otherRoutes] = routes;
+    if (!homeRoute) throw new Error('SC-Y32 缺少首頁頁首驗收路由。');
+    await page.setViewportSize({ width: 309, height: 900 });
+    await expectHeaderToFit(homeRoute);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await switchLedger(page, ledger.name);
+    await page.setViewportSize({ width: 309, height: 900 });
+    for (const route of otherRoutes) await expectHeaderToFit(route);
+  });
+
   test('SC-V1～V4：資產與帳本結餘切換、動畫、鍵盤及手機版', async ({
     signedInPage: page,
     userA,
