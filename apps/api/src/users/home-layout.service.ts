@@ -4,10 +4,13 @@ import type { HomeLayoutV1 } from '@ledger/shared';
 import { HomeLayoutSurface, Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/exceptions/app.exception';
-import { MAX_HOME_LAYOUT_REVISION, PutHomeLayoutDto } from './dto/put-home-layout.dto';
+import { PutHomeLayoutDto } from './dto/put-home-layout.dto';
 import { HomeLayoutResponseDto } from './dto/home-layout-response.dto';
 
-/** 只依 JWT 傳入的使用者隔離版面；用資料庫條件更新讓並發儲存只有一方成功。 */
+/**
+ * 只依 JWT 傳入的使用者隔離版面；revision 永遠遞增，避免舊工作階段在回繞後覆蓋新版面。
+ * 條件寫入直接取回快照，避免另外 GET 時讀到其他請求稍後存入的版面。
+ */
 @Injectable()
 export class HomeLayoutService {
   constructor(private readonly prisma: PrismaService) {}
@@ -18,8 +21,7 @@ export class HomeLayoutService {
       select: { schemaVersion: true, revision: true, layout: true },
     });
     if (!row) return { schemaVersion: 1, revision: 0, layout: null };
-    // 寫入端已驗證；讀取不修補資料，讓前端仍能自行驗證格式版本。
-    return { ...row, layout: row.layout as HomeLayoutV1 | null };
+    return this.toResponse(row);
   }
 
   async put(userId: string, dto: PutHomeLayoutDto): Promise<HomeLayoutResponseDto> {
@@ -32,9 +34,11 @@ export class HomeLayoutService {
     const data = { schemaVersion: dto.schemaVersion, layout };
     if (dto.expectedRevision === 0) {
       try {
-        await this.prisma.userHomeLayout.create({
+        const row = await this.prisma.userHomeLayout.create({
           data: { ...data, userId, surface: HomeLayoutSurface.WEB, revision: 1 },
+          select: { schemaVersion: true, revision: true, layout: true },
         });
+        return this.toResponse(row);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           throw this.conflict();
@@ -42,17 +46,41 @@ export class HomeLayoutService {
         throw error;
       }
     } else {
-      // 避免 PostgreSQL INTEGER 溢位而回繞成 1；0 保留給「沒存過」，不會寫入。
-      const result = await this.prisma.userHomeLayout.updateMany({
-        where: { userId, surface: HomeLayoutSurface.WEB, revision: dto.expectedRevision },
-        data: {
-          ...data,
-          revision: dto.expectedRevision === MAX_HOME_LAYOUT_REVISION ? 1 : { increment: 1 },
-        },
-      });
-      if (result.count === 0) throw this.conflict();
+      try {
+        // 主鍵與舊 revision 一起比對，資料庫在同一個動作遞增並回傳這次寫入的列。
+        const row = await this.prisma.userHomeLayout.update({
+          where: {
+            userId_surface: { userId, surface: HomeLayoutSurface.WEB },
+            revision: BigInt(dto.expectedRevision),
+          },
+          data: { ...data, revision: { increment: 1 } },
+          select: { schemaVersion: true, revision: true, layout: true },
+        });
+        return this.toResponse(row);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw this.conflict();
+        }
+        throw error;
+      }
     }
-    return this.get(userId);
+  }
+
+  private toResponse(row: {
+    schemaVersion: number;
+    revision: bigint;
+    layout: Prisma.JsonValue | null;
+  }): HomeLayoutResponseDto {
+    // 拒絕失真的數字；一般內部錯誤交由全站 filter 遮蔽，不讓 BigInt 進入 JSON。
+    if (row.revision < 0n || row.revision > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error('Home layout revision is outside the safe integer range');
+    }
+    // 寫入端已驗證；讀取不修補資料，讓前端仍能自行驗證格式版本。
+    return {
+      ...row,
+      revision: Number(row.revision),
+      layout: row.layout as HomeLayoutV1 | null,
+    };
   }
 
   private conflict(): AppException {
