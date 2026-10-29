@@ -2,10 +2,17 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { LEDGER_KINDS } from '@ledger/shared';
 import type { CreateLedgerRequest, LedgerKind } from '@ledger/shared';
+import { TrimName } from '../../common/decorators/trim-name.decorator';
 
 /** 建立帳本的請求形狀（幣別暫用預設值）。 */
 export class CreateLedgerDto implements CreateLedgerRequest {
-  @ApiProperty({ example: '家庭帳本', minLength: 1, maxLength: 100 })
+  @ApiProperty({
+    example: '家庭帳本',
+    description: '去掉前後空白後驗證。',
+    minLength: 1,
+    maxLength: 100,
+  })
+  @TrimName()
   @IsString()
   @MinLength(1)
   @MaxLength(100)

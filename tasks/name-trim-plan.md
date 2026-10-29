@@ -66,4 +66,8 @@
 
 ## 實作紀錄
 
-（實作時補）
+- 抽出 `apps/api/src/common/decorators/trim-name.decorator.ts` 的 `TrimName`，8 個 DTO 共用同一段轉換；只修剪字串，非字串原樣交由 `@IsString()` 拒絕。
+- 修改前的 null 行為：註冊、建立帳本／帳戶／分類，以及更新使用者／帳本都由必要的 `@IsString()` 拒絕 `null`；更新分類已有只略過 `undefined` 的 `@ValidateIf`，因此 `null` 也會被拒絕；更新帳戶的 `@IsOptional()` 會同時略過 `undefined` 與 `null`，是唯一會讓 null 進入 service 並造成 500 的 DTO。更新使用者與帳本的名稱原本必填，維持缺少名稱時 400；更新帳戶與分類維持省略名稱時通過。
+- 更新帳戶改用只略過 `undefined` 的 `@ValidateIf`；更新分類保留既有條件並加上修剪。其餘 6 個 DTO 的名稱必填規則不變。所有名稱的 OpenAPI 說明補充先去掉前後空白再驗證；註冊名稱補上 1～100 長度資訊。
+- 偏離：無。Schema、其他 API、共用契約、前端、CI 與相依套件均未變更。
+- 驗證：DTO 單元測試 8 suites／72 tests、API e2e 59 suites／623 tests、帳戶 e2e 最後重跑 1 suite／14 tests、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`、`pnpm build` 通過（shared 160、API 1028、web 1153 tests）。首次與其他檢查平行執行 `pnpm test` 時，無關的 GLM provider 測試遇到 40ms timeout；單獨重跑通過，未修改 AI 程式。`pnpm build` 的 web 步驟另有 PostCSS `from` warning，但建置成功。

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import type { UpdateAccountRequest } from '@ledger/shared';
+import { TrimName } from '../../common/decorators/trim-name.decorator';
 
 /**
  * 更新帳戶的請求形狀。**只能改名**。
@@ -13,8 +14,15 @@ import type { UpdateAccountRequest } from '@ledger/shared';
  * 不只是前端不顯示欄位而已。
  */
 export class UpdateAccountDto implements UpdateAccountRequest {
-  @ApiPropertyOptional({ example: '台灣銀行', minLength: 1, maxLength: 50 })
-  @IsOptional()
+  @ApiPropertyOptional({
+    example: '台灣銀行',
+    description: '去掉前後空白後驗證。',
+    minLength: 1,
+    maxLength: 50,
+  })
+  // 只有未送出才略過；明確送 null 時仍要驗證，避免把 null 寫進不可為空的名稱欄位。
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @TrimName()
   @IsString()
   @MinLength(1)
   @MaxLength(50)

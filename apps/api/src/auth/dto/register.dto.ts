@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
+import { TrimName } from '../../common/decorators/trim-name.decorator';
 import type { RegisterRequest } from '@ledger/shared';
 
 /** 註冊請求的驗證形狀（email／password／name）。 */
@@ -17,7 +18,13 @@ export class RegisterDto implements RegisterRequest {
   @MaxLength(72)
   password!: string;
 
-  @ApiProperty({ example: 'Alice' })
+  @ApiProperty({
+    example: 'Alice',
+    description: '去掉前後空白後驗證。',
+    minLength: 1,
+    maxLength: 100,
+  })
+  @TrimName()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
