@@ -4,6 +4,17 @@
 
 ## 現況（2026-10-29）
 
+### 名稱 trim 與首頁版面 revision 不回繞：已驗收、合併並部署 dev
+
+開發者要兩件同時做，advisor 兩輪後雙方一致，開發者核可（orca run `run_1f196e6bdf9d`）。
+
+- 首頁版面 revision 不回繞：#206（`101407e`）。[plan](../../tasks/archive/home-layout-bigint-revision-plan.md)。`backend` 角色實作。`revision` 改 `BIGINT`，寫入永遠加 1；API 仍用 JSON number，`expectedRevision` 上限 9007199254740990；條件 `update` 沒有符合的列丟 `P2025` 轉 409；PUT 回傳寫入快照。修訂 2l 決策 329、333，新增決策 260～262。#202 的儲存前 GET 保留。
+- 名稱 trim：#207（`fa4c09d`）。[plan](../../tasks/archive/name-trim-plan.md)。`default` 角色實作。8 個 DTO 共用 `TrimName()`，先去掉前後空白再驗證，純空白回 400；更新帳戶 `name: null` 從 500 改成 400。各 DTO 原本的必填或可省略規則不變。
+- 驗收數字（協調者重跑）：#206 API 單元 967、API e2e 59 suites／624；#207 API 單元 1028、API e2e 59 suites／623；兩邊 lint、typecheck、format:check 都 exit 0。CI 併入 main 後重跑都通過。
+- 計畫外：#205 改了 `docs/handoff.md` 的編號那一行，#206 合併前手動解衝突。name-trim worker 和其他檢查平行跑時，無關的 GLM provider 測試 40ms 逾時；單獨重跑通過。
+- 部署：API 與 Vite 原本就沒在跑。主工作區 `git pull`、`pnpm install`、shared build；`pg_dump` 備份到 `D:\Projects\ledger-app-backups\ledger_dev-20261029-before-206-207.dump`；`prisma generate`、`migrate deploy`（套用 `20261029080000_home_layout_revision_bigint`）、API build。暫時用 3200 起 API 驗過：欄位型別 `bigint`、GET 回傳的 revision 是 number、`PATCH` 帳戶 `name: null` 回 400。開發者下次照常起 API 即可。
+- 已清掉：worktree `layout-bigint`、`name-trim` 與對應的本機、遠端分支；測試資料庫 `ledger_layoutbig_test`、`ledger_nametrim_test`；worker 終端機。
+
 ### 4 項後續：已驗收、合併並部署 dev
 
 開發者要 4 項全開，全部交給 Codex 先提案、協調者審批與驗收（orca run `run_a1b491916f94`）。提案與驗證紀錄都在 `tasks/archive/`。
@@ -83,11 +94,11 @@
 
 - 統計頁 e2e 偶發失敗：#194（`38ddbe3`）。一直沒有重現（`--repeat-each=10 --workers=1` 加 CPU 負載 50/50）。`stats.spec.ts` 一次量測就斷言的地方已全部改成整段重試，數值沒放寬。再出現時保留失敗的 trace。`--workers=4` 會因共用資料庫互撞（409 EMAIL_ALREADY_EXISTS、外鍵）失敗，不是版面問題。
 - `getRect` 巢狀等待：#194。在外層 `expect.poll`／`toPass` 裡的 4 處改用只量一次的 `measureRectOnce`，其餘 24 處維持會重試的 `getRect`。
-- 首頁版面 revision 到 2147483647 再存回 500：改成回繞成 1（2l 決策 333、SC-Y11，開發者 10-28 核可 advisor 與協調者的共識）。網頁補查時改成「revision 不等於 r 才算衝突」。advisor 提醒：首頁查詢 `staleTime: Infinity`，停著不重新整理的分頁在回繞後可能用舊 revision 蓋掉新版面，機率極低但不是零。
+- 首頁版面 revision 到 2147483647 再存回 500：改成回繞成 1（2l 決策 333、SC-Y11，開發者 10-28 核可 advisor 與協調者的共識）。網頁補查時改成「revision 不等於 r 才算衝突」。advisor 提醒：首頁查詢 `staleTime: Infinity`，停著不重新整理的分頁在回繞後可能用舊 revision 蓋掉新版面，機率極低但不是零。10-29 已由 #206 改成不回繞，取代這個做法。
 
 ## 已知問題
 
-- 註冊 DTO 沒有 trim 姓名，純空白名稱可以註冊（`apps/api/src/auth/dto/register.dto.ts:20-24`）。網頁已用 #200 的佔位頭像擋住顯示問題，後端資料品質另案處理。
+- 既有名稱資料沒有清理：#207 之前存進去、前後有空白或純空白的使用者、帳本、帳戶、分類名稱維持原樣。帳戶與分類去掉空白後可能和既有名稱撞名。下一步先只統計數量，不列真實資料。
 
 ## 開發者在這次討論給的偏好
 
