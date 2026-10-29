@@ -1,4 +1,6 @@
+/* 首頁帳戶清單保留既有欄數門檻，以單行名稱與等寬金額建立閱讀層次。 */
 .list {
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -7,23 +9,30 @@
 .multiColumnList {
   container-name: home-account-list;
   container-type: inline-size;
+  display: flex;
+  flex-flow: row wrap;
 }
 
 .item {
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   min-width: 0;
-  padding: var(--space-md) var(--space-sm);
+  padding: 0.625rem var(--space-sm);
   border-bottom: 1px solid var(--color-border);
   font-size: var(--text-sm);
 }
 
 .name {
+  flex: 1 1 auto;
   min-width: 0;
   color: var(--color-text);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .balance {
@@ -48,8 +57,6 @@
 
 @container home-account-list (min-width: 440px) {
   .item {
-    display: inline-flex;
     width: 50%;
-    vertical-align: top;
   }
 }
