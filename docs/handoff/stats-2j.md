@@ -2,7 +2,21 @@
 
 入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
 
-## 現況（2026-10-28）
+## 現況（2026-10-29）
+
+### 4 項後續：已驗收、合併並部署 dev
+
+開發者要 4 項全開，全部交給 Codex 先提案、協調者審批與驗收（orca run `run_a1b491916f94`）。提案與驗證紀錄都在 `tasks/archive/`。
+
+- shared lint 與 typecheck：#199（`e289b60`）。[plan](../../tasks/archive/shared-lint-typecheck-plan.md)。`packages/shared` 加 ESLint 與 7 個 devDependency（開發者核可，要求確認套件沒有問題）。lockfile 只在 shared importer 多 7 條；`pnpm audit` 前後都是 96 筆、id 相同；dist 前後 52 個檔案完全相同；typecheck 已涵蓋測試檔（放型別錯誤會報 TS2322）。build 改用 `tsconfig.build.json`。
+- 借還卡空白姓名：#200（`d42ca9f`）。[plan](../../tasks/archive/home-avatar-empty-name-plan.md)。空字串或純空白姓名的頭像顯示 `?`、姓名欄 `—`。
+- 帳戶卡視覺：#201（`9892c71`）。[plan](../../tasks/archive/home-account-card-visual-plan.md)。方案 A 細線帳簿列：名稱單行省略、金額等寬數字、`title` 顯示完整名稱。協調者用臨時檢查量過 309／390／560px 不溢出、560px 分 2 欄；版控內 e2e 只涵蓋 309、560。
+- 首頁版面舊 revision：#202（`d647e7d`）。[plan](../../tasks/archive/home-layout-stale-revision-plan.md)。採方案 (b)：普通「完成」先 GET，比對 revision 與原版面才 PUT。改 2l 決策 329、SC-Y14，新增 SC-Y31。剩餘限制：GET→PUT 間不是原子操作；舊 client 與未來 App 沒有這層保護，要全面保障需改後端（方案 (c)，另案核可）。
+- 驗收數字：全站 Web e2e 頭像 136／136、帳戶卡 137／137、revision 136／136；4 個分支的 lint、typecheck、test、format:check 都 exit 0。
+- CI 偶發：#201 第一次 CI 的 SC-Y30（窄 activity 卡列超出卡片下方 383px）失敗；本機同 commit `--repeat-each 5` 5／5 通過，併入 main 後 CI 重跑通過。SC-Y30 過去 CI 沒失敗過，再出現時保留 trace 查。#202 第一次 CI 的 SC-W80（3c 分帳）失敗，10-28 的 main 也失敗過，是既有偶發。
+- 部署：主工作區 `git pull`、`pnpm install`、shared build。沒有 migration，API 不用重開。
+- 計畫外：一個孤兒 grep 程序吃掉 12GB 記憶體，讓 Web 單元測試大量 5 秒逾時，協調者把它停掉。PR #198 分支名稱不符規範，關掉後改名重開成 #199。
+- 已清掉：worktree `shared-lint`、`home-avatar-empty`、`home-account-card`、`home-layout-stale` 與對應的本機、遠端分支；測試資料庫 `ledger_revstale_test`。worker 終端機都已關閉。
 
 ### 首頁 4 項網頁修正：已驗收、合併並部署 dev
 
@@ -73,7 +87,7 @@
 
 ## 已知問題
 
-- `packages/shared` 沒有 lint script；shared 的測試檔不在 typecheck 範圍內。
+- 註冊 DTO 沒有 trim 姓名，純空白名稱可以註冊（`apps/api/src/auth/dto/register.dto.ts:20-24`）。網頁已用 #200 的佔位頭像擋住顯示問題，後端資料品質另案處理。
 
 ## 開發者在這次討論給的偏好
 

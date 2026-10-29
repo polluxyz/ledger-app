@@ -22,7 +22,7 @@
 
 ## 預覽
 
-- 比較頁：[docs/artifacts/home-account-card/index.html](../docs/artifacts/home-account-card/index.html)（self-contained HTML，不進版控）。
+- 比較頁：[docs/artifacts/home-account-card/index.html](../../docs/artifacts/home-account-card/index.html)（self-contained HTML，不進版控）。
 - 頁面並排比較 A／B／C，提供 3／8 個帳戶、309／390／560px 卡寬與深／淺主題切換。樣本含長帳戶名稱與負餘額；8 個帳戶在清單容器達 440px 時呈現兩欄。
 - 預覽只使用虛構帳戶名稱與金額，顏色、字級、圓角、間距和動態 token 對應 `apps/web/src/styles/global.css`。預覽不載入外部資源，也不使用動畫。
 
