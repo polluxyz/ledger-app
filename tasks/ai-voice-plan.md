@@ -186,4 +186,33 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 
 ## 7. 實作紀錄
 
-（尚未開始）
+### T0（2026-10-29，協調者，`94ef4ab`）
+
+- 新增 `apps/web/src/features/ai/test-support/fake-speech-recognition.ts` 與 `AiEntry.voice-isolation.test.tsx`。
+- 隔離測試 19 條全紅，原因都是找不到「開始語音記帳」按鈕。
+- 既有 Web 單元測試 1153 條全綠（138 個檔，只有新檔失敗）。typecheck、lint 綠。
+- 「開新的一輪」不放進 9 種取消條件的表：決策 348 (b) 規定辨識中不能開始新一輪，改由 SC-SR5 (3) 測「取消後馬上開新一輪」。
+
+### T1（2026-10-29 派工）
+
+- worktree `aiv-voice-ui`，分支 `feature/aiv-voice-ui`（從 `feature/ai-voice` 的 `94ef4ab` 開），`default` 的 Codex。
+- 第 1 輪交付 `c90c7e6`。驗收退回 3 個必修問題，都先用臨時測試在 worker 的 worktree 重現：
+  1. 語音填入一次後，每打一個字游標都跳到最後（焦點 effect 每次 `text` 改變都重跑）。
+  2. 按「取消語音」後焦點掉到 body，不回麥克風按鈕（W259）。
+  3. 「請精簡至 200 字內。」刪到 200 字後還留著（決策 349 (g)）。
+  - 另 2 個小調整：不在辨識期間只有輸入欄的 Escape 會收合；假辨識器過時的註解。
+- 第 1 次退回用 `reply`，Codex 沒收到，空等 50 分鐘。`worker_done` 後任務就結束了，改成對同一個終端機重新 `worker-start`（已補進 `docs/orca-multi-agent.md` §2）。
+- 第 2 輪交付 `b7f41d4`，3 個問題都修好，各補 1 條單元測試。驗收通過。
+- Codex 回報的 10 條逾時是當時機器負載：同一台機器在整合分支重跑沒有逾時。
+
+### T2（2026-10-29，協調者）
+
+- 協調者補 `ab6c788`：同一批更新裡「改字再改回」的隔離測試。原本的 SC-SR6 (3) 分成 2 次 `act`，中間有一次 render 看得到 `x`，「輸入欄有字就不能開始」先取消了這一輪，拿掉輸入版本檢查也不會紅。
+- 突變檢查（`use-voice-input.ts` 的 `isCurrentOperation`）：
+  - 帳本 id 檢查改成 `true`：3 條變紅（SC-SR6 (1) 2 條、SC-SR5 (2) 切帳本）。
+  - 輸入版本檢查改成 `true`：補了 `ab6c788` 之後 1 條變紅。
+  - 兩處都已還原。
+- `git merge --no-ff feature/aiv-voice-ui`（`46c7bb6`）。
+- 根目錄檢查（`b7f41d4`）：lint、typecheck、format:check、test 全部 exit 0。shared 160/160、api 60 個 suite 956 條、web 139 個檔 1215 條。
+- grep：語音檔案沒有呼叫 `parse(`，沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`。`parse(` 只在 `AiEntry.tsx` 的 `handleSubmit`。
+- `pnpm build` exit 0。全部 Web e2e（`46c7bb6`）140 passed（6.7 分鐘），含 `ai-voice.spec.ts` 的 SC-SR13 第 1～3 項，0 failed、0 flaky。

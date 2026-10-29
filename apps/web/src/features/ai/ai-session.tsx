@@ -38,6 +38,8 @@ interface SessionIdentity {
   generation: number;
 }
 
+export type AiSessionIdentitySnapshot = Readonly<SessionIdentity>;
+
 interface WriteLock {
   id: number;
   key: string;
@@ -54,6 +56,9 @@ interface ConfirmAllRun {
 
 interface AiSessionValue extends AiSessionState {
   setText: (text: string) => void;
+  getTextVersion: () => number;
+  getIdentitySnapshot: () => AiSessionIdentitySnapshot;
+  isIdentityCurrent: (snapshot: AiSessionIdentitySnapshot) => boolean;
   parse: (text: string, ledgerId: string) => Promise<boolean>;
   confirmDraft: (key: string, editingKey?: string | null) => Promise<boolean>;
   confirmAll: (editingKey: string | null, candidateKeys: readonly string[]) => Promise<void>;
@@ -85,6 +90,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
   const createTransaction = useCreateTransactionForLedger();
   const [state, setState] = useState<AiSessionState>(EMPTY_STATE);
   const stateRef = useRef(state);
+  const textVersionRef = useRef(0);
   const identityRef = useRef<SessionIdentity>({
     token,
     userId: currentUser.data?.id ?? null,
@@ -114,6 +120,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
       userId,
       generation: currentIdentity.generation + 1,
     };
+    textVersionRef.current += 1;
     parseLockRef.current = false;
     parseRequestIdRef.current += 1;
     confirmAllRef.current = null;
@@ -127,9 +134,21 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
     }));
   }, [currentUser.data?.id, token, updateState]);
 
-  const setText = useCallback(
-    (text: string) => updateState((current) => ({ ...current, text })),
+  const updateText = useCallback(
+    (text: string) => {
+      if (stateRef.current.text !== text) textVersionRef.current += 1;
+      updateState((current) => ({ ...current, text }));
+    },
     [updateState],
+  );
+
+  const setText = updateText;
+
+  const getTextVersion = useCallback(() => textVersionRef.current, []);
+
+  const getIdentitySnapshot = useCallback(
+    (): AiSessionIdentitySnapshot => ({ ...identityRef.current }),
+    [],
   );
 
   const isCurrentSession = useCallback((snapshot: SessionIdentity) => {
@@ -152,6 +171,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
       parseLockRef.current = true;
       const requestId = ++parseRequestIdRef.current;
       const snapshot = { ...identity };
+      if (stateRef.current.text !== sentence) textVersionRef.current += 1;
       updateState((current) => ({ ...current, text: sentence, error: null, isParsing: true }));
 
       try {
@@ -174,6 +194,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
           draftSequenceRef.current += 1;
           return { key: `ai-draft-${draftSequenceRef.current}`, draft };
         });
+        if (stateRef.current.text !== '') textVersionRef.current += 1;
         updateState((current) => ({
           ...current,
           text: '',
@@ -183,6 +204,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
         return true;
       } catch (error) {
         if (!isCurrentSession(snapshot) || parseRequestIdRef.current !== requestId) return false;
+        if (stateRef.current.text !== sentence) textVersionRef.current += 1;
         updateState((current) => ({
           ...current,
           text: sentence,
@@ -370,6 +392,9 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       setText,
+      getTextVersion,
+      getIdentitySnapshot,
+      isIdentityCurrent: isCurrentSession,
       parse,
       confirmDraft,
       confirmAll,
@@ -380,6 +405,9 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
     [
       state,
       setText,
+      getTextVersion,
+      getIdentitySnapshot,
+      isCurrentSession,
       parse,
       confirmDraft,
       confirmAll,
