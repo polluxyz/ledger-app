@@ -54,6 +54,8 @@ export function AiEntry({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const microphoneRef = useRef<HTMLButtonElement>(null);
   const focusTimeoutRef = useRef<number | null>(null);
+  const handledVoiceFocusRequestRef = useRef(0);
+  const returnFocusToMicrophoneRef = useRef(false);
   const isWritable = isLedgerWritable(ledger);
   const entryVisible = Boolean(
     element &&
@@ -79,12 +81,22 @@ export function AiEntry({
   const displayError = lengthError ?? voice.error ?? error;
 
   useLayoutEffect(() => {
-    if (voiceFocusRequest === 0) return;
+    if (voiceFocusRequest === 0 || voiceFocusRequest === handledVoiceFocusRequestRef.current) {
+      return;
+    }
     const input = inputRef.current;
-    if (!input) return;
+    if (!input || input.disabled) return;
+    handledVoiceFocusRequestRef.current = voiceFocusRequest;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
-  }, [text, voice.status, voiceFocusRequest]);
+  }, [isParsing, text, voice.status, voiceFocusRequest]);
+
+  useLayoutEffect(() => {
+    if (!returnFocusToMicrophoneRef.current || voice.isActive) return;
+    const microphone = microphoneRef.current;
+    returnFocusToMicrophoneRef.current = false;
+    if (entryVisible && microphone && !microphone.disabled) microphone.focus();
+  }, [entryVisible, voice.isActive]);
 
   function cancelPendingFocus() {
     if (focusTimeoutRef.current === null) return;
@@ -134,13 +146,24 @@ export function AiEntry({
 
   function handleEntryKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'Escape') return;
-    event.preventDefault();
     if (voice.isActive) {
-      voice.cancel();
-      microphoneRef.current?.focus();
+      event.preventDefault();
+      cancelVoiceAndReturnFocus();
       return;
     }
-    if (isExpanded) collapse();
+    if (isExpanded && event.target === inputRef.current) {
+      event.preventDefault();
+      collapse();
+    }
+  }
+
+  function handleVoiceCancel() {
+    cancelVoiceAndReturnFocus();
+  }
+
+  function cancelVoiceAndReturnFocus() {
+    returnFocusToMicrophoneRef.current = true;
+    voice.cancel();
   }
 
   if (!element || !isVisible || isLedgerLoading || ledgerError || ledger === undefined) {
@@ -189,6 +212,7 @@ export function AiEntry({
             setText(event.target.value);
             if ([...event.target.value.trim()].length <= AI_TEXT_MAX_LENGTH) {
               setLengthError(null);
+              if (voice.error === '請精簡至 200 字內。') voice.clearError();
             }
           }}
         />
@@ -238,7 +262,7 @@ export function AiEntry({
           className={styles.voiceButton}
           type="button"
           aria-label="取消語音"
-          onClick={voice.cancel}
+          onClick={handleVoiceCancel}
         >
           <CancelIcon />
           <span className={styles.visuallyHidden}>取消語音</span>

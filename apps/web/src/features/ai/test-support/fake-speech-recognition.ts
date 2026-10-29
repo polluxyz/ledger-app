@@ -47,7 +47,7 @@ export interface FakeSpeechRecognition extends EventTarget {
   emitStart(): void;
   emitAudioStart(): void;
   emitAudioEnd(): void;
-  /** 送 1 個結果，只有 1 個候選，`resultIndex` 是 0。 */
+  /** 送 1 個結果，候選由 `alternatives` 設定，`resultIndex` 是 0。 */
   emitResult(transcript: string, options: { isFinal: boolean; alternatives?: string[] }): void;
   /** 送 error 事件；`code` 是 Web Speech API 的錯誤碼，例如 `no-speech`、`aborted`。 */
   emitError(code: string): void;

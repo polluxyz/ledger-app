@@ -271,6 +271,24 @@ describe('AI entry voice input', () => {
     expect(mocks.parse).not.toHaveBeenCalled();
   });
 
+  it('SC-SR3 (5)：語音填入後在中間插字時保留游標位置', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    const recognition = await startListening(user);
+    emitFinal(recognition);
+    await waitFor(() => expect(inputBox()).toHaveValue(sentence));
+
+    const input = inputBox() as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 2);
+    await user.keyboard('XY');
+
+    expect(input).toHaveValue('早餐XY 60 現金');
+    expect(input.selectionStart).toBe(4);
+    expect(mocks.parse).not.toHaveBeenCalled();
+  });
+
   it('SC-SR3 (2)：只有使用者按送出才解析，接著照既有流程清空輸入', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     mocks.parse.mockResolvedValueOnce({
@@ -493,7 +511,7 @@ describe('AI entry voice input', () => {
 
   it('SC-SR9 (3)：201 個 code point 完整填入但不送出，刪到 200 後可送', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
-    const text = `${'字'.repeat(AI_TEXT_MAX_LENGTH)}😀`;
+    const text = 'a'.repeat(AI_TEXT_MAX_LENGTH + 1);
     const user = userEvent.setup();
     renderEntry();
     const recognition = await startListening(user);
@@ -506,14 +524,17 @@ describe('AI entry voice input', () => {
     expect(inputBox()).toHaveValue(text);
     expect(probe.text).toBe(text);
 
-    await user.clear(inputBox());
-    fireEvent.change(inputBox(), {
-      target: { value: '字'.repeat(AI_TEXT_MAX_LENGTH) },
-    });
+    const input = inputBox() as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    await user.keyboard('{Backspace}');
+    const allowedText = 'a'.repeat(AI_TEXT_MAX_LENGTH);
+    expect(inputBox()).toHaveValue(allowedText);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '送出' }));
     await waitFor(() => expect(mocks.parse).toHaveBeenCalledTimes(1));
-    expectSingleParse('字'.repeat(AI_TEXT_MAX_LENGTH));
-    await waitFor(() => expect(inputBox()).toHaveValue('字'.repeat(AI_TEXT_MAX_LENGTH)));
+    expectSingleParse(allowedText);
+    await waitFor(() => expect(inputBox()).toHaveValue(allowedText));
   });
 
   it('SC-SR9 (4)：解析失敗保留語音文字且不自動重送', async () => {
@@ -626,6 +647,19 @@ describe('AI entry voice input', () => {
     act(() => second.emitError('aborted'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expectNoParseWithInput('');
+  });
+
+  it('SC-SR11：按取消語音後焦點回到麥克風按鈕', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    await startRound(user);
+
+    await user.click(screen.getByRole('button', { name: '取消語音' }));
+
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toHaveFocus();
+    expect(inputBox()).toHaveValue('');
+    expect(mocks.parse).not.toHaveBeenCalled();
   });
 
   it('SC-SR12：Enter 與 Space 可開始、停止，Escape 只取消並把焦點放回麥克風', async () => {
