@@ -3,6 +3,7 @@ import { DEFAULT_HOME_LAYOUT_V1, ErrorCode } from '@ledger/shared';
 import type { ApiErrorResponse, HomeCardId, HomeLayoutNode, HomeLayoutV1 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
+import type { HomeLayoutResponseDto } from '../src/users/dto/home-layout-response.dto';
 import { createE2EApp, httpServer, resetDb } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
@@ -56,13 +57,16 @@ describe('Home layout — persistence and validation (e2e)', () => {
       .send(data as object);
   const get = () => request(httpServer(app)).get(path).set(auth(alice.token));
   const snapshot = async () =>
-    JSON.stringify(await prisma.userHomeLayout.findMany({ orderBy: { userId: 'asc' } }));
+    JSON.stringify(
+      await prisma.userHomeLayout.findMany({ orderBy: { userId: 'asc' } }),
+      (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value),
+    );
   const seedRevision = async (revision: number) => {
     await put(body()).expect(200);
-    // 直接設定邊界 fixture，避免為了到達 INTEGER 上限而重複呼叫數十億次 API。
+    // 直接設定邊界 fixture，避免為了到達大 revision 而重複呼叫數十億次 API。
     await prisma.userHomeLayout.update({
       where: { userId_surface: { userId: alice.userId, surface: 'WEB' } },
-      data: { revision },
+      data: { revision: BigInt(revision) },
     });
   };
 
@@ -103,31 +107,37 @@ describe('Home layout — persistence and validation (e2e)', () => {
     expect(rows).toEqual([{ isNull: true }]);
   });
 
-  it('SC-Y11: revision 從 INTEGER 上限前一版經上限回繞成 1，再遞增成 2', async () => {
+  it('SC-Y11: revision 跨越舊上限後仍持續遞增，PUT 與 GET 都回 number', async () => {
     await seedRevision(2147483646);
     for (const [expectedRevision, revision] of [
       [2147483646, 2147483647],
-      [2147483647, 1],
-      [1, 2],
+      [2147483647, 2147483648],
+      [2147483648, 2147483649],
     ]) {
       const saved = await put(body(DEFAULT_HOME_LAYOUT_V1, expectedRevision)).expect(200);
       expect(saved.body).toEqual({ schemaVersion: 1, revision, layout: DEFAULT_HOME_LAYOUT_V1 });
-      expect((await get().expect(200)).body).toEqual(saved.body);
+      const loaded = await get().expect(200);
+      expect(loaded.body).toEqual(saved.body);
+      expect(typeof (saved.body as HomeLayoutResponseDto).revision).toBe('number');
+      expect(typeof (loaded.body as HomeLayoutResponseDto).revision).toBe('number');
     }
   });
 
-  it('SC-Y11: INTEGER 上限時重設回繞成 1，GET 與 SQL 均為 NULL', async () => {
+  it('SC-Y11: 舊上限時重設仍遞增，GET 與 SQL 均為 NULL', async () => {
     await seedRevision(2147483647);
     const reset = await put(body(null, 2147483647)).expect(200);
-    expect(reset.body).toEqual({ schemaVersion: 1, revision: 1, layout: null });
-    expect((await get().expect(200)).body).toEqual(reset.body);
+    expect(reset.body).toEqual({ schemaVersion: 1, revision: 2147483648, layout: null });
+    const loaded = await get().expect(200);
+    expect(loaded.body).toEqual(reset.body);
+    expect(typeof (reset.body as HomeLayoutResponseDto).revision).toBe('number');
+    expect(typeof (loaded.body as HomeLayoutResponseDto).revision).toBe('number');
     const rows = await prisma.$queryRaw<
       { isNull: boolean }[]
     >`SELECT "layout" IS NULL AS "isNull" FROM "UserHomeLayout" WHERE "userId" = ${alice.userId}`;
     expect(rows).toEqual([{ isNull: true }]);
   });
 
-  it('SC-Y11: 回繞後再帶 INTEGER 上限回 409，資料不變', async () => {
+  it('SC-Y11: 跨越舊上限後再帶舊 revision 回 409，資料不變', async () => {
     await seedRevision(2147483647);
     await put(body(DEFAULT_HOME_LAYOUT_V1, 2147483647)).expect(200);
     const before = await snapshot();
@@ -139,10 +149,48 @@ describe('Home layout — persistence and validation (e2e)', () => {
     expect(await snapshot()).toBe(before);
     expect((await get().expect(200)).body).toEqual({
       schemaVersion: 1,
-      revision: 1,
+      revision: 2147483648,
       layout: DEFAULT_HOME_LAYOUT_V1,
     });
   });
+
+  it('SC-Y11: 最大可接受 revision 儲存後精確回傳安全整數上限', async () => {
+    await seedRevision(9007199254740990);
+    const saved = await put(body(DEFAULT_HOME_LAYOUT_V1, 9007199254740990)).expect(200);
+    const loaded = await get().expect(200);
+    expect(saved.body).toEqual({
+      schemaVersion: 1,
+      revision: 9007199254740991,
+      layout: DEFAULT_HOME_LAYOUT_V1,
+    });
+    expect(loaded.body).toEqual(saved.body);
+    expect(typeof (saved.body as HomeLayoutResponseDto).revision).toBe('number');
+    expect(typeof (loaded.body as HomeLayoutResponseDto).revision).toBe('number');
+  });
+
+  it.each([false, true])(
+    'SC-Y11: Prisma 條件更新在已存在列 %s 不符合時實際丟 P2025',
+    async (exists) => {
+      if (exists) await put(body()).expect(200);
+      const before = await snapshot();
+      await expect(
+        prisma.userHomeLayout.update({
+          where: {
+            userId_surface: { userId: alice.userId, surface: 'WEB' },
+            revision: 2n,
+          },
+          data: { revision: { increment: 1 } },
+          select: { schemaVersion: true, revision: true, layout: true },
+        }),
+      ).rejects.toMatchObject({ code: 'P2025' });
+      expect(await snapshot()).toBe(before);
+      const conflict = await put(body(nested, 2)).expect(409);
+      expect((conflict.body as ApiErrorResponse).errorCode).toBe(
+        ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
+      );
+      expect(await snapshot()).toBe(before);
+    },
+  );
 
   it('SC-Y11: 資料列 revision 為 5 時帶 INTEGER 上限回 409，不回繞且資料不變', async () => {
     await seedRevision(5);
@@ -162,17 +210,22 @@ describe('Home layout — persistence and validation (e2e)', () => {
 
   it.each([0, 1, 2147483647])('SC-Y11: 同時以 revision %i 儲存恰有一個成功', async (revision) => {
     if (revision > 0) await seedRevision(revision);
-    const responses = await Promise.all([
-      put(body(nested, revision)),
-      put(body(DEFAULT_HOME_LAYOUT_V1, revision)),
-    ]);
+    const layouts = [nested, DEFAULT_HOME_LAYOUT_V1];
+    const responses = await Promise.all(layouts.map((layout) => put(body(layout, revision))));
     expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
     const winner = responses.find((response) => response.status === 200)!;
-    expect(winner.body).toMatchObject({ revision: revision === 2147483647 ? 1 : revision + 1 });
+    expect(winner.body).toEqual({
+      schemaVersion: 1,
+      revision: revision + 1,
+      layout: layouts[responses.indexOf(winner)],
+    });
+    expect(typeof (winner.body as HomeLayoutResponseDto).revision).toBe('number');
     expect(responses.find((response) => response.status === 409)!.body).toMatchObject({
       errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
     });
-    expect((await get().expect(200)).body).toEqual(winner.body);
+    const loaded = await get().expect(200);
+    expect(loaded.body).toEqual(winner.body);
+    expect(typeof (loaded.body as HomeLayoutResponseDto).revision).toBe('number');
     expect(await prisma.userHomeLayout.count()).toBe(1);
   });
 
@@ -256,7 +309,8 @@ describe('Home layout — persistence and validation (e2e)', () => {
     { schemaVersion: 2 },
     { expectedRevision: -1 },
     { expectedRevision: 1.5 },
-    { expectedRevision: 2147483648 },
+    { expectedRevision: 9007199254740991 },
+    { expectedRevision: '3' },
   ])('DTO 錯誤 %j 沿用 Validation failed 格式', async (invalid) => {
     await put(body()).expect(200);
     const before = await snapshot();

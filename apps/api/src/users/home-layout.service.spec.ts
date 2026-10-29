@@ -3,26 +3,30 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { HomeLayoutService } from './home-layout.service';
 
-/** 用 Prisma mock 驗證原子寫入條件與錯誤映射，避免先讀再寫造成競態。 */
+/** 用 Prisma mock 驗證原子條件、寫入快照與安全整數轉換，避免先讀再寫或寫後重讀的競態。 */
 describe('HomeLayoutService', () => {
   const findUnique = jest.fn();
   const create = jest.fn();
-  const updateMany = jest.fn();
+  const update = jest.fn();
   const service = new HomeLayoutService({
-    userHomeLayout: { findUnique, create, updateMany },
+    userHomeLayout: { findUnique, create, update },
   } as unknown as PrismaService);
   const dto = {
     schemaVersion: 1 as const,
     expectedRevision: 2,
     layout: { ...DEFAULT_HOME_LAYOUT_V1 },
   };
-  const row = { schemaVersion: 1, revision: 3, layout: DEFAULT_HOME_LAYOUT_V1 };
+  const row = { schemaVersion: 1, revision: 3n, layout: DEFAULT_HOME_LAYOUT_V1 };
+  const select = { schemaVersion: true, revision: true, layout: true };
+  const prismaError = (code: string) =>
+    new Prisma.PrismaClientKnownRequestError('database error', { code, clientVersion: '7' });
 
   beforeEach(() => {
     jest.resetAllMocks();
-    findUnique.mockResolvedValue(row);
-    updateMany.mockResolvedValue({ count: 1 });
-    create.mockResolvedValue(row);
+    // 讓額外 GET 的內容不同，確定 PUT 採用的是寫入時回傳的快照。
+    findUnique.mockResolvedValue({ ...row, revision: 99n, layout: null });
+    update.mockResolvedValue(row);
+    create.mockResolvedValue({ ...row, revision: 1n });
   });
 
   it('沒有資料時回預設狀態且不建立資料列', async () => {
@@ -34,45 +38,35 @@ describe('HomeLayoutService', () => {
     });
     expect(findUnique).toHaveBeenCalledWith({
       where: { userId_surface: { userId: 'alice', surface: 'WEB' } },
-      select: { schemaVersion: true, revision: true, layout: true },
+      select,
     });
     expect(create).not.toHaveBeenCalled();
   });
 
-  it.each([1, 2, 2147483646])('revision %i 先條件遞增，再讀回結果', async (expectedRevision) => {
-    await expect(service.put('alice', { ...dto, expectedRevision })).resolves.toEqual(row);
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { userId: 'alice', surface: 'WEB', revision: expectedRevision },
-      data: { schemaVersion: 1, layout: dto.layout, revision: { increment: 1 } },
-    });
-    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
-      findUnique.mock.invocationCallOrder[0]!,
-    );
-    expect(create).not.toHaveBeenCalled();
-  });
+  it.each([1, 2, 2147483646, 2147483647, 9007199254740990])(
+    'revision %i 條件遞增並直接回傳更新快照',
+    async (expectedRevision) => {
+      update.mockResolvedValue({ ...row, revision: BigInt(expectedRevision) + 1n });
+      await expect(service.put('alice', { ...dto, expectedRevision })).resolves.toEqual({
+        ...row,
+        revision: expectedRevision + 1,
+      });
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({
+        where: {
+          userId_surface: { userId: 'alice', surface: 'WEB' },
+          revision: BigInt(expectedRevision),
+        },
+        data: { schemaVersion: 1, layout: dto.layout, revision: { increment: 1 } },
+        select,
+      });
+      expect(findUnique).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    { name: '儲存版面', layout: dto.layout },
-    { name: '重設版面', layout: null },
-  ])('revision 到 INTEGER 上限時 $name 原子回繞成 1', async ({ layout }) => {
-    const wrapped = { ...row, revision: 1, layout };
-    findUnique.mockResolvedValue(wrapped);
-    await expect(
-      service.put('alice', { ...dto, expectedRevision: 2147483647, layout }),
-    ).resolves.toEqual(wrapped);
-    expect(updateMany).toHaveBeenCalledTimes(1);
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { userId: 'alice', surface: 'WEB', revision: 2147483647 },
-      data: { schemaVersion: 1, layout: layout === null ? Prisma.DbNull : layout, revision: 1 },
-    });
-    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(
-      findUnique.mock.invocationCallOrder[0]!,
-    );
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('更新零列回 409，不讀取最新版面', async () => {
-    updateMany.mockResolvedValue({ count: 0 });
+  it('更新找不到主鍵或 revision 不符的 P2025 回 409', async () => {
+    update.mockRejectedValue(prismaError('P2025'));
     await expect(service.put('alice', dto)).rejects.toMatchObject({
       status: 409,
       errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
@@ -80,21 +74,21 @@ describe('HomeLayoutService', () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it('revision 0 直接建立第一版', async () => {
-    findUnique.mockResolvedValue({ ...row, revision: 1 });
-    await expect(service.put('alice', { ...dto, expectedRevision: 0 })).resolves.toMatchObject({
+  it('revision 0 直接建立第一版並回傳建立快照', async () => {
+    await expect(service.put('alice', { ...dto, expectedRevision: 0 })).resolves.toEqual({
+      ...row,
       revision: 1,
     });
     expect(create).toHaveBeenCalledWith({
       data: { userId: 'alice', surface: 'WEB', revision: 1, schemaVersion: 1, layout: dto.layout },
+      select,
     });
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it('只有 P2002 轉成版面衝突', async () => {
-    create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002', clientVersion: '7' }),
-    );
+  it('建立只有 P2002 轉成版面衝突', async () => {
+    create.mockRejectedValue(prismaError('P2002'));
     await expect(service.put('alice', { ...dto, expectedRevision: 0 })).rejects.toMatchObject({
       status: 409,
       errorCode: ErrorCode.HOME_LAYOUT_REVISION_CONFLICT,
@@ -102,34 +96,71 @@ describe('HomeLayoutService', () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(['P2003', 'P2024'])('其他 Prisma 錯誤 %s 原樣拋出', async (code) => {
-    const error = new Prisma.PrismaClientKnownRequestError('database error', {
-      code,
-      clientVersion: '7',
-    });
-    create.mockRejectedValue(error);
-    await expect(service.put('alice', { ...dto, expectedRevision: 0 })).rejects.toBe(error);
+  it.each([
+    [0, 'P2003'],
+    [0, 'P2024'],
+    [0, 'P2025'],
+    [2, 'P2002'],
+    [2, 'P2003'],
+    [2, 'P2024'],
+  ])('revision %i 的其他 Prisma 錯誤 %s 原樣拋出', async (expectedRevision, code) => {
+    const error = prismaError(code);
+    (expectedRevision === 0 ? create : update).mockRejectedValue(error);
+    await expect(service.put('alice', { ...dto, expectedRevision })).rejects.toBe(error);
   });
 
-  it.each([0, 2])('重設 revision %i 使用資料庫 NULL', async (expectedRevision) => {
-    findUnique.mockResolvedValue({ ...row, layout: null });
-    await expect(
-      service.put('alice', { ...dto, expectedRevision, layout: null }),
-    ).resolves.toMatchObject({ layout: null });
-    const mutation = expectedRevision === 0 ? create : updateMany;
-    expect(mutation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ layout: Prisma.DbNull }) as unknown,
-      }),
-    );
+  it.each([0, 2])('revision %i 的一般錯誤原樣拋出', async (expectedRevision) => {
+    const error = new Error('connection unavailable');
+    (expectedRevision === 0 ? create : update).mockRejectedValue(error);
+    await expect(service.put('alice', { ...dto, expectedRevision })).rejects.toBe(error);
   });
+
+  it.each([0, 2, 2147483647])(
+    '重設 revision %i 使用資料庫 NULL 並持續遞增',
+    async (expectedRevision) => {
+      const mutation = expectedRevision === 0 ? create : update;
+      mutation.mockResolvedValue({ ...row, revision: BigInt(expectedRevision) + 1n, layout: null });
+      await expect(
+        service.put('alice', { ...dto, expectedRevision, layout: null }),
+      ).resolves.toEqual({ schemaVersion: 1, revision: expectedRevision + 1, layout: null });
+      expect(mutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            layout: Prisma.DbNull,
+            revision: expectedRevision === 0 ? 1 : { increment: 1 },
+          }) as unknown,
+        }),
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0n, 9007199254740991n])('GET 精確轉換 revision %s 為 number', async (revision) => {
+    findUnique.mockResolvedValue({ ...row, revision });
+    const response = await service.get('alice');
+    expect(response).toEqual({ ...row, revision: Number(revision) });
+    expect(typeof response.revision).toBe('number');
+  });
+
+  it.each([-1n, 9007199254740992n])(
+    'GET 與兩種 PUT 拒絕超出安全範圍的 revision %s',
+    async (revision) => {
+      const invalid = { ...row, revision };
+      findUnique.mockResolvedValue(invalid);
+      create.mockResolvedValue(invalid);
+      update.mockResolvedValue(invalid);
+      await expect(service.get('alice')).rejects.toThrow(Error);
+      await expect(service.put('alice', dto)).rejects.toThrow(Error);
+      await expect(service.put('alice', { ...dto, expectedRevision: 0 })).rejects.toThrow(Error);
+    },
+  );
 
   it('不合格版面回固定 400，不寫資料也不暴露 reason', async () => {
     await expect(service.put('alice', { ...dto, layout: { bands: [] } })).rejects.toMatchObject({
       status: 400,
       message: '版面格式不正確',
     });
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     expect(findUnique).not.toHaveBeenCalled();
   });
