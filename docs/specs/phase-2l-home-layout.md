@@ -265,7 +265,7 @@ Body：
 - 成功回 200，內容同 GET，是這次寫入的快照，`revision` 是新的值（決策 262）。
 - `expectedRevision` 是 0～9007199254740990 的整數（決策 261）。
 - 寫入是原子的條件更新：
-  1. `expectedRevision` 大於 0：`updateMany where { userId, surface: WEB, revision: expectedRevision }`，把 `revision` 加 1，同一個動作取回寫入後的列，不先讀再寫。沒有符合的列就回 409。不回繞（決策 260；2026-10-28 的「2147483647 時設為 1」已取消）。
+  1. `expectedRevision` 大於 0：`update where { userId_surface: { userId, surface: WEB }, revision: BigInt(expectedRevision) }`，把 `revision` 加 1，用 `select` 在同一個動作取回寫入後的列，不先讀再寫。沒有符合的列時 Prisma 丟 `P2025`，轉成 409。不回繞（決策 260；2026-10-28 的「2147483647 時設為 1」已取消）。
   2. `expectedRevision` 等於 0：用主鍵 `create`。撞到主鍵（別人先建了）就回 409。
 - 409 用新錯誤碼 `HOME_LAYOUT_REVISION_CONFLICT`，回應裡不帶最新版面；前端自己再 GET。
 
