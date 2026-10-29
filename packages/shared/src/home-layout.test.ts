@@ -223,7 +223,7 @@ describe('parseHomeLayoutV1：根列的 extraHeightPx', () => {
 
   it('負數、超過 1600、非整數、非數字、缺少都不合格', () => {
     for (const value of [-1, 1601, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '0', null]) {
-      rejects(withExtra(value as Json));
+      rejects(withExtra(value));
     }
     const missing = defaultLayout();
     missing.bands[0] = { root: missing.bands[0]!.root } as ReturnType<typeof band>;
