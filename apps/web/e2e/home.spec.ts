@@ -1013,6 +1013,59 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     });
   });
 
+  test('首頁帳戶卡：309px 與 560px 不水平溢出並省略長名稱', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const longAccountName = '這是一個很長的首頁帳戶名稱用來檢查換行能力';
+    await createAccount(request, userA.token, {
+      name: longAccountName,
+      initialBalance: 1_234_567_800,
+    });
+    for (let index = 2; index <= 11; index += 1) {
+      await createAccount(request, userA.token, { name: `手機首頁帳戶 ${index}` });
+    }
+
+    for (const width of [309, 560]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.reload();
+
+      const accountsCard = page.locator('[data-home-card-id="accounts"]');
+      const accountList = accountsCard.getByRole('list', { name: '帳戶' });
+      const accountItems = accountList.getByRole('listitem');
+      const longName = accountList.getByText(longAccountName, { exact: true });
+      await expect(accountItems).toHaveCount(12);
+      await expect(longName).toHaveAttribute('title', longAccountName);
+
+      const documentSize = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(documentSize.scrollWidth, `${width}px 頁面不可水平溢出`).toBeLessThanOrEqual(
+        documentSize.clientWidth,
+      );
+
+      for (const item of await accountItems.all()) {
+        const itemSize = await item.evaluate((element) => ({
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        }));
+        expect(itemSize.scrollWidth, `${width}px 帳戶列不可水平溢出`).toBeLessThanOrEqual(
+          itemSize.clientWidth,
+        );
+      }
+
+      const nameSize = await longName.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        textOverflow: getComputedStyle(element).textOverflow,
+      }));
+      expect(nameSize.scrollWidth).toBeGreaterThan(nameSize.clientWidth);
+      expect(nameSize.textOverflow).toBe('ellipsis');
+    }
+  });
+
   test('SC-Y30：窄 activity 卡的最近與標註列保留名稱、金額、徽章與操作', async ({
     signedInPage: initialPage,
     userA,
