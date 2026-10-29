@@ -1,6 +1,6 @@
 # Spec：4a 補充：語音記帳（桌機 Chrome 先試）
 
-> 狀態：**第 2 版草稿，待開發者核可**。第 1 版 §10 的 7 項，開發者 2026-10-29 已逐項回覆，第 2 版照回覆修改（見 §10）。
+> 狀態：**已核可**（開發者 2026-10-29 回「核可」，含 §10 第 2 版要確認的 3 點）。第 1 版 §10 的 7 項，開發者同日已逐項回覆，第 2 版照回覆修改（見 §10）。實作計畫：`tasks/ai-voice-plan.md`。
 > 上游：[`phase-4a-ai-text.md`](phase-4a-ai-text.md)（AI 入口與草稿，決策 237～253、W208～W214、W246～W256）、[`phase-4a-ai-new-category.md`](phase-4a-ai-new-category.md)、[`phase-4a-ai-quota.md`](phase-4a-ai-quota.md)（額度，決策 292～299）、[`phase-4a-ai-vertex.md`](phase-4a-ai-vertex.md)（模型，決策 337～345）。
 > 依據：
 >
