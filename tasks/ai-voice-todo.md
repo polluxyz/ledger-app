@@ -2,7 +2,7 @@
 
 plan：`tasks/ai-voice-plan.md`；spec：`docs/specs/phase-4a-voice.md`。
 
-- [ ] **T0 假辨識器與先紅的隔離測試**（協調者）：plan §1.1。
+- [x] **T0 假辨識器與先紅的隔離測試**（協調者）：plan §1.1。
       驗收：Web typecheck、lint 綠；`AiEntry.voice-isolation.test.tsx` 只因「找不到麥克風按鈕」而紅；既有測試全綠；沒有改正式程式。
 - [ ] **T1 語音 hook 與畫面**（依賴 T0；`aiv-voice-ui`，`default` 的 Codex）：plan §1.2。
       驗收：SC-SR1～SR12 單元測試綠；T0 的隔離測試轉綠且斷言沒改；既有 AI 測試內容沒改且綠；`ai-voice.spec.ts` 寫好 SC-SR13 第 1～3 項；只改 `apps/web`；沒有新套件；語音流程沒有呼叫 `parse()`；沒有 log 或 `localStorage` 寫辨識文字。

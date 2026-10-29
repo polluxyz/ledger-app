@@ -186,4 +186,13 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 
 ## 7. 實作紀錄
 
-（尚未開始）
+### T0（2026-10-29，協調者，`94ef4ab`）
+
+- 新增 `apps/web/src/features/ai/test-support/fake-speech-recognition.ts` 與 `AiEntry.voice-isolation.test.tsx`。
+- 隔離測試 19 條全紅，原因都是找不到「開始語音記帳」按鈕。
+- 既有 Web 單元測試 1153 條全綠（138 個檔，只有新檔失敗）。typecheck、lint 綠。
+- 「開新的一輪」不放進 9 種取消條件的表：決策 348 (b) 規定辨識中不能開始新一輪，改由 SC-SR5 (3) 測「取消後馬上開新一輪」。
+
+### T1（2026-10-29 派工）
+
+- worktree `aiv-voice-ui`，分支 `feature/aiv-voice-ui`（從 `feature/ai-voice` 的 `94ef4ab` 開），`default` 的 Codex。
