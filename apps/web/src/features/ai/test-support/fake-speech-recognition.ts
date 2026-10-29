@@ -48,7 +48,7 @@ export interface FakeSpeechRecognition extends EventTarget {
   emitAudioStart(): void;
   emitAudioEnd(): void;
   /** 送 1 個結果，只有 1 個候選，`resultIndex` 是 0。 */
-  emitResult(transcript: string, options: { isFinal: boolean }): void;
+  emitResult(transcript: string, options: { isFinal: boolean; alternatives?: string[] }): void;
   /** 送 error 事件；`code` 是 Web Speech API 的錯誤碼，例如 `no-speech`、`aborted`。 */
   emitError(code: string): void;
   emitEnd(): void;
@@ -66,11 +66,14 @@ export interface FakeSpeechRecognitionController {
 }
 
 /** 組出 `SpeechRecognitionResultList` 的形狀：可用索引或 `item()` 讀。 */
-function createResultList(transcript: string, isFinal: boolean) {
-  const alternative = { transcript, confidence: 0.9 };
-  const result = Object.assign([alternative], {
+function createResultList(transcript: string, isFinal: boolean, alternatives: string[] = []) {
+  const candidates = [transcript, ...alternatives.slice(1)].map((candidate) => ({
+    transcript: candidate,
+    confidence: 0.9,
+  }));
+  const result = Object.assign(candidates, {
     isFinal,
-    item: (index: number) => (index === 0 ? alternative : null),
+    item: (index: number) => candidates[index] ?? null,
   });
   return Object.assign([result], {
     item: (index: number) => (index === 0 ? result : null),
@@ -136,8 +139,14 @@ export function installFakeSpeechRecognition(
         this.emit('audioend');
       }
 
-      emitResult(transcript: string, { isFinal }: { isFinal: boolean }) {
-        this.emit('result', { resultIndex: 0, results: createResultList(transcript, isFinal) });
+      emitResult(
+        transcript: string,
+        { isFinal, alternatives = [transcript] }: { isFinal: boolean; alternatives?: string[] },
+      ) {
+        this.emit('result', {
+          resultIndex: 0,
+          results: createResultList(transcript, isFinal, alternatives),
+        });
       }
 
       emitError(code: string) {
