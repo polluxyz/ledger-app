@@ -588,7 +588,7 @@ test('SC-Y17：重設權重草稿後分隔線回到預設比例', async ({ signe
   await expect.poll(() => firstSeparatorValue(page)).toBe(defaultWeight);
 });
 
-test('SC-Y18：同一 context 的 B 收到 409 後載入 A 的最新版，仍留在編輯模式', async ({
+test('SC-Y18：同一 context 的 B 儲存前 GET 發現衝突，不 PUT 並載入 A 的最新版', async ({
   signedInPage: pageA,
   userA,
 }) => {
@@ -605,6 +605,7 @@ test('SC-Y18：同一 context 的 B 收到 409 後載入 A 的最新版，仍留
   const latestWeight = await adjustFirstSeparator(pageA);
   await pageA.getByRole('button', { name: '完成', exact: true }).click();
   await expect(pageA.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  const getsBeforeSave = networkB.gets;
   await pageB.getByRole('button', { name: '完成', exact: true }).click();
 
   const conflict = pageB.getByRole('dialog', { name: '版面已在其他地方更新' });
@@ -615,8 +616,8 @@ test('SC-Y18：同一 context 的 B 收到 409 後載入 A 的最新版，仍留
   await expect.poll(() => firstSeparatorValue(pageB)).toBe(latestWeight);
   await expect(conflict).toHaveCount(0);
   expect(networkA.puts).toHaveLength(1);
-  expect(networkB.puts).toHaveLength(1);
-  expect(networkB.gets).toBeGreaterThanOrEqual(1);
+  expect(networkB.puts).toHaveLength(0);
+  expect(networkB.gets).toBe(getsBeforeSave + 1);
 });
 
 test('SC-Y18：用我的覆蓋以 B 的版面更新伺服器', async ({ signedInPage: pageA, userA, request }) => {
@@ -625,53 +626,14 @@ test('SC-Y18：用我的覆蓋以 B 的版面更新伺服器', async ({ signedIn
   await signInWithToken(pageB, userA);
   await pageB.setViewportSize({ width: 2800, height: 1600 });
   const networkA = await watchHomeLayoutRequests(pageA);
-  const networkB = await watchHomeLayoutRequests(pageB);
-
-  await enterEditor(pageB);
-  const bWeight = await adjustFirstSeparator(pageB, 'Home');
-  await enterEditor(pageA);
-  await adjustFirstSeparator(pageA);
-  await pageA.getByRole('button', { name: '完成', exact: true }).click();
-  await expect(pageA.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
-  await pageB.getByRole('button', { name: '完成', exact: true }).click();
-  const conflict = pageB.getByRole('dialog', { name: '版面已在其他地方更新' });
-  await expect(conflict).toBeVisible();
-  await conflict.getByRole('button', { name: '用我的覆蓋' }).click();
-  await expect(pageB.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
-
-  expect(networkA.puts).toHaveLength(1);
-  expect(networkB.puts).toHaveLength(2);
-  expect(networkB.puts.map(({ expectedRevision }) => expectedRevision)).toEqual([0, 1]);
-  const saved = await getHomeLayout(request, userA.token);
-  expect(saved.layout).not.toBeNull();
-  const savedLayout = saved.layout as HomeLayoutV1;
-  expect(parseHomeLayoutV1(savedLayout).ok).toBe(true);
-  const middleRoot = savedLayout.bands[1]?.root;
-  expect(middleRoot?.type).toBe('split');
-  if (middleRoot?.type !== 'split') throw new Error('預期第二列為左右分割。');
-  expect(middleRoot.weights[0]! / 100).toBe(bWeight);
-});
-
-test('SC-Y18：覆蓋期間 A 再存一次，B 第二次 409 保留草稿與彈窗', async ({
-  signedInPage: pageA,
-  userA,
-}) => {
-  await pageA.setViewportSize({ width: 2800, height: 1600 });
-  const pageB = await pageA.context().newPage();
-  await signInWithToken(pageB, userA);
-  await pageB.setViewportSize({ width: 2800, height: 1600 });
-  let allowOverwrite!: () => void;
-  const overwriteGate = new Promise<void>((resolve) => {
-    allowOverwrite = resolve;
-  });
-  let overwriteStarted = false;
-  const networkA = await watchHomeLayoutRequests(pageA);
+  const requestsB: string[] = [];
   const networkB = await watchHomeLayoutRequests(pageB, {
-    put: async (route, _body, log) => {
-      if (log.puts.length === 2) {
-        overwriteStarted = true;
-        await overwriteGate;
-      }
+    get: async (route) => {
+      requestsB.push('GET');
+      await route.continue();
+    },
+    put: async (route) => {
+      requestsB.push('PUT');
       await route.continue();
     },
   });
@@ -682,25 +644,116 @@ test('SC-Y18：覆蓋期間 A 再存一次，B 第二次 409 保留草稿與彈�
   await adjustFirstSeparator(pageA);
   await pageA.getByRole('button', { name: '完成', exact: true }).click();
   await expect(pageA.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  const latestBeforeOverwrite = await getHomeLayout(request, userA.token);
+  requestsB.length = 0;
   await pageB.getByRole('button', { name: '完成', exact: true }).click();
   const conflict = pageB.getByRole('dialog', { name: '版面已在其他地方更新' });
   await expect(conflict).toBeVisible();
+  expect(networkB.puts).toHaveLength(0);
+  expect(requestsB).toEqual(['GET']);
+  await conflict.getByRole('button', { name: '用我的覆蓋' }).click();
+  await expect(pageB.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+
+  expect(networkA.puts).toHaveLength(1);
+  expect(networkB.puts).toHaveLength(1);
+  expect(networkB.puts[0]?.expectedRevision).toBe(latestBeforeOverwrite.revision);
+  expect(requestsB).toEqual(['GET', 'GET', 'PUT']);
+  const saved = await getHomeLayout(request, userA.token);
+  expect(saved.revision).toBe(latestBeforeOverwrite.revision + 1);
+  expect(saved.layout).not.toBeNull();
+  const savedLayout = saved.layout as HomeLayoutV1;
+  expect(parseHomeLayoutV1(savedLayout).ok).toBe(true);
+  const middleRoot = savedLayout.bands[1]?.root;
+  expect(middleRoot?.type).toBe('split');
+  if (middleRoot?.type !== 'split') throw new Error('預期第二列為左右分割。');
+  expect(middleRoot.weights[0]! / 100).toBe(bWeight);
+});
+
+test('SC-Y18：覆蓋 GET 與 PUT 之間 A 再存一次，B 的 PUT 回 409 並保留草稿與彈窗', async ({
+  signedInPage: pageA,
+  userA,
+  request,
+}) => {
+  await pageA.setViewportSize({ width: 2800, height: 1600 });
+  const pageB = await pageA.context().newPage();
+  await signInWithToken(pageB, userA);
+  await pageB.setViewportSize({ width: 2800, height: 1600 });
+  let allowOverwrite!: () => void;
+  const overwriteGate = new Promise<void>((resolve) => {
+    allowOverwrite = resolve;
+  });
+  let overwriteStarted = false;
+  let gateNextGet = false;
+  let overwriteRevision: number | null = null;
+  const requestsB: string[] = [];
+  const networkA = await watchHomeLayoutRequests(pageA);
+  const networkB = await watchHomeLayoutRequests(pageB, {
+    get: async (route) => {
+      requestsB.push('GET');
+      if (!gateNextGet) {
+        await route.continue();
+        return;
+      }
+      gateNextGet = false;
+      // 先讓伺服器完成覆蓋前 GET，再暫停回應；A 存完才放行 B 的後續 PUT。
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      const latest = (await response.json()) as HomeLayoutResponse;
+      overwriteRevision = latest.revision;
+      overwriteStarted = true;
+      await overwriteGate;
+      await route.fulfill({ response });
+    },
+    put: async (route) => {
+      requestsB.push('PUT');
+      await route.continue();
+    },
+  });
+
+  await enterEditor(pageB);
+  const bWeight = await adjustFirstSeparator(pageB, 'Home');
+  await enterEditor(pageA);
+  await adjustFirstSeparator(pageA);
+  await pageA.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(pageA.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  requestsB.length = 0;
+  await pageB.getByRole('button', { name: '完成', exact: true }).click();
+  const conflict = pageB.getByRole('dialog', { name: '版面已在其他地方更新' });
+  await expect(conflict).toBeVisible();
+  expect(networkB.puts).toHaveLength(0);
+  expect(requestsB).toEqual(['GET']);
+  gateNextGet = true;
   await conflict.getByRole('button', { name: '用我的覆蓋' }).click();
   await expect.poll(() => overwriteStarted, { timeout: 10_000 }).toBe(true);
-  expect(networkB.puts[1]?.expectedRevision).toBe(1);
+  expect(overwriteRevision).toBe(1);
+  expect(networkB.puts).toHaveLength(0);
+  expect(requestsB).toEqual(['GET', 'GET']);
 
   await enterEditor(pageA);
   await adjustFirstSeparator(pageA);
   await pageA.getByRole('button', { name: '完成', exact: true }).click();
   await expect(pageA.getByRole('button', { name: '編輯', exact: true })).toBeVisible();
+  const latestAfterA = await getHomeLayout(request, userA.token);
+  expect(latestAfterA.revision).toBe(2);
+  const overwriteResponse = pageB.waitForResponse(
+    (response) =>
+      response.url().endsWith('/users/me/home-layout/web') && response.request().method() === 'PUT',
+  );
   allowOverwrite();
+  const rejected = await overwriteResponse;
+  expect(rejected.status()).toBe(409);
+  expect(await rejected.json()).toMatchObject({ errorCode: 'HOME_LAYOUT_REVISION_CONFLICT' });
 
   await expect(conflict).toBeVisible();
+  await expect(conflict.getByRole('button', { name: '用我的覆蓋' })).toBeEnabled();
   await expect(pageB.getByRole('button', { name: '完成', exact: true })).toBeVisible();
   await expectCardOrder(pageB, ALL_CARD_IDS);
   await expect.poll(() => firstSeparatorValue(pageB)).toBe(bWeight);
   expect(networkA.puts).toHaveLength(2);
-  expect(networkB.puts).toHaveLength(2);
+  expect(networkB.puts).toHaveLength(1);
+  expect(networkB.puts[0]?.expectedRevision).toBe(overwriteRevision);
+  expect(requestsB).toEqual(['GET', 'GET', 'PUT', 'GET']);
+  expect(await getHomeLayout(request, userA.token)).toEqual(latestAfterA);
 });
 
 test('SC-Y19：PUT 網路失敗後顯示錯誤並保留草稿', async ({ signedInPage: page }) => {
@@ -1189,7 +1242,7 @@ test('SC-Y27：離開首頁、切帳本與窄螢幕時保留草稿，另一帳�
   expect(network.puts).toHaveLength(0);
 });
 
-test('SC-Y27：離開首頁期間外部存檔，回來完成時顯示 409', async ({
+test('SC-Y27：離開首頁期間外部存檔，回來儲存前 GET 發現衝突且不 PUT', async ({
   signedInPage: page,
   userA,
   request,
@@ -1197,18 +1250,19 @@ test('SC-Y27：離開首頁期間外部存檔，回來完成時顯示 409', asyn
   await page.setViewportSize({ width: 2800, height: 1500 });
   const network = await watchHomeLayoutRequests(page);
   await enterEditor(page);
-  await adjustFirstSeparator(page);
+  const draftedWeight = await adjustFirstSeparator(page);
   await page.getByRole('link', { name: '統計', exact: true }).click();
   const current = await getHomeLayout(request, userA.token);
   await putHomeLayout(request, userA.token, layoutPut(eightCardsInOneRow(), current.revision));
   await page.getByRole('link', { name: '首頁', exact: true }).click();
   await expect(page.getByTestId('home-layout-edit-viewport')).toBeVisible();
   await expectCardOrder(page, ALL_CARD_IDS);
+  const getsBeforeSave = network.gets;
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '版面已在其他地方更新' })).toBeVisible();
-  expect(network.puts).toHaveLength(1);
-  expect(network.puts[0]?.expectedRevision).toBe(current.revision);
-  expect(network.gets).toBeGreaterThanOrEqual(1);
+  expect(network.puts).toHaveLength(0);
+  expect(network.gets).toBe(getsBeforeSave + 1);
+  await expect.poll(() => firstSeparatorValue(page)).toBe(draftedWeight);
 });
 
 test('SC-Y28：超出深度上限時拖動沒有落點且移到方向停用', async ({
