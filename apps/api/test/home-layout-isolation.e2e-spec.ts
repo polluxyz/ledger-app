@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
+import type { HomeLayoutResponseDto } from '../src/users/dto/home-layout-response.dto';
 import { createE2EApp, httpServer, resetDb } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
@@ -12,7 +13,7 @@ import { auth, person, type Person } from './linking-utils';
  * - 未登入的 GET、PUT 都是 401。路徑只接受 `web`。
  * - 刪掉使用者時，他的版面一起刪，別人的不受影響。
  *
- * 策略：資料表 `UserHomeLayout` 還沒有 Prisma model，一律用 `$queryRaw` 查整張表的內容
+ * 策略：用 `$queryRaw` 查整張表的內容
  * （含 `updatedAt`），用來斷言「完全沒有變化」。兩份版面刻意不同，寫錯人時看得出來。
  *
  * 場景：Alice 與 Bob 是互不相干的兩位使用者。
@@ -112,8 +113,8 @@ describe('Home layout — isolation (e2e)', () => {
     return rows[0]!.rows;
   }
 
-  async function rowsOf(userId: string): Promise<{ revision: number; layout: unknown }[]> {
-    return prisma.$queryRaw<{ revision: number; layout: unknown }[]>`
+  async function rowsOf(userId: string): Promise<{ revision: bigint; layout: unknown }[]> {
+    return prisma.$queryRaw<{ revision: bigint; layout: unknown }[]>`
       SELECT "revision", "layout" FROM "UserHomeLayout" WHERE "userId" = ${userId}`;
   }
 
@@ -152,7 +153,30 @@ describe('Home layout — isolation (e2e)', () => {
       expect(await rowsOf(alice.userId)).toEqual(aliceBefore);
       const aliceView = await request(server()).get(PATH).set(auth(alice.token)).expect(200);
       expect(aliceView.body).toEqual({ schemaVersion: 1, revision: 1, layout: ALICE_LAYOUT });
-      expect(await rowsOf(bob.userId)).toEqual([{ revision: 2, layout: null }]);
+      expect(await rowsOf(bob.userId)).toEqual([{ revision: 2n, layout: null }]);
+    });
+
+    it('A 的大 revision 不影響 B 的起點，也不能讓 B 改到 A', async () => {
+      const revision = 9007199254740990;
+      await prisma.userHomeLayout.update({
+        where: { userId_surface: { userId: alice.userId, surface: 'WEB' } },
+        data: { revision: BigInt(revision) },
+      });
+      const aliceBefore = await rowsOf(alice.userId);
+      const before = await snapshot();
+      await save(bob.token, BOB_LAYOUT, revision).expect(409);
+      expect(await snapshot()).toBe(before);
+
+      const saved = await save(bob.token, BOB_LAYOUT).expect(200);
+      expect(saved.body).toEqual({ schemaVersion: 1, revision: 1, layout: BOB_LAYOUT });
+      const afterCreate = await snapshot();
+      await save(bob.token, null, revision).expect(409);
+      expect(await snapshot()).toBe(afterCreate);
+      expect(await rowsOf(alice.userId)).toEqual(aliceBefore);
+      const aliceView = await request(server()).get(PATH).set(auth(alice.token)).expect(200);
+      expect(aliceView.body).toEqual({ schemaVersion: 1, revision, layout: ALICE_LAYOUT });
+      expect(typeof (saved.body as HomeLayoutResponseDto).revision).toBe('number');
+      expect(typeof (aliceView.body as HomeLayoutResponseDto).revision).toBe('number');
     });
 
     it('3: unauthenticated GET and PUT are 401 and change nothing', async () => {

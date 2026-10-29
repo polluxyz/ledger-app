@@ -6,7 +6,12 @@ export class HomeLayoutResponseDto {
   @ApiProperty({ type: Number, enum: [1], description: '版面 JSON 格式版本。' })
   schemaVersion!: number;
 
-  @ApiProperty({ type: 'integer', minimum: 0, description: '目前已儲存的 revision。' })
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+    description: '目前已儲存的 revision。',
+  })
   revision!: number;
 
   @ApiProperty({

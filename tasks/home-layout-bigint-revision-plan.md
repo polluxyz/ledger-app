@@ -55,4 +55,16 @@
 
 ## 實作紀錄
 
-（實作時補）
+- Migration：`apps/api/prisma/migrations/20261029080000_home_layout_revision_bigint/migration.sql`。已逐字檢查，全文只有以下一條 SQL，沒有更新既有資料：
+
+  ```sql
+  ALTER TABLE "UserHomeLayout" ALTER COLUMN "revision" SET DATA TYPE BIGINT;
+  ```
+
+- 已明確檢查 `.env.test` 的資料庫名稱為 `ledger_layoutbig_test`；API e2e 的 global setup 載入該檔並執行 `prisma migrate deploy`，29 個 migrations（含本次）套用成功。`prisma generate` 成功，產生的 revision 型別為 `bigint`。
+- P2025 實測：在真實 PostgreSQL 上以主鍵加 `revision: 2n` 呼叫 `update`，分別測試「尚未建立列」與「已建立但 revision 為 1」，兩者都收到 `code: 'P2025'`，整張表內容不變；相同條件透過 HTTP PUT 均回 409 `HOME_LAYOUT_REVISION_CONFLICT`。並發建立與條件更新各恰有一個 200、一個 409，成功回應與該請求送出的版面一致。
+- GET、create、update 共用安全轉換；單元測試驗證 `9007199254740991n` 精確轉成 number，負數與 `9007199254740992n` 丟一般 Error。PUT 直接回傳寫入快照，不再額外 GET。
+- 驗證：首頁版面單元測試 1 suite／25 tests 通過；首頁版面 e2e 2 suites／32 tests 通過。根目錄 `pnpm lint`、`pnpm typecheck` 均為 3 packages 通過，`pnpm test` 為 shared 160 tests、API 60 suites／967 tests、Web 137 files／1153 tests 全過（共 2280 tests），`pnpm format:check` 通過。`pnpm --filter @ledger/api test:e2e` 完整 API e2e 為 59 suites／624 tests 全過，耗時 357.015 秒；未執行 Web e2e。
+- 偏離：無。測試快照使用區域性的 BigInt 序列化以比較資料不變，沒有修改全域 `BigInt.prototype.toJSON`；原始 SQL 查詢的 revision 斷言同步改為 bigint。初次單元測試因 shared 尚無 dist 而失敗，執行既有的 `pnpm --filter @ledger/shared build` 後通過，未改 shared 原始碼。
+- 修正驗證發現的問題：新增 e2e 斷言直接存取 Supertest 的 any body，首輪 lint 報 11 個 `no-unsafe-member-access`；已改用明確的 response 型別，重跑 lint 與 typecheck 通過。
+- 文件待協調者同步：spec §4.2 第 1 點仍寫 `updateMany`，與核可 plan 的 `update` 不一致；已透過 Orca 回報，該 spec 不在本 worker 的修改範圍。
