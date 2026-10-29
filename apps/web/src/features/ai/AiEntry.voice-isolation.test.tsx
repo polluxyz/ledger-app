@@ -359,4 +359,22 @@ describe('AI entry voice isolation', () => {
     expect(inputBox()).toHaveValue('');
     expect(mocks.parse).not.toHaveBeenCalled();
   });
+
+  // 上一條中間有一次 render 看得到 'x'，「輸入欄有字就不能開始」會先把這一輪取消。
+  // 這條把兩次改動放進同一批更新，畫面從頭到尾都是空字串，只剩輸入版本擋得住（突變檢查用）。
+  it('SC-SR6 (3) an edit and restore inside one batched update still rejects the old final', async () => {
+    const user = userEvent.setup();
+    renderVoice(false);
+    const recognition = await startListening(user, speech);
+
+    act(() => {
+      probe.setText('x');
+      probe.setText('');
+    });
+    act(() => recognition.emitResult(SENTENCE, { isFinal: true }));
+
+    expect(probe.text).toBe('');
+    expect(inputBox()).toHaveValue('');
+    expect(mocks.parse).not.toHaveBeenCalled();
+  });
 });
