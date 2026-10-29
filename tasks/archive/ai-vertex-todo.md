@@ -1,6 +1,6 @@
 # 4a 補充任務清單：換模型到 Vertex AI 的 DeepSeek V4.1 Flash
 
-plan：`tasks/ai-vertex-plan.md`；spec：`docs/specs/phase-4a-ai-vertex.md`。
+plan：`tasks/archive/ai-vertex-plan.md`；spec：`docs/specs/phase-4a-ai-vertex.md`。
 
 - [x] **T0 契約與先紅的測試**（協調者）：plan §1.1。
       驗收：API typecheck 通過；既有測試行為不變；`ai-vertex-isolation.e2e-spec.ts` 的 Vertex 斷言紅、fake 對照綠；e2e 不連 Google。
