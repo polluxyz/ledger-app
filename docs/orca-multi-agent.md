@@ -82,6 +82,7 @@ orca orchestration check --wait --types "worker_done,escalation,question" --time
 - 不在 Orca 終端機裡時，`worker-start` 會被拒絕（`requires the coordinator terminal currently bound to the Task Run`）。用 `run-current --json` 取 `coordinator_handle`，再傳給 `worker-start --from` 與 `check --terminal`。`worker-release` 兩個旗標都不收。
 - 整個 run 用同一個 `orca` 執行檔。它失敗就回報那個錯誤，不要換執行檔。
 - 收到 `worker_done` 的順序：驗收 → `reply` → `check --ack <delivery_id>` → `worker-release`。驗收沒過不要 ack。
+- 驗收沒過要退回時，對同一個終端機重新 `worker-start`，把退回清單寫進新的 `--spec`。`worker_done` 之後原任務就結束了，`reply` 不會出現在 worker 畫面上，worker 會一直閒著（2026-10-29 Codex 因此空等 50 分鐘）。
 - `worker-start` 非 0 結束不要重開，先讀 receipt 的 `failedStage` 與 `residualResources`。
 - 每次 `check` 逾時（5 分鐘），對每個還沒回報的 worker 做 §4 的「執行中檢查」。逾時不要設長，額度用完的 worker 不會自己回報。
 - 連續三次空等，改用 `worker-list --include-remote --json`，依每列的 `projection.nextAction` 處理。查不到不等於結束。
