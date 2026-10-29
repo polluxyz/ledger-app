@@ -13,7 +13,7 @@
 | worktree   | 分支              | 交接檔                          | 測試資料庫          | 狀態                                                                                           |
 | ---------- | ----------------- | ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
 | 主工作區   | `main`            | [main](handoff/main.md)         | `ledger_test`       | 管理：handoff、部署 dev、跨分支協調                                                            |
-| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 3 項已知問題已修（#194 e2e 穩定、revision 回繞），待命                                         |
+| `stats-2j` | 無（停在 `main`） | [stats-2j](handoff/stats-2j.md) | `ledger_stats_test` | 4 項後續已合併並部署 dev（#199～#202），待命                                                   |
 | `ai-4a`    | 無（停在 `main`） | [ai-4a](handoff/ai-4a.md)       | `ledger_ai_test`    | 換模型到 Vertex 的 DeepSeek V4.1 Flash 完成（T3 有 2 項逾時例外，開發者核可）；之後語音 → 匯入 |
 
 ## 跨工作區的規則
