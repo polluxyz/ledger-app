@@ -2,10 +2,17 @@ import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { MAX_INITIAL_BALANCE_CENTS } from '@ledger/shared';
 import type { CreateAccountRequest } from '@ledger/shared';
+import { TrimName } from '../../common/decorators/trim-name.decorator';
 
 /** 新增帳戶的請求形狀。 */
 export class CreateAccountDto implements CreateAccountRequest {
-  @ApiProperty({ example: '國泰世華', minLength: 1, maxLength: 50 })
+  @ApiProperty({
+    example: '國泰世華',
+    description: '去掉前後空白後驗證。',
+    minLength: 1,
+    maxLength: 50,
+  })
+  @TrimName()
   @IsString()
   @MinLength(1)
   @MaxLength(50)

@@ -192,6 +192,41 @@ describe('Accounts (e2e)', () => {
     expect((duplicate.body as { errorCode: string }).errorCode).toBe('ACCOUNT_NAME_TAKEN');
   });
 
+  it('trims account names before checking uniqueness on create and rename', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+
+    const duplicateCreate = await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '  現金  ' });
+    expect(duplicateCreate.status).toBe(409);
+    expect((duplicateCreate.body as { errorCode: string }).errorCode).toBe('ACCOUNT_NAME_TAKEN');
+
+    const created = await request(server())
+      .post('/api/accounts')
+      .set(auth(alice.token))
+      .send({ name: '日常備用' })
+      .expect(201);
+    const account = created.body as Account;
+    const duplicateRename = await request(server())
+      .patch(`/api/accounts/${account.id}`)
+      .set(auth(alice.token))
+      .send({ name: '  現金  ' });
+    expect(duplicateRename.status).toBe(409);
+    expect((duplicateRename.body as { errorCode: string }).errorCode).toBe('ACCOUNT_NAME_TAKEN');
+  });
+
+  it('rejects a null account name with 400', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const account = (await listAccounts(app, alice.token)).find((item) => !item.isTemporary)!;
+
+    await request(server())
+      .patch(`/api/accounts/${account.id}`)
+      .set(auth(alice.token))
+      .send({ name: null })
+      .expect(400);
+  });
+
   it('lets two different users each have an account of the same name', async () => {
     // 唯一性只在「同一使用者」內；否則第一個叫「現金」的人就佔走了這個名字。
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
