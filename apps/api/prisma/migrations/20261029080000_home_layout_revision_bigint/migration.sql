@@ -1,0 +1,1 @@
+ALTER TABLE "UserHomeLayout" ALTER COLUMN "revision" SET DATA TYPE BIGINT;

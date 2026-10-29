@@ -43,6 +43,22 @@ describe('Auth & Users (e2e)', () => {
     expect(categories).toBe(12);
   });
 
+  it('trims a registered name before storing it and rejects whitespace-only names', async () => {
+    const registered = await request(server())
+      .post('/api/auth/register')
+      .send({ ...alice, name: '  Alice  ' })
+      .expect(201);
+
+    expect((registered.body as AuthUser).name).toBe('Alice');
+    const stored = await prisma.user.findUnique({ where: { email: alice.email } });
+    expect(stored?.name).toBe('Alice');
+
+    await request(server())
+      .post('/api/auth/register')
+      .send({ ...alice, email: 'spaces@example.com', name: '   ' })
+      .expect(400);
+  });
+
   it('rejects a duplicate email with 409', async () => {
     await request(server()).post('/api/auth/register').send(alice);
     const res = await request(server()).post('/api/auth/register').send(alice);

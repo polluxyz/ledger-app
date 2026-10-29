@@ -102,6 +102,32 @@ describe('Category icons (e2e)', () => {
       .expect(400);
   });
 
+  it('trims category names before checking uniqueness on create and rename', async () => {
+    const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
+    const ledgerId = await firstLedgerId(app, alice.token);
+    const url = `/api/ledgers/${ledgerId}/categories`;
+
+    const duplicateCreate = await request(server())
+      .post(url)
+      .set(auth(alice.token))
+      .send({ name: '  餐飲  ', type: 'EXPENSE' });
+    expect(duplicateCreate.status).toBe(409);
+    expect((duplicateCreate.body as { errorCode: string }).errorCode).toBe('CATEGORY_NAME_TAKEN');
+
+    const created = await request(server())
+      .post(url)
+      .set(auth(alice.token))
+      .send({ name: '寵物', type: 'EXPENSE' })
+      .expect(201);
+    const category = created.body as Category;
+    const duplicateRename = await request(server())
+      .patch(`${url}/${category.id}`)
+      .set(auth(alice.token))
+      .send({ name: '  餐飲  ' });
+    expect(duplicateRename.status).toBe(409);
+    expect((duplicateRename.body as { errorCode: string }).errorCode).toBe('CATEGORY_NAME_TAKEN');
+  });
+
   it('replays the migration backfill for matching null default categories only', async () => {
     const alice = await registerAndLogin(app, 'alice@example.com', 'Alice');
     const ledgerId = await firstLedgerId(app, alice.token);

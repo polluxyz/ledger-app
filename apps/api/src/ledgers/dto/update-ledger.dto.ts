@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { LEDGER_KINDS } from '@ledger/shared';
 import type { LedgerKind } from '@ledger/shared';
+import { TrimName } from '../../common/decorators/trim-name.decorator';
 
 /**
  * 帳本改名的請求形狀。
@@ -15,7 +16,13 @@ import type { LedgerKind } from '@ledger/shared';
  * `tracksBalance` 在 3h 拿掉了（決策 165），送了由 `forbidNonWhitelisted` 回 400。
  */
 export class UpdateLedgerDto {
-  @ApiProperty({ example: '重新命名的帳本', minLength: 1, maxLength: 100 })
+  @ApiProperty({
+    example: '重新命名的帳本',
+    description: '去掉前後空白後驗證。',
+    minLength: 1,
+    maxLength: 100,
+  })
+  @TrimName()
   @IsString()
   @MinLength(1)
   @MaxLength(100)

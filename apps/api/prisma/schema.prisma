@@ -81,8 +81,8 @@ model UserHomeLayout {
   surface       HomeLayoutSurface
   /// JSON 格式版本，與並發編輯的 revision 分開。
   schemaVersion Int
-  /// 每次寫入加一，讓條件更新偵測其他編輯工作階段的儲存。
-  revision      Int
+  /// 每次寫入加一，讓條件更新偵測其他編輯工作階段的儲存。永遠不回繞（決策 260）。
+  revision      BigInt
   /// 資料庫 NULL 代表重設為預設版面。
   layout        Json?
   createdAt     DateTime @default(now())
