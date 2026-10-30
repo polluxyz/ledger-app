@@ -12,6 +12,12 @@ import {
 const IDS = ['left', 'top', 'right', 'bottom', 'center'];
 const EXPECTED_SLOTS = [16, 20, 8, 4, 12];
 const EXPECTED_HEIGHTS = [12, 6, 12, 6, 18];
+// 收音循環的驗收界線獨立於實作參數；高度含 1.8 的圓頭線寬。
+const MAX_WAVE_MIN_TO_MAX_RATIO = 0.4;
+const MIN_WAVE_HEIGHT = 3.8;
+const MAX_WAVE_HEIGHT = 20;
+const MAX_HEIGHT_CHANGE_PER_FRAME = 1.5;
+const FRAME_MS = 1000 / 60;
 const EXPECTED_HOME_POINTS = [
   [
     [5.5, 11.5],
@@ -102,8 +108,112 @@ function expectRecording(frame: GlyphFrame) {
   });
 }
 
+function recordingHeights(frame: GlyphFrame): number[] {
+  return frame.particles.map(
+    (particle) => particle.shape.points[1][1] - particle.shape.points[0][1] + 1.8,
+  );
+}
+
 /** SC-SR18 (4)：獨立幾何常數、跨圈取樣與中斷快照驗證純函式，不接觸語音或 React。 */
 describe('voice glyph geometry', () => {
+  it('收音三秒內每根條的低點不超過高點四成，且最短仍有可見線段', () => {
+    const plan = planTransition(staticFrame('recording'), 'recording');
+    const samples = Array.from({ length: 181 }, (_, index) =>
+      recordingHeights(sampleTransition(plan, index * FRAME_MS)),
+    );
+    for (let index = 0; index < 5; index++) {
+      const heights = samples.map((heights) => heights[index]!);
+      const minimum = Math.min(...heights);
+      const maximum = Math.max(...heights);
+      expect(minimum / maximum).toBeLessThanOrEqual(MAX_WAVE_MIN_TO_MAX_RATIO);
+      expect(minimum).toBeGreaterThanOrEqual(MIN_WAVE_HEIGHT);
+      expect(maximum).toBeLessThanOrEqual(MAX_WAVE_HEIGHT);
+    }
+  });
+
+  it('收音各條在同一時刻的縮放比例不同，不會整排一起呼吸', () => {
+    const plan = planTransition(staticFrame('recording'), 'recording');
+    const scales = recordingHeights(sampleTransition(plan, 400)).map(
+      (height, index) => height / EXPECTED_HEIGHTS[index]!,
+    );
+    expect(Math.max(...scales) - Math.min(...scales)).toBeGreaterThan(0.25);
+  });
+
+  it('收音三秒的所有筆畫含圓頭都留在 24 viewBox 內', () => {
+    const plan = planTransition(staticFrame('recording'), 'recording');
+    for (let index = 0; index <= 180; index++) {
+      const frame = sampleTransition(plan, index * FRAME_MS);
+      frame.particles.forEach((particle) => {
+        particle.shape.points.forEach(([x, y]) => {
+          expect(particle.x + x - 0.9).toBeGreaterThanOrEqual(0);
+          expect(particle.x + x + 0.9).toBeLessThanOrEqual(24);
+          expect(particle.y + y - 0.9).toBeGreaterThanOrEqual(0);
+          expect(particle.y + y + 0.9).toBeLessThanOrEqual(24);
+        });
+      });
+    }
+  });
+
+  it('收音以 60Hz 取樣時，相鄰幀高度差不超過 1.5，包含剛接入的區間', () => {
+    const plan = planTransition(staticFrame('recording'), 'recording');
+    let previous = EXPECTED_HEIGHTS;
+    for (let index = 1; index <= 180; index++) {
+      const heights = recordingHeights(sampleTransition(plan, index * FRAME_MS));
+      heights.forEach((height, particleIndex) => {
+        expect(Math.abs(height - previous[particleIndex]!)).toBeLessThanOrEqual(
+          MAX_HEIGHT_CHANGE_PER_FRAME,
+        );
+      });
+      previous = heights;
+    }
+  });
+
+  it('收音相位零保留靜態圖形，落點終點與循環起點完全相同', () => {
+    const staticRecording = staticFrame('recording');
+    const loop = planTransition(staticRecording, 'recording');
+    expect(sampleTransition(loop, 0)).toEqual(staticRecording);
+    const landing = planTransition(staticFrame('waiting'), 'recording');
+    const endpoint = sampleTransition(landing, 700);
+    expect(endpoint.phaseMs).toBe(0);
+    expectRecording(endpoint);
+    expect(endpoint.particles.map((particle) => particle.shape)).toEqual(
+      staticRecording.particles.map((particle) => particle.shape),
+    );
+    recordingHeights(sampleTransition(landing, 700.01)).forEach((height, index) => {
+      expect(Math.abs(height - EXPECTED_HEIGHTS[index]!)).toBeLessThan(0.001);
+    });
+  });
+
+  it.each([60, 120, 'jump'] as const)(
+    '收音循環以 %s 更新並重新規劃時，與直接依時間取樣的形狀一致',
+    (frequency) => {
+      const plan = planTransition(staticFrame('recording'), 'recording');
+      let current = plan.from;
+      const steps = frequency === 'jump' ? 1 : frequency * 3;
+      const stepMs = 3000 / steps;
+      for (let index = 0; index < steps; index++) {
+        current = sampleTransition(planTransition(current, 'recording'), stepMs);
+      }
+      const expected = recordingHeights(sampleTransition(plan, 3000));
+      recordingHeights(current).forEach((height, index) => {
+        expect(height).toBeCloseTo(expected[index]!, 8);
+      });
+    },
+  );
+
+  it.each([150, 400, 1410])('收音起伏到 %sms 中斷時，從當下筆畫回等待或閒置', (time) => {
+    const loop = planTransition(staticFrame('recording'), 'recording');
+    const snapshot = sampleTransition(loop, time);
+    for (const target of ['waiting', 'idle'] as const) {
+      const next = planTransition(snapshot, target);
+      expect(sampleTransition(next, 0)).toEqual(snapshot);
+      expect(next.durationMs).toBeLessThanOrEqual(target === 'waiting' ? 700 : 900);
+      expect(sampleTransition(next, next.durationMs).phase).toBe(
+        target === 'waiting' ? 'orbit' : 'idle',
+      );
+    }
+  });
+
   it('閒置的兩段 U 弧、支桿、底座與膠囊保留原圖的精確圓弧', () => {
     const frame = staticFrame('idle');
     frame.particles.forEach((particle, index) => {

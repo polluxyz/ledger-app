@@ -47,6 +47,10 @@ const IDS: readonly ParticleId[] = ['left', 'top', 'right', 'bottom', 'center'];
 const BASES = [Math.PI, -Math.PI / 2, 0, Math.PI / 2, 0];
 const SLOTS = [16, 20, 8, 4, 12];
 const HEIGHTS = [12, 6, 12, 6, 18];
+// 短條也伸展到 10，低點仍是線段；各條用不同週期與相位，避免整排同步呼吸。
+const WAVE_PEAKS = [14, 10, 14, 10, 20];
+const WAVE_PERIODS_MS = [520, 430, 610, 470, 570];
+const WAVE_PHASES = [0, 1.6, 3.1, 4.4, 2.2];
 const HOMES: readonly Point[] = [
   [7.86, 15.64],
   [16.14, 15.64],
@@ -370,11 +374,11 @@ function sampleLoop(frame: GlyphFrame, target: VoiceGlyphTarget, elapsedMs: numb
       }
       if (target === 'recording') {
         const pulse =
-          1 -
-          0.15 *
-            (1 - Math.cos(phaseMs / 180)) *
-            (0.65 + 0.35 * Math.cos(index * 0.7 + phaseMs / 360));
-        return { ...particle, shape: line(HEIGHTS[index]! * pulse) };
+          (1 + Math.cos((TAU * phaseMs) / WAVE_PERIODS_MS[index]! + WAVE_PHASES[index]!)) / 2;
+        const height = WAVE_PEAKS[index]! * (0.38 + 0.62 * pulse);
+        // 起始值與導數接住落點終點，180ms 後才完全採用循環；只依絕對相位計算。
+        const blend = ease(clamp(phaseMs / 180));
+        return { ...particle, shape: line(mix(HEIGHTS[index]!, height, blend)) };
       }
       return particle;
     }),
