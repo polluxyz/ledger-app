@@ -4,6 +4,10 @@
 
 ## 現況（2026-10-30）
 
+### stats-2j 已收尾
+
+開發者 10-30 決定收尾。沒有待辦、沒有開著的 PR。測試資料庫 `ledger_stats_test` 已刪除，orca run `run_1f196e6bdf9d` 的 4 個 task 都是 completed。工作區與終端機交給 main 關閉。之後要再做 2j 相關的事，從 main 開新工作區，決策號照 `../handoff.md` 的編號分段。
+
 ### 既有名稱資料：統計完，不清理
 
 協調者對 `ledger_dev` 只跑 `SELECT`、只輸出數字。空白的定義與 JavaScript `trim()` 相同。
