@@ -1040,8 +1040,9 @@ describe('AI entry voice input', () => {
     expect(css).toMatch(
       /:global\(:root\[data-motion='off'\]\) \.voiceButton\s*\{[^}]*transition: none;/,
     );
+    // jsdom 不計算 CSS 權重，因此需核對能蓋過 recording span 動畫的 selector 文字。
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton \*\s*\{[^}]*transition: none;[^}]*animation: none;/,
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look\] \*\s*\{[^}]*transition: none;[^}]*animation: none;/,
     );
     expect(css).toMatch(
       /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*border-top-color: currentColor;[^}]*border-right-style: dashed;/,

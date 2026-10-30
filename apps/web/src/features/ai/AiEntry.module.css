@@ -276,7 +276,7 @@
   transition: none;
 }
 
-:global(:root[data-motion='off']) .voiceButton * {
+:global(:root[data-motion='off']) .voiceButton[data-voice-look] * {
   transition: none;
   animation: none;
 }
