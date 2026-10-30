@@ -38,6 +38,7 @@ export function AiEntry({
     isParsing,
     parse,
     setText,
+    clearInput: clearSessionInput,
     text,
     getTextVersion,
     getIdentitySnapshot,
@@ -79,6 +80,9 @@ export function AiEntry({
     requestInputFocus: requestVoiceInputFocus,
   });
   const displayError = lengthError ?? voice.error ?? error;
+  const canClearInput = Boolean(
+    entryVisible && isExpanded && isWritable && text.length > 0 && !isParsing && !voice.isActive,
+  );
 
   useLayoutEffect(() => {
     if (voiceFocusRequest === 0 || voiceFocusRequest === handledVoiceFocusRequestRef.current) {
@@ -157,8 +161,21 @@ export function AiEntry({
     }
   }
 
-  function handleVoiceCancel() {
-    cancelVoiceAndReturnFocus();
+  function handleClearInput() {
+    if (
+      !entryVisible ||
+      !isExpandedRef.current ||
+      !isWritable ||
+      text.length === 0 ||
+      isParsing ||
+      voice.isActive
+    ) {
+      return;
+    }
+    clearSessionInput();
+    setLengthError(null);
+    voice.clearError();
+    inputRef.current?.focus();
   }
 
   function cancelVoiceAndReturnFocus() {
@@ -176,10 +193,9 @@ export function AiEntry({
     listening: '聆聽中…',
     recognizing: '辨識中…',
   }[voice.status];
-  const canStop = voice.status === 'listening';
-  const microphoneDisabled = isWritable
-    ? !(canStop || (voice.status === 'idle' && canStartVoice))
-    : false;
+  const voiceLook =
+    voice.status === 'idle' ? 'idle' : voice.status === 'listening' ? 'recording' : 'waiting';
+  const microphoneDisabled = isWritable ? voice.status === 'idle' && !canStartVoice : false;
 
   return createPortal(
     <div
@@ -198,24 +214,35 @@ export function AiEntry({
         <label className={styles.visuallyHidden} htmlFor={`${inputId}-text`}>
           用一句話記帳
         </label>
-        <input
-          ref={inputRef}
-          id={`${inputId}-text`}
-          className={styles.input}
-          type="text"
-          value={text}
-          maxLength={AI_TEXT_MAX_LENGTH}
-          placeholder="例如：早餐 60 現金、午餐 120 刷卡"
-          disabled={isParsing || voice.isActive}
-          tabIndex={isExpanded ? 0 : -1}
-          onChange={(event) => {
-            setText(event.target.value);
-            if ([...event.target.value.trim()].length <= AI_TEXT_MAX_LENGTH) {
-              setLengthError(null);
-              if (voice.error === '請精簡至 200 字內。') voice.clearError();
-            }
-          }}
-        />
+        <div className={styles.inputWrap}>
+          <input
+            ref={inputRef}
+            id={`${inputId}-text`}
+            className={styles.input}
+            type="text"
+            value={text}
+            maxLength={AI_TEXT_MAX_LENGTH}
+            placeholder="例如：早餐 60 現金、午餐 120 刷卡"
+            disabled={isParsing || voice.isActive}
+            tabIndex={isExpanded ? 0 : -1}
+            onChange={(event) => {
+              setText(event.target.value);
+              if ([...event.target.value.trim()].length <= AI_TEXT_MAX_LENGTH) {
+                setLengthError(null);
+                if (voice.error === '請精簡至 200 字內。') voice.clearError();
+              }
+            }}
+          />
+          <button
+            className={styles.clearInput}
+            type="button"
+            aria-label="清除輸入文字"
+            hidden={!canClearInput}
+            onClick={handleClearInput}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
         <Button
           type="submit"
           aria-label={isParsing ? '處理中…' : undefined}
@@ -238,34 +265,34 @@ export function AiEntry({
           ref={microphoneRef}
           className={styles.voiceButton}
           type="button"
-          aria-label={canStop ? '停止聆聽' : '開始語音記帳'}
+          aria-label={voice.status === 'idle' ? '開始語音記帳' : '取消語音'}
           aria-describedby={!isWritable ? tooltipId : undefined}
           aria-disabled={!isWritable || undefined}
           disabled={microphoneDisabled}
           data-error={voice.error !== null}
+          data-voice-look={voiceLook}
+          data-voice-state={voice.status}
           onClick={() => {
             if (!isWritable) return;
-            if (canStop) {
-              voice.stop();
-              return;
-            }
-            if (voice.status !== 'idle' || !canStartVoice) return;
-            if (!isExpandedRef.current) expand(false);
-            voice.start();
+            if (voice.isActive) returnFocusToMicrophoneRef.current = true;
+            if (voice.status === 'idle' && canStartVoice && !isExpandedRef.current) expand(false);
+            voice.toggle();
           }}
         >
-          <MicrophoneIcon />
-        </button>
-      )}
-      {voice.isSupported && voice.isActive && (
-        <button
-          className={styles.voiceButton}
-          type="button"
-          aria-label="取消語音"
-          onClick={handleVoiceCancel}
-        >
-          <CancelIcon />
-          <span className={styles.visuallyHidden}>取消語音</span>
+          <span className={styles.voiceGlyph}>
+            {voice.status !== 'idle' &&
+              (voice.status === 'listening' ? (
+                <span className={styles.recordingWaveform} aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : (
+                <span className={styles.voiceActivity} aria-hidden="true" />
+              ))}
+            <MicrophoneIcon />
+            {voice.status !== 'idle' && <CancelMarkIcon />}
+          </span>
         </button>
       )}
       <button
@@ -291,11 +318,9 @@ export function AiEntry({
           </span>
         )}
       </button>
-      {statusText !== '' && (
-        <span className={styles.status} role="status" aria-live="polite" aria-atomic="true">
-          {statusText}
-        </span>
-      )}
+      <span className={styles.visuallyHidden} role="status" aria-live="polite" aria-atomic="true">
+        {statusText}
+      </span>
       {displayError !== null && (
         <p
           className={isExpanded ? styles.error : styles.visuallyHidden}
@@ -331,15 +356,16 @@ function MicrophoneIcon() {
   );
 }
 
-function CancelIcon() {
+function CancelMarkIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      className={styles.cancelMark}
+      width="10"
+      height="10"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="3"
       strokeLinecap="round"
       aria-hidden="true"
       focusable="false"
