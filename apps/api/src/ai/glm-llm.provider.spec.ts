@@ -31,7 +31,8 @@ function createCompletionResponse(
 function createProvider(
   fetchImplementation: FetchMock,
   baseUrl = 'https://open.bigmodel.cn/api/paas/v4',
-  timeoutMs = 15,
+  // 一般測試的 fetch 立即回應；逾時拉長，CI 忙碌時才不會先觸發逾時。逾時測試自己傳 10ms。
+  timeoutMs = 5_000,
   reasoningEffort?: 'low' | 'high' | 'max',
 ): GlmLlmProvider {
   return new GlmLlmProvider(
@@ -164,7 +165,7 @@ describe('GlmLlmProvider', () => {
     it('adds reasoning_effort only when it is configured', async () => {
       const fetchMock = createFetchMock(createCompletionResponse('{"drafts":[]}'));
 
-      await createProvider(fetchMock, undefined, 15, 'low').complete(BASE_REQUEST);
+      await createProvider(fetchMock, undefined, undefined, 'low').complete(BASE_REQUEST);
 
       const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<
         string,
