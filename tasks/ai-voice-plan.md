@@ -299,3 +299,23 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - worktree `aiv-voice-v3-ui`，分支 `feature/aiv-voice-v3-ui`（從 `feature/ai-voice-v3` 的 `39137f6` 開），`default` 的 Codex。dispatch `ctx_01a38b02e519`。
 - Orca 的 setup 沒有裝相依套件，協調者在 worker 的 worktree 手動跑 `pnpm install`。
 - 第一次開的 Codex 終端機跳出更新提示，選 3 後關掉重開才派工。
+- 交付 `6f8b3e1`，改 6 個檔，都在 `apps/web`：`use-voice-input.ts`、`AiEntry.tsx`、`AiEntry.module.css`、`ai-session.tsx`、`AiEntry.voice.test.tsx`、`e2e/ai-voice.spec.ts`。隔離測試檔沒改。
+- `use-voice-input.ts`：拿掉 `stop`，改成 `toggle`。有進行中的語音就取消，否則開始。`stop` 只剩 30 秒上限在用。
+- 麥克風：閒置名稱是「開始語音記帳」，其他狀態是「取消語音」。只有閒置且不能開始時才停用。`data-voice-look` 分 idle、recording、waiting 3 種樣子。
+- 拿掉獨立的取消按鈕與可見的狀態文字。live region 保留，用 `visuallyHidden` 藏起來。
+- 清除鈕：名稱是「清除輸入文字」，沒字時隱藏。解析中、語音進行中、不可寫入時按了不動作。按下後清掉文字與錯誤，再把焦點移回輸入欄。
+- 動畫：聆聽中是 3 條跳動的長條，準備中與辨識中是旋轉的虛線環。`data-motion='off'` 時停掉動畫，2 種樣子改用不同的靜態圖形。
+- 已知小瑕疵，不擋合併：SC-SR18 (2) 有部分靠比對 CSS 原始碼；圖示尺寸用 px 寫死。
+
+### T2b（2026-10-30，協調者）
+
+- 整合分支合併 worker 分支（`b4aa16b`）。
+- 突變檢查 3 處，都已還原：
+  1. `toggle` 改回呼叫 `stopOperation`：16 條紅。
+  2. 清除處理拿掉解析中的檢查：1 條紅（SC-SR17 (3)）。
+  3. 聆聽中也畫成等待的圖形：2 條紅（SC-SR18 (1)、(2)）。
+- 根目錄 lint、format:check、test 綠：shared 160、api 1039、web 1234。
+- typecheck 第一次紅在 `apps/api/src/users/home-layout.service.ts`（bigint 與 number 不符）。原因是這個 worktree 的 Prisma client 沒跟上 #206，跑 `prisma generate` 後綠。與本次改動無關。
+- grep：語音檔案沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`、`AudioContext`。`parse(` 只在送出處理。
+- `pnpm build` exit 0。全部 Web e2e（`b4aa16b`）140 passed（6.6 分鐘），含 SC-SR13 第 1～3 項，0 flaky。
+- worker 的終端機、worktree、分支已清掉。
