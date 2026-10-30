@@ -14,6 +14,8 @@ plan：`tasks/ai-voice-plan.md`；spec：`docs/specs/phase-4a-voice.md`。
       驗收：T0b 的隔離測試轉綠且斷言沒改；SC-SR3 (4)、SR5、SR7、SR8、SR12、SR17、SR18 單元測試綠；`ai-voice.spec.ts` 的取消改成按麥克風；打字流程的 AI 測試內容沒改；只改 `apps/web`；沒有新套件；沒有可見的狀態文字，也沒有第 2 顆取消按鈕。
 - [x] **T1k 第 4 版動畫 B4**（依賴 T1b；`aiv-voice-v3-anim`，`backend` 的 Codex）：plan §1.3c。
       驗收：`SC-SR18` (1)～(7) 單元測試綠；隔離測試檔沒改且綠；各段轉場在決策 359 (g) 的時間上限內；閒置圖示和原本的麥克風幾何一致；辨識中一直是 5 點；B4 原型的 3 處問題沒有帶進來；只改 `apps/web`；沒有新套件；沒有 `getUserMedia`、`MediaRecorder`、`AudioContext`。
+- [x] **T1l 收音起伏加強**（依賴 T1k；開發者看 5174 後的回饋；`aiv-voice-v3-anim`，`backend` 的 Codex）：spec 沒規定幅度，屬規格內的視覺調整。
+      驗收：低點不超過高點 40%、5 條不同步、含圓頭不出 viewBox 24、60Hz 相鄰幀差不超過 1.5、`phaseMs=0` 等於靜態收音圖形；只改 `voice-glyph-geometry.ts` 與其測試；5 處突變都會變紅；沒有 `Math.random`、`getUserMedia`、`AudioContext`。
 - [ ] **T2b 第 3、4 版整合、PR、部署**（依賴 T1k；協調者）：plan §1.3b、§1.3c、§1.3。
       驗收：lint、typecheck、test、format:check、build 綠；全部 Web e2e 綠；7 處突變檢查都會變紅；開發者看過 5174 預覽並同意；CI 全綠、squash merge；主工作區 `git pull` 完成；worker 的 worktree、分支、終端機清掉。
 - [ ] **T3 真實驗收**（依賴 T2b；開發者現場，協調者記錄）：plan §1.4。
