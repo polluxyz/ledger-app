@@ -299,15 +299,19 @@ export function useVoiceInput({
     updateStatus,
   ]);
 
-  const stop = useCallback(() => {
-    const operation = activeOperation;
-    if (operation?.owner === ownerRef.current) stopOperation(operation);
-  }, [stopOperation]);
-
   const cancel = useCallback(() => {
     const operation = activeOperation;
     if (operation?.owner === ownerRef.current) cancelOperation(operation);
   }, [cancelOperation]);
+
+  const toggle = useCallback(() => {
+    const operation = activeOperation;
+    if (operation?.owner === ownerRef.current) {
+      cancelOperation(operation);
+      return;
+    }
+    start();
+  }, [cancelOperation, start]);
 
   const clearError = useCallback(() => updateError(null), [updateError]);
 
@@ -340,8 +344,8 @@ export function useVoiceInput({
     isActive: status !== 'idle',
     isSupported: getSpeechRecognitionConstructor() !== null,
     start,
-    stop,
     cancel,
+    toggle,
     clearError,
   };
 }

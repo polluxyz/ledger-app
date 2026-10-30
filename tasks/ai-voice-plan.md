@@ -5,6 +5,8 @@ spec：`docs/specs/phase-4a-voice.md`（決策 346～360、W257～W259、W288、
 > 核可：spec 第 2 版由開發者 2026-10-29 回「核可」核可（含 §10 第 2 版要確認的 3 點）。本 plan、todo（含 §5 的 2 點解讀）開發者 2026-10-29 回「核可」核可。
 >
 > 第 3 版：開發者 2026-10-29 回「同意」核可 spec §10 第 3 版的 4 點。§1.3b 的 T0b、T1b、T2b 與 §5 第 3、4 點，開發者 2026-10-30 回「核可」核可。
+>
+> 第 4 版：spec §10 第 4 版的 4 點、§1.3c 的 T1k 與 T2b 追加驗收、§5 第 5 點，開發者 2026-10-30 回「繼續」核可。
 
 ## 0. 起點
 
@@ -166,8 +168,49 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
   1. 再按麥克風改回呼叫 `stop()`。
   2. 清除鈕的處理函式拿掉「解析中」的檢查。
   3. `data-motion='off'` 時 2 種樣子改成相同。
-- 全部 Web e2e。合併後請開發者在 Chrome 按 `Ctrl + Shift + R`，看動畫與清除鈕。
+- 全部 Web e2e。合併後請開發者在 Chrome 按 `Ctrl + Shift + R`，看動畫與清除鈕。（第 4 版起改成合併前看，見 §1.3c。）
 - 真的 Chrome 冒煙：在 3 個時間點各按一次麥克風取消：第一次要權限的視窗出現時、收音中、`audioend` 之後。這 3 項併進 T3 的 SC-SR16 冒煙，照實記。
+
+### 1.3c 第 4 版動畫（T1k `backend` 的 Codex；驗收併入 T2b）
+
+開發者看 #212 後要改動畫。T1c～T1j 在對比頁（`docs/artifacts/`，不進版控）試了 B1～B4，開發者 2026-10-30 採用 B4「外圈落點」。spec 第 4 版寫成決策 359 (f)～(h)、`SC-SR18` (4)～(7)。各輪經過記在 §7。
+
+T1k 依開發者「更強的codex」的要求用 `backend` 角色，因為要處理可中斷的連續變形與生命週期驗證。這是本任務的例外，其他網頁任務仍派 `default`。模型與強度只看角色表。
+
+分支：worker 子分支 `feature/aiv-voice-v3-anim`（沿用，已合併到整合分支 `64e75e5`）。從整合分支最新的 commit 繼續。
+
+**T1k：Codex 把 B4 實作進正式頁面。** 做法採 advisor 推薦的 A：純函式負責規劃與取樣，`requestAnimationFrame` 只寫 SVG。
+
+1. 新增純函式模組（例如 `voice-glyph-geometry.ts`）。拆成 2 個函式：「規劃轉場」輸入目前的完整形狀與目標樣子；「取樣」輸入規劃結果與經過的時間，輸出完整形狀（每個點的身分、座標、不取餘數的轉角、筆畫形狀）。不要用「狀態＋進度」當輸入。幾何與時間參考對比頁 B4，閒置的形狀用原本麥克風圖示的路徑。
+2. B4 原型有 3 處不照抄：
+   - 辨識中會合回麥克風（原型的 `snap()` 把 recognizing 當閒置）。正式版辨識中一直是 5 點在轉（決策 359 (f)）。
+   - 動畫關閉時仍在排幀。正式版不排（決策 359 (h) 3）。
+   - 固定等 900ms 才進收音，拆解途中收到 `audiostart` 會跳位。正式版從當下形狀接（決策 359 (h) 2）。
+3. 新增獨立的 `VoiceGlyph` 子元件，避免 `AiEntry` 的 early return 讓 Hook 變成有條件呼叫。
+   - 當下的形狀、frame id、世代編號都存在 ref。每幀直接寫 5 個 path 的 `d`，不呼叫 `setState`。
+   - 寫法參考 `use-trend-animation.ts`（rAF、ref、MutationObserver）。
+   - 動畫開關用 `isMotionEnabled`（`apps/web/src/app/use-motion.ts`）並觀察 `data-motion` 的變化。`useMotion()` 不會跟著設定改變，不能直接用。
+   - 圖示整個 `aria-hidden`、`focusable="false"`、`pointer-events: none`，不加 `role` 或 `title`。取消記號是固定在角落的獨立元素，跟著「語音進行中」立刻出現。
+4. `AiEntry.tsx`：`data-voice-look`、`aria-label`、live region、停用、焦點照現有方式在 render 當下改，不等動畫（決策 359 (h) 1）。`use-voice-input.ts` 預期不需要改，不能用 `transitionend` 或動畫結束的回呼決定語音狀態。
+5. `AiEntry.module.css`：拿掉被取代的虛線環與跳動長條的樣式與 keyframes。只用 `global.css` 的設計 token。
+6. 測試：
+   - 新純函式的單元測試，照 `SC-SR18` (4)。
+   - `AiEntry.voice.test.tsx` 補 `SC-SR18` (5)～(7)。假 rAF 要能手動推進；假 timer 不要用 `runAllTimers`（繞圈不會停）。
+   - 現有的 (1)～(3) 行為照舊要綠。綁舊圖示 class 或舊 CSS 的斷言（約在第 990～1074 行）可以改成驗新的 SVG。第 1103 行自稱 SR18(4) 的那條，併進新的 (5)。
+   - 隔離測試檔不改。e2e `ai-voice.spec.ts` 點擊後馬上送 `audiostart` 的寫法不改，不加等待。
+7. 不呼叫 `getUserMedia`、`MediaRecorder`、`AudioContext`。不改 API、`packages/shared`，不加套件。不跑 Web e2e。
+
+**T2b 追加的驗收：**
+
+- 逐行看 diff：`requestAnimationFrame` 在卸載、狀態改變、motion 改成 off 時都有取消；狀態判斷沒有被動畫延後；舊動畫的回呼不會蓋掉新的。
+- 突變檢查追加 4 處，各自要讓測試變紅，再還原：
+  1. 落點對應改錯一根（例如左邊的點落到第 2 根）。
+  2. motion off 時照樣排 `requestAnimationFrame`。
+  3. 轉角改成走最短路徑或反向。
+  4. 途中改變時，改從預設姿態開始，不從當下形狀接。
+- T2b 原本的 3 處突變檢查重跑一次。第 3 處要真的改繪圖輸出（收音也畫成 5 點），不能只改 `data-voice-look`。
+- 在正式頁面用可以控制的假事件跑 4 段轉場（拆解、落點、聆聽中取消、準備中取消），加上快速連按與途中改變。錄影或逐幀看，和對比頁的 B4 比對。
+- 可以先 push 跑 CI。給開發者看 5174 預覽，開發者同意、CI 全綠後才合併 #212。這條取代 §1.3b 與 §5 第 3 點「合併後再看、不擋合併」的安排。
 
 ### 1.4 真實驗收（T3，開發者現場，協調者記錄）
 
@@ -228,7 +271,8 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - T2 後：全部檢查與 Web e2e 綠；2 處突變檢查都會變紅；CI 全綠。
 - T0b 後：隔離測試只因 §1.3b 列的 2 種原因而紅；Web typecheck、lint 綠。
 - T1b 後：Web 單元測試全綠（含 T0b 的隔離測試）；SC-SR17、SR18 有測試；`git diff` 只碰 `apps/web`；`package.json` 與 lockfile 沒變。
-- T2b 後：全部檢查與 Web e2e 綠；3 處突變檢查都會變紅；CI 全綠。
+- T1k 後：Web 單元測試全綠（含 `SC-SR18` (4)～(7)）；隔離測試檔沒改；`git diff` 只碰 `apps/web`；`package.json` 與 lockfile 沒變。
+- T2b 後：全部檢查與 Web e2e 綠；7 處突變檢查都會變紅；開發者看過預覽並同意；CI 全綠。
 - T3 後：SC-SR14～SR16 的表填完，門檻結果照實記。
 
 ## 5. 要開發者決定的事
@@ -240,8 +284,12 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 
 第 3 版（§1.3b）另外 2 點，核可時一起確認：
 
-3. 動畫與清除鈕的樣式由 Codex 決定。合併後你在 Chrome 看。想改就另開一個小 PR，不擋這次合併。
+3. 動畫與清除鈕的樣式由 Codex 決定。合併後你在 Chrome 看。想改就另開一個小 PR，不擋這次合併。（動畫部分已被第 4 版取代：合併前看預覽，見 §1.3c。）
 4. 隔離測試原本有 1 條「按停止聆聽，final 照常填入」。使用者已經按不到停止，這條改由 T1b 寫在 SC-SR8 (1)，用 30 秒上限觸發停止。其他防線斷言照舊保留。
+
+第 4 版（§1.3c）另外 1 點，核可時一起確認：
+
+5. T1k 派 `backend` 的 Codex，不是 §6 寫的 `default`。理由見 §1.3c。
 
 ## 6. 派工
 
@@ -251,6 +299,7 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - worker 驗收合併後，立刻清 worktree、分支、終端機。
 - T1b 一樣派 `default` 的 Codex。附本 plan §1.3b 全文與 spec 決策 350、353、358～360、W258、W259、W288、SC-SR3、SR5、SR7、SR8、SR12、SR13、SR17、SR18。
 - T1b 的 Constraints：T1 的那幾條，但「不改既有 AI 測試的內容」改成「只改語音相關測試裡按停止與取消按鈕的案例」。打字流程的 AI 測試仍然不能改。
+- T1k 派 `backend` 的 Codex（一行啟動），在 `aiv-voice-v3-anim` worktree。附本 plan §1.3c 全文與 spec 決策 358 (g)、359、W258、`SC-SR18`。Constraints：T1 的那幾條，加上「隔離測試檔不改；語音測試只改綁舊圖示的斷言；不 push」。
 
 ## 7. 實作紀錄
 
@@ -284,3 +333,38 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - 根目錄檢查（`b7f41d4`）：lint、typecheck、format:check、test 全部 exit 0。shared 160/160、api 60 個 suite 956 條、web 139 個檔 1215 條。
 - grep：語音檔案沒有呼叫 `parse(`，沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`。`parse(` 只在 `AiEntry.tsx` 的 `handleSubmit`。
 - `pnpm build` exit 0。全部 Web e2e（`46c7bb6`）140 passed（6.7 分鐘），含 `ai-voice.spec.ts` 的 SC-SR13 第 1～3 項，0 failed、0 flaky。
+
+### T0b（2026-10-30，協調者）
+
+- 只改 `AiEntry.voice-isolation.test.tsx`，防線的斷言沒刪。SC-SR5 (1) 分成準備中、聆聽中、辨識中 3 條；新增 SC-SR7 (1) 連按、決策 358 (b)「只有麥克風 1 顆取消鈕」2 條；取消條件表第 1 項改成「再按麥克風」。
+- 28 條全紅，原因只有 plan 允許的 2 種：
+  - 26 條：麥克風名稱不是「取消語音」。
+  - 2 條（SC-SR7 (1)，一般與 StrictMode）：準備中麥克風停用，第 2 下按不到，`abort` 是 0。
+- `startPreparing` 與 `startListening` 的 `waitFor` 設 `timeout: 2000`。`src/test/setup.ts` 的 `asyncUtilTimeout` 是 5000，和測試逾時一樣長，不設的話紅燈會顯示成逾時，看不出原因。
+- Web typecheck、lint、prettier 綠。
+
+### T1b（2026-10-30 派工）
+
+- worktree `aiv-voice-v3-ui`，分支 `feature/aiv-voice-v3-ui`（從 `feature/ai-voice-v3` 的 `39137f6` 開），`default` 的 Codex。dispatch `ctx_01a38b02e519`。
+- Orca 的 setup 沒有裝相依套件，協調者在 worker 的 worktree 手動跑 `pnpm install`。
+- 第一次開的 Codex 終端機跳出更新提示，選 3 後關掉重開才派工。
+- 交付 `6f8b3e1`，改 6 個檔，都在 `apps/web`：`use-voice-input.ts`、`AiEntry.tsx`、`AiEntry.module.css`、`ai-session.tsx`、`AiEntry.voice.test.tsx`、`e2e/ai-voice.spec.ts`。隔離測試檔沒改。
+- `use-voice-input.ts`：拿掉 `stop`，改成 `toggle`。有進行中的語音就取消，否則開始。`stop` 只剩 30 秒上限在用。
+- 麥克風：閒置名稱是「開始語音記帳」，其他狀態是「取消語音」。只有閒置且不能開始時才停用。`data-voice-look` 分 idle、recording、waiting 3 種樣子。
+- 拿掉獨立的取消按鈕與可見的狀態文字。live region 保留，用 `visuallyHidden` 藏起來。
+- 清除鈕：名稱是「清除輸入文字」，沒字時隱藏。解析中、語音進行中、不可寫入時按了不動作。按下後清掉文字與錯誤，再把焦點移回輸入欄。
+- 動畫：聆聽中是 3 條跳動的長條，準備中與辨識中是旋轉的虛線環。`data-motion='off'` 時停掉動畫，2 種樣子改用不同的靜態圖形。
+- 已知小瑕疵，不擋合併：SC-SR18 (2) 有部分靠比對 CSS 原始碼；圖示尺寸用 px 寫死。
+
+### T2b（2026-10-30，協調者）
+
+- 整合分支合併 worker 分支（`b4aa16b`）。
+- 突變檢查 3 處，都已還原：
+  1. `toggle` 改回呼叫 `stopOperation`：16 條紅。
+  2. 清除處理拿掉解析中的檢查：1 條紅（SC-SR17 (3)）。
+  3. 聆聽中也畫成等待的圖形：2 條紅（SC-SR18 (1)、(2)）。
+- 根目錄 lint、format:check、test 綠：shared 160、api 1039、web 1234。
+- typecheck 第一次紅在 `apps/api/src/users/home-layout.service.ts`（bigint 與 number 不符）。原因是這個 worktree 的 Prisma client 沒跟上 #206，跑 `prisma generate` 後綠。與本次改動無關。
+- grep：語音檔案沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`、`AudioContext`。`parse(` 只在送出處理。
+- `pnpm build` exit 0。全部 Web e2e（`b4aa16b`）140 passed（6.6 分鐘），含 SC-SR13 第 1～3 項，0 flaky。
+- worker 的終端機、worktree、分支已清掉。

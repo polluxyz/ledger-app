@@ -32,20 +32,51 @@
   visibility: visible;
 }
 
-.dock[data-open='true'][data-voice-active='true'] .composer {
-  width: min(23rem, calc(100vw - 12.5rem), calc(100% - 8.25rem));
+.inputWrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .input {
-  flex: 1 1 0;
-  width: 0;
+  width: 100%;
   min-width: 0;
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) calc(var(--space-md) + 2.5rem) var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background-color: var(--color-fill);
   color: var(--color-text);
   font: inherit;
+}
+
+.clearInput {
+  position: absolute;
+  top: 50%;
+  right: var(--space-xs);
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.clearInput[hidden] {
+  display: none;
+}
+
+.clearInput:hover,
+.clearInput:focus-visible {
+  background: var(--color-primary-soft);
+  color: var(--color-accent);
 }
 
 .toggle {
@@ -105,6 +136,30 @@
   cursor: not-allowed;
 }
 
+.voiceGlyph {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+}
+
+.microphoneIcon {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.cancelMark {
+  position: absolute;
+  z-index: 3;
+  top: -3px;
+  right: -4px;
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  pointer-events: none;
+}
+
 .toggle:hover,
 .toggle[aria-expanded='true'] {
   border-color: color-mix(in srgb, var(--color-accent) 24%, transparent);
@@ -162,25 +217,6 @@
   box-shadow: var(--shadow-md);
 }
 
-.dock[data-voice-active='true'] .error {
-  right: calc(8.25rem + var(--space-xs));
-}
-
-.status {
-  position: absolute;
-  z-index: 1;
-  top: calc(100% + var(--space-xs));
-  right: calc(5.5rem + var(--space-xs));
-  max-width: min(23rem, calc(100vw - 9.75rem));
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  pointer-events: none;
-}
-
-.dock[data-voice-active='true'] .status {
-  right: calc(8.25rem + var(--space-xs));
-}
-
 .spinner {
   display: block;
   width: 1rem;
@@ -214,15 +250,7 @@
     width: min(20rem, calc(100vw - 8.5rem), calc(100% - 5.5rem));
   }
 
-  .dock[data-open='true'][data-voice-active='true'] .composer {
-    width: min(20rem, calc(100vw - 11.25rem), calc(100% - 8.25rem));
-  }
-
   .error {
-    max-width: calc(100vw - 8.5rem);
-  }
-
-  .status {
     max-width: calc(100vw - 8.5rem);
   }
 }
