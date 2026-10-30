@@ -100,8 +100,36 @@ function renderVoice(strict: boolean, options: TreeOptions = {}) {
   return { ...result, rerenderTree: (next: TreeOptions) => result.rerender(wrap(next)) };
 }
 
-function micButton(name: '開始語音記帳' | '停止聆聽') {
+function micButton(name: '開始語音記帳' | '取消語音') {
   return screen.getByRole('button', { name });
+}
+
+/**
+ * 最近一次按下開始的麥克風元素。第 3 版拿掉了獨立的取消按鈕（決策 358 (b)），
+ * 所以「再按麥克風」要按同一個元素，不能用名稱重新找，否則會找到別的按鈕。
+ */
+let currentMic: HTMLElement | null = null;
+
+/** 按麥克風開始，停在「準備中」（只送 `start`，還沒 `audiostart`）。 */
+async function startPreparing(
+  user: ReturnType<typeof userEvent.setup>,
+  speech: FakeSpeechRecognitionController,
+): Promise<FakeSpeechRecognition> {
+  currentMic = micButton('開始語音記帳');
+  await user.click(currentMic);
+  const recognition = speech.latest();
+  expect(recognition.startCalls).toBe(1);
+  act(() => recognition.emitStart());
+  await waitFor(() => expect(currentMic).toHaveAccessibleName('取消語音'), { timeout: 2000 });
+  return recognition;
+}
+
+/** 辨識期間再按同一顆麥克風（決策 358 (a)）。 */
+async function pressMicAgain(user: ReturnType<typeof userEvent.setup>) {
+  if (!currentMic) throw new Error('還沒按過麥克風');
+  expect(currentMic).toHaveAccessibleName('取消語音');
+  expect(currentMic).toBeEnabled();
+  await user.click(currentMic);
 }
 
 function inputBox() {
@@ -117,14 +145,9 @@ async function startListening(
   user: ReturnType<typeof userEvent.setup>,
   speech: FakeSpeechRecognitionController,
 ): Promise<FakeSpeechRecognition> {
-  await user.click(micButton('開始語音記帳'));
-  const recognition = speech.latest();
-  expect(recognition.startCalls).toBe(1);
-  act(() => {
-    recognition.emitStart();
-    recognition.emitAudioStart();
-  });
-  await waitFor(() => expect(micButton('停止聆聽')).toBeInTheDocument());
+  const recognition = await startPreparing(user, speech);
+  act(() => recognition.emitAudioStart());
+  await waitFor(() => expect(currentMic).toHaveAccessibleName('取消語音'), { timeout: 2000 });
   return recognition;
 }
 
@@ -154,11 +177,8 @@ interface CancelContext {
  * 某個取消之後，由 SC-SR5 第 3 項另外測。
  */
 const cancelConditions: [string, (context: CancelContext) => Promise<void> | void][] = [
-  [
-    '按「取消語音」',
-    async ({ user }) => user.click(screen.getByRole('button', { name: '取消語音' })),
-  ],
-  ['辨識期間按 Escape', () => void fireEvent.keyDown(micButton('停止聆聽'), { key: 'Escape' })],
+  ['再按麥克風', async ({ user }) => pressMicAgain(user)],
+  ['辨識期間按 Escape', () => void fireEvent.keyDown(micButton('取消語音'), { key: 'Escape' })],
   [
     '按星芒按鈕收合',
     async ({ user }) => user.click(screen.getByRole('button', { name: 'AI 記帳' })),
@@ -193,11 +213,13 @@ const cancelConditions: [string, (context: CancelContext) => Promise<void> | voi
 ];
 
 /**
- * 驗證語音辨識的「停止、取消與有效性」（spec `phase-4a-voice.md` SC-SR5、SC-SR6）。
+ * 驗證語音辨識的「取消與有效性」（spec `phase-4a-voice.md` SC-SR5、SC-SR6、SC-SR7 第 1 項）。
  *
  * 這是資料隔離的防線：舊的辨識結果不能套到別的身分、別的帳本，或已經被改過的輸入欄。
  * 策略是用假辨識器手動送事件，模擬「取消之後舊實例才送來 result、error、end」，再從
  * AI session 讀輸入欄文字。只透過畫面操作與按鈕名稱（W259），不綁 hook 的內部 API。
+ * 第 3 版起再按麥克風＝取消（決策 358）；「停止後照常填入」只剩 30 秒上限會走到，
+ * 改由 `AiEntry.voice.test.tsx` 的 SC-SR8 第 1 項驗。
  * 每一條都斷言解析次數：語音流程本身一律 0 次（決策 349 (b)）。
  */
 describe('AI entry voice isolation', () => {
@@ -205,6 +227,7 @@ describe('AI entry voice isolation', () => {
   let consoleError: MockInstance<typeof console.error>;
 
   beforeEach(() => {
+    currentMic = null;
     mocks.token = 'token-a';
     mocks.userId = 'user-a';
     mocks.authenticated = true;
@@ -226,23 +249,58 @@ describe('AI entry voice isolation', () => {
     ['', false],
     ['（StrictMode）', true],
   ])('flows that must also hold under StrictMode%s', (_label, strict) => {
-    it('SC-SR5 (1) stop keeps the round alive and the later final still fills the input', async () => {
+    it.each([
+      ['準備中', (user: ReturnType<typeof userEvent.setup>) => startPreparing(user, speech)],
+      ['聆聽中', (user: ReturnType<typeof userEvent.setup>) => startListening(user, speech)],
+      [
+        '辨識中',
+        async (user: ReturnType<typeof userEvent.setup>) => {
+          const recognition = await startListening(user, speech);
+          act(() => recognition.emitAudioEnd());
+          return recognition;
+        },
+      ],
+    ])(
+      'SC-SR5 (1) pressing the mic again while %s cancels and ignores every later event',
+      async (_state, reachState) => {
+        const user = userEvent.setup();
+        renderVoice(strict);
+        const recognition = await reachState(user);
+
+        await pressMicAgain(user);
+        expect(recognition.abortCalls).toBe(1);
+        expect(recognition.stopCalls).toBe(0);
+        await waitFor(() => expect(currentMic).toHaveAccessibleName('開始語音記帳'));
+
+        emitLateEvents(recognition);
+        expect(probe.text).toBe('');
+        expect(inputBox()).toHaveValue('');
+        expect(alerts()).toHaveLength(0);
+        expect(mocks.parse).not.toHaveBeenCalled();
+      },
+    );
+
+    it('SC-SR7 (1) a double press starts then cancels one round; the third press starts a new one', async () => {
       const user = userEvent.setup();
       renderVoice(strict);
-      const recognition = await startListening(user, speech);
+      const mic = micButton('開始語音記帳');
 
-      await user.click(micButton('停止聆聽'));
-      expect(recognition.stopCalls).toBe(1);
-      expect(recognition.abortCalls).toBe(0);
+      await user.dblClick(mic);
+      expect(speech.instances).toHaveLength(1);
+      const first = speech.latest();
+      expect(first.startCalls).toBe(1);
+      expect(first.abortCalls).toBe(1);
+      expect(first.stopCalls).toBe(0);
+      await waitFor(() => expect(mic).toHaveAccessibleName('開始語音記帳'));
 
-      act(() => {
-        recognition.emitAudioEnd();
-        recognition.emitResult(SENTENCE, { isFinal: true });
-        recognition.emitEnd();
-      });
-      await waitFor(() => expect(probe.text).toBe(SENTENCE));
-      expect(inputBox()).toHaveValue(SENTENCE);
+      emitLateEvents(first);
+      expect(probe.text).toBe('');
       expect(alerts()).toHaveLength(0);
+
+      await user.click(mic);
+      expect(speech.instances).toHaveLength(2);
+      expect(speech.latest().startCalls).toBe(1);
+      expect(speech.latest().abortCalls).toBe(0);
       expect(mocks.parse).not.toHaveBeenCalled();
     });
 
@@ -251,14 +309,14 @@ describe('AI entry voice isolation', () => {
       renderVoice(strict);
       const oldRecognition = await startListening(user, speech);
 
-      await user.click(screen.getByRole('button', { name: '取消語音' }));
+      await pressMicAgain(user);
       expect(oldRecognition.abortCalls).toBe(1);
       const newRecognition = await startListening(user, speech);
       expect(speech.instances).toHaveLength(2);
       expect(newRecognition).not.toBe(oldRecognition);
 
       emitLateEvents(oldRecognition);
-      expect(micButton('停止聆聽')).toBeInTheDocument();
+      expect(currentMic).toHaveAccessibleName('取消語音');
       expect(newRecognition.abortCalls).toBe(0);
       expect(probe.text).toBe('');
       expect(alerts()).toHaveLength(0);
@@ -302,6 +360,20 @@ describe('AI entry voice isolation', () => {
     },
   );
 
+  // 決策 358 (b)：拿掉獨立的取消按鈕。辨識期間名稱是「取消語音」的按鈕只有麥克風一顆。
+  it.each(['準備中', '聆聽中'] as const)(
+    'decision 358 (b) while %s the only cancel button is the microphone itself',
+    async (state) => {
+      const user = userEvent.setup();
+      renderVoice(false);
+      if (state === '準備中') await startPreparing(user, speech);
+      else await startListening(user, speech);
+
+      expect(screen.getAllByRole('button', { name: '取消語音' })).toEqual([currentMic]);
+      expect(screen.queryByRole('button', { name: '停止聆聽' })).not.toBeInTheDocument();
+    },
+  );
+
   it('SC-SR5 control: window blur is not a cancel (decision 350 (e))', async () => {
     const user = userEvent.setup();
     renderVoice(false);
@@ -309,7 +381,7 @@ describe('AI entry voice isolation', () => {
 
     act(() => void window.dispatchEvent(new Event('blur')));
     expect(recognition.abortCalls).toBe(0);
-    expect(micButton('停止聆聽')).toBeInTheDocument();
+    expect(currentMic).toHaveAccessibleName('取消語音');
 
     act(() => recognition.emitResult(SENTENCE, { isFinal: true }));
     await waitFor(() => expect(probe.text).toBe(SENTENCE));

@@ -284,3 +284,12 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - 根目錄檢查（`b7f41d4`）：lint、typecheck、format:check、test 全部 exit 0。shared 160/160、api 60 個 suite 956 條、web 139 個檔 1215 條。
 - grep：語音檔案沒有呼叫 `parse(`，沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`。`parse(` 只在 `AiEntry.tsx` 的 `handleSubmit`。
 - `pnpm build` exit 0。全部 Web e2e（`46c7bb6`）140 passed（6.7 分鐘），含 `ai-voice.spec.ts` 的 SC-SR13 第 1～3 項，0 failed、0 flaky。
+
+### T0b（2026-10-30，協調者）
+
+- 只改 `AiEntry.voice-isolation.test.tsx`，防線的斷言沒刪。SC-SR5 (1) 分成準備中、聆聽中、辨識中 3 條；新增 SC-SR7 (1) 連按、決策 358 (b)「只有麥克風 1 顆取消鈕」2 條；取消條件表第 1 項改成「再按麥克風」。
+- 28 條全紅，原因只有 plan 允許的 2 種：
+  - 26 條：麥克風名稱不是「取消語音」。
+  - 2 條（SC-SR7 (1)，一般與 StrictMode）：準備中麥克風停用，第 2 下按不到，`abort` 是 0。
+- `startPreparing` 與 `startListening` 的 `waitFor` 設 `timeout: 2000`。`src/test/setup.ts` 的 `asyncUtilTimeout` 是 5000，和測試逾時一樣長，不設的話紅燈會顯示成逾時，看不出原因。
+- Web typecheck、lint、prettier 綠。
