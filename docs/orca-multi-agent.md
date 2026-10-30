@@ -8,7 +8,7 @@
 
 | 角色           | 什麼時候用                                                      | 啟動方式                                                                                                              |
 | -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `default`      | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-terra -c model_reasoning_effort=max"` |
+| `default`      | 一般實作：前端、測試、重構、補文件、單純的 API 端點             | 一行，`--agent codex --model gpt-6.1-terra --effort xhigh`                                                            |
 | `backend`      | 難或要求高準確的：migration SQL、授權與隔離、鎖、金額與帳戶規則 | 一行，`--agent codex --model gpt-6.1-sol --effort high`                                                               |
 | `fallback-1`   | `default` 額度用完                                              | 兩段式，`--command "pi --model zai/glm-5.3"`；單檔、不需判斷、機器可驗的任務改 `zai/glm-5.3-flash`                    |
 | `fallback-2`   | `fallback-1` 也用完                                             | 一行，`--agent antigravity --model gemini-3.8-flash-high`                                                             |
@@ -16,7 +16,7 @@
 | `advisor`      | 要開發者拍板的決策，先聽第二意見（見 §1.1）                     | 兩段式，`--command "codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh"` |
 | `advisor` 備援 | `advisor` 額度用完                                              | 一行，`--agent antigravity --model gemini-4-argon-high`，不帶 `--effort`（強度寫在模型 id 裡）                        |
 
-順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`default` 用 max，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`；2026-10-30 起 `default` 從 `gpt-6-luna` 換成 `gpt-6.1-terra`，強度維持 max），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。`advisor` 先問 Codex `gpt-6.1-sol` xhigh，用完改 Gemini 4 Argon high（2026-10-22；10-18 原本是 Argon 優先）。兩個都用完就不往下換。
+順序由開發者定案（2026-09-24 Codex → GLM → Gemini，09-26 加 `backend`，09-29 確認 Codex 優先，10-04 把 `backend` 限縮到難或要求高準確的工作）。順序是成本與可用性的取捨，不是品質排名。強度也是開發者定的取捨：`default` 用 xhigh，sol 用 high（2026-10-03；2026-10-14 起 `backend` 換成 `gpt-6.1-sol`；2026-10-30 起 `default` 從 `gpt-6-luna` max 換成 `gpt-6.1-terra` xhigh，改用一行派工，尚未實測，失敗就改兩段式），Claude worker 用 Sonnet 5.5 high（2026-10-04），不要自己調高或調低。`advisor` 先問 Codex `gpt-6.1-sol` xhigh，用完改 Gemini 4 Argon high（2026-10-22；10-18 原本是 Argon 優先）。兩個都用完就不往下換。
 
 兩種啟動方式：
 
