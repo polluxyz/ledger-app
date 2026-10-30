@@ -149,6 +149,19 @@
   z-index: 1;
 }
 
+.microphoneIcon {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--motion-fade) var(--motion-ease),
+    transform var(--motion-panel) var(--motion-ease);
+}
+
+.voiceButton[data-voice-look='recording'] .microphoneIcon {
+  opacity: 0;
+  transform: scale(0.72);
+}
+
 .voiceActivity {
   position: absolute;
   inset: -3px;
@@ -157,11 +170,21 @@
   border: 1.5px dotted currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  animation: voice-wait-turn 1.1s linear infinite;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.72);
   transition:
     inset var(--motion-panel) var(--motion-ease),
     border-color var(--motion-fade) var(--motion-ease),
-    border-radius var(--motion-panel) var(--motion-ease);
+    border-radius var(--motion-panel) var(--motion-ease),
+    opacity var(--motion-fade) var(--motion-ease),
+    transform var(--motion-panel) var(--motion-ease);
+}
+
+.voiceButton[data-voice-look='waiting'] .voiceActivity {
+  opacity: 1;
+  transform: scale(1);
+  animation: voice-wait-turn 1.1s linear infinite;
 }
 
 .recordingWaveform {
@@ -184,6 +207,9 @@
   flex: 0 0 2px;
   border-radius: 2px;
   background: currentColor;
+}
+
+.voiceButton[data-voice-look='recording'] .recordingWaveform > span {
   animation: voice-record-pulse 650ms ease-in-out infinite alternate;
 }
 
@@ -215,6 +241,8 @@
   inset: 1px;
   border-color: transparent;
   border-radius: 0;
+  opacity: 1;
+  transform: scale(1);
   animation: none;
 }
 
@@ -231,29 +259,31 @@
   padding: 1px;
   border-radius: 50%;
   background: var(--color-surface);
+  opacity: 0;
+  transform: scale(0.72);
+  transition:
+    opacity var(--motion-fade) var(--motion-ease),
+    transform var(--motion-panel) var(--motion-ease);
+}
+
+.voiceButton[data-voice-look='waiting'] .cancelMark,
+.voiceButton[data-voice-look='recording'] .cancelMark {
+  opacity: 1;
+  transform: scale(1);
 }
 
 :global(:root[data-motion='off']) .voiceButton {
   transition: none;
 }
 
-:global(:root[data-motion='off']) .voiceButton .voiceActivity,
-:global(:root[data-motion='off']) .voiceButton .recordingWaveform {
+:global(:root[data-motion='off']) .voiceButton[data-voice-look] * {
   transition: none;
-}
-
-:global(:root[data-motion='off']) .voiceButton .recordingWaveform > span {
   animation: none;
 }
 
 :global(:root[data-motion='off']) .voiceButton[data-voice-look='waiting'] .voiceActivity {
   border-top-color: currentColor;
   border-right-style: dashed;
-  animation: none;
-}
-
-:global(:root[data-motion='off']) .voiceButton[data-voice-look='recording'] .voiceActivity {
-  animation: none;
 }
 
 .toggle:hover,

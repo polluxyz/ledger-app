@@ -280,19 +280,17 @@ export function AiEntry({
           }}
         >
           <span className={styles.voiceGlyph}>
-            {voice.status !== 'idle' && (
-              <span className={styles.voiceActivity} aria-hidden="true">
-                <span className={styles.recordingWaveform}>
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </span>
+            <span className={styles.voiceActivity} aria-hidden="true">
+              <span className={styles.recordingWaveform}>
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
               </span>
-            )}
-            {voice.status !== 'listening' && <MicrophoneIcon />}
-            {voice.status !== 'idle' && <CancelMarkIcon />}
+            </span>
+            <MicrophoneIcon />
+            <CancelMarkIcon />
           </span>
         </button>
       )}
