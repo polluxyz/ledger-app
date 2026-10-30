@@ -172,7 +172,9 @@ test.describe('AI voice entry', () => {
     await page.getByRole('button', { name: '開始語音記帳' }).click();
     await page.evaluate(() => window.__voiceTestControl?.emitAudioStart(0));
     await expect(page.getByRole('status')).toHaveText('聆聽中…');
-    await page.getByRole('button', { name: '取消語音' }).click();
+    const microphone = page.getByRole('button', { name: '取消語音' });
+    await expect(microphone).toHaveAttribute('data-voice-look', 'recording');
+    await microphone.click();
     await page.evaluate((text) => window.__voiceTestControl?.emitResult(0, text), VOICE_TEXT);
 
     await expect(page.getByRole('textbox', { name: '用一句話記帳' })).toHaveValue('');

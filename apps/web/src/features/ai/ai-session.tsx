@@ -56,6 +56,7 @@ interface ConfirmAllRun {
 
 interface AiSessionValue extends AiSessionState {
   setText: (text: string) => void;
+  clearInput: () => void;
   getTextVersion: () => number;
   getIdentitySnapshot: () => AiSessionIdentitySnapshot;
   isIdentityCurrent: (snapshot: AiSessionIdentitySnapshot) => boolean;
@@ -143,6 +144,11 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
   );
 
   const setText = updateText;
+
+  const clearInput = useCallback(() => {
+    if (stateRef.current.text !== '') textVersionRef.current += 1;
+    updateState((current) => ({ ...current, text: '', error: null }));
+  }, [updateState]);
 
   const getTextVersion = useCallback(() => textVersionRef.current, []);
 
@@ -392,6 +398,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       setText,
+      clearInput,
       getTextVersion,
       getIdentitySnapshot,
       isIdentityCurrent: isCurrentSession,
@@ -405,6 +412,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
     [
       state,
       setText,
+      clearInput,
       getTextVersion,
       getIdentitySnapshot,
       isCurrentSession,

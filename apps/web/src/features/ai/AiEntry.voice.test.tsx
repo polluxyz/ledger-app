@@ -1,12 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLayoutEffect, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ParseTransactionResponse } from '@ledger/shared';
 import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
+import type { AiDraftItem } from './AiDraftList';
 import { usePageToolbarSlot } from '../../app/PageToolbarSlotContext';
 import { PageToolbarSlotProvider } from '../../app/PageToolbarSlotProvider';
 import { AiEntry } from './AiEntry';
+import styles from './AiEntry.module.css';
 import { AiSessionProvider, useAiSession } from './ai-session';
 import {
   installFakeSpeechRecognition,
@@ -49,19 +53,28 @@ const ledger = {
 } as const;
 const sentence = '早餐 60 現金';
 
-const probe: { text: string; setText: (text: string) => void } = {
+const probe: {
+  text: string;
+  setText: (text: string) => void;
+  drafts: readonly AiDraftItem[];
+  confirmDraft: (key: string) => Promise<boolean>;
+} = {
   text: '',
   setText: () => undefined,
+  drafts: [],
+  confirmDraft: () => Promise.resolve(false),
 };
 
 let speech: FakeSpeechRecognitionController | null = null;
 
 function SessionProbe() {
-  const { setText, text } = useAiSession();
+  const { confirmDraft, drafts, setText, text } = useAiSession();
   useLayoutEffect(() => {
     probe.text = text;
     probe.setText = setText;
-  }, [setText, text]);
+    probe.drafts = drafts;
+    probe.confirmDraft = confirmDraft;
+  }, [confirmDraft, drafts, setText, text]);
   return null;
 }
 
@@ -84,6 +97,10 @@ function renderEntry(props: Partial<ComponentProps<typeof AiEntry>> = {}) {
 
 function inputBox() {
   return screen.getByRole('textbox', { name: '用一句話記帳', hidden: true });
+}
+
+function readAiEntryCss(): string {
+  return readFileSync(join(process.cwd(), 'src/features/ai/AiEntry.module.css'), 'utf8');
 }
 
 function expectNoParseWithInput(value: string) {
@@ -129,12 +146,14 @@ describe('AI entry voice input', () => {
     mocks.parse.mockReset().mockResolvedValue({ drafts: [] } satisfies ParseTransactionResponse);
     mocks.mutateAsync.mockReset().mockResolvedValue(undefined);
     probe.text = '';
+    probe.drafts = [];
     speech = null;
   });
 
   afterEach(() => {
     speech?.uninstall();
     speech = null;
+    delete document.documentElement.dataset.motion;
     vi.useRealTimers();
   });
 
@@ -320,7 +339,7 @@ describe('AI entry voice input', () => {
     expect(mocks.mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('SC-SR3 (3)、(4)：送出使用者改過的字，清空後能再錄一輪', async () => {
+  it('SC-SR3 (3)、(4)：送出修改後的文字，按清除鈕後能再錄一輪', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     const user = userEvent.setup();
     renderEntry();
@@ -335,6 +354,237 @@ describe('AI entry voice input', () => {
     expectSingleParse('早餐 80 現金');
     await waitFor(() => expect(inputBox()).toHaveValue('早餐 80 現金'));
     expect(probe.text).toBe('早餐 80 現金');
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: '開始語音記帳' }));
+    expect(speech.instances).toHaveLength(2);
+    expect(speech.latest().startCalls).toBe(1);
+  });
+
+  it('SC-SR17 (1)：一般文字可以清除並恢復語音按鈕', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    await user.type(inputBox(), '早餐 60 現金');
+
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+
+    expect(inputBox()).toHaveValue('');
+    expect(probe.text).toBe('');
+    expect(inputBox()).toHaveFocus();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toBeEnabled();
+    expect(mocks.parse).not.toHaveBeenCalled();
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('SC-SR17 (1)：只有空白時仍顯示清除鈕，清除後可用麥克風', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    fireEvent.change(inputBox(), { target: { value: '   ' } });
+    const clearButton = screen.getByRole('button', { name: '清除輸入文字' });
+
+    expect(clearButton).toHaveAttribute('type', 'button');
+    expect(clearButton.querySelector('span')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toBeEnabled();
+    await user.click(clearButton);
+
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toBeEnabled();
+    expect(mocks.parse).not.toHaveBeenCalled();
+  });
+
+  it('SC-SR17 (1)：清除同時移除字數、語音與解析錯誤', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    mocks.parse.mockRejectedValueOnce(new Error('provider detail'));
+    const user = userEvent.setup();
+    renderEntry();
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    await user.type(inputBox(), sentence);
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('AI 暫時沒有回應，請稍後再試。'),
+    );
+
+    await user.clear(inputBox());
+    expect(screen.getByRole('alert')).toHaveTextContent('AI 暫時沒有回應，請稍後再試。');
+    const recognition = await startRound(user);
+    emitFinal(recognition, 'a'.repeat(AI_TEXT_MAX_LENGTH + 1));
+    await waitFor(() => expect(inputBox()).toHaveValue('a'.repeat(AI_TEXT_MAX_LENGTH + 1)));
+    expect(screen.getByRole('alert')).toHaveTextContent('請精簡至 200 字內。');
+
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '開始語音記帳' })).toBeEnabled();
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('SC-SR17 (1)：送出解析失敗後按清除鈕清空文字與錯誤', async () => {
+    mocks.parse.mockRejectedValueOnce(new Error('provider detail'));
+    const user = userEvent.setup();
+    renderEntry();
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    await user.type(inputBox(), sentence);
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('AI 暫時沒有回應，請稍後再試。'),
+    );
+
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
+    expect(mocks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('SC-SR17 (2)：清除輸入不影響草稿、草稿錯誤與 API 請求數', async () => {
+    mocks.parse.mockResolvedValueOnce({
+      drafts: [
+        {
+          ledgerId: ledger.id,
+          type: 'EXPENSE',
+          amount: 6000,
+          date: '2026-10-29',
+          title: '早餐',
+          categoryId: 'category-1',
+          newCategoryName: null,
+          accountId: 'account-1',
+          toAccountId: null,
+        },
+      ],
+    } satisfies ParseTransactionResponse);
+    mocks.mutateAsync.mockRejectedValueOnce(new Error('provider detail'));
+    const user = userEvent.setup();
+    renderEntry();
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    await user.type(inputBox(), sentence);
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    await waitFor(() => expect(probe.drafts).toHaveLength(1));
+
+    await act(async () => {
+      await probe.confirmDraft(probe.drafts[0]!.key);
+    });
+    await waitFor(() => expect(probe.drafts[0]?.error).toBe('寫入失敗，請稍後再試。'));
+    await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
+    await user.type(inputBox(), '午餐 120 刷卡');
+    const draftsBeforeClear = probe.drafts;
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+
+    expect(probe.drafts).toBe(draftsBeforeClear);
+    expect(probe.drafts[0]?.error).toBe('寫入失敗，請稍後再試。');
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(probe.text).toBe('');
+  });
+
+  it('SC-SR17 (3)：收合、解析中、辨識中與唯讀狀態不顯示清除鈕', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    const view = renderEntry();
+    act(() => probe.setText('保留文字'));
+    expect(screen.queryByRole('button', { name: '清除輸入文字' })).not.toBeInTheDocument();
+    const clearButton = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="清除輸入文字"]',
+    )!;
+    fireEvent.click(clearButton);
+    expect(probe.text).toBe('保留文字');
+
+    const toggle = screen.getByRole('button', { name: 'AI 記帳' });
+    await user.click(toggle);
+    expect(screen.getByRole('button', { name: '清除輸入文字' })).toBeInTheDocument();
+    await user.click(toggle);
+    expect(screen.queryByRole('button', { name: '清除輸入文字' })).not.toBeInTheDocument();
+    expect(probe.text).toBe('保留文字');
+    fireEvent.click(clearButton);
+    expect(probe.text).toBe('保留文字');
+
+    await user.click(toggle);
+    let finishParse!: (result: ParseTransactionResponse) => void;
+    const pending = new Promise<ParseTransactionResponse>((resolve) => {
+      finishParse = resolve;
+    });
+    mocks.parse.mockReturnValueOnce(pending);
+    await user.click(screen.getByRole('button', { name: '送出' }));
+    expect(screen.queryByRole('button', { name: '清除輸入文字' })).not.toBeInTheDocument();
+    fireEvent.click(clearButton);
+    expect(inputBox()).toHaveValue('保留文字');
+    await act(async () => {
+      finishParse({ drafts: [] });
+      await pending;
+    });
+
+    act(() => probe.setText(''));
+    const recognition = await startRound(user);
+    expect(screen.queryByRole('button', { name: '清除輸入文字' })).not.toBeInTheDocument();
+    fireEvent.click(clearButton);
+    expect(screen.getByRole('status')).toHaveTextContent('準備中…');
+    expect(recognition.abortCalls).toBe(0);
+    expect(screen.getByRole('button', { name: '取消語音' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: '取消語音' }));
+    expect(recognition.abortCalls).toBe(1);
+
+    act(() => probe.setText('唯讀文字'));
+    view.rerender(
+      <AiSessionProvider>
+        <SessionProbe />
+        <PageToolbarSlotProvider>
+          <ToolbarSlot />
+          <AiEntry ledger={{ ...ledger, role: 'VIEWER' }} />
+        </PageToolbarSlotProvider>
+      </AiSessionProvider>,
+    );
+    expect(inputBox()).toHaveValue('唯讀文字');
+    expect(screen.queryByRole('button', { name: '清除輸入文字' })).not.toBeInTheDocument();
+    fireEvent.click(clearButton);
+    expect(inputBox()).toHaveValue('唯讀文字');
+  });
+
+  it('SC-SR17 (4)：兩個入口共用文字與解析錯誤，任一處清除都同步生效', async () => {
+    mocks.parse.mockRejectedValueOnce(new Error('provider detail'));
+    const user = userEvent.setup();
+    render(
+      <AiSessionProvider>
+        <SessionProbe />
+        <PageToolbarSlotProvider>
+          <ToolbarSlot />
+          <AiEntry ledger={ledger} />
+          <AiEntry ledger={ledger} />
+        </PageToolbarSlotProvider>
+      </AiSessionProvider>,
+    );
+    const inputs = screen.getAllByRole('textbox', { name: '用一句話記帳', hidden: true });
+    const [firstToggle] = screen.getAllByRole('button', { name: 'AI 記帳' });
+    await user.click(firstToggle!);
+    await user.type(inputs[0]!, sentence);
+    const [firstSubmit] = screen.getAllByRole('button', { name: '送出' });
+    await user.click(firstSubmit!);
+    await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
+    expect(inputs[0]).toHaveValue(sentence);
+    expect(inputs[1]).toHaveValue(sentence);
+
+    await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
+
+    expect(inputs[0]).toHaveValue('');
+    expect(inputs[1]).toHaveValue('');
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    expect(mocks.parse).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -387,7 +637,7 @@ describe('AI entry voice input', () => {
     }
   });
 
-  it('SC-SR7 (1)：連按開始只建立一個辨識器並呼叫一次 start', () => {
+  it('SC-SR7 (1)：連按兩次取消，第三次開始新一輪', () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     renderEntry();
     const microphone = screen.getByRole('button', { name: '開始語音記帳' });
@@ -397,9 +647,16 @@ describe('AI entry voice input', () => {
 
     expect(speech.instances).toHaveLength(1);
     expect(speech.latest().startCalls).toBe(1);
+    expect(speech.latest().abortCalls).toBe(1);
+    expect(speech.latest().stopCalls).toBe(0);
     expect(inputBox()).toHaveValue('');
     expect(probe.text).toBe('');
     expect(mocks.parse).not.toHaveBeenCalled();
+
+    fireEvent.click(microphone);
+    expect(speech.instances).toHaveLength(2);
+    expect(speech.latest().startCalls).toBe(1);
+    expect(speech.latest().abortCalls).toBe(0);
   });
 
   it('SC-SR7 (2)：start 丟例外時顯示訊息並解除鎖，可再開始', async () => {
@@ -410,7 +667,7 @@ describe('AI entry voice input', () => {
 
     await user.click(screen.getByRole('button', { name: '開始語音記帳' }));
     expect(screen.getByRole('alert')).toHaveTextContent('目前無法使用語音，請改用文字。');
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expectNoParseWithInput('');
 
     speech.setStartError(null);
@@ -456,14 +713,13 @@ describe('AI entry voice input', () => {
     expectNoParseWithInput('');
   });
 
-  it('SC-SR8 (3)、(4)：停止後 10 秒沒 final 取消，舊 timer 不影響下一輪', async () => {
+  it('SC-SR8 (3)、(4)：audioend 後 10 秒沒 final 取消，舊 timer 不影響下一輪', async () => {
     vi.useFakeTimers();
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     renderEntry();
     fireEvent.click(screen.getByRole('button', { name: '開始語音記帳' }));
     const first = speech.latest();
-    act(() => first.emitAudioStart());
-    fireEvent.click(screen.getByRole('button', { name: '停止聆聽' }));
+    act(() => first.emitAudioEnd());
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
@@ -649,7 +905,7 @@ describe('AI entry voice input', () => {
     expectNoParseWithInput('');
   });
 
-  it('SC-SR11：按取消語音後焦點回到麥克風按鈕', async () => {
+  it('SC-SR11：再按麥克風取消後焦點回到麥克風按鈕', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     const user = userEvent.setup();
     renderEntry();
@@ -662,15 +918,20 @@ describe('AI entry voice input', () => {
     expect(mocks.parse).not.toHaveBeenCalled();
   });
 
-  it('SC-SR12：Enter 與 Space 可開始、停止，Escape 只取消並把焦點放回麥克風', async () => {
+  it('SC-SR12：Enter 與 Space 可開始和取消，Escape 取消並將焦點放回麥克風', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     const user = userEvent.setup();
     renderEntry();
     const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    const liveRegion = screen.getByRole('status');
+    expect(liveRegion).toBeEmptyDOMElement();
+    expect(liveRegion).toHaveClass(styles.visuallyHidden!);
+
     microphone.focus();
     await user.keyboard('{Enter}');
     const recognition = speech.latest();
     expect(recognition.startCalls).toBe(1);
+    expect(screen.getByRole('button', { name: '取消語音' })).toBe(microphone);
     expect(screen.getByRole('status')).toHaveTextContent('準備中…');
     expect(inputBox()).toHaveValue('');
     expect(mocks.parse).not.toHaveBeenCalled();
@@ -679,18 +940,134 @@ describe('AI entry voice input', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('聆聽中…'));
     microphone.focus();
     await user.keyboard(' ');
-    expect(recognition.stopCalls).toBe(1);
-    expect(screen.getByRole('status')).toHaveTextContent('辨識中…');
+    expect(recognition.abortCalls).toBe(1);
+    expect(recognition.stopCalls).toBe(0);
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(microphone).toHaveFocus();
     expect(inputBox()).toHaveValue('');
     expect(mocks.parse).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(microphone, { key: 'Escape' });
-    expect(recognition.abortCalls).toBe(1);
+    await user.keyboard('{Enter}');
+    const second = speech.latest();
+    expect(second).not.toBe(recognition);
+    expect(second.startCalls).toBe(1);
+    expect(screen.getByRole('status')).toHaveTextContent('準備中…');
+    await user.keyboard('{Escape}');
+    expect(second.abortCalls).toBe(1);
+    expect(second.stopCalls).toBe(0);
     expect(microphone).toHaveFocus();
     expect(screen.getByRole('button', { name: 'AI 記帳' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    await user.keyboard(' ');
+    const third = speech.latest();
+    expect(third).not.toBe(second);
+    expect(third.startCalls).toBe(1);
+    await user.keyboard(' ');
+    expect(third.abortCalls).toBe(1);
+    expect(third.stopCalls).toBe(0);
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    await user.type(inputBox(), '鍵盤清除');
+    let clearButton = screen.getByRole('button', { name: '清除輸入文字' });
+    clearButton.focus();
+    await user.keyboard('{Enter}');
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
+
+    await user.type(inputBox(), '再次清除');
+    clearButton = screen.getByRole('button', { name: '清除輸入文字' });
+    clearButton.focus();
+    await user.keyboard(' ');
+    expect(inputBox()).toHaveValue('');
+    expect(inputBox()).toHaveFocus();
     expectNoParseWithInput('');
+  });
+
+  it('SC-SR18 (1)：準備與辨識是等待、收音是 recording、閒置沒有狀態樣式', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+
+    expect(microphone).toHaveAttribute('data-voice-look', 'idle');
+    expect(microphone).toHaveAttribute('data-voice-state', 'idle');
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).not.toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).not.toBeInTheDocument();
+
+    await user.click(microphone);
+    const recognition = speech.latest();
+    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'preparing'));
+    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone).toHaveAccessibleName('取消語音');
+
+    act(() => recognition.emitAudioStart());
+    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'listening'));
+    expect(microphone).toHaveAttribute('data-voice-look', 'recording');
+    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
+    expect(microphone).toHaveAccessibleName('取消語音');
+
+    act(() => recognition.emitAudioEnd());
+    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'recognizing'));
+    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    emitFinal(recognition);
+    await waitFor(() => expect(inputBox()).toHaveValue(sentence));
+    expect(microphone).toHaveAttribute('data-voice-look', 'idle');
+    expect(microphone).toHaveAccessibleName('開始語音記帳');
+  });
+
+  it('SC-SR18 (2)：動畫關閉時等待與收音仍用不同的靜態形狀', async () => {
+    document.documentElement.dataset.motion = 'off';
+    const css = readAiEntryCss();
+    expect(css).toMatch(
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*animation: none;/,
+    );
+    expect(css).toMatch(
+      /:global\(:root\[data-motion='off'\]\)[\s\S]*?\[data-voice-look='recording'\][\s\S]*?\.recordingWaveform\s*>\s*span\s*\{[^}]*animation: none;/,
+    );
+
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    await user.click(microphone);
+    const recognition = speech.latest();
+    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'waiting'));
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+
+    act(() => recognition.emitAudioStart());
+    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'recording'));
+    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
+    expect(microphone.getAttribute('data-voice-look')).not.toBe('waiting');
+  });
+
+  it('SC-SR18 (3)：狀態文字只在視覺隱藏的 live region 內，閒置時為空', async () => {
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const user = userEvent.setup();
+    renderEntry();
+    const liveRegion = screen.getByRole('status');
+    expect(liveRegion).toBeEmptyDOMElement();
+    expect(liveRegion).toHaveClass(styles.visuallyHidden!);
+
+    await user.click(screen.getByRole('button', { name: '開始語音記帳' }));
+    const recognition = speech.latest();
+    await waitFor(() => expect(liveRegion).toHaveTextContent('準備中…'));
+    expect(screen.getAllByText('準備中…')).toEqual([liveRegion]);
+    expect(liveRegion).toHaveClass(styles.visuallyHidden!);
+
+    act(() => recognition.emitAudioStart());
+    await waitFor(() => expect(liveRegion).toHaveTextContent('聆聽中…'));
+    expect(screen.getAllByText('聆聽中…')).toEqual([liveRegion]);
+    expect(liveRegion).toHaveClass(styles.visuallyHidden!);
+
+    act(() => recognition.emitAudioEnd());
+    await waitFor(() => expect(liveRegion).toHaveTextContent('辨識中…'));
+    expect(screen.getAllByText('辨識中…')).toEqual([liveRegion]);
+    expect(liveRegion).toHaveClass(styles.visuallyHidden!);
   });
 });
