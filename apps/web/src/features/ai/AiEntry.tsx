@@ -16,6 +16,7 @@ import { isLedgerWritable } from '../ledgers/use-ledgers';
 import { usePageToolbarSlot } from '../../app/PageToolbarSlotContext';
 import { useAiSession } from './ai-session';
 import { useVoiceInput } from './use-voice-input';
+import { VoiceGlyph } from './VoiceGlyph';
 import styles from './AiEntry.module.css';
 
 interface AiEntryProps {
@@ -279,19 +280,7 @@ export function AiEntry({
             voice.toggle();
           }}
         >
-          <span className={styles.voiceGlyph}>
-            <span className={styles.voiceActivity} aria-hidden="true">
-              <span className={styles.recordingWaveform}>
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </span>
-            </span>
-            <MicrophoneIcon />
-            <CancelMarkIcon />
-          </span>
+          <VoiceGlyph target={voiceLook} active={voice.isActive} />
         </button>
       )}
       <button
@@ -332,45 +321,5 @@ export function AiEntry({
       )}
     </div>,
     element,
-  );
-}
-
-function MicrophoneIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={styles.microphoneIcon}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="9" y="3" width="6" height="12" rx="3" />
-      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8" />
-    </svg>
-  );
-}
-
-function CancelMarkIcon() {
-  return (
-    <svg
-      className={styles.cancelMark}
-      width="10"
-      height="10"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="m6 6 12 12M18 6 6 18" />
-    </svg>
   );
 }
