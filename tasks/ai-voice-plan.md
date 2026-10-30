@@ -293,3 +293,9 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
   - 2 條（SC-SR7 (1)，一般與 StrictMode）：準備中麥克風停用，第 2 下按不到，`abort` 是 0。
 - `startPreparing` 與 `startListening` 的 `waitFor` 設 `timeout: 2000`。`src/test/setup.ts` 的 `asyncUtilTimeout` 是 5000，和測試逾時一樣長，不設的話紅燈會顯示成逾時，看不出原因。
 - Web typecheck、lint、prettier 綠。
+
+### T1b（2026-10-30 派工）
+
+- worktree `aiv-voice-v3-ui`，分支 `feature/aiv-voice-v3-ui`（從 `feature/ai-voice-v3` 的 `39137f6` 開），`default` 的 Codex。dispatch `ctx_01a38b02e519`。
+- Orca 的 setup 沒有裝相依套件，協調者在 worker 的 worktree 手動跑 `pnpm install`。
+- 第一次開的 Codex 終端機跳出更新提示，選 3 後關掉重開才派工。
