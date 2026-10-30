@@ -368,3 +368,43 @@ T1k 依開發者「更強的codex」的要求用 `backend` 角色，因為要處
 - grep：語音檔案沒有 `console.`、`localStorage`、`getUserMedia`、`MediaRecorder`、`AudioContext`。`parse(` 只在送出處理。
 - `pnpm build` exit 0。全部 Web e2e（`b4aa16b`）140 passed（6.6 分鐘），含 SC-SR13 第 1～3 項，0 flaky。
 - worker 的終端機、worktree、分支已清掉。
+
+### T1c～T1j（2026-10-30，動畫各輪）
+
+- T1c：準備中是麥克風外圈虛線環，收音時轉成 5 條聲波。開發者回饋：取消時接回麥克風有延遲。
+- T1d：Codex 在 Chrome 量到，按下取消後 1.4～1.6ms 狀態就改，14～15ms 畫面就換。頓感來自畫面硬切，不是程式等待。改成約 0.18 秒的退場轉場。
+  - 退回 1 次：`data-motion='off'` 時聲波仍在跳。原因是 CSS 選擇器權重蓋不掉動畫，測試只比對 CSS 文字所以沒抓到。改成在 Chromium 量實際生效的值。
+- T1e～T1j：只改 `docs/artifacts/` 的對比頁，不改產品程式。
+  - T1e：B 版「麥克風 → 5 點 → 聲波 → 5 點 → 麥克風」。麥克風由點拼成，形狀和原圖不同。
+  - T1f：改用原本的麥克風圖示，做 B1、B2 兩種拆法。
+  - B3（開發者描述：橢圓坍縮成中心點，其餘變 4 點繞圈）：第 1 版退回，有蓋住按鈕的大圓塊、聲波不等距、倒回時出現細斜線。
+  - B3 第 2、3 輪：變形前把角度歸零造成看起來逆轉，改成一路順時針減速再對位。
+  - T1j：開發者畫草圖指定 B4（外圈旋轉後落到固定位置），改派 `backend` 角色。開發者採用 B4，寫成 spec 第 4 版。
+
+### T1k（2026-10-30，`backend` 的 Codex，`cb17d40`）
+
+- 改 `voice-glyph-geometry.ts`（純函式）、`VoiceGlyph.tsx`（rAF 直接改 5 筆 path）、`AiEntry.tsx` 的對應。
+- 各段時間：拆解 500ms、落點 700ms、收音 → 等待 700ms、收音 → 閒置 900ms、等待 → 閒置 600ms。都在決策 359 (g) 的上限內。
+
+### T2b（2026-10-30～31，協調者，第 4 版）
+
+- 根目錄 lint、typecheck、format:check、build 綠。單元測試 shared 160、api 1039（68 suites）、web 1275（140 檔）。
+- 全部 Web e2e（`cb17d40`）140 passed（6.9 分鐘）。
+- 突變檢查 7 處，都已還原：再按麥克風改呼叫 stop 25 條紅；清除鈕不擋解析中 1 條紅；收音畫成 5 點 10 條紅；落點錯一根 13 條紅；motion off 仍排 rAF 4 條紅；改成最短角度 3 條紅；重新規劃從預設姿態開始 12 條紅。
+- 逐幀目視：暫時的 Playwright 腳本每幀記錄 5 筆 path（不進版控）。完整流程、拆解中取消、落點中取消、倒回中再開始 4 個情境都連續、只順時針。
+- 開發者看 5174 後要求聲波起伏更強，加派 T1l。
+
+### T1l（2026-10-30，`backend` 的 Codex，`2982eb9`）
+
+- spec 沒規定起伏幅度，屬規格內的視覺調整，沒改 spec。
+- 只改 `sampleLoop` 的收音起伏：峰值 `[14,10,14,10,20]`，低點是峰值 38%，各條週期 430～610ms、相位錯開。前 180ms 從靜態高度平滑接入。`HEIGHTS` 與 motion off 圖形不變。
+- 幾何測試 17 → 28 條，web 1286 條綠，Web e2e 140 passed（6.8 分鐘）。
+- 突變檢查 5 處都變紅：幅度改回 85%、5 條同步、拿掉接入、中心超出 viewBox、節奏過快。
+- 開發者看過 5174 後同意。`main` 前進 3 個 commit，`gh pr update-branch` 後 CI 重跑全綠，#212 squash merge（`d1932e1`）。
+
+### 本輪踩到的坑
+
+- Codex 會重送上一輪的舊 `worker_done`，內容一字不差。收到後先看交付檔的 mtime 與 commit，確認是新的才驗收。
+- `--from`、`--terminal` 要用協調者真正的終端機 handle。hook 顯示的 coordinator handle 不一定是現在這個 session 的。
+- 剛 push 時 `gh pr checks --watch` 會因為 checks 還沒登記而報「no checks reported」並結束。先等 checks 出現再 watch。
+- `glm-llm.provider.spec.ts` 的短逾時偶發失敗，已由 #214 處理。
