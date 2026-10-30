@@ -995,15 +995,22 @@ describe('AI entry voice input', () => {
 
     expect(microphone).toHaveAttribute('data-voice-look', 'idle');
     expect(microphone).toHaveAttribute('data-voice-state', 'idle');
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).not.toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).not.toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
     expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
+    const css = readAiEntryCss();
+    expect(css).toMatch(/\.voiceActivity\s*\{[^}]*opacity: 0;/);
+    expect(css).toMatch(/\.microphoneIcon\s*\{[^}]*opacity: 1;/);
+    expect(css).toMatch(
+      /\.voiceButton\[data-voice-look='recording'\] \.microphoneIcon\s*\{[^}]*opacity: 0;/,
+    );
 
     await user.click(microphone);
     const recognition = speech.latest();
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'preparing'));
     expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
     expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     expect(microphone).toHaveAccessibleName('取消語音');
 
@@ -1012,7 +1019,7 @@ describe('AI entry voice input', () => {
     expect(microphone).toHaveAttribute('data-voice-look', 'recording');
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
     expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).not.toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     expect(microphone).toHaveAccessibleName('取消語音');
 
     act(() => recognition.emitAudioEnd());
@@ -1031,16 +1038,22 @@ describe('AI entry voice input', () => {
     document.documentElement.dataset.motion = 'off';
     const css = readAiEntryCss();
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*animation: none;/,
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton\s*\{[^}]*transition: none;/,
     );
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton \.recordingWaveform\s*>\s*span\s*\{[^}]*animation: none;/,
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton \*\s*\{[^}]*transition: none;[^}]*animation: none;/,
     );
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton \{[^}]*transition: none;/,
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*border-top-color: currentColor;[^}]*border-right-style: dashed;/,
     );
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton \.voiceActivity,[\s\S]*?\.recordingWaveform \{[^}]*transition: none;/,
+      /\.voiceButton\[data-voice-look='recording'\] \.voiceActivity \{[^}]*border-color: transparent;[^}]*border-radius: 0;/,
+    );
+    expect(css).toMatch(
+      /\.voiceButton\[data-voice-look='waiting'\] \.voiceActivity\s*\{[^}]*opacity: 1;/,
+    );
+    expect(css).toMatch(
+      /\.voiceButton\[data-voice-look='recording'\] \.recordingWaveform\s*\{[^}]*opacity: 1;/,
     );
 
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
@@ -1056,7 +1069,7 @@ describe('AI entry voice input', () => {
     act(() => recognition.emitAudioStart());
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'recording'));
     expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).not.toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     expect(microphone.getAttribute('data-voice-look')).not.toBe('waiting');
   });
 
@@ -1084,4 +1097,39 @@ describe('AI entry voice input', () => {
     expect(screen.getAllByText('辨識中…')).toEqual([liveRegion]);
     expect(liveRegion).toHaveClass(styles.visuallyHidden!);
   });
+
+  it.each(['preparing', 'listening', 'recognizing'] as const)(
+    'SC-SR18 (4)：%s 取消後同一個 tick 回到麥克風並可立刻重新開始',
+    (cancelState) => {
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+
+      fireEvent.click(microphone);
+      const recognition = speech.latest();
+      if (cancelState === 'listening') {
+        act(() => recognition.emitAudioStart());
+      } else if (cancelState === 'recognizing') {
+        act(() => {
+          recognition.emitAudioStart();
+          recognition.emitAudioEnd();
+        });
+      }
+      expect(microphone).toHaveAttribute('data-voice-state', cancelState);
+
+      fireEvent.click(microphone);
+      expect(microphone).toHaveAttribute('aria-label', '開始語音記帳');
+      expect(microphone).toHaveAttribute('data-voice-look', 'idle');
+      expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
+      expect(microphone).not.toBeDisabled();
+      expect(recognition.abortCalls).toBe(1);
+
+      fireEvent.click(microphone);
+      expect(microphone).toHaveAttribute('aria-label', '取消語音');
+      expect(microphone).toHaveAttribute('data-voice-state', 'preparing');
+      expect(speech.instances).toHaveLength(2);
+      expect(speech.latest().startCalls).toBe(1);
+      expect(mocks.parse).not.toHaveBeenCalled();
+    },
+  );
 });
