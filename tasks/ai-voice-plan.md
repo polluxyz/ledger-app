@@ -1,8 +1,10 @@
 # 4a 補充實作計畫：語音記帳（桌機 Chrome，Web Speech API）
 
-spec：`docs/specs/phase-4a-voice.md`（決策 346～357、W257～W259、SC-SR1～SR16）。只改 `apps/web`，一個 PR。
+spec：`docs/specs/phase-4a-voice.md`（決策 346～360、W257～W259、W288、SC-SR1～SR18）。只改 `apps/web`。第 1 版功能一個 PR（#209），第 3 版改版（§1.3b）另一個 PR。
 
 > 核可：spec 第 2 版由開發者 2026-10-29 回「核可」核可（含 §10 第 2 版要確認的 3 點）。本 plan、todo（含 §5 的 2 點解讀）開發者 2026-10-29 回「核可」核可。
+>
+> 第 3 版：開發者 2026-10-29 回「同意」核可 spec §10 第 3 版的 4 點。§1.3b 的 T0b、T1b、T2b 與 §5 第 3、4 點，開發者 2026-10-30 回「核可」核可。
 
 ## 0. 起點
 
@@ -121,6 +123,52 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 - 部署：只改前端。主工作區 `git pull`，請開發者在 Chrome 按 `Ctrl + Shift + R`（spec §8）。
 - 清掉 worker 的 worktree、分支、終端機。
 
+### 1.3b 第 3 版改版（T0b 協調者、T1b `default` 的 Codex、T2b 協調者）
+
+開發者看過 #209 後要 3 項修改：拿掉可見的狀態文字改用麥克風動畫、輸入欄加清除鈕、拿掉取消按鈕改成再按麥克風取消。spec 第 3 版寫成決策 358～360、W258、W259、W288、SC-SR17、SC-SR18。T3 排在改版之後，真實驗收測的是改版後的畫面。
+
+分支：docs PR 用 `docs/ai-voice-v3`（現在的 `docs/ai-voice-t3` 改名）。整合分支 `feature/ai-voice-v3`，從合併後的 `main` 開，用 `ai-4a` worktree。worker 子分支 `feature/aiv-voice-v3-ui`。
+
+**T0b：協調者先改隔離測試，讓它先紅。** 只改 `AiEntry.voice-isolation.test.tsx`，防線的斷言一條都不刪：
+
+- `micButton` 的名稱改成「開始語音記帳」或「取消語音」。`startListening` 等到「取消語音」。
+- SC-SR5 (1) 改成準備中、聆聽中、辨識中各 1 條：再按麥克風 → `abort` 1 次、`stop` 0 次 → 舊實例晚送的事件不改輸入欄、不顯示錯誤、`parse` 0 次。原本「停止後 final 照常填入」的案例移到 SC-SR8 (1)（30 秒上限），由 T1b 寫。
+- 取消條件表的「按『取消語音』」改成「再按麥克風」。其餘 9 種不動。
+- 新增 SC-SR7 (1) 連按：同一個 `user` 連按 2 次 → 1 個實例、`start` 1 次、`abort` 1 次。
+- 新增「沒有第 2 顆取消按鈕」：辨識期間名稱是「取消語音」的按鈕只有 1 顆，就是麥克風。
+- 紅的原因只接受 2 種：找不到名稱是「取消語音」的麥克風，或準備中、辨識中的麥克風停用按不到。commit 後先不 push。
+
+**T1b：Codex 實作。** 樣式、圖示、動畫由 Codex 決定，只用 `global.css` 的設計 token。行為照決策 358～360：
+
+1. `use-voice-input.ts`：準備中、聆聽中、辨識中再按都走取消。hook 內部的停止（`stopOperation`）只留給 30 秒上限。連按用同步的鎖判斷，不加延遲或 debounce。
+2. `AiEntry.tsx`：
+   - 拿掉「取消語音」按鈕。麥克風在準備中、辨識中也能按（現在 `AiEntry.tsx:179` 的 `canStop`、`microphoneDisabled` 會擋）。
+   - 拿掉可見的狀態文字，保留視覺隱藏的 live region（W258）。
+   - 加清除鈕（W288），顯示條件與處理函式的檢查照決策 360 (a)。
+   - 錯誤的優先序維持 `lengthError ?? voice.error ?? error`（`AiEntry.tsx:81`）。清除鈕要讓 3 個都消失。
+3. `ai-session.tsx`：加一個只清文字與錯誤的動作（例如 `clearInput`）。現在的 `setText`（`ai-session.tsx:137`）不清 `session.error`，不能直接拿來用。輸入版本照現有規則加 1。
+4. CSS：
+   - 收回為取消按鈕預留的寬度與偏移（`AiEntry.module.css:35`、`:165`、`:217`）。
+   - 輸入欄右側預留清除鈕的空間。
+   - 麥克風的「等待」「收音」2 種樣子用形狀與動畫區分（SC-SR18 看狀態屬性，例如 `data-voice-look`）。
+   - `data-motion='off'` 時改用靜態形狀。現有固定 700ms 的 spinner 不會因為 motion token 歸零而停，新動畫要自己處理。
+5. 測試：
+   - `AiEntry.voice.test.tsx` 改寫按「停止聆聽」與「取消語音」的案例。`AiEntry.voice.test.tsx:413`「找不到 status」改成驗 live region 存在而且內容是空的。
+   - SC-SR8 (1) 用假 timer 驗 30 秒上限仍是 `stop()`，final 照常填入。SC-SR8 (3) 原本靠按麥克風進入停止，改成用 `audioend` 或 30 秒上限觸發。
+   - 補 SC-SR3 (4) 的清除鈕路徑、SC-SR12、SC-SR17 4 項、SC-SR18 3 項。
+   - `e2e/ai-voice.spec.ts:175` 的取消改成按麥克風（SC-SR13 (2)）。
+6. 不改 T0b 隔離測試的斷言。不改 API、`packages/shared`，不加套件。
+
+**T2b：協調者驗收。** 照 §1.3，另加：
+
+- 逐行看 diff：再按麥克風一律走取消路徑，`stop()` 只剩 30 秒上限會呼叫；清除鈕不碰草稿、不送 API。
+- 突變檢查 3 處，各自要讓測試變紅，再還原：
+  1. 再按麥克風改回呼叫 `stop()`。
+  2. 清除鈕的處理函式拿掉「解析中」的檢查。
+  3. `data-motion='off'` 時 2 種樣子改成相同。
+- 全部 Web e2e。合併後請開發者在 Chrome 按 `Ctrl + Shift + R`，看動畫與清除鈕。
+- 真的 Chrome 冒煙：在 3 個時間點各按一次麥克風取消：第一次要權限的視窗出現時、收音中、`audioend` 之後。這 3 項併進 T3 的 SC-SR16 冒煙，照實記。
+
 ### 1.4 真實驗收（T3，開發者現場，協調者記錄）
 
 - 地點：主工作區的 dev，開發者的 Chrome 開 `localhost:5173`。不用 Playwright 的 Chromium。
@@ -140,8 +188,12 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 2. T0：協調者在 `feature/ai-voice` 寫假辨識器與隔離測試，跑一次確認紅的原因正確，commit（先不 push）。
 3. T1：派 Codex。
 4. T2：驗收、merge 子分支、文件、PR、部署。
-5. T3：開發者現場測。
-6. T4：收尾 docs PR。
+5. 第 3 版 docs PR（spec 第 3 版、plan、todo、編號登記）合併。
+6. T0b：協調者在 `feature/ai-voice-v3` 改隔離測試，確認紅的原因正確，commit（先不 push）。
+7. T1b：派 Codex。
+8. T2b：驗收、merge 子分支、PR、部署。
+9. T3：開發者現場測（含 §1.3b 的 3 個取消時間點）。
+10. T4：收尾 docs PR。
 
 ## 3. 風險與對策
 
@@ -162,12 +214,21 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 | 第一次用時 Chrome 的權限視窗擋住畫面，15 秒開始上限先到                | 15 秒從 `start()` 算，使用者通常幾秒內就按允許。T3 第一次使用時記實際秒數；太短就照決策 353 (f) 記證據再問開發者  |
 | Codex 額度用完                                                         | 網頁任務不換層（`docs/orca-multi-agent.md` §4），等額度恢復                                                       |
 | 將來部署到外網沒有 HTTPS，按鈕消失                                     | spec §8 已寫明。這一輪只在 localhost                                                                              |
+| 第 3 版：使用者以為再按麥克風會保留說過的話，結果被取消                | 圖示不用方形的停止符號（決策 358 (g)）。T3 照實記開發者的感受，要改再問                                           |
+| 第 3 版：連按 2 次被當成「開始又馬上取消再開始」，建出 2 個實例        | 同步的鎖，T0b 的 SC-SR7 (1) 驗 1 個實例、`start` 1 次、`abort` 1 次                                               |
+| 第 3 版：準備中、辨識中的麥克風仍停用，使用者只能等                    | T0b 的 SC-SR5 (1) 在 3 個狀態各按一次，停用就紅                                                                   |
+| 第 3 版：清除鈕順手清掉草稿或送出 API                                  | 決策 360 (c)。SC-SR17 (2) 驗草稿保留、請求數不變；T2b 突變檢查                                                    |
+| 第 3 版：關掉動畫後 2 種樣子變得一樣，只剩隱藏文字不同                 | SC-SR18 (2) 看狀態屬性；T2b 突變檢查                                                                              |
+| 第 3 版：改寫既有語音測試時順手刪掉防線                                | T0b 的隔離測試由協調者改，T1b 不能動斷言；T2b 比對 diff                                                           |
 
 ## 4. 驗證點
 
 - T0 後：`pnpm --filter @ledger/web typecheck`、`lint` 綠；新測試只因「找不到麥克風按鈕」而紅；既有測試全綠。
 - T1 後：Web 單元測試全綠（含 T0 的隔離測試）；既有 AI 測試內容沒改；`git diff` 只碰 `apps/web`；`package.json` 與 lockfile 沒變。
 - T2 後：全部檢查與 Web e2e 綠；2 處突變檢查都會變紅；CI 全綠。
+- T0b 後：隔離測試只因 §1.3b 列的 2 種原因而紅；Web typecheck、lint 綠。
+- T1b 後：Web 單元測試全綠（含 T0b 的隔離測試）；SC-SR17、SR18 有測試；`git diff` 只碰 `apps/web`；`package.json` 與 lockfile 沒變。
+- T2b 後：全部檢查與 Web e2e 綠；3 處突變檢查都會變紅；CI 全綠。
 - T3 後：SC-SR14～SR16 的表填完，門檻結果照實記。
 
 ## 5. 要開發者決定的事
@@ -177,12 +238,19 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
 1. 辨識期間按 Escape 只取消，不收合入口；焦點回到麥克風按鈕。不在辨識期間，Escape 照現有行為收合。
 2. 按星芒按鈕收合時，辨識取消，焦點留在星芒按鈕（使用者剛按的那顆），不跳到麥克風按鈕。
 
+第 3 版（§1.3b）另外 2 點，核可時一起確認：
+
+3. 動畫與清除鈕的樣式由 Codex 決定。合併後你在 Chrome 看。想改就另開一個小 PR，不擋這次合併。
+4. 隔離測試原本有 1 條「按停止聆聽，final 照常填入」。使用者已經按不到停止，這條改由 T1b 寫在 SC-SR8 (1)，用 30 秒上限觸發停止。其他防線斷言照舊保留。
+
 ## 6. 派工
 
 - T1 用 `orca orchestration` 派給 `default` 角色（兩段式啟動），Task spec 照 `docs/orca-multi-agent.md` §3 的格式。開頭寫「先讀根目錄與 `apps/web` 的 `CLAUDE.md`」，附本 plan §1.2 全文與 spec 決策 347～354、W257～W259、§5、§7。
 - Constraints 加寫：只改 `apps/web`；不加套件；不跑 Web e2e；不改 T0 測試的斷言；不改既有 AI 測試的內容。
 - 驗收：協調者逐行看 diff，自己重跑 Web 單元測試與全部 Web e2e。
 - worker 驗收合併後，立刻清 worktree、分支、終端機。
+- T1b 一樣派 `default` 的 Codex。附本 plan §1.3b 全文與 spec 決策 350、353、358～360、W258、W259、W288、SC-SR3、SR5、SR7、SR8、SR12、SR13、SR17、SR18。
+- T1b 的 Constraints：T1 的那幾條，但「不改既有 AI 測試的內容」改成「只改語音相關測試裡按停止與取消按鈕的案例」。打字流程的 AI 測試仍然不能改。
 
 ## 7. 實作紀錄
 
