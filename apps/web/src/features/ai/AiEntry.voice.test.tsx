@@ -987,7 +987,7 @@ describe('AI entry voice input', () => {
     expectNoParseWithInput('');
   });
 
-  it('SC-SR18 (1)：準備與辨識是等待、收音是 recording、閒置沒有狀態樣式', async () => {
+  it('SC-SR18 (1)：準備與辨識是等待、收音是 recording，收音不畫麥克風且閒置有麥克風', async () => {
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
     const user = userEvent.setup();
     renderEntry();
@@ -997,27 +997,33 @@ describe('AI entry voice input', () => {
     expect(microphone).toHaveAttribute('data-voice-state', 'idle');
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).not.toBeInTheDocument();
     expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).not.toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
 
     await user.click(microphone);
     const recognition = speech.latest();
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'preparing'));
     expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     expect(microphone).toHaveAccessibleName('取消語音');
 
     act(() => recognition.emitAudioStart());
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'listening'));
     expect(microphone).toHaveAttribute('data-voice-look', 'recording');
+    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
     expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).not.toBeInTheDocument();
     expect(microphone).toHaveAccessibleName('取消語音');
 
     act(() => recognition.emitAudioEnd());
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'recognizing'));
     expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     emitFinal(recognition);
     await waitFor(() => expect(inputBox()).toHaveValue(sentence));
     expect(microphone).toHaveAttribute('data-voice-look', 'idle');
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
     expect(microphone).toHaveAccessibleName('開始語音記帳');
   });
 
@@ -1028,7 +1034,13 @@ describe('AI entry voice input', () => {
       /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*animation: none;/,
     );
     expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\)[\s\S]*?\[data-voice-look='recording'\][\s\S]*?\.recordingWaveform\s*>\s*span\s*\{[^}]*animation: none;/,
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton \.recordingWaveform\s*>\s*span\s*\{[^}]*animation: none;/,
+    );
+    expect(css).toMatch(
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton \{[^}]*transition: none;/,
+    );
+    expect(css).toMatch(
+      /:global\(:root\[data-motion='off'\]\) \.voiceButton \.voiceActivity,[\s\S]*?\.recordingWaveform \{[^}]*transition: none;/,
     );
 
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
@@ -1039,10 +1051,12 @@ describe('AI entry voice input', () => {
     const recognition = speech.latest();
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'waiting'));
     expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
 
     act(() => recognition.emitAudioStart());
     await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'recording'));
     expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
+    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).not.toBeInTheDocument();
     expect(microphone.getAttribute('data-voice-look')).not.toBe('waiting');
   });
 

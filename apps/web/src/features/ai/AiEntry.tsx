@@ -280,17 +280,18 @@ export function AiEntry({
           }}
         >
           <span className={styles.voiceGlyph}>
-            {voice.status !== 'idle' &&
-              (voice.status === 'listening' ? (
-                <span className={styles.recordingWaveform} aria-hidden="true">
+            {voice.status !== 'idle' && (
+              <span className={styles.voiceActivity} aria-hidden="true">
+                <span className={styles.recordingWaveform}>
+                  <span />
+                  <span />
                   <span />
                   <span />
                   <span />
                 </span>
-              ) : (
-                <span className={styles.voiceActivity} aria-hidden="true" />
-              ))}
-            <MicrophoneIcon />
+              </span>
+            )}
+            {voice.status !== 'listening' && <MicrophoneIcon />}
             {voice.status !== 'idle' && <CancelMarkIcon />}
           </span>
         </button>
@@ -347,6 +348,7 @@ function MicrophoneIcon() {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
+      className={styles.microphoneIcon}
       aria-hidden="true"
       focusable="false"
     >
