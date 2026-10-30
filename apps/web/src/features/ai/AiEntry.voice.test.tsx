@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useLayoutEffect, type ComponentProps } from 'react';
+import { StrictMode, useLayoutEffect, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ParseTransactionResponse } from '@ledger/shared';
 import { AI_TEXT_MAX_LENGTH } from '@ledger/shared';
@@ -83,16 +83,20 @@ function ToolbarSlot() {
   return <div ref={setElement} data-testid="page-toolbar-slot" />;
 }
 
-function renderEntry(props: Partial<ComponentProps<typeof AiEntry>> = {}) {
-  return render(
+function EntryHarness(props: Partial<ComponentProps<typeof AiEntry>>) {
+  return (
     <AiSessionProvider>
       <SessionProbe />
       <PageToolbarSlotProvider>
         <ToolbarSlot />
         <AiEntry ledger={ledger} {...props} />
       </PageToolbarSlotProvider>
-    </AiSessionProvider>,
+    </AiSessionProvider>
   );
+}
+
+function renderEntry(props: Partial<ComponentProps<typeof AiEntry>> = {}) {
+  return render(EntryHarness(props));
 }
 
 function inputBox() {
@@ -137,6 +141,65 @@ function emitFinal(recognition: FakeSpeechRecognition, transcript = sentence) {
   act(() => recognition.emitResult(transcript, { isFinal: true }));
 }
 
+/** rAF 與時鐘都由測試推進，取消後仍可故意呼叫舊回呼，驗證世代隔離。 */
+function manualRaf() {
+  let now = 0;
+  let nextId = 0;
+  const pending = new Map<number, FrameRequestCallback>();
+  const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    const id = ++nextId;
+    pending.set(id, callback);
+    return id;
+  });
+  const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+    pending.delete(id);
+  });
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  return {
+    pending,
+    request,
+    cancel,
+    step(milliseconds: number) {
+      act(() => {
+        now += milliseconds;
+        const callbacks = [...pending.values()];
+        pending.clear();
+        callbacks.forEach((callback) => callback(now));
+      });
+    },
+    stale(callbacks: FrameRequestCallback[]) {
+      act(() => callbacks.forEach((callback) => callback(now + 5000)));
+    },
+  };
+}
+
+function glyphPaths(button: HTMLElement): string[] {
+  const paths = [...button.querySelectorAll('path[data-particle]')];
+  expect(paths.map((path) => path.getAttribute('data-particle'))).toEqual([
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'center',
+  ]);
+  return paths.map((path) => path.getAttribute('d')!);
+}
+
+const STATIC_DOTS = [
+  'M4,12L4,12.000001A0,0 0 0 0 4,12.000001L4,12.000001A0,0 0 0 0 4,12.000001',
+  'M12,4L12,4.000001A0,0 0 0 0 12,4.000001L12,4.000001A0,0 0 0 0 12,4.000001',
+  'M20,12L20,12.000001A0,0 0 0 0 20,12.000001L20,12.000001A0,0 0 0 0 20,12.000001',
+  'M12,20L12,20.000001A0,0 0 0 0 12,20.000001L12,20.000001A0,0 0 0 0 12,20.000001',
+  'M12,12L12,12.000001A0,0 0 0 1 12,12.000001L12,12.000001A0,0 0 0 1 12,12.000001',
+];
+const STATIC_BARS = [
+  'M16,6.9L16,17.1A0,0 0 0 0 16,17.1L16,17.1A0,0 0 0 0 16,17.1',
+  'M20,9.9L20,14.1A0,0 0 0 0 20,14.1L20,14.1A0,0 0 0 0 20,14.1',
+  'M8,6.9L8,17.1A0,0 0 0 0 8,17.1L8,17.1A0,0 0 0 0 8,17.1',
+  'M4,9.9L4,14.1A0,0 0 0 0 4,14.1L4,14.1A0,0 0 0 0 4,14.1',
+  'M12,3.9L12,20.1A0,0 0 0 1 12,20.1L12,20.1A0,0 0 0 1 12,20.1',
+];
+
 /** 以可控制的假辨識器驗證語音辨識只填入文字，解析仍只由送出按鈕觸發。 */
 describe('AI entry voice input', () => {
   beforeEach(() => {
@@ -155,6 +218,7 @@ describe('AI entry voice input', () => {
     speech = null;
     delete document.documentElement.dataset.motion;
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('SC-SR1 (1)：沒有建構子時不顯示麥克風，打字仍可用', async () => {
@@ -987,91 +1051,47 @@ describe('AI entry voice input', () => {
     expectNoParseWithInput('');
   });
 
-  it('SC-SR18 (1)：準備與辨識是等待、收音是 recording，收音不畫麥克風且閒置有麥克風', async () => {
-    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
-    const user = userEvent.setup();
-    renderEntry();
-    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
-
-    expect(microphone).toHaveAttribute('data-voice-look', 'idle');
-    expect(microphone).toHaveAttribute('data-voice-state', 'idle');
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    const css = readAiEntryCss();
-    expect(css).toMatch(/\.voiceActivity\s*\{[^}]*opacity: 0;/);
-    expect(css).toMatch(/\.microphoneIcon\s*\{[^}]*opacity: 1;/);
-    expect(css).toMatch(
-      /\.voiceButton\[data-voice-look='recording'\] \.microphoneIcon\s*\{[^}]*opacity: 0;/,
-    );
-
-    await user.click(microphone);
-    const recognition = speech.latest();
-    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'preparing'));
-    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    expect(microphone).toHaveAccessibleName('取消語音');
-
-    act(() => recognition.emitAudioStart());
-    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'listening'));
-    expect(microphone).toHaveAttribute('data-voice-look', 'recording');
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    expect(microphone).toHaveAccessibleName('取消語音');
-
-    act(() => recognition.emitAudioEnd());
-    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-state', 'recognizing'));
-    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    emitFinal(recognition);
-    await waitFor(() => expect(inputBox()).toHaveValue(sentence));
-    expect(microphone).toHaveAttribute('data-voice-look', 'idle');
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    expect(microphone).toHaveAccessibleName('開始語音記帳');
-  });
-
-  it('SC-SR18 (2)：動畫關閉時等待與收音仍用不同的靜態形狀', async () => {
+  it('SC-SR18 (1)(2)：實際 SVG 在閒置、等待、收音不同，辨識中持續是五點', () => {
+    const raf = manualRaf();
     document.documentElement.dataset.motion = 'off';
-    const css = readAiEntryCss();
-    expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton\s*\{[^}]*transition: none;/,
-    );
-    // jsdom 不計算 CSS 權重，因此需核對能蓋過 recording span 動畫的 selector 文字。
-    expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look\] \*\s*\{[^}]*transition: none;[^}]*animation: none;/,
-    );
-    expect(css).toMatch(
-      /:global\(:root\[data-motion='off'\]\) \.voiceButton\[data-voice-look='waiting'\] \.voiceActivity \{[^}]*border-top-color: currentColor;[^}]*border-right-style: dashed;/,
-    );
-    expect(css).toMatch(
-      /\.voiceButton\[data-voice-look='recording'\] \.voiceActivity \{[^}]*border-color: transparent;[^}]*border-radius: 0;/,
-    );
-    expect(css).toMatch(
-      /\.voiceButton\[data-voice-look='waiting'\] \.voiceActivity\s*\{[^}]*opacity: 1;/,
-    );
-    expect(css).toMatch(
-      /\.voiceButton\[data-voice-look='recording'\] \.recordingWaveform\s*\{[^}]*opacity: 1;/,
-    );
-
     speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
-    const user = userEvent.setup();
     renderEntry();
     const microphone = screen.getByRole('button', { name: '開始語音記帳' });
-    await user.click(microphone);
-    const recognition = speech.latest();
-    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'waiting'));
-    expect(microphone.querySelector(`.${styles.voiceActivity!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
+    const idle = glyphPaths(microphone);
+    expect(idle[4]).toBe('M15,6L15,12A3,3 0 0 1 9,12L9,6A3,3 0 0 1 15,6');
+    const svg = microphone.querySelector('svg')!;
+    expect(svg).toHaveAttribute('width', '20');
+    expect(svg).toHaveAttribute('height', '20');
+    expect(svg).toHaveAttribute('stroke-width', '1.8');
+    expect(svg).toHaveAttribute('aria-hidden', 'true');
+    expect(svg).toHaveAttribute('focusable', 'false');
+    expect(svg).toHaveAttribute('pointer-events', 'none');
+    expect(svg).not.toHaveAttribute('role');
+    expect(svg.querySelector('title')).toBeNull();
+    expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeNull();
 
+    fireEvent.click(microphone);
+    const recognition = speech.latest();
+    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
+    expect(glyphPaths(microphone)).toEqual(STATIC_DOTS);
+    expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeInTheDocument();
     act(() => recognition.emitAudioStart());
-    await waitFor(() => expect(microphone).toHaveAttribute('data-voice-look', 'recording'));
-    expect(microphone.querySelector(`.${styles.recordingWaveform!}`)).toBeInTheDocument();
-    expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
-    expect(microphone.getAttribute('data-voice-look')).not.toBe('waiting');
+    expect(microphone).toHaveAttribute('data-voice-look', 'recording');
+    expect(glyphPaths(microphone)).toEqual(STATIC_BARS);
+    act(() => recognition.emitAudioEnd());
+    expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
+    expect(glyphPaths(microphone)).toEqual(STATIC_DOTS);
+    raf.step(2000);
+    expect(glyphPaths(microphone)).toEqual(STATIC_DOTS);
+    expect(raf.request).not.toHaveBeenCalled();
+    expectNoParseWithInput('');
+    emitFinal(recognition);
+    expect(glyphPaths(microphone)).toEqual(idle);
+    expect(microphone).toBeDisabled();
+    expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeNull();
+    expectNoParseWithInput(sentence);
+    const css = readAiEntryCss();
+    expect(css).not.toMatch(/voice-wait-turn|voice-record-pulse|recordingWaveform|voiceActivity/);
   });
 
   it('SC-SR18 (3)：狀態文字只在視覺隱藏的 live region 內，閒置時為空', async () => {
@@ -1100,8 +1120,9 @@ describe('AI entry voice input', () => {
   });
 
   it.each(['preparing', 'listening', 'recognizing'] as const)(
-    'SC-SR18 (4)：%s 取消後同一個 tick 回到麥克風並可立刻重新開始',
+    'SC-SR18 (5)：%s 取消後第一個 commit 可立刻重新開始，不等動畫',
     (cancelState) => {
+      const raf = manualRaf();
       speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
       renderEntry();
       const microphone = screen.getByRole('button', { name: '開始語音記帳' });
@@ -1124,13 +1145,331 @@ describe('AI entry voice input', () => {
       expect(microphone.querySelector(`.${styles.microphoneIcon!}`)).toBeInTheDocument();
       expect(microphone).not.toBeDisabled();
       expect(recognition.abortCalls).toBe(1);
+      expect(recognition.stopCalls).toBe(0);
+      expect(microphone).toHaveFocus();
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+      expect(inputBox()).not.toBeDisabled();
+      expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeNull();
+      expectNoParseWithInput('');
 
       fireEvent.click(microphone);
       expect(microphone).toHaveAttribute('aria-label', '取消語音');
       expect(microphone).toHaveAttribute('data-voice-state', 'preparing');
       expect(speech.instances).toHaveLength(2);
       expect(speech.latest().startCalls).toBe(1);
+      expect(screen.getByRole('status')).toHaveTextContent('準備中…');
+      expect(inputBox()).toBeDisabled();
+      expect(raf.pending.size).toBe(1);
+      expectNoParseWithInput('');
+    },
+  );
+
+  it('SC-SR18 (5)：一幀不跑，開始、收音、辨識、final 的語意、焦點與停用都已更新', () => {
+    const raf = manualRaf();
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    const initial = glyphPaths(microphone);
+    const live = screen.getByRole('status');
+    const status = (look: string, message: string) => {
+      expect(microphone).toHaveAttribute('data-voice-look', look);
+      expect(microphone).toHaveAccessibleName(look === 'idle' ? '開始語音記帳' : '取消語音');
+      expect(live.textContent).toBe(message);
+      expect(microphone).not.toBeDisabled();
+      expectNoParseWithInput('');
+    };
+    fireEvent.click(microphone);
+    const recognition = speech.latest();
+    status('waiting', '準備中…');
+    expect(recognition.startCalls).toBe(1);
+    expect(inputBox()).toBeDisabled();
+    expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeInTheDocument();
+    act(() => recognition.emitAudioStart());
+    status('recording', '聆聽中…');
+    act(() => recognition.emitAudioEnd());
+    status('waiting', '辨識中…');
+    expect(recognition.abortCalls).toBe(0);
+    emitFinal(recognition);
+    expect(microphone).toHaveAttribute('data-voice-look', 'idle');
+    expect(microphone).toHaveAccessibleName('開始語音記帳');
+    expect(live).toBeEmptyDOMElement();
+    expect(inputBox()).toHaveFocus();
+    expect(inputBox()).not.toBeDisabled();
+    expect(microphone).toBeDisabled();
+    expect(microphone.querySelector('svg.' + styles.cancelMark)).toBeNull();
+    expect(glyphPaths(microphone)).toEqual(initial);
+    expectNoParseWithInput(sentence);
+    expect(recognition.startCalls).toBe(1);
+    expect(recognition.abortCalls).toBe(0);
+    expect(raf.pending.size).toBe(0);
+  });
+
+  it.each([0.2, 0.5, 0.8])(
+    'SC-SR18 (6)：%s 處拆解收到 audiostart，保留實際 SVG 所有筆畫',
+    (fraction) => {
+      const raf = manualRaf();
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+      fireEvent.click(microphone);
+      const recognition = speech.latest();
+      raf.step(500 * fraction);
+      const before = glyphPaths(microphone);
+      const stale = [...raf.pending.values()];
+      act(() => recognition.emitAudioStart());
+      expect(glyphPaths(microphone)).toEqual(before);
+      raf.step(16);
+      const next = glyphPaths(microphone);
+      expect(next).not.toEqual(before);
+      const scheduled = raf.request.mock.calls.length;
+      raf.stale(stale);
+      expect(glyphPaths(microphone)).toEqual(next);
+      expect(raf.request).toHaveBeenCalledTimes(scheduled);
+      expect(raf.pending.size).toBe(1);
+      raf.step(684);
+      expect(glyphPaths(microphone)).toEqual(STATIC_BARS);
+      expect(recognition.startCalls).toBe(1);
+      expect(recognition.abortCalls).toBe(0);
+      expectNoParseWithInput('');
+    },
+  );
+
+  it.each([0.2, 0.5, 0.8])('SC-SR18 (6)：%s 處落點中取消，新轉場從實際 SVG 接續', (fraction) => {
+    const raf = manualRaf();
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    const idle = glyphPaths(microphone);
+    fireEvent.click(microphone);
+    const recognition = speech.latest();
+    raf.step(500);
+    act(() => recognition.emitAudioStart());
+    raf.step(700 * fraction);
+    const before = glyphPaths(microphone);
+    const stale = [...raf.pending.values()];
+    fireEvent.click(microphone);
+    expect(glyphPaths(microphone)).toEqual(before);
+    expect(microphone).toHaveFocus();
+    expect(recognition.abortCalls).toBe(1);
+    raf.step(16);
+    const next = glyphPaths(microphone);
+    expect(next).not.toEqual(before);
+    const scheduled = raf.request.mock.calls.length;
+    raf.stale(stale);
+    expect(glyphPaths(microphone)).toEqual(next);
+    expect(raf.request).toHaveBeenCalledTimes(scheduled);
+    raf.step(884);
+    expect(glyphPaths(microphone)).toEqual(idle);
+    expect(raf.pending.size).toBe(0);
+    expectNoParseWithInput('');
+  });
+
+  it.each([0.2, 0.5, 0.8])(
+    'SC-SR18 (6)：%s 處合併中按第 3 下，從實際 SVG 開始新一輪',
+    (fraction) => {
+      const raf = manualRaf();
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+      fireEvent.click(microphone);
+      const first = speech.latest();
+      raf.step(500);
+      act(() => first.emitAudioStart());
+      raf.step(700);
+      fireEvent.click(microphone);
+      raf.step(900 * fraction);
+      const before = glyphPaths(microphone);
+      const stale = [...raf.pending.values()];
+      fireEvent.click(microphone);
+      expect(glyphPaths(microphone)).toEqual(before);
+      const second = speech.latest();
+      expect(second).not.toBe(first);
+      expect(first.abortCalls).toBe(1);
+      expect(second.startCalls).toBe(1);
+      expect(microphone).toHaveAttribute('data-voice-look', 'waiting');
+      raf.step(16);
+      const next = glyphPaths(microphone);
+      expect(next).not.toEqual(before);
+      const scheduled = raf.request.mock.calls.length;
+      raf.stale(stale);
+      expect(glyphPaths(microphone)).toEqual(next);
+      expect(raf.request).toHaveBeenCalledTimes(scheduled);
+      expect(raf.pending.size).toBe(1);
+      raf.step(700);
+      expect(glyphPaths(microphone).every((path) => path.includes('A0,0'))).toBe(true);
+      expectNoParseWithInput('');
+    },
+  );
+
+  it.each([0.2, 0.5, 0.8])(
+    'SC-SR18 (6)：%s 處收音中 audioend 隨即 final，不等待回外圈',
+    (fraction) => {
+      const raf = manualRaf();
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+      const idle = glyphPaths(microphone);
+      fireEvent.click(microphone);
+      const recognition = speech.latest();
+      raf.step(500);
+      act(() => recognition.emitAudioStart());
+      raf.step(700);
+      raf.step(1000 * fraction);
+      const before = glyphPaths(microphone);
+      const stale = [...raf.pending.values()];
+      act(() => recognition.emitAudioEnd());
+      expect(glyphPaths(microphone)).toEqual(before);
+      stale.push(...raf.pending.values());
+      emitFinal(recognition);
+      expect(glyphPaths(microphone)).toEqual(before);
+      expect(inputBox()).toHaveFocus();
+      expect(microphone).toBeDisabled();
+      expectNoParseWithInput(sentence);
+      raf.step(16);
+      const next = glyphPaths(microphone);
+      expect(next).not.toEqual(before);
+      const scheduled = raf.request.mock.calls.length;
+      raf.stale(stale);
+      expect(glyphPaths(microphone)).toEqual(next);
+      expect(raf.request).toHaveBeenCalledTimes(scheduled);
+      raf.step(884);
+      expect(glyphPaths(microphone)).toEqual(idle);
+      expect(raf.pending.size).toBe(0);
+      expect(recognition.abortCalls).toBe(0);
+      expectNoParseWithInput(sentence);
+    },
+  );
+
+  it('SC-SR18 (6)：重複 render 同一個目標不重排或重啟轉場', () => {
+    const raf = manualRaf();
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    const view = renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    fireEvent.click(microphone);
+    raf.step(250);
+    const before = glyphPaths(microphone);
+    const scheduled = raf.request.mock.calls.length;
+    const cancelled = raf.cancel.mock.calls.length;
+    view.rerender(EntryHarness({}));
+    expect(glyphPaths(microphone)).toEqual(before);
+    expect(raf.request).toHaveBeenCalledTimes(scheduled);
+    expect(raf.cancel).toHaveBeenCalledTimes(cancelled);
+    raf.step(250);
+    expect(glyphPaths(microphone).every((path) => path.includes('A0,0'))).toBe(true);
+    expect(raf.pending.size).toBe(1);
+    expectNoParseWithInput('');
+  });
+
+  it.each(['idle', 'preparing', 'listening', 'recognizing'] as const)(
+    'SC-SR18 (7)：%s on→off 取消幀，舊回呼無效，off→on 只恢復目前狀態',
+    async (state) => {
+      const raf = manualRaf();
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+      const idle = glyphPaths(microphone);
+      if (state !== 'idle') {
+        fireEvent.click(microphone);
+        raf.step(250);
+        if (state === 'listening' || state === 'recognizing') {
+          act(() => speech!.latest().emitAudioStart());
+          raf.step(350);
+        }
+        if (state === 'recognizing') {
+          act(() => speech!.latest().emitAudioEnd());
+          raf.step(350);
+        }
+      }
+      const oldCallbacks = [...raf.pending.values()];
+      await act(async () => {
+        document.documentElement.dataset.motion = 'off';
+        await Promise.resolve();
+      });
+      const still = state === 'idle' ? idle : state === 'listening' ? STATIC_BARS : STATIC_DOTS;
+      expect(glyphPaths(microphone)).toEqual(still);
+      expect(raf.pending.size).toBe(0);
+      if (state !== 'idle') expect(raf.cancel).toHaveBeenCalled();
+      const scheduled = raf.request.mock.calls.length;
+      raf.stale(oldCallbacks);
+      expect(glyphPaths(microphone)).toEqual(still);
+      expect(raf.request).toHaveBeenCalledTimes(scheduled);
+      raf.step(2000);
+      expect(glyphPaths(microphone)).toEqual(still);
+      await act(async () => {
+        delete document.documentElement.dataset.motion;
+        await Promise.resolve();
+      });
+      expect(glyphPaths(microphone)).toEqual(still);
+      expect(raf.pending.size).toBe(state === 'idle' ? 0 : 1);
+      raf.step(16);
+      if (state !== 'idle') expect(glyphPaths(microphone)).not.toEqual(still);
+      else expect(glyphPaths(microphone)).toEqual(still);
+      expect(microphone).toHaveAttribute('data-voice-state', state);
+      expectNoParseWithInput('');
+    },
+  );
+
+  it('SC-SR18 (7)：辨識中持續繞圈，沒有計時後合回麥克風', () => {
+    const raf = manualRaf();
+    speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+    renderEntry();
+    const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+    fireEvent.click(microphone);
+    act(() => speech!.latest().emitAudioStart());
+    raf.step(700);
+    act(() => speech!.latest().emitAudioEnd());
+    raf.step(700);
+    const dots = glyphPaths(microphone);
+    raf.step(3300);
+    expect(glyphPaths(microphone)).not.toEqual(dots);
+    expect(glyphPaths(microphone).every((path) => path.includes('A0,0'))).toBe(true);
+    expect(microphone).toHaveAttribute('data-voice-state', 'recognizing');
+    expect(raf.pending.size).toBe(1);
+    expectNoParseWithInput('');
+  });
+
+  it.each(['unmount', 'hidden', 'strict'] as const)(
+    'SC-SR18 (7)：%s 清除幀與觀察器，同時最多一個 loop',
+    async (mode) => {
+      const raf = manualRaf();
+      speech = installFakeSpeechRecognition({ global: 'webkitSpeechRecognition' });
+      const observe = vi.spyOn(MutationObserver.prototype, 'observe');
+      const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
+      const view =
+        mode === 'strict'
+          ? render(
+              <StrictMode>
+                <EntryHarness />
+              </StrictMode>,
+            )
+          : renderEntry();
+      const microphone = screen.getByRole('button', { name: '開始語音記帳' });
+      fireEvent.click(microphone);
+      for (let frame = 0; frame < 5; frame += 1) {
+        expect(raf.pending.size).toBe(1);
+        raf.step(100);
+      }
+      const stale = [...raf.pending.values()];
+      if (mode === 'hidden') view.rerender(EntryHarness({ isVisible: false }));
+      else view.unmount();
+      expect(raf.pending.size).toBe(0);
+      expect(disconnect.mock.calls.length).toBe(observe.mock.calls.length);
+      const scheduled = raf.request.mock.calls.length;
+      raf.stale(stale);
+      await act(async () => {
+        document.documentElement.dataset.motion = 'off';
+        await Promise.resolve();
+      });
+      await act(async () => {
+        delete document.documentElement.dataset.motion;
+        await Promise.resolve();
+      });
+      expect(raf.request).toHaveBeenCalledTimes(scheduled);
+      expect(raf.pending.size).toBe(0);
+      expect(speech.latest().abortCalls).toBe(1);
       expect(mocks.parse).not.toHaveBeenCalled();
+      expect(probe.text).toBe('');
+      expect(screen.queryByRole('textbox', { name: '用一句話記帳', hidden: true })).toBeNull();
     },
   );
 });
