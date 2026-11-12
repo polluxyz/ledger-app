@@ -487,18 +487,22 @@ export class LedgersService {
       where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
     });
     if (existing) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.ALREADY_MEMBER,
-        'User is already a member of this ledger.',
-      );
+      throw this.alreadyMember();
     }
 
     const member = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.ledgerMember.create({
-        data: { ledgerId, userId: targetUserId, role },
-        include: { user: true },
-      });
+      const created = await tx.ledgerMember
+        .create({
+          data: { ledgerId, userId: targetUserId, role },
+          include: { user: true },
+        })
+        .catch((error: unknown) => {
+          // 前置查詢不能阻止並行加入；只轉換建立成員這一步的唯一鍵衝突，讓整個交易回滾。
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw this.alreadyMember();
+          }
+          throw error;
+        });
       await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, targetUserId);
       // 3k 決策 208：被加回時，他上次退出這本帳本留下的帳本轉入撤銷，這筆錢回到帳本裡算，
       // 借還頁不會重複。只動他自己的；帳本轉入沒有交易、不送提議，軟刪除即可。
@@ -665,6 +669,14 @@ export class LedgersService {
 
   private memberNotFound(): AppException {
     return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Member not found.');
+  }
+
+  private alreadyMember(): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      ErrorCode.ALREADY_MEMBER,
+      'User is already a member of this ledger.',
+    );
   }
 
   private toLedger(ledger: LedgerRow) {
