@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthTokenResponse, AuthUser, LoginRequest, RegisterRequest } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
 import { clearActiveLedgerId } from '../../lib/active-ledger-storage';
-import { clearToken, readToken, writeToken } from '../../lib/token-storage';
+import { clearToken, onTokenExpired, readToken, writeToken } from '../../lib/token-storage';
 import { homeLayoutEditStore } from '../../app/home-layout-edit-store';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
@@ -49,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 清掉快取，避免下一位登入者看到上一位的資料。
     queryClient.clear();
   }, [queryClient]);
+
+  useEffect(() => onTokenExpired(logout), [logout]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ token, isAuthenticated: token !== null, login, register, logout }),
