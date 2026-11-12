@@ -1,6 +1,6 @@
 # 3j 任務清單
 
-plan：`tasks/phase-3j-plan.md`；spec：`docs/specs/phase-3j-ledger-delete-archive.md`。
+plan：`tasks/archive/phase-3j-plan.md`；spec：`docs/specs/phase-3j-ledger-delete-archive.md`。
 
 - [x] **J0 契約與隔離測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`ledger-delete-archive-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 通過。

@@ -1,6 +1,6 @@
 # 3g 任務清單
 
-plan：`tasks/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`。
+plan：`tasks/archive/phase-3g-plan.md`；spec：`docs/specs/phase-3g-debts-inline.md`。
 
 - [x] **G0 整合分支、契約與隔離測試**（協調者）：從 `polluxyz/debts-inline` 開 `feature/debts-inline`；plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`debts-inline-isolation.e2e-spec.ts` 紅燈（端點或參數還不存在）；API／Web typecheck 只剩「新欄位未實作」的錯誤。
