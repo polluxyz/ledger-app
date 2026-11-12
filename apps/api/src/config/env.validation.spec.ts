@@ -14,6 +14,19 @@ describe('validateEnv', () => {
     JWT_SECRET: 'a'.repeat(32),
   };
 
+  it.each([undefined, '', 'a', 'a'.repeat(31)])(
+    'rejects a JWT secret shorter than 32 characters (%s)',
+    (secret) => {
+      expect(() => validateEnv({ ...base, JWT_SECRET: secret })).toThrow('JWT_SECRET');
+    },
+  );
+
+  it.each([32, 64])('accepts a JWT secret of %i characters', (length) => {
+    expect(validateEnv({ ...base, JWT_SECRET: 'a'.repeat(length) }).JWT_SECRET).toHaveLength(
+      length,
+    );
+  });
+
   it.each([
     ['AI_PARSE_DAILY_LIMIT_PER_USER', 50, 10000, 0],
     ['AI_DAILY_LIMIT_GLOBAL', 500, 1000000, 0],

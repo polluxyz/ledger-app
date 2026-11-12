@@ -5,6 +5,7 @@ import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { AccountsService } from '../accounts/accounts.service';
 import { DebtEntriesService } from '../debts/debt-entries.service';
 import { SplitsService } from '../splits/splits.service';
+import { Prisma } from '../generated/prisma/client';
 
 /**
  * 聚焦成員管理的不變量（最具安全性關鍵的邏輯）：加入成員的查無／重複、最後一位
@@ -31,6 +32,7 @@ describe('LedgersService (members)', () => {
     debtEntry: { count: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     split: { count: jest.Mock; findMany: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
   const ledgerPeople = { ensureMemberPerson: jest.fn() };
 
@@ -83,6 +85,7 @@ describe('LedgersService (members)', () => {
         deleteMany: jest.fn(),
       },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     ledgerPeople.ensureMemberPerson.mockReset();
     service = new LedgersService(
@@ -290,6 +293,30 @@ describe('LedgersService (members)', () => {
   });
 
   describe('addMember', () => {
+    it('maps a concurrent member unique-key conflict to ALREADY_MEMBER', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      prisma.ledgerMember.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@example.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toMatchObject({ status: 409, errorCode: 'ALREADY_MEMBER' });
+      expect(ledgerPeople.ensureMemberPerson).not.toHaveBeenCalled();
+    });
+
+    it('preserves unexpected failures instead of treating them as duplicate membership', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+      prisma.ledgerMember.findUnique.mockResolvedValue(null);
+      const error = new Error('unavailable');
+      prisma.ledgerMember.create.mockRejectedValue(error);
+      await expect(
+        service.addMember(ledgerId, { email: 'bob@example.com', role: 'EDITOR' }, 'owner-1'),
+      ).rejects.toBe(error);
+    });
     it('404s when no user has the email', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 

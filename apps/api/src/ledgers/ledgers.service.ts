@@ -487,18 +487,22 @@ export class LedgersService {
       where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
     });
     if (existing) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.ALREADY_MEMBER,
-        'User is already a member of this ledger.',
-      );
+      throw this.alreadyMember();
     }
 
     const member = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.ledgerMember.create({
-        data: { ledgerId, userId: targetUserId, role },
-        include: { user: true },
-      });
+      const created = await tx.ledgerMember
+        .create({
+          data: { ledgerId, userId: targetUserId, role },
+          include: { user: true },
+        })
+        .catch((error: unknown) => {
+          // 前置查詢不能阻止並行加入；只轉換建立成員這一步的唯一鍵衝突，讓整個交易回滾。
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw this.alreadyMember();
+          }
+          throw error;
+        });
       await this.ledgerPeople.ensureMemberPerson(tx, ledgerId, targetUserId);
       // 3k 決策 208：被加回時，他上次退出這本帳本留下的帳本轉入撤銷，這筆錢回到帳本裡算，
       // 借還頁不會重複。只動他自己的；帳本轉入沒有交易、不送提議，軟刪除即可。
@@ -548,6 +552,8 @@ export class LedgersService {
     role: LedgerRole,
   ): Promise<LedgerMemberInfo> {
     return this.prisma.$transaction(async (tx) => {
+      // 所有擁有者變更先鎖同一帳本；取得鎖後才重讀成員與擁有者數量。
+      await tx.$queryRaw`SELECT id FROM "Ledger" WHERE id = ${ledgerId} FOR UPDATE`;
       const target = await tx.ledgerMember.findUnique({
         where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
       });
@@ -573,6 +579,8 @@ export class LedgersService {
    */
   async removeMember(ledgerId: string, targetUserId: string, actingUserId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
+      // 與角色變更及退出流程共用帳本鎖，避免數到另一位即將被移除的擁有者。
+      await tx.$queryRaw`SELECT id FROM "Ledger" WHERE id = ${ledgerId} FOR UPDATE`;
       const target = await tx.ledgerMember.findUnique({
         where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
       });
@@ -661,6 +669,14 @@ export class LedgersService {
 
   private memberNotFound(): AppException {
     return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Member not found.');
+  }
+
+  private alreadyMember(): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      ErrorCode.ALREADY_MEMBER,
+      'User is already a member of this ledger.',
+    );
   }
 
   private toLedger(ledger: LedgerRow) {

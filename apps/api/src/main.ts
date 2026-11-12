@@ -44,16 +44,22 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Ledger API')
-    .setDescription('Personal & family expense tracking API')
-    .setVersion('0.1.0')
-    // 具名的 bearer 方案，讓 controller 用 @ApiBearerAuth('jwt') 選擇性套用。
-    .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'jwt')
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  // 掛在 /docs（在 /api 前綴之外），是慣例的文件位置。
-  SwaggerModule.setup('docs', app, document);
+  // 正式環境不建立文件，也不掛載 UI 與 JSON 路由。
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Ledger API')
+      .setDescription('Personal & family expense tracking API')
+      .setVersion('0.1.0')
+      // 具名的 bearer 方案，讓 controller 用 @ApiBearerAuth('jwt') 選擇性套用。
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'jwt')
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    // 掛在 /docs（在 /api 前綴之外），是慣例的文件位置。
+    SwaggerModule.setup('docs', app, document);
+  }
+
+  // 收到關機訊號時執行生命週期清理，讓 Prisma 釋放連線。
+  app.enableShutdownHooks();
 
   // 位址與埠都取驗證過的設定；HOST 預設只聽本機（見 `env.validation.ts`）。
   await app.listen(config.get('PORT', { infer: true }), config.get('HOST', { infer: true }));

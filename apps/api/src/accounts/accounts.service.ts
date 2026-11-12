@@ -243,31 +243,41 @@ export class AccountsService {
 
   /** 刪除帳戶，除非有任何交易引用它（轉出或轉入皆算）。 */
   async remove(userId: string, accountId: string): Promise<void> {
-    const owned = await this.getOwned(userId, accountId);
-    this.assertNotTemporary(owned);
+    await this.prisma.$transaction(async (tx) => {
+      // 先鎖帳戶才計數：等待既有引用提交，並阻止新的外鍵引用插入到檢查與刪除之間。
+      await tx.$queryRaw`
+        SELECT id FROM "Account" WHERE id = ${accountId} AND "userId" = ${userId} FOR UPDATE
+      `;
+      const owned = await this.getOwned(userId, accountId, tx);
+      this.assertNotTemporary(owned);
 
-    // 計數包含已軟刪除的交易：歷史紀錄必須保持可追溯，帳戶名不能憑空消失。
-    // 轉入方也要算——否則刪掉轉入帳戶會讓一筆轉帳只剩半邊。
-    const referencing = await this.prisma.transaction.count({
-      where: { OR: [{ accountId }, { toAccountId: accountId }] },
+      // 計數包含已軟刪除的交易：歷史紀錄必須保持可追溯，帳戶名不能憑空消失。
+      // 轉入方也要算——否則刪掉轉入帳戶會讓一筆轉帳只剩半邊。
+      const referencing = await tx.transaction.count({
+        where: { OR: [{ accountId }, { toAccountId: accountId }] },
+      });
+      if (referencing > 0) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.ACCOUNT_IN_USE,
+          'Cannot delete an account that transactions reference.',
+        );
+      }
+
+      await tx.account.delete({ where: { id: accountId } });
     });
-    if (referencing > 0) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.ACCOUNT_IN_USE,
-        'Cannot delete an account that transactions reference.',
-      );
-    }
-
-    await this.prisma.account.delete({ where: { id: accountId } });
   }
 
   /**
    * 載入帳戶並確認它屬於呼叫者。不屬於自己或根本不存在，一律回同樣的 404——
    * 兩者若給出不同回應，就等於提供了一個探測他人帳戶 id 的管道。
    */
-  private async getOwned(userId: string, accountId: string): Promise<AccountRow> {
-    const account = await this.prisma.account.findUnique({
+  private async getOwned(
+    userId: string,
+    accountId: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<AccountRow> {
+    const account = await client.account.findUnique({
       where: { id: accountId },
     });
     if (!account || account.userId !== userId) {

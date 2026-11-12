@@ -18,6 +18,7 @@ describe('TransactionsService', () => {
     account: { findUnique: jest.Mock; findFirst: jest.Mock };
     debtEntry: { findUnique: jest.Mock };
     ledgerSettlement: { findUnique: jest.Mock };
+    ledgerSplit: { deleteMany: jest.Mock };
     ledgerPerson: { findUnique: jest.Mock };
     ledgerMerge: { findUnique: jest.Mock };
     ledgerMember: { findUnique: jest.Mock };
@@ -83,6 +84,7 @@ describe('TransactionsService', () => {
       account: { findUnique: jest.fn(), findFirst: jest.fn() },
       debtEntry: { findUnique: jest.fn().mockResolvedValue(null) },
       ledgerSettlement: { findUnique: jest.fn().mockResolvedValue(null) },
+      ledgerSplit: { deleteMany: jest.fn() },
       ledgerPerson: { findUnique: jest.fn().mockResolvedValue({ id: 'person-1' }) },
       ledgerMerge: { findUnique: jest.fn().mockResolvedValue({ userId: creatorId }) },
       ledgerMember: { findUnique: jest.fn().mockResolvedValue({ role: 'VIEWER' }) },
@@ -111,6 +113,53 @@ describe('TransactionsService', () => {
       {} as LedgerPeopleService,
       categories as unknown as CategoriesService,
     );
+  });
+
+  it.each(['PERSONAL', 'SHARED'] as const)(
+    'validates transfer accounts on the same transaction client in %s',
+    async (kind) => {
+      allowEverything();
+      prisma.ledger.findUnique.mockResolvedValue({ kind });
+      prisma.$queryRaw.mockResolvedValue([{ id: 'txn-1' }]);
+      prisma.transaction.findUnique.mockResolvedValue({
+        ...joined,
+        ...input,
+        toAccountId,
+        type: 'TRANSFER',
+      });
+      prisma.transaction.findFirst.mockResolvedValue(null);
+      const account = {
+        findUnique: jest.fn().mockResolvedValue({ userId: creatorId, isTemporary: false }),
+      };
+      prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+        cb({ ...prisma, account }),
+      );
+      prisma.account.findUnique.mockResolvedValue(null);
+      jest.spyOn(service, 'getById').mockResolvedValue({} as never);
+
+      await service.update(ledgerId, 'txn-1', creatorId, { accountId, toAccountId });
+      expect(account.findUnique).toHaveBeenCalledTimes(2);
+      expect(prisma.account.findUnique).not.toHaveBeenCalled();
+    },
+  );
+
+  it('validates split share accounts on the caller transaction client', async () => {
+    allowEverything();
+    const account = {
+      findUnique: jest.fn().mockResolvedValue({ userId: creatorId, isTemporary: false }),
+    };
+    prisma.account.findUnique.mockResolvedValue(null);
+    await expect(
+      service.createSplitShareTransaction({ ...prisma, account } as never, {
+        ...input,
+        ledgerId,
+        creatorId,
+        splitId: 'split-1',
+        date: new Date(input.date),
+      }),
+    ).resolves.toBe('txn-1');
+    expect(account.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.account.findUnique).not.toHaveBeenCalled();
   });
 
   it('creates a transaction with its category, account and creator', async () => {
@@ -812,6 +861,7 @@ describe('TransactionsService', () => {
         ledger: prisma.ledger,
         account: prisma.account,
         category: { findFirst: jest.fn().mockResolvedValue({ type: categoryType }) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
         transaction: { create: jest.fn().mockResolvedValue({ id: 'debt' }) },
       };
       await service.createDebtTransaction(client as never, {
@@ -869,6 +919,7 @@ describe('TransactionsService', () => {
         ledger: prisma.ledger,
         account: prisma.account,
         transaction: { create: jest.fn().mockResolvedValue({ id: 'txn-9' }) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
       };
 
       const id = await service.createDebtTransaction(client as never, {
@@ -921,6 +972,7 @@ describe('TransactionsService', () => {
         ledger: prisma.ledger,
         account: prisma.account,
         transaction: { create: jest.fn() },
+        $queryRaw: jest.fn().mockResolvedValue([]),
       };
 
       await expect(
