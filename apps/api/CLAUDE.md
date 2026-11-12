@@ -6,7 +6,9 @@
 
 ```
 src/
-  auth/ users/ ledgers/ accounts/ categories/ transactions/   領域模組
+  auth/ users/ ledgers/ accounts/ categories/ transactions/
+  friends/ debts/ splits/ ledger-people/ settlements/ ledger-groups/
+  ai/ statistics/  領域模組
   common/     跨模組共用（filter、guard、decorator、pipe）
   config/     環境變數載入與 Zod 驗證
   prisma/     PrismaService 與模組
@@ -21,7 +23,7 @@ test/         e2e（*.e2e-spec.ts）
 - **Controller 只處理請求 / 回應與驗證，業務邏輯一律在 service。**
 - **每個對外端點都要有 DTO**，用 class-validator 標註。沒有 DTO 的輸入不准進 service。
 - **授權在 service 層把關，不是只在 guard。** 查詢一律先以「使用者有權存取的帳本」過濾，預設拒絕。新增任何讀寫帳本資料的方法時，同時補一個「別人的帳本讀不到」的測試。
-- **金額用整數（最小貨幣單位）或 `Decimal`**，不可用 `number` 做運算。
+- **金額用最小貨幣單位的整數或 `Decimal`**。`number` 運算只用整數，不能用浮點金額。
 - 交易是軟刪除（`deletedAt`），查詢記得排除。
 - 每個 controller 加 `@ApiTags`，DTO 標註型別，讓 Swagger 正確。
 

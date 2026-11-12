@@ -1,6 +1,6 @@
 # 3e 畫面任務清單
 
-plan：`tasks/phase-3e-web-plan.md`；spec：`docs/specs/phase-3e-web.md`。
+plan：`tasks/archive/phase-3e-web-plan.md`；spec：`docs/specs/phase-3e-web.md`。
 
 - [x] **F0 契約、hook 與後端小改動**（協調者）：plan §1 協調者那一段。
       驗收：hook 測試全綠；`PanelTarget` 與 `onFillAccount` 型別在整合分支上；`ledger-splits.e2e-spec.ts` 的 SC-E14 改寫後全綠；隔離測試 18/18 綠；`pnpm typecheck` 通過。

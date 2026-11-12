@@ -1,6 +1,6 @@
 # 3i 任務清單
 
-plan：`tasks/phase-3i-plan.md`；spec：`docs/specs/phase-3i-debt-entry-edit.md`。
+plan：`tasks/archive/phase-3i-plan.md`；spec：`docs/specs/phase-3i-debt-entry-edit.md`。
 
 - [x] **I0 整合分支、契約與隔離測試**（協調者）：從 `main` 開 `feature/debt-entry-edit`；plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`debtCategoryTypeOf` 的 Node test 通過；`debt-entry-edit-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 只剩「新欄位未實作」的錯誤。

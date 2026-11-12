@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { TransactionType } from '@ledger/shared';
 import { Filter } from 'lucide-react';
 import { Select } from '../../components/Select';
@@ -11,41 +11,6 @@ interface TransactionFiltersProps {
   ledgerId: string;
   filters: TransactionFilters;
   onChange: (filters: TransactionFilters) => void;
-}
-
-/**
- * 交易列表的篩選列：型別、分類、日期區間。
- *
- * 篩選本身完全交給後端（`?type=&categoryId=&from=&to=`）——前端不自行過濾拿到的
- * 那一頁，那樣算出來的結果只涵蓋當頁，是錯的。
- *
- * 條件不寫進網址（D4），所以重整會回到預設。代價是篩選結果無法用網址分享，
- * 等真的有這個需求再改。
- */
-export function TransactionFilterBar({ ledgerId, filters, onChange }: TransactionFiltersProps) {
-  const filterFieldsId = useId();
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  return (
-    <div className={styles.bar}>
-      <div className={styles.toolbar}>
-        <TransactionFilterToggle
-          filters={filters}
-          expanded={isExpanded}
-          controlsId={filterFieldsId}
-          onToggle={() => setIsExpanded((current) => !current)}
-        />
-      </div>
-      {isExpanded && (
-        <TransactionFilterPanel
-          id={filterFieldsId}
-          ledgerId={ledgerId}
-          filters={filters}
-          onChange={onChange}
-        />
-      )}
-    </div>
-  );
 }
 
 interface TransactionFilterToggleProps {
