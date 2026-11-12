@@ -4,6 +4,7 @@ import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
 import { GuestOnlyRoute } from './GuestOnlyRoute';
 import { ProtectedRoute } from './ProtectedRoute';
+import { PageLoading } from './PageLoading';
 
 // 登入與註冊是常用入口且程式量小，保留同步載入；其他頁面按路由載入。
 const AccountsPage = lazy(() => import('../pages/AccountsPage'));
@@ -29,7 +30,7 @@ const TransactionsPage = lazy(() => import('../pages/TransactionsPage'));
  */
 export function AppRoutes() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={<HomePage />} />
 
