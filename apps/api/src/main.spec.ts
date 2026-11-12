@@ -21,6 +21,7 @@ describe('bootstrap', () => {
       setGlobalPrefix: jest.fn(),
       useGlobalPipes: jest.fn(),
       useGlobalFilters: jest.fn(),
+      enableShutdownHooks: jest.fn(),
       listen: jest.fn().mockResolvedValue(undefined),
     };
     jest.spyOn(NestFactory, 'create').mockResolvedValue(app as unknown as INestApplication);
@@ -39,6 +40,7 @@ describe('bootstrap', () => {
     await Promise.resolve();
 
     expect(app.listen).toHaveBeenCalledTimes(1);
+    expect(app.enableShutdownHooks).toHaveBeenCalledTimes(1);
     expect(createDocument).toHaveBeenCalledTimes(env === 'production' ? 0 : 1);
     expect(setup).toHaveBeenCalledTimes(env === 'production' ? 0 : 1);
   });

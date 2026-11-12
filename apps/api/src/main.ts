@@ -58,6 +58,9 @@ async function bootstrap() {
     SwaggerModule.setup('docs', app, document);
   }
 
+  // 收到關機訊號時執行生命週期清理，讓 Prisma 釋放連線。
+  app.enableShutdownHooks();
+
   // 位址與埠都取驗證過的設定；HOST 預設只聽本機（見 `env.validation.ts`）。
   await app.listen(config.get('PORT', { infer: true }), config.get('HOST', { infer: true }));
 }
