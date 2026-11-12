@@ -10,7 +10,7 @@
 src/
   app/         路由、Provider、AppShell / Sidebar / TopBar、守衛（ProtectedRoute）
   pages/       頁面元件，一個路由一個
-  features/    領域切分：accounts / auth / categories / ledgers / transactions
+  features/    依領域切分，例如 accounts / ai / debts / statistics / transactions
   components/  跨領域的無狀態 UI 元件（Button、Dialog、TextField…）
   lib/         api-client、格式化、localStorage 存取等工具
   styles/      global.css（設計 token 在這裡）

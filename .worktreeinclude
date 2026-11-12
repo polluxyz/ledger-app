@@ -1,3 +1,4 @@
 apps/api/.env
 apps/api/.env.test
 .claude/settings.local.json
+docs/handoff/.env.test-accounts
