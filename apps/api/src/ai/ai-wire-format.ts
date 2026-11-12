@@ -21,9 +21,6 @@ import {
  * 由 `ai-draft-validation.ts` 逐欄檢查，不可直接斷言成這個型別。
  */
 
-/** 帳戶「提了但對不到」的標記。 */
-export const AI_WIRE_UNMATCHED = '?';
-
 export interface AiWireDraft {
   type: ManualTransactionType;
   /** 帳本代號；`null`＝沒提。 */
@@ -41,10 +38,6 @@ export interface AiWireDraft {
   account: string | null;
   /** 轉入帳戶代號，只有轉帳用；`null`＝沒提；`"?"`＝提了但對不到。 */
   toAccount: string | null;
-}
-
-export interface AiWireResponse {
-  drafts: AiWireDraft[];
 }
 
 const nullableString = { type: ['string', 'null'] } as const;
