@@ -36,10 +36,20 @@ describe('Statistics — isolation (e2e)', () => {
   afterAll(() => app.close());
 
   const server = () => httpServer(app);
-  /** 台灣時間 2026-10-18 中午，離月界很遠，這裡不測日期邊界。 */
-  const DAY = '2026-10-18T04:00:00.000Z';
-  const PERIOD = { from: '2026-10-01', to: '2026-10-31' };
-  const TREND = { endMonth: '2026-10', months: 12 };
+  /**
+   * 期間跟著「台灣時間的當月」走，交易日就用現在。
+   * 免除（forgive）沒有日期參數，一律記在伺服器的現在；期間寫死某個月，
+   * 日曆翻過該月後呆帳與債務免除就落在期間外（2026-11 CI 因此紅燈）。
+   * 這裡不測日期邊界；剛好在月底午夜跨月時跑會失敗，重跑即可。
+   */
+  const TAIPEI_TODAY = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const MONTH = TAIPEI_TODAY.toISOString().slice(0, 7);
+  const LAST_DAY = new Date(
+    Date.UTC(TAIPEI_TODAY.getUTCFullYear(), TAIPEI_TODAY.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const DAY = new Date().toISOString();
+  const PERIOD = { from: `${MONTH}-01`, to: `${MONTH}-${String(LAST_DAY).padStart(2, '0')}` };
+  const TREND = { endMonth: MONTH, months: 12 };
 
   interface Scene {
     owner: Person;
@@ -342,7 +352,7 @@ describe('Statistics — isolation (e2e)', () => {
       }
       const trendBody = (await trend(s.owner.token, s.ledgerId).expect(200))
         .body as StatisticsTrend;
-      expect(trendBody.months.at(-1)).toMatchObject({ month: '2026-10', expense: 50300 });
+      expect(trendBody.months.at(-1)).toMatchObject({ month: MONTH, expense: 50300 });
     });
   });
 });
