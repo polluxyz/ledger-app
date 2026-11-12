@@ -613,6 +613,7 @@ export class TransactionsService {
         finalType,
         { accountId: finalAccountId, toAccountId: finalToAccountId },
         { accountId: input.accountId, toAccountId: input.toAccountId },
+        tx,
       );
       await this.assertCategoryRules(tx, ledgerId, finalType, finalCategoryId);
 
@@ -698,6 +699,7 @@ export class TransactionsService {
           finalType,
           { accountId: finalAccountId, toAccountId: finalToAccountId },
           { accountId: input.accountId, toAccountId: input.toAccountId },
+          tx,
         );
         await tx.ledgerSplit.deleteMany({ where: { transactionId } });
         await tx.transaction.update({
@@ -1331,6 +1333,7 @@ export class TransactionsService {
       input.type,
       { accountId: input.accountId },
       { accountId: input.accountId },
+      client,
     );
     const row = await client.transaction.create({
       data: {
@@ -1516,7 +1519,7 @@ export class TransactionsService {
     type: TransactionType,
     final: { accountId?: string; toAccountId?: string },
     assigned: { accountId?: string; toAccountId?: string },
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
+    client: Prisma.TransactionClient,
   ): Promise<void> {
     const ledger = await client.ledger.findUnique({
       where: { id: ledgerId },
@@ -1560,6 +1563,18 @@ export class TransactionsService {
       }
     }
 
+    // 以固定順序持有引用鎖直到寫入完成；刪除帳戶須先等這些引用提交後才能計數。
+    const assignedIds = [
+      ...new Set(
+        [assigned.accountId, assigned.toAccountId].filter((id): id is string => id !== undefined),
+      ),
+    ].sort();
+    if (assignedIds.length > 0) {
+      await client.$queryRaw`
+        SELECT id FROM "Account" WHERE id IN (${Prisma.join(assignedIds)}) AND "userId" = ${userId}
+        ORDER BY id FOR KEY SHARE
+      `;
+    }
     // 形狀合法後，才驗證這次「指定」的帳戶確實屬於呼叫者。
     for (const accountId of [assigned.accountId, assigned.toAccountId]) {
       if (accountId !== undefined) {

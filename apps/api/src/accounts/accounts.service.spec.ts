@@ -24,6 +24,7 @@ describe('AccountsService', () => {
     };
     transaction: { groupBy: jest.Mock; count: jest.Mock };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
 
   const userId = 'user-1';
@@ -78,7 +79,8 @@ describe('AccountsService', () => {
         delete: jest.fn(),
       },
       transaction: { groupBy: jest.fn(), count: jest.fn() },
-      $transaction: jest.fn(),
+      $transaction: jest.fn((callback: (client: unknown) => unknown) => callback(prisma)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     service = new AccountsService(prisma as unknown as PrismaService);
   });
