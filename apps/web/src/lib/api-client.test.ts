@@ -96,6 +96,27 @@ describe('apiRequest', () => {
     expect(localStorage.getItem('ledger.accessToken')).toBeNull();
   });
 
+  it('does not clear the current token when an anonymous request receives 401', async () => {
+    localStorage.setItem('ledger.accessToken', 'current');
+    fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(apiRequest('/auth/login', { anonymous: true })).rejects.toBeInstanceOf(ApiError);
+    expect(localStorage.getItem('ledger.accessToken')).toBe('current');
+  });
+
+  it('does not clear a new token when an older request receives 401', async () => {
+    localStorage.setItem('ledger.accessToken', 'old');
+    let respond!: (response: Response) => void;
+    fetchMock.mockReturnValue(new Promise<Response>((resolve) => (respond = resolve)));
+
+    const request = apiRequest('/users/me');
+    localStorage.setItem('ledger.accessToken', 'new');
+    respond(new Response(null, { status: 401 }));
+
+    await expect(request).rejects.toBeInstanceOf(ApiError);
+    expect(localStorage.getItem('ledger.accessToken')).toBe('new');
+  });
+
   it('falls back to a safe message when the body is not JSON', async () => {
     fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }));
 

@@ -1,5 +1,5 @@
 import type { ApiErrorResponse } from '@ledger/shared';
-import { clearToken, readToken } from './token-storage';
+import { invalidateToken, readToken } from './token-storage';
 
 /**
  * 與後端溝通的唯一管道。集中處理三件每個請求都要做的事：
@@ -43,16 +43,14 @@ interface RequestOptions {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, anonymous = false, signal } = options;
+  const token = anonymous ? null : readToken();
 
   const headers: Record<string, string> = {};
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
-  if (!anonymous) {
-    const token = readToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -63,6 +61,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   });
 
   if (!response.ok) {
+    if (response.status === 401 && token) invalidateToken(token);
     throw await toApiError(response);
   }
 
@@ -74,14 +73,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 /**
- * 把失敗的回應轉成 ApiError。401 代表 token 失效或過期，順手清掉本機的
- * token——讓 UI 的「已登入」狀態不會停在一個其實無效的憑證上。
+ * 把失敗的回應轉成 ApiError。
  */
 async function toApiError(response: Response): Promise<ApiError> {
-  if (response.status === 401) {
-    clearToken();
-  }
-
   let payload: Partial<ApiErrorResponse> = {};
   try {
     payload = (await response.json()) as Partial<ApiErrorResponse>;

@@ -1,0 +1,37 @@
+/* 使用現有頁面寬度與設計 token，讓載入時的輪廓隨主題變化。 */
+.skeleton {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.title,
+.card,
+.panel {
+  border-radius: var(--radius-lg);
+  background: var(--color-fill);
+}
+
+.title {
+  width: min(12rem, 60%);
+  height: 1.75rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.card {
+  height: 6rem;
+}
+
+.panel {
+  height: 14rem;
+}
+
+@media (max-width: 600px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
