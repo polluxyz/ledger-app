@@ -31,6 +31,7 @@ describe('LedgersService (members)', () => {
     debtEntry: { count: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     split: { count: jest.Mock; findMany: jest.Mock; deleteMany: jest.Mock };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
   const ledgerPeople = { ensureMemberPerson: jest.fn() };
 
@@ -83,6 +84,7 @@ describe('LedgersService (members)', () => {
         deleteMany: jest.fn(),
       },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     ledgerPeople.ensureMemberPerson.mockReset();
     service = new LedgersService(

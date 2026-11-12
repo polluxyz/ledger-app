@@ -548,6 +548,8 @@ export class LedgersService {
     role: LedgerRole,
   ): Promise<LedgerMemberInfo> {
     return this.prisma.$transaction(async (tx) => {
+      // 所有擁有者變更先鎖同一帳本；取得鎖後才重讀成員與擁有者數量。
+      await tx.$queryRaw`SELECT id FROM "Ledger" WHERE id = ${ledgerId} FOR UPDATE`;
       const target = await tx.ledgerMember.findUnique({
         where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
       });
@@ -573,6 +575,8 @@ export class LedgersService {
    */
   async removeMember(ledgerId: string, targetUserId: string, actingUserId: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
+      // 與角色變更及退出流程共用帳本鎖，避免數到另一位即將被移除的擁有者。
+      await tx.$queryRaw`SELECT id FROM "Ledger" WHERE id = ${ledgerId} FOR UPDATE`;
       const target = await tx.ledgerMember.findUnique({
         where: { ledgerId_userId: { ledgerId, userId: targetUserId } },
       });
