@@ -1,6 +1,6 @@
 # 3l 任務清單
 
-plan：`tasks/phase-3l-plan.md`；spec：`docs/specs/phase-3l-move-and-copy.md`。
+plan：`tasks/archive/phase-3l-plan.md`；spec：`docs/specs/phase-3l-move-and-copy.md`。
 
 - [x] **L0 契約與隔離測試**（總控）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`ledger-delete-move-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 通過。

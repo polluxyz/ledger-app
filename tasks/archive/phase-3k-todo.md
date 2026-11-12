@@ -1,6 +1,6 @@
 # 3k 任務清單
 
-plan：`tasks/phase-3k-plan.md`；spec：`docs/specs/phase-3k-leave-and-merge.md`。
+plan：`tasks/archive/phase-3k-plan.md`；spec：`docs/specs/phase-3k-leave-and-merge.md`。
 
 - [x] **K0 契約與隔離測試**（協調者）：plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`ledger-leave-merge-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 通過。

@@ -1,6 +1,6 @@
 # 3h 任務清單
 
-plan：`tasks/phase-3h-plan.md`；spec：`docs/specs/phase-3h-every-entry-has-account.md`。
+plan：`tasks/archive/phase-3h-plan.md`；spec：`docs/specs/phase-3h-every-entry-has-account.md`。
 
 - [x] **H0 整合分支、契約與隔離測試**（協調者）：從 `main` 開 `feature/every-entry-account`；plan §1.1。
       驗收：`pnpm --filter @ledger/shared build` 通過；`differenceLabelOf`、`forgivenessLabelOf` 的 Node test 通過；`every-entry-account-isolation.e2e-spec.ts` 紅燈；API／Web typecheck 只剩「新欄位未實作」與「`tracksBalance` 已移除」的錯誤。

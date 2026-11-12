@@ -1,6 +1,6 @@
 # 3e 後端任務清單
 
-plan：`tasks/phase-3e-plan.md`；spec：`docs/specs/phase-3e-shared-split.md`。
+plan：`tasks/archive/phase-3e-plan.md`；spec：`docs/specs/phase-3e-shared-split.md`。
 
 - [x] **E0 shared 契約與隔離測試**（協調者定型別與錯誤碼、寫隔離測試；計算函式派 `split-shared`）：plan §1 的 shared 部分；`ledger-splits-isolation.e2e-spec.ts`。
       驗收：`pnpm --filter @ledger/shared test` 全綠（含 3c 原有 80 個與新的 `computeLedgerNets`／`suggestSettlements`）；隔離測試紅燈（端點不存在）；`pnpm --filter @ledger/shared build` 後 API 與 Web 的 typecheck 只剩「新欄位還沒實作」的錯誤。
