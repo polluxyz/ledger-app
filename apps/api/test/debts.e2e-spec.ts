@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -18,6 +17,7 @@ import {
   httpServer,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /**

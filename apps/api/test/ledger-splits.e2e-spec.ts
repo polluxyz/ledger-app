@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { INestApplication } from '@nestjs/common';
 import type { LedgerPerson, Transaction } from '@ledger/shared';
@@ -11,6 +10,7 @@ import {
   httpServer,
   listAccounts,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 import { auth, createCounterparty, person, type Person } from './linking-utils';
 

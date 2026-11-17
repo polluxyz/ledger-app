@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { performance } from 'node:perf_hooks';
 import { INestApplication } from '@nestjs/common';
 import type {
@@ -12,7 +11,7 @@ import type {
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, person, type Person } from './linking-utils';
 
 /**

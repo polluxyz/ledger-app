@@ -1,10 +1,9 @@
-import { idempotencyKey } from './e2e-utils';
 /** 3c 分帳端到端測試：實際資料庫驗證份額、往來、提議、互轉與列表分頁。 */
 import { INestApplication } from '@nestjs/common';
 import type { CreateSplitRequest, Paginated, Split, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import {
   auth,
   createCounterparty,

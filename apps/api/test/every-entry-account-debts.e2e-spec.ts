@@ -1,9 +1,8 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { CreateDebtEntryResponse, DebtEntry, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, listAccounts, resetDb } from './e2e-utils';
+import { createE2EApp, httpServer, listAccounts, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /** 3h 的借還路徑以 HTTP 與真實資料庫驗證：還款只寫一筆往來，分支與呆帳各是一筆交易。 */

@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -9,7 +8,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, linkPair, person, type Person } from './linking-utils';
 
 /** 同一份交易逐步驗金額、指向與退出，避免借還總額和結清摘要各走不同算法。 */

@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -13,7 +12,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, listAccounts, resetDb } from './e2e-utils';
+import { createE2EApp, httpServer, listAccounts, resetDb, idempotencyKey } from './e2e-utils';
 import {
   DAY,
   auth,

@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import { Account, Category, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -12,6 +11,7 @@ import {
   listAccounts,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /**

@@ -1,9 +1,15 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { Account, Category, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /** 3h SC-H8：替另一位成員記帳先落在他的臨時帳戶，由本人搬到真帳戶。 */

@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { CategoriesService } from '../src/categories/categories.service';
@@ -11,6 +10,7 @@ import {
   httpServer,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /** R7：讓刪除卡在帳戶鎖，再建立引用，驗證刪除重查引用並保留歷史。 */

@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -11,7 +10,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /** 3i SC-I1～I7：以真實 HTTP 與資料庫驗證交易標記、分支搬帳戶、餘額與連動提議。 */

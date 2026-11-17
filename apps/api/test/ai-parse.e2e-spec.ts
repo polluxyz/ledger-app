@@ -1,4 +1,3 @@
-import { idempotencyKey } from './e2e-utils';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -18,7 +17,7 @@ import { createLlmProvider } from '../src/ai/llm-provider.factory';
 import type { Env } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
