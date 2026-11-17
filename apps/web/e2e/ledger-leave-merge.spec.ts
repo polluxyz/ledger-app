@@ -134,7 +134,7 @@ async function createTripScenario(request: APIRequestContext, page: Page): Promi
   const settlementResponse = await request.post(
     `${API_BASE_URL}/ledgers/${ledger.id}/settlements`,
     {
-      headers: { Authorization: `Bearer ${owner.token}` },
+      headers: { Authorization: `Bearer ${owner.token}`, 'Idempotency-Key': crypto.randomUUID() },
       data: settlement,
     },
   );

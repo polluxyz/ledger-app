@@ -12,7 +12,7 @@ vi.mock('../auth/use-current-user', () => ({
 
 /** 結清表單的輸入規則與 request body：使用 hooks 的真實路徑，mock 只取代 HTTP。 */
 describe('SettlementForm', () => {
-  const fetchMock = vi.fn();
+  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
   const requests: { url: string; init?: RequestInit }[] = [];
   const ledger: LedgerSummary = {
     id: 'ledger-1',
@@ -107,12 +107,12 @@ describe('SettlementForm', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onSaved = props.onSaved ?? vi.fn();
     const onDeleted = props.onDeleted ?? vi.fn();
-    render(
+    const view = render(
       <QueryClientProvider client={client}>
         <SettlementForm ledger={ledger} onSaved={onSaved} onDeleted={onDeleted} {...props} />
       </QueryClientProvider>,
     );
-    return { onSaved, onDeleted, client };
+    return { onSaved, onDeleted, client, unmount: view.unmount };
   }
 
   function parseRequestBody(init: RequestInit): unknown {
@@ -169,6 +169,67 @@ describe('SettlementForm', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('SC-IK12 結清失敗與修改後保留鍵及內容，成功後換鍵', async () => {
+    const original = fetchMock.getMockImplementation()!;
+    let writes = 0;
+    const keys: string[] = [];
+    const bodies: (BodyInit | null | undefined)[] = [];
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/settlements') && init?.method === 'POST') {
+        keys.push((init.headers as Record<string, string>)['Idempotency-Key']!);
+        bodies.push(init.body);
+        writes += 1;
+        if (writes <= 2) return Promise.reject(new TypeError('network'));
+        if (writes <= 4)
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                statusCode: 409,
+                errorCode: writes === 3 ? 'IDEMPOTENCY_KEY_REUSED' : 'IDEMPOTENCY_RESOURCE_DELETED',
+                message: 'error',
+              }),
+              { status: 409 },
+            ),
+          );
+      }
+      return original(url, init);
+    });
+    const user = userEvent.setup();
+    const view = renderForm({
+      prefill: { fromPersonId: hua.id, toPersonId: min.id, amount: 205000 },
+    });
+    await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue(account.id));
+    const amount = screen.getByLabelText('金額');
+    const submit = screen.getByRole('button', { name: '新增' });
+    await user.click(submit);
+    await screen.findByText(/無法連線到伺服器/);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(2));
+    await user.clear(amount);
+    await user.type(amount, '100');
+    await user.click(submit);
+    await screen.findByText('已記錄過');
+    expect(amount).toHaveValue(100);
+    await user.click(submit);
+    await screen.findByText('這筆已刪除');
+    expect(amount).toHaveValue(100);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(5));
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(6));
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys.slice(0, 5)).toEqual([keys[0], keys[0], keys[0], keys[0], keys[0]]);
+    expect(keys[5]).not.toBe(keys[0]);
+    view.unmount();
+    renderForm({ prefill: { fromPersonId: hua.id, toPersonId: min.id, amount: 205000 } });
+    await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue(account.id));
+    await user.click(screen.getByRole('button', { name: '新增' }));
+    await waitFor(() => expect(writes).toBe(7));
+    expect(keys[6]).not.toBe(keys[5]);
   });
 
   it('prefills the default account and posts as the current payer without fromPersonId', async () => {
@@ -273,6 +334,14 @@ describe('SettlementForm', () => {
     const body = parseRequestBody(
       findRequest('/ledgers/ledger-1/settlements/settlement-edit-id', 'PATCH'),
     );
+    expect(
+      (
+        findRequest('/ledgers/ledger-1/settlements/settlement-edit-id', 'PATCH').headers as Record<
+          string,
+          string
+        >
+      )['Idempotency-Key'],
+    ).toBeUndefined();
     expect(body).toMatchObject({
       fromPersonId: hua.id,
       toPersonId: guest.id,

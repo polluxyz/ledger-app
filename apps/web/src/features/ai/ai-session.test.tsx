@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ParseTransactionResponse } from '@ledger/shared';
+import { ApiError } from '../../lib/api-client';
 import { AiSessionProvider, useAiSession } from './ai-session';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   userId: 'user-a',
   authenticated: true,
   parse: vi.fn(),
-  mutateAsync: vi.fn(),
+  mutateAsync: vi.fn<(input: { idempotencyKey?: string }) => Promise<unknown>>(),
 }));
 
 vi.mock('../auth/use-auth', () => ({
@@ -61,6 +62,8 @@ function snapshot() {
     error: string | null;
     isParsing: boolean;
     drafts: string[];
+    idempotencyKeys: string[];
+    draftErrors: (string | null)[];
     writingKey: string | null;
     busyKeys: string[];
     isConfirmingAll: boolean;
@@ -110,6 +113,8 @@ function SessionControls() {
           error: session.error,
           isParsing: session.isParsing,
           drafts: session.drafts.map(({ key }) => key),
+          idempotencyKeys: session.drafts.map(({ idempotencyKey }) => idempotencyKey),
+          draftErrors: session.drafts.map(({ error }) => error ?? null),
           writingKey: session.writingKey,
           busyKeys: [...session.busyKeys],
           isConfirmingAll: session.isConfirmingAll,
@@ -134,6 +139,55 @@ function renderControls() {
 function setParseDrafts(...drafts: ParseTransactionResponse['drafts']) {
   mocks.parse.mockResolvedValueOnce({ drafts } satisfies ParseTransactionResponse);
 }
+
+/** 驗證草稿各自的防重鍵與錯誤訊息；以模擬解析及寫入回應檢查重試和重新解析。 */
+describe('SC-IK13 草稿防重鍵', () => {
+  beforeEach(() => {
+    mocks.parse.mockReset();
+    mocks.mutateAsync.mockReset().mockResolvedValue(undefined);
+  });
+
+  it.each([
+    [new ApiError(408, 'TIMEOUT', 'timeout'), '尚未確認，請重試'],
+    [new ApiError(503, 'INTERNAL_ERROR', 'unavailable'), '尚未確認，請重試'],
+    [new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'reused'), '已記錄過'],
+    [new ApiError(409, 'IDEMPOTENCY_RESOURCE_DELETED', 'deleted'), '這筆已刪除'],
+    [new ApiError(400, 'VALIDATION_FAILED', 'invalid'), '寫入失敗，請稍後再試。'],
+  ])('草稿寫入失敗後保留草稿並顯示錯誤', async (error, message) => {
+    const user = userEvent.setup();
+    setParseDrafts(firstDraft);
+    mocks.mutateAsync.mockRejectedValueOnce(error);
+    renderControls();
+    await user.click(screen.getByRole('button', { name: '解析' }));
+    await waitFor(() => expect(snapshot().drafts).toHaveLength(1));
+    const key = snapshot().idempotencyKeys[0];
+    await user.click(screen.getByRole('button', { name: '確認第一筆' }));
+    await waitFor(() => expect(snapshot().draftErrors[0]).toBe(message));
+    expect(snapshot().idempotencyKeys).toEqual([key]);
+  });
+  it('每筆草稿使用不同鍵，失敗重試與全部確認保留鍵，重新解析換鍵', async () => {
+    const user = userEvent.setup();
+    setParseDrafts(firstDraft, secondDraft);
+    mocks.mutateAsync.mockRejectedValueOnce(new TypeError('network'));
+    renderControls();
+    await user.click(screen.getByRole('button', { name: '解析' }));
+    await waitFor(() => expect(snapshot().drafts).toHaveLength(2));
+    const keys = snapshot().idempotencyKeys;
+    expect(keys[0]).not.toBe(keys[1]);
+    await user.click(screen.getByRole('button', { name: '確認第一筆' }));
+    await waitFor(() => expect(snapshot().draftErrors[0]).toBe('尚未確認，請重試'));
+    expect(mocks.mutateAsync.mock.calls.at(-1)?.[0].idempotencyKey).toBe(keys[0]);
+    await user.click(screen.getByRole('button', { name: '全部確認' }));
+    await waitFor(() => expect(snapshot().drafts).toHaveLength(0));
+    expect(mocks.mutateAsync.mock.calls.slice(-2).map(([input]) => input.idempotencyKey)).toEqual(
+      keys,
+    );
+    setParseDrafts(firstDraft);
+    await user.click(screen.getByRole('button', { name: '再解析' }));
+    await waitFor(() => expect(snapshot().drafts).toHaveLength(1));
+    expect(keys).not.toContain(snapshot().idempotencyKeys[0]);
+  });
+});
 
 /**
  * 驗證 AI session 的路由外狀態生命週期、使用者世代隔離，以及解析和交易寫入的同步鎖。

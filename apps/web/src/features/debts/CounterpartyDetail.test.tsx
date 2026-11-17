@@ -10,7 +10,7 @@ import { CounterpartyDetail } from './CounterpartyDetail';
  * CounterpartyDetail 驗兩種分頁的唯讀內容、未還清分組、歷史與個人操作。
  */
 describe('CounterpartyDetail', () => {
-  const fetchMock = vi.fn();
+  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
   let queryClient: QueryClient;
 
   const baseEntry = {
@@ -529,6 +529,61 @@ describe('CounterpartyDetail', () => {
     const undoDialog = await screen.findByRole('dialog', { name: '撤銷這筆？' });
     expect(undoDialog).toHaveTextContent('對方會收到通知');
     expect(undoDialog).not.toHaveTextContent('會請小明也刪除');
+  });
+
+  it('SC-IK12 免除失敗保留鍵與對話框，成功後重開換鍵', async () => {
+    const user = userEvent.setup();
+    renderDetail(5000);
+    const original = fetchMock.getMockImplementation()!;
+    let writes = 0;
+    const keys: string[] = [];
+    const bodies: (BodyInit | null | undefined)[] = [];
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/forgive') && init?.method === 'POST') {
+        keys.push((init.headers as Record<string, string>)['Idempotency-Key']!);
+        bodies.push(init.body);
+        writes += 1;
+        if (writes <= 2) return Promise.reject(new TypeError('network'));
+        if (writes <= 4)
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                statusCode: 409,
+                errorCode: writes === 3 ? 'IDEMPOTENCY_KEY_REUSED' : 'IDEMPOTENCY_RESOURCE_DELETED',
+                message: 'error',
+              }),
+              { status: 409 },
+            ),
+          );
+      }
+      return original(url, init);
+    });
+    await user.click(await screen.findByRole('button', { name: '免除剩餘' }));
+    const dialog = await screen.findByRole('dialog', { name: '免除剩餘' });
+    const submit = within(dialog).getByRole('button', { name: '免除' });
+    await user.click(submit);
+    await within(dialog).findByText(/無法連線到伺服器/);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(2));
+    await user.click(submit);
+    await within(dialog).findByText('已記錄過');
+    await user.click(submit);
+    await within(dialog).findByText('這筆已刪除');
+    await user.click(submit);
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '免除剩餘' })).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: '免除剩餘' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: '免除剩餘' })).getByRole('button', {
+        name: '免除',
+      }),
+    );
+    await waitFor(() => expect(writes).toBe(6));
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys.slice(0, 5)).toEqual([keys[0], keys[0], keys[0], keys[0], keys[0]]);
+    expect(keys[5]).not.toBe(keys[0]);
   });
 
   it('uses the selected ledger to forgive without a ledger picker', async () => {

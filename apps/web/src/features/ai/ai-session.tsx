@@ -16,6 +16,8 @@ import {
 import { ErrorCode } from '@ledger/shared';
 import { ApiError } from '../../lib/api-client';
 import { toDateInputValue } from '../../lib/format';
+import { createIdempotencyKey } from '../../lib/idempotency-key';
+import { toUserMessage } from '../../lib/error-messages';
 import { useCurrentUser } from '../auth/use-current-user';
 import { useAuth } from '../auth/use-auth';
 import { useCreateTransactionForLedger } from '../transactions/use-transactions';
@@ -198,7 +200,11 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
 
         const items = response.drafts.map((draft) => {
           draftSequenceRef.current += 1;
-          return { key: `ai-draft-${draftSequenceRef.current}`, draft };
+          return {
+            key: `ai-draft-${draftSequenceRef.current}`,
+            idempotencyKey: createIdempotencyKey(),
+            draft,
+          };
         });
         if (stateRef.current.text !== '') textVersionRef.current += 1;
         updateState((current) => ({
@@ -277,6 +283,7 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
         await createTransaction.mutateAsync({
           ledgerId: item.draft.ledgerId,
           input: draftRequest(item.draft),
+          idempotencyKey: item.idempotencyKey,
         });
         if (!isCurrentSession(snapshot)) return false;
         updateState((current) => ({
@@ -284,13 +291,24 @@ export function AiSessionProvider({ children }: { children: ReactNode }) {
           drafts: current.drafts.filter((draftItem) => draftItem.key !== item.key),
         }));
         return true;
-      } catch {
+      } catch (error) {
         if (isCurrentSession(snapshot)) {
           updateState((current) => ({
             ...current,
             drafts: current.drafts.map((draftItem) =>
               draftItem.key === item.key
-                ? { ...draftItem, error: '寫入失敗，請稍後再試。' }
+                ? {
+                    ...draftItem,
+                    error:
+                      !(error instanceof ApiError) ||
+                      error.statusCode === 408 ||
+                      error.statusCode >= 500
+                        ? '尚未確認，請重試'
+                        : error.errorCode === 'IDEMPOTENCY_KEY_REUSED' ||
+                            error.errorCode === 'IDEMPOTENCY_RESOURCE_DELETED'
+                          ? toUserMessage(error)
+                          : '寫入失敗，請稍後再試。',
+                  }
                 : draftItem,
             ),
           }));
