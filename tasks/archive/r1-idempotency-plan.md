@@ -2,7 +2,7 @@
 
 spec：`docs/specs/r1-idempotency.md`（決策 361～372、W289～W292、SC-IK1～SC-IK16）。後端與網頁合成一個 PR（決策 372）。
 
-> 核可：spec 由開發者 2026-11-17 回「核可」（含 §10 的 2 項）。本 plan 與 `tasks/r1-idempotency-todo.md` 開發者 2026-11-17 回「同意」核可。
+> 核可：spec 由開發者 2026-11-17 回「核可」（含 §10 的 2 項）。本 plan 與 `tasks/archive/r1-idempotency-todo.md` 開發者 2026-11-17 回「同意」核可。
 
 ## 0. 起點
 
@@ -343,3 +343,22 @@ ALTER TABLE "IdempotencyKey" ADD CONSTRAINT "IdempotencyKey_userId_fkey" FOREIGN
 - 既有完整 API e2e 留給 T1b 合併後驗證；本分支只跑 2 個 idempotency 檔。沒有執行 Web e2e。
 - 待協調者合併、逐行驗收及跑完整回歸；本 worker 不 push、不開 PR。
 - 交付時整合分支已前進到 `72bcebc`（T1b）；檢查本 worker 的改動請以 `130bd7e..feature/r1-api` 為準。對目前整合分支的 diff 也只含 `apps/api` 與本 plan，既有 API e2e 的差異來自整合分支已先合併 T1b。
+
+### T1b：既有 API e2e 補 header（2026-11-17）
+
+- 既有 API e2e 建立金錢紀錄的請求都補上 `.set(idempotencyKey())`，斷言沒有改。
+- 合併進整合分支時，有 1 個檔案和 T1a 的 import 重複，協調者合併成 1 行（`385b131`）。
+
+### T2：網頁（2026-11-17）
+
+- 5 個建立入口都帶鍵：手動表單用 state 保留鍵，成功後換鍵；AI 草稿每筆各有一把鍵；「免除剩餘」每次打開對話框換鍵。
+- 計畫外修正：`TransactionForm` 的分帳草稿路徑原本成功後不清草稿、不換鍵，再按一次會收到「已記錄過」。補上 `onDraftSavingChange` 與 `onSaved`，在核可範圍內。
+- `AiEntry.voice.test` 的網路錯誤文字改成「尚未確認，請重試」，這是 spec 要求的新文字，不是放寬斷言。
+- 協調者驗收時退回 1 次：新檔與新欄位缺檔頭說明和 suite 註解。worker 補在 `fefc4fc`，沒有改程式與斷言。
+
+### T3：整合（2026-11-17）
+
+- 整合分支 `feature/r1-idempotency` 依序合併 T1b、T1a、T2，沒有衝突以外的手動改動。
+- CORS 只把既有選項抽成 `corsOptions()` 函式，選項內容不變，不屬於「改 CORS 設定」。
+- 已知小事，不擋合併：「免除剩餘」關掉再開會換鍵。若第 1 次其實已成功，第 2 次會因剩餘欠款為 0 被擋下，不會重複免除。
+- 已知風險：`isKeyConflict` 綁定 Prisma 7.8 的錯誤格式。升級 Prisma 後若格式改變，同時送出會變成 500，但不會重複記帳；SC-IK9 會抓到。

@@ -1,12 +1,12 @@
 # R1 任務清單：防重複送出（Idempotency-Key）
 
-plan：`tasks/r1-idempotency-plan.md`；spec：`docs/specs/r1-idempotency.md`。
+plan：`tasks/archive/r1-idempotency-plan.md`；spec：`docs/specs/r1-idempotency.md`。
 
-- [ ] **D docs PR**（協調者）：spec、plan、todo、`docs/README.md`、`docs/handoff.md` 編號、審查報告進度。
+- [x] **D docs PR**（協調者）：spec、plan、todo、`docs/README.md`、`docs/handoff.md` 編號、審查報告進度。
       驗收：format:check 綠；CI 全綠、squash merge；主工作區 `git pull` 完成。
-- [ ] **T0 契約與先紅的測試**（依賴 D；協調者）：plan §1.1。
+- [x] **T0 契約與先紅的測試**（依賴 D；協調者）：plan §1.1。
       驗收：shared 有 3 個 `errorCode` 與 header 常數，`pnpm --filter @ledger/shared build` 綠；`e2e-utils.ts` 有 `idempotencyKey()`；`idempotency-isolation.e2e-spec.ts` 的 SC-IK3 紅（建立 2 筆）、SC-IK9 綠；typecheck、lint 綠；沒有改正式程式。
-- [ ] **T1a 後端核心**（依賴 T0；`r1-api`，`backend`）：plan §1.2。
+- [x] **T1a 後端核心**（依賴 T0；`r1-api`，`backend`）：plan §1.2。
       驗收：
   - migration 只新增 1 張表與 2 個 enum，不改現有的表；SQL 列在交付說明。
   - 共用服務單元測試綠：搶鍵、P2002 轉重送、其他 P2002 往外丟、3 種比對不符、`write` 回空值時回滾、雜湊正規化。
@@ -15,9 +15,9 @@ plan：`tasks/r1-idempotency-plan.md`；spec：`docs/specs/r1-idempotency.md`。
   - T0 的 `idempotency-isolation.e2e-spec.ts` 轉綠，斷言沒改。
   - 5 個 service 的業務規則、鎖順序、錯誤碼沒變；既有單元測試只改呼叫方式。
   - 只改 `apps/api`；沒有新套件；CORS 選項內容沒變。
-- [ ] **T1b 既有 API e2e 補 header**（依賴 T0；`r1-api-e2e`，`default`）：plan §1.3。
+- [x] **T1b 既有 API e2e 補 header**（依賴 T0；`r1-api-e2e`，`default`）：plan §1.3。
       驗收：呼叫 5 個端點的請求都帶 `.set(idempotencyKey())`；diff 只有 header 與 import；沒改斷言、測試資料、`e2e-utils.ts`；在沒有 T1a 的分支上 API e2e 全綠。
-- [ ] **T2 網頁**（依賴 T0；`r1-web`，Codex）：plan §1.4。
+- [x] **T2 網頁**（依賴 T0；`r1-web`，Codex）：plan §1.4。
       驗收：
   - Vitest 綠：SC-IK12、SC-IK13、SC-IK15。
   - 既有 Vitest 的斷言沒改。
