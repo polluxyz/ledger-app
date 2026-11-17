@@ -10,6 +10,11 @@ import type {
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
+import {
+  IdempotencyService,
+  requestHash,
+  idempotencyResourceDeleted,
+} from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import { TransactionsService } from '../transactions/transactions.service';
@@ -59,6 +64,7 @@ type HistoryDebtEntry = Pick<
 export class CounterpartiesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
     private readonly ledgerDebts: LedgerDebtsService,
     private readonly transactions: TransactionsService,
   ) {}
@@ -298,12 +304,14 @@ export class CounterpartiesService {
    * 再鎖對象算餘額；呆帳交易與往來紀錄在同一個資料庫交易內提交，避免兩本帳只改一邊。
    * 連動中會送提議給對方（決策 62）。
    */
-  forgive(
+  async forgive(
     userId: string,
     counterpartyId: string,
     ledgerId: string,
+    key: string,
   ): Promise<CreateDebtEntryResponse> {
-    return this.prisma.$transaction(async (tx) => {
+    let response: CreateDebtEntryResponse | undefined;
+    const write = async (tx: Prisma.TransactionClient): Promise<string> => {
       const row = await loadOwnedCounterparty(tx, userId, counterpartyId);
       await assertLedgerWritable(tx, userId, ledgerId);
       await lockCounterparty(tx, row.id);
@@ -337,11 +345,46 @@ export class CounterpartiesService {
       await proposeCreate(tx, { fromUserId: userId, entry, amount: balance, settle: false });
 
       const sync = await syncStatuses(tx, [entry]);
-      return {
+      response = {
         counterparty: await this.present(tx, row),
         entries: [toDebtEntry(entry, { sync: sync.get(entry.id) })],
       };
-    });
+      return entry.id;
+    };
+    const result = await this.idempotency.run(
+      {
+        userId,
+        key,
+        operation: 'COUNTERPARTY_FORGIVE',
+        scopeId: counterpartyId,
+        requestHash: requestHash({ ledgerId, counterpartyId }),
+      },
+      write,
+      async (resultId) => {
+        const entry = await this.prisma.debtEntry.findUnique({
+          where: { id: resultId },
+          include: DEBT_ENTRY_INCLUDE,
+        });
+        if (!entry) throw notFound('Entry');
+        const row = await loadOwnedCounterparty(this.prisma, userId, entry.counterpartyId);
+        if (!entry.transactionId) throw notFound('Transaction');
+        const transaction = await this.prisma.transaction.findUnique({
+          where: { id: entry.transactionId },
+          select: { ledgerId: true },
+        });
+        if (!transaction) throw notFound('Transaction');
+        await assertLedgerWritable(this.prisma, userId, transaction.ledgerId);
+        if (entry.deletedAt !== null) throw idempotencyResourceDeleted();
+        const sync = await syncStatuses(this.prisma, [entry]);
+        return {
+          counterparty: await this.present(this.prisma, row),
+          entries: [toDebtEntry(entry, { sync: sync.get(entry.id) })],
+        };
+      },
+    );
+    if (!result.created) return result.response;
+    if (!response) throw new Error('Forgiveness response is missing.');
+    return response;
   }
 
   /**

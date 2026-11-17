@@ -1,3 +1,4 @@
+import { createIdempotencyStub } from '../idempotency/idempotency.testing';
 import { AppException } from '../common/exceptions/app.exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from './transactions.service';
@@ -110,6 +111,7 @@ describe('TransactionsService', () => {
     );
     service = new TransactionsService(
       prisma as unknown as PrismaService,
+      createIdempotencyStub(prisma as unknown as PrismaService),
       {} as LedgerPeopleService,
       categories as unknown as CategoriesService,
     );
@@ -165,7 +167,9 @@ describe('TransactionsService', () => {
   it('creates a transaction with its category, account and creator', async () => {
     allowEverything();
 
-    await expect(service.create(ledgerId, creatorId, input)).resolves.toEqual({
+    await expect(
+      service.create(ledgerId, creatorId, input, '00000000-0000-0000-0000-000000000001'),
+    ).resolves.toEqual({
       id: 'txn-1',
       type: 'EXPENSE',
       amount: 120,
@@ -196,12 +200,17 @@ describe('TransactionsService', () => {
       'resolves a trimmed new category for %s on the write client',
       async (type) => {
         allowEverything();
-        await service.create(ledgerId, creatorId, {
-          ...input,
-          type,
-          categoryId: undefined,
-          newCategoryName: '  日用品  ',
-        });
+        await service.create(
+          ledgerId,
+          creatorId,
+          {
+            ...input,
+            type,
+            categoryId: undefined,
+            newCategoryName: '  日用品  ',
+          },
+          '00000000-0000-0000-0000-000000000001',
+        );
         expect(categories.findOrCreateByName).toHaveBeenCalledWith(
           prisma,
           ledgerId,
@@ -225,7 +234,12 @@ describe('TransactionsService', () => {
     ])('rejects invalid category selection %j', async (change) => {
       allowEverything();
       await expect(
-        service.create(ledgerId, creatorId, { ...input, ...change }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, ...change },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({
         status: 400,
         errorCode: 'VALIDATION_FAILED',
@@ -369,7 +383,9 @@ describe('TransactionsService', () => {
       type: 'EXPENSE',
     });
 
-    await expect(service.create(ledgerId, creatorId, input)).rejects.toMatchObject({
+    await expect(
+      service.create(ledgerId, creatorId, input, '00000000-0000-0000-0000-000000000001'),
+    ).rejects.toMatchObject({
       constructor: AppException,
       errorCode: 'NOT_FOUND',
     });
@@ -380,7 +396,9 @@ describe('TransactionsService', () => {
     allowEverything();
     prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', ledgerId, type: 'INCOME' });
 
-    await expect(service.create(ledgerId, creatorId, input)).rejects.toMatchObject({
+    await expect(
+      service.create(ledgerId, creatorId, input, '00000000-0000-0000-0000-000000000001'),
+    ).rejects.toMatchObject({
       errorCode: 'CATEGORY_TYPE_MISMATCH',
     });
     expect(prisma.transaction.create).not.toHaveBeenCalled();
@@ -393,7 +411,12 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, { ...input, accountId: undefined }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, accountId: undefined },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_REQUIRED' });
       expect(prisma.transaction.create).not.toHaveBeenCalled();
     });
@@ -401,7 +424,9 @@ describe('TransactionsService', () => {
     it('rejects a manually selected temporary account', async () => {
       allowEverything();
       prisma.account.findUnique.mockResolvedValue({ userId: creatorId, isTemporary: true });
-      await expect(service.create(ledgerId, creatorId, input)).rejects.toMatchObject({
+      await expect(
+        service.create(ledgerId, creatorId, input, '00000000-0000-0000-0000-000000000001'),
+      ).rejects.toMatchObject({
         status: 400,
         errorCode: 'TEMPORARY_ACCOUNT_NOT_SELECTABLE',
       });
@@ -411,7 +436,9 @@ describe('TransactionsService', () => {
       allowEverything();
       prisma.account.findUnique.mockResolvedValue({ userId: otherUserId });
 
-      await expect(service.create(ledgerId, creatorId, input)).rejects.toMatchObject({
+      await expect(
+        service.create(ledgerId, creatorId, input, '00000000-0000-0000-0000-000000000001'),
+      ).rejects.toMatchObject({
         status: 404,
         errorCode: 'NOT_FOUND',
       });
@@ -422,12 +449,17 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, {
-          ...input,
-          type: 'TRANSFER',
-          categoryId: undefined,
-          toAccountId: accountId,
-        }),
+        service.create(
+          ledgerId,
+          creatorId,
+          {
+            ...input,
+            type: 'TRANSFER',
+            categoryId: undefined,
+            toAccountId: accountId,
+          },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'TRANSFER_SAME_ACCOUNT' });
     });
 
@@ -435,7 +467,12 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, { ...input, type: 'TRANSFER', categoryId: undefined }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, type: 'TRANSFER', categoryId: undefined },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_REQUIRED' });
     });
 
@@ -443,7 +480,12 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, { ...input, type: 'TRANSFER', toAccountId }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, type: 'TRANSFER', toAccountId },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
     });
 
@@ -451,7 +493,12 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, { ...input, categoryId: undefined }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, categoryId: undefined },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
     });
 
@@ -459,7 +506,12 @@ describe('TransactionsService', () => {
       allowEverything();
 
       await expect(
-        service.create(ledgerId, creatorId, { ...input, toAccountId }),
+        service.create(
+          ledgerId,
+          creatorId,
+          { ...input, toAccountId },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
     });
 
@@ -472,12 +524,17 @@ describe('TransactionsService', () => {
         toAccount: { id: toAccountId, name: '國泰世華', userId: creatorId },
       });
 
-      const result = await service.create(ledgerId, creatorId, {
-        ...input,
-        type: 'TRANSFER',
-        categoryId: undefined,
-        toAccountId,
-      });
+      const result = await service.create(
+        ledgerId,
+        creatorId,
+        {
+          ...input,
+          type: 'TRANSFER',
+          categoryId: undefined,
+          toAccountId,
+        },
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(result.category).toBeNull();
       expect(result.toAccount).toEqual({ id: toAccountId, name: '國泰世華' });
@@ -1158,6 +1215,7 @@ describe('TransactionsService', () => {
         prisma.account.findFirst.mockResolvedValue({ id: 'temporary' });
         service = new TransactionsService(
           prisma as unknown as PrismaService,
+          createIdempotencyStub(prisma as unknown as PrismaService),
           {
             findCallerPerson: jest.fn().mockResolvedValue({ id: 'payer', userId: creatorId }),
             lockPeople: jest.fn().mockResolvedValue(new Map([['payer', { userId: creatorId }]])),
@@ -1190,6 +1248,7 @@ describe('TransactionsService', () => {
         prisma.transaction.findMany.mockResolvedValue(merged ? [{ mergedFromId: joined.id }] : []);
         service = new TransactionsService(
           prisma as unknown as PrismaService,
+          createIdempotencyStub(prisma as unknown as PrismaService),
           {
             listPeople: jest.fn().mockResolvedValue([payer]),
             toView: jest.fn().mockReturnValue(payer),

@@ -1,3 +1,4 @@
+import { createIdempotencyStub } from '../idempotency/idempotency.testing';
 import { AppException } from '../common/exceptions/app.exception';
 import type { LedgerPersonRecord } from '../ledger-people/ledger-people.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -114,6 +115,7 @@ describe('SettlementsService', () => {
     };
     service = new SettlementsService(
       prisma as unknown as PrismaService,
+      createIdempotencyStub(prisma as unknown as PrismaService),
       people as unknown as LedgerPeopleService,
       transactions as unknown as TransactionsService,
     );
@@ -158,14 +160,19 @@ describe('SettlementsService', () => {
         expectedToAccountId: 'account-alice',
       },
     ])('$label', async (testCase) => {
-      await service.create(ledgerId, callerId, {
-        ...(testCase.fromPersonId ? { fromPersonId: testCase.fromPersonId } : {}),
-        toPersonId: testCase.toPersonId,
-        amount: 50000,
-        date,
-        ...(testCase.fromAccountId ? { fromAccountId: testCase.fromAccountId } : {}),
-        ...(testCase.toAccountId ? { toAccountId: testCase.toAccountId } : {}),
-      });
+      await service.create(
+        ledgerId,
+        callerId,
+        {
+          ...(testCase.fromPersonId ? { fromPersonId: testCase.fromPersonId } : {}),
+          toPersonId: testCase.toPersonId,
+          amount: 50000,
+          date,
+          ...(testCase.fromAccountId ? { fromAccountId: testCase.fromAccountId } : {}),
+          ...(testCase.toAccountId ? { toAccountId: testCase.toAccountId } : {}),
+        },
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(tx.transaction.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -195,12 +202,17 @@ describe('SettlementsService', () => {
 
     it('rejects the same person without writing either row', async () => {
       await expect(
-        service.create(ledgerId, callerId, {
-          toPersonId: alice.id,
-          amount: 100,
-          date,
-          fromAccountId: 'account-alice',
-        }),
+        service.create(
+          ledgerId,
+          callerId,
+          {
+            toPersonId: alice.id,
+            amount: 100,
+            date,
+            fromAccountId: 'account-alice',
+          },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'SETTLEMENT_SAME_PERSON' });
 
       expect(tx.transaction.create).not.toHaveBeenCalled();
@@ -209,15 +221,25 @@ describe('SettlementsService', () => {
 
     it('requires an account when the caller is either side', async () => {
       await expect(
-        service.create(ledgerId, callerId, { toPersonId: bob.id, amount: 100, date }),
+        service.create(
+          ledgerId,
+          callerId,
+          { toPersonId: bob.id, amount: 100, date },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_REQUIRED' });
       await expect(
-        service.create(ledgerId, callerId, {
-          fromPersonId: bob.id,
-          toPersonId: alice.id,
-          amount: 100,
-          date,
-        }),
+        service.create(
+          ledgerId,
+          callerId,
+          {
+            fromPersonId: bob.id,
+            toPersonId: alice.id,
+            amount: 100,
+            date,
+          },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_REQUIRED' });
 
       expect(tx.transaction.create).not.toHaveBeenCalled();
@@ -226,23 +248,33 @@ describe('SettlementsService', () => {
 
     it('rejects an account selected for another payer and a foreign account', async () => {
       await expect(
-        service.create(ledgerId, callerId, {
-          fromPersonId: bob.id,
-          toPersonId: alice.id,
-          amount: 100,
-          date,
-          fromAccountId: 'account-bob',
-          toAccountId: 'account-alice',
-        }),
+        service.create(
+          ledgerId,
+          callerId,
+          {
+            fromPersonId: bob.id,
+            toPersonId: alice.id,
+            amount: 100,
+            date,
+            fromAccountId: 'account-bob',
+            toAccountId: 'account-alice',
+          },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'ACCOUNT_NOT_PAYERS' });
 
       await expect(
-        service.create(ledgerId, callerId, {
-          toPersonId: bob.id,
-          amount: 100,
-          date,
-          fromAccountId: 'account-foreign',
-        }),
+        service.create(
+          ledgerId,
+          callerId,
+          {
+            toPersonId: bob.id,
+            amount: 100,
+            date,
+            fromAccountId: 'account-foreign',
+          },
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 404, errorCode: 'NOT_FOUND' });
 
       expect(tx.transaction.create).not.toHaveBeenCalled();

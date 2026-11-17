@@ -245,4 +245,101 @@ T1a 只用 1 個 worker：共用服務和 5 個 service 的改法要一致，拆
 
 ## 7. 實作紀錄
 
-（實作時填寫）
+### T1a：後端核心（2026-11-17）
+
+- 工作分支：`feature/r1-api`，基底為整合分支的 `130bd7e`。
+- 開始前完成 shared build 與 Prisma generate。所有資料庫操作只連 `ledger_r1_api_test`；沒有操作 `ledger_dev`、`ledger_test`。
+- 新增鍵表、共用服務、原始 header 裝飾器與 5 個端點的接線。controller 第一行驗 header，DTO 驗證仍先執行。
+- `run` 首次提交回 `{ created: true, resultId }`，重送回 `{ created: false, response }`。領域保留首次建立的回應方式，重送由讀取函式重建目前狀態。
+- 沒有新增套件、修改 CI、變更 CORS 選項或修改既有 API e2e。`idempotency-isolation.e2e-spec.ts` 與共用 e2e 工具保持原樣。
+
+#### Migration SQL（逐行完整內容）
+
+檔案：`apps/api/prisma/migrations/20261117090000_r1_idempotency_key/migration.sql`。
+
+只新增 1 張表、2 個 enum、鍵表的唯一索引與外鍵。`User` 只加 Prisma 反向關聯，沒有修改既有表的 SQL。
+
+```sql
+-- CreateEnum
+CREATE TYPE "IdempotencyOperation" AS ENUM ('TRANSACTION_CREATE', 'DEBT_ENTRY_CREATE', 'SPLIT_CREATE', 'SETTLEMENT_CREATE', 'COUNTERPARTY_FORGIVE');
+
+-- CreateEnum
+CREATE TYPE "IdempotencyResultType" AS ENUM ('TRANSACTION', 'DEBT_ENTRY', 'SPLIT');
+
+-- CreateTable
+CREATE TABLE "IdempotencyKey" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "operation" "IdempotencyOperation" NOT NULL,
+    "scopeId" TEXT,
+    "requestHash" TEXT NOT NULL,
+    "resultType" "IdempotencyResultType" NOT NULL,
+    "resultId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "IdempotencyKey_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "IdempotencyKey_userId_key_key" ON "IdempotencyKey"("userId", "key");
+
+-- AddForeignKey
+ALTER TABLE "IdempotencyKey" ADD CONSTRAINT "IdempotencyKey_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+```
+
+依 `apps/api/CLAUDE.md` 的非互動環境指引，用 `prisma migrate diff --from-schema <基底 schema> --to-schema prisma/schema.prisma --script` 產生 SQL，再用 `prisma migrate deploy` 套用。沒有用 `db push` 或手動修改資料庫結構。
+
+#### Prisma 7.8 P2002 實測
+
+在真實 PostgreSQL 的 `$transaction` 內重複插入同一個 `(userId, key)`，印出一次 `JSON.stringify(error.meta)`，得到：
+
+```json
+{
+  "modelName": "IdempotencyKey",
+  "driverAdapterError": {
+    "name": "DriverAdapterError",
+    "cause": {
+      "originalCode": "23505",
+      "originalMessage": "duplicate key value violates unique constraint \"IdempotencyKey_userId_key_key\"",
+      "kind": "UniqueConstraintViolation",
+      "constraint": { "fields": ["\"userId\"", "key"] }
+    }
+  }
+}
+```
+
+這個版本沒有 `meta.target`。`fields[0]` 的字串本身含雙引號，`fields[1]` 不含雙引號。判斷要求 P2002、正確的 `modelName`、`originalCode`、`kind` 與精確的 2 個欄位全部吻合；其他形狀一律往外丟，不依錯誤文字猜測。e2e 保留相同結構的斷言，移除臨時印出。
+
+#### 5 個 service 搬動範圍與權限
+
+1. `transactions.service.ts`：原共享與個人 `$transaction` 內容移進同一個 `write(tx)` 的 2 個分支。共享分支保留找本人、鎖人物、解析帳戶、分類、寫交易、寫份額的順序；個人分支保留帳戶、分類、交易的順序。帳本類型讀取與靜態檢查在搶鍵後執行，讀取使用同一個 `tx`，避免另取連線。個人交易的回應轉換仍在提交後。重送用結果目前的 `ledgerId` 呼叫既有 `assertLedgerWritable`，再查軟刪除，最後 `getById`。
+2. `debt-entries.service.ts`：原建立交易整段移成 `write(tx)`。保留解析對象、鎖對象、讀餘額、寫交易、寫往來紀錄、差額、提議、同步狀態與組回應的順序。純輸入檢查 `assertEntryShape` 維持交易外，`ledgerParts` 維持提交後補齊。重送先限定紀錄對象屬於本人，再驗紀錄對應交易目前的帳本可寫，檢查軟刪除，重建同步狀態、差額與 `ledgerParts`；不重驗還款餘額。
+3. `splits.service.ts`：保留交易外的份額計算；原交易整段移成 `write(tx)`。參照檢查、鎖對象、轉分帳時的原交易檢查及軟刪除、建分帳、建參與者、寫組合的順序不變。重送先查本人擁有的結果及目前帳本，驗可寫與軟刪除，再沿用 `loadOwned` 和 `get`。
+4. `settlements.service.ts`：原建立交易整段移成 `write(tx)`。帳本類型、找本人、鎖人物、解析兩端帳戶、建交易、建結清的順序不變。重送沿用交易的 `replayCreated`，驗結果目前所在的帳本；`resultId` 是交易 id。
+5. `counterparties.service.ts`：只搬 `forgive` 的原交易內容。保留驗對象擁有者、驗指定帳本、鎖對象、讀餘額、寫呆帳交易、寫免除紀錄、提議、同步狀態的順序。重送先驗結果對象擁有者，再驗對應交易目前帳本可寫及軟刪除；只為回應計算目前餘額，不再用餘額判斷能否免除。
+
+5 個 service 都保留原業務錯誤碼與預設隔離等級。首次回應原本在交易內組合的部分保留原樣，只把結果 id 交給共用服務填回鍵表。
+
+既有單元測試只補 constructor 的共用服務與 create 的鍵參數。首次寫入的測試替身仍呼叫原本的 `$transaction`。比對 TypeScript 語法樹，排除新鍵參數後，5 個既有測試檔的 334 個斷言敘述完全相同（20、104、51、37、122）。
+
+#### 驗證證據
+
+- 共用服務新增 31 個單元測試；包含搶鍵順序、P2002 重送及拒絕其他 P2002、3 種不符、空結果、雜湊正規化與未完成結果的拒絕。
+- 新增 e2e 54 項，涵蓋 SC-IK1、SC-IK2、SC-IK4～SC-IK8、SC-IK10、SC-IK11。另補 5 個端點的結果搬帳本後失去寫入權、結果真的刪除、空結果造成真實回滾。
+- SC-IK7 在交易內記錄已寫入的份額、差額、提議與 AI 分類筆數，再於 HTTP 回應外斷言；測試不會把斷言失敗誤當成預期的 500。
+- `resetDb` 實測：建立交易與鍵後呼叫原工具，鍵從 1 筆變 0 筆，交易變 0 筆、金額加總為 null。原因是工具查 `pg_tables` 動態列出所有 public 表，再一次 `TRUNCATE ... CASCADE`，不需要修改工具或只靠 User cascade。
+- CORS 選項只抽成 `src/config/cors-options.ts`，內容仍只有 `origin: config.get('CORS_ORIGIN', { infer: true })`。OpenAPI、真實預檢與不需鍵的分類及帳戶建立都實測通過。
+- `pnpm --filter @ledger/api test:e2e -- idempotency`：`Test Suites: 2 passed, 2 total`；`Tests: 62 passed, 62 total`。包含未修改的 SC-IK3（5 項）與 SC-IK9（3 項）。
+- 根目錄 `pnpm lint`：exit 0，shared、API、Web 全部通過。
+- 根目錄 `pnpm typecheck`：exit 0，shared、API、Web 全部通過。
+- 根目錄 `pnpm test`：exit 0；shared 160/160、API 1084/1084（70 suites）、Web 1290/1290（142 files）。
+- 根目錄 `pnpm format:check`：exit 0，`All matched files use Prettier code style!`。
+- 同時跑根目錄檢查與 API e2e 時，曾有 2 個未修改的 Web 測試超過既有的 5000ms 上限（`StatsPage` 鍵盤操作、`use-transactions` 建立後刷新餘額）。先前 2 次已通過，停止其他檢查後單獨重跑根目錄 `pnpm test`，全部通過；沒有調整測試或上限。高負載是推測原因。
+
+#### 偏離與待辦
+
+- 沒有需求或業務規則的偏離。migration 產生方式依後端指引改用 diff 與 deploy，沒有使用互動式 migrate dev。
+- 既有完整 API e2e 留給 T1b 合併後驗證；本分支只跑 2 個 idempotency 檔。沒有執行 Web e2e。
+- 待協調者合併、逐行驗收及跑完整回歸；本 worker 不 push、不開 PR。
+- 交付時整合分支已前進到 `72bcebc`（T1b）；檢查本 worker 的改動請以 `130bd7e..feature/r1-api` 為準。對目前整合分支的 diff 也只含 `apps/api` 與本 plan，既有 API e2e 的差異來自整合分支已先合併 T1b。

@@ -10,7 +10,17 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiConflictResponse, ApiNotFoundResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiNotFoundResponse,
+  ApiTags,
+  ApiHeader,
+  ApiBadRequestResponse,
+} from '@nestjs/swagger';
+import { IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
+import { IdempotencyKeyHeader } from '../idempotency/idempotency-key-header.decorator';
+import { parseIdempotencyKey } from '../idempotency/idempotency.service';
 import type {
   Counterparty,
   CreateDebtEntryResponse,
@@ -93,14 +103,24 @@ export class CounterpartiesController {
   }
 
   @Post(':id/forgive')
+  @ApiHeader({
+    name: IDEMPOTENCY_KEY_HEADER,
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiBadRequestResponse({ description: 'IDEMPOTENCY_KEY_INVALID; VALIDATION_FAILED.' })
   @ApiNotFoundResponse({ description: 'No such counterparty, or it is not yours.' })
-  @ApiConflictResponse({ description: 'NOTHING_TO_FORGIVE.' })
+  @ApiConflictResponse({
+    description: 'NOTHING_TO_FORGIVE; IDEMPOTENCY_KEY_REUSED; IDEMPOTENCY_RESOURCE_DELETED.',
+  })
   forgive(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() dto: ForgiveCounterpartyDto,
+    @IdempotencyKeyHeader() rawKey: string | string[] | undefined,
   ): Promise<CreateDebtEntryResponse> {
-    return this.counterparties.forgive(user.sub, id, dto.ledgerId);
+    const key = parseIdempotencyKey(rawKey);
+    return this.counterparties.forgive(user.sub, id, dto.ledgerId, key);
   }
 
   @Post(':id/merge')
