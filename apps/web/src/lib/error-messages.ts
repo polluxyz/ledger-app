@@ -28,6 +28,8 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   NOT_FOUND: '找不到這筆資料，請重新整理頁面後再試。',
   TOO_MANY_REQUESTS: '操作太頻繁了，請稍待片刻再試。',
   INTERNAL_ERROR: '發生未預期的錯誤，請稍後再試。',
+  IDEMPOTENCY_KEY_REUSED: '已記錄過',
+  IDEMPOTENCY_RESOURCE_DELETED: '這筆已刪除',
 
   // ── 帳本與成員 ────────────────────────────────────────────────────────────
   USER_NOT_FOUND: '找不到使用這個 email 的帳號。請對方先註冊，再加入。',
