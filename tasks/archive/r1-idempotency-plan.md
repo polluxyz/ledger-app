@@ -361,4 +361,4 @@ ALTER TABLE "IdempotencyKey" ADD CONSTRAINT "IdempotencyKey_userId_fkey" FOREIGN
 - 整合分支 `feature/r1-idempotency` 依序合併 T1b、T1a、T2，沒有衝突以外的手動改動。
 - CORS 只把既有選項抽成 `corsOptions()` 函式，選項內容不變，不屬於「改 CORS 設定」。
 - 已知小事，不擋合併：「免除剩餘」關掉再開會換鍵。若第 1 次其實已成功，第 2 次會因剩餘欠款為 0 被擋下，不會重複免除。
-- 已知風險：`isKeyConflict` 綁定 Prisma 7.8 的錯誤格式。升級 Prisma 後若格式改變，同時送出會變成 500，但不會重複記帳；SC-IK9 會抓到。
+- 已知風險：`isKeyConflict` 綁定 Prisma 7.8 的錯誤格式。升級 Prisma 後若格式改變，每次同鍵重送都會變成 500，但不會重複記帳；SC-IK2、SC-IK3 會抓到。
