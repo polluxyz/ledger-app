@@ -13,6 +13,7 @@ import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatMoney, toDateInputValue } from '../../lib/format';
+import { createIdempotencyKey } from '../../lib/idempotency-key';
 import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCategories } from '../categories/use-categories';
@@ -55,6 +56,7 @@ export function DebtEntryForm({
   onSaved,
   onCancel,
 }: DebtEntryFormProps) {
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const [kind, setKind] = useState<DebtEntryFormKind>('LEND');
   const [counterpartyName, setCounterpartyName] = useState(initialCounterpartyName);
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
@@ -257,20 +259,24 @@ export function DebtEntryForm({
       ...(canSettle && settle ? { settle: true } : {}),
     };
 
-    createEntry.mutate(request, {
-      onSuccess: (response) => {
-        // 一個對象常會連續記多筆；保留對象與種類，只清掉每筆通常不同的內容。
-        setAmount('');
-        setTitle('');
-        setCategoryId('');
-        setNote('');
-        if (kind === 'REPAYMENT' && response.counterparty.balance === 0) {
-          setKind('LEND');
-          setSettle(false);
-        }
-        onSaved?.();
+    createEntry.mutate(
+      { ...request, idempotencyKey },
+      {
+        onSuccess: (response) => {
+          setIdempotencyKey(createIdempotencyKey());
+          // 一個對象常會連續記多筆；保留對象與種類，只清掉每筆通常不同的內容。
+          setAmount('');
+          setTitle('');
+          setCategoryId('');
+          setNote('');
+          if (kind === 'REPAYMENT' && response.counterparty.balance === 0) {
+            setKind('LEND');
+            setSettle(false);
+          }
+          onSaved?.();
+        },
       },
-    });
+    );
   }
 
   return (

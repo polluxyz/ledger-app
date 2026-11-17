@@ -16,6 +16,7 @@ import styles from './AiDraftList.module.css';
 
 export interface AiDraftItem {
   key: string;
+  idempotencyKey?: string;
   draft: TransactionDraft;
   error?: string;
 }

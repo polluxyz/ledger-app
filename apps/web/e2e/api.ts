@@ -268,7 +268,7 @@ export async function createTransaction(
   body: CreateTransactionRequest,
 ): Promise<Transaction> {
   const response = await request.post(`${API_BASE_URL}/ledgers/${ledgerId}/transactions`, {
-    headers: authHeaders(token),
+    headers: { ...authHeaders(token), 'Idempotency-Key': crypto.randomUUID() },
     data: body,
   });
   return readJson<Transaction>(response, '記一筆交易');
@@ -310,7 +310,7 @@ export async function createSplit(
   body: CreateSplitRequest,
 ): Promise<Split> {
   const response = await request.post(`${API_BASE_URL}/splits`, {
-    headers: authHeaders(token),
+    headers: { ...authHeaders(token), 'Idempotency-Key': crypto.randomUUID() },
     data: body,
   });
   return readJson<Split>(response, '建立分帳');
@@ -375,7 +375,7 @@ export async function createDebtEntry(
     record = { ledgerId, accountId };
   }
   const response = await request.post(`${API_BASE_URL}/debt-entries`, {
-    headers: authHeaders(token),
+    headers: { ...authHeaders(token), 'Idempotency-Key': crypto.randomUUID() },
     data: { ...body, record } satisfies CreateDebtEntryRequest,
   });
   return readJson<CreateDebtEntryResponse>(response, '記一筆往來');
@@ -389,7 +389,7 @@ export async function forgiveCounterparty(
   body: ForgiveCounterpartyRequest,
 ): Promise<CreateDebtEntryResponse> {
   const response = await request.post(`${API_BASE_URL}/counterparties/${counterpartyId}/forgive`, {
-    headers: authHeaders(token),
+    headers: { ...authHeaders(token), 'Idempotency-Key': crypto.randomUUID() },
     data: body,
   });
   return readJson<CreateDebtEntryResponse>(response, '免除往來餘額');

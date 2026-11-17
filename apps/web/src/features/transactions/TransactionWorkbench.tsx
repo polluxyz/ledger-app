@@ -33,7 +33,7 @@ import styles from './TransactionWorkbench.module.css';
  */
 export type PanelTarget =
   | { kind: 'new' }
-  | { kind: 'draft'; item: { key: string; draft: TransactionDraft } }
+  | { kind: 'draft'; item: { key: string; draft: TransactionDraft; idempotencyKey?: string } }
   | { kind: 'transaction'; transaction: Transaction; initialDeleteOpen?: boolean }
   | { kind: 'copy'; transaction: Transaction }
   | { kind: 'debtTransaction'; transaction: Transaction }
@@ -155,6 +155,9 @@ export function TransactionWorkbench({
             amountFieldId={amountFieldId}
             copyFrom={activeTarget.kind === 'copy' ? activeTarget.transaction : undefined}
             draft={activeTarget.kind === 'draft' ? activeTarget.item.draft : undefined}
+            idempotencyKey={
+              activeTarget.kind === 'draft' ? activeTarget.item.idempotencyKey : undefined
+            }
             onSaved={
               activeTarget.kind === 'draft'
                 ? () => onDraftSaved?.(activeTarget.item.key)

@@ -588,6 +588,33 @@ describe('invalidateAfterMoneyWrite', () => {
 });
 
 describe('money-write mutation invalidation decisions', () => {
+  it.each(
+    mutationCases.filter(({ name }) =>
+      [
+        'useCreateTransactionForLedger',
+        'useCreateDebtEntry',
+        'useForgiveCounterparty',
+        'useCreateSplit',
+        'useCreateSettlement',
+      ].includes(name),
+    ),
+  )('SC-IK12 $name 鍵已使用時重抓列表', async (testCase) => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(['transactions'], { items: [] });
+    mockFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ statusCode: 409, errorCode: 'IDEMPOTENCY_KEY_REUSED', message: 'error' }),
+        { status: 409 },
+      ),
+    );
+    const { result, unmount } = renderHook(testCase.hook, { wrapper: createWrapper(queryClient) });
+    await act(async () => {
+      await expect(result.current.mutateAsync(testCase.variables as never)).rejects.toThrow();
+    });
+    expect(queryClient.getQueryState(['transactions'])?.isInvalidated).toBe(true);
+    unmount();
+    queryClient.clear();
+  });
   it.each(mutationCases)('$name follows its matrix decision', async (testCase) => {
     const queryClient = createQueryClient();
     queryClient.setQueryData(LEDGER_STATISTICS_KEY, { total: 123 });

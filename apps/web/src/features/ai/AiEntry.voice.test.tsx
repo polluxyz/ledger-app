@@ -542,7 +542,7 @@ describe('AI entry voice input', () => {
     await act(async () => {
       await probe.confirmDraft(probe.drafts[0]!.key);
     });
-    await waitFor(() => expect(probe.drafts[0]?.error).toBe('寫入失敗，請稍後再試。'));
+    await waitFor(() => expect(probe.drafts[0]?.error).toBe('尚未確認，請重試'));
     await user.click(screen.getByRole('button', { name: 'AI 記帳' }));
     await user.type(inputBox(), '午餐 120 刷卡');
     const draftsBeforeClear = probe.drafts;
@@ -552,7 +552,7 @@ describe('AI entry voice input', () => {
     await user.click(screen.getByRole('button', { name: '清除輸入文字' }));
 
     expect(probe.drafts).toBe(draftsBeforeClear);
-    expect(probe.drafts[0]?.error).toBe('寫入失敗，請稍後再試。');
+    expect(probe.drafts[0]?.error).toBe('尚未確認，請重試');
     expect(mocks.parse).toHaveBeenCalledTimes(1);
     expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
     expect(probe.text).toBe('');

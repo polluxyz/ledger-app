@@ -12,6 +12,7 @@ import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { toDateInputValue } from '../../lib/format';
+import { createIdempotencyKey } from '../../lib/idempotency-key';
 import { useCurrentUser } from '../auth/use-current-user';
 import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
@@ -42,6 +43,7 @@ export function SettlementForm({
   onSaved,
   onDeleted,
 }: SettlementFormProps) {
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const people = useLedgerPeople(ledger.id, ledger.kind === 'SHARED');
   const currentUser = useCurrentUser();
   const accounts = useAccounts();
@@ -140,7 +142,15 @@ export function SettlementForm({
     if (isEditing && settlement) {
       updateSettlement.mutate({ settlementId: settlement.id, input }, { onSuccess: onSaved });
     } else {
-      createSettlement.mutate(input, { onSuccess: onSaved });
+      createSettlement.mutate(
+        { ...input, idempotencyKey },
+        {
+          onSuccess: () => {
+            setIdempotencyKey(createIdempotencyKey());
+            onSaved();
+          },
+        },
+      );
     }
   }
 

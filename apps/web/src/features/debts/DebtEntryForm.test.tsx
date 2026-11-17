@@ -10,7 +10,7 @@ import { DebtEntryForm } from './DebtEntryForm';
  * fetch mock 回傳伺服器餘額，測試不替後端推導往來紀錄結果。
  */
 describe('DebtEntryForm', () => {
-  const fetchMock = vi.fn();
+  const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
   let queryClient: QueryClient;
 
   const ledger: LedgerSummary = {
@@ -158,7 +158,7 @@ describe('DebtEntryForm', () => {
   });
 
   function renderForm(selectedLedger = ledger, initialCounterpartyName?: string) {
-    render(
+    return render(
       <QueryClientProvider client={queryClient}>
         <DebtEntryForm ledger={selectedLedger} initialCounterpartyName={initialCounterpartyName} />
       </QueryClientProvider>,
@@ -169,12 +169,10 @@ describe('DebtEntryForm', () => {
     let body: Record<string, unknown> = {};
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes('/debt-entries') &&
-          (init as RequestInit | undefined)?.method === 'POST',
+        ([url, init]) => String(url).includes('/debt-entries') && init?.method === 'POST',
       );
       expect(call).toBeDefined();
-      const raw = (call?.[1] as RequestInit | undefined)?.body;
+      const raw = call?.[1]?.body;
       body = JSON.parse(typeof raw === 'string' ? raw : '{}') as Record<string, unknown>;
     });
     return body;
@@ -273,6 +271,71 @@ describe('DebtEntryForm', () => {
     const options = screen.getByRole('listbox', { name: '分類' });
     expect(within(options).getByRole('option', { name: '居住' })).toBeInTheDocument();
     expect(within(options).queryByRole('option', { name: '薪資' })).not.toBeInTheDocument();
+  });
+
+  it('SC-IK12 借還失敗與修改後保留鍵及內容，成功後換鍵', async () => {
+    const original = fetchMock.getMockImplementation()!;
+    let writes = 0;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/debt-entries') && init?.method === 'POST' && ++writes <= 4) {
+        if (writes <= 2) return Promise.reject(new TypeError('network'));
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              statusCode: 409,
+              errorCode: writes === 3 ? 'IDEMPOTENCY_KEY_REUSED' : 'IDEMPOTENCY_RESOURCE_DELETED',
+              message: 'error',
+            }),
+            { status: 409 },
+          ),
+        );
+      }
+      return original(url, init);
+    });
+    const user = userEvent.setup();
+    const view = renderForm(anotherLedger, '小明');
+    await screen.findByText('目前小明欠你 $9');
+    await waitFor(() => expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('acc-cash'));
+    const amount = screen.getByLabelText('金額');
+    await user.type(amount, '12');
+    const submit = screen.getByRole('button', { name: '新增' });
+    await user.click(submit);
+    await screen.findByText(/無法連線到伺服器/);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(2));
+    await user.clear(amount);
+    await user.type(amount, '13');
+    await user.click(submit);
+    await screen.findByText('已記錄過');
+    expect(amount).toHaveValue(13);
+    await user.click(submit);
+    await screen.findByText('這筆已刪除');
+    expect(amount).toHaveValue(13);
+    await user.click(submit);
+    await waitFor(() => expect(amount).toHaveValue(null));
+    await user.type(amount, '14');
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(6));
+    const calls = fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).endsWith('/debt-entries') && init?.method === 'POST',
+    );
+    expect(calls[0]?.[1]?.body).toBe(calls[1]?.[1]?.body);
+    const keys = calls.map(
+      ([, init]) => (init?.headers as Record<string, string>)['Idempotency-Key'],
+    );
+    expect(keys[0]).toBeTruthy();
+    expect(keys.slice(0, 5)).toEqual([keys[0], keys[0], keys[0], keys[0], keys[0]]);
+    expect(keys[5]).not.toBe(keys[0]);
+    view.unmount();
+    renderForm(anotherLedger, '小明');
+    await waitFor(() => expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('acc-cash'));
+    await user.type(screen.getByLabelText('金額'), '15');
+    await user.click(screen.getByRole('button', { name: '新增' }));
+    await waitFor(() => expect(writes).toBe(7));
+    const reopened = fetchMock.mock.calls
+      .filter(([url, init]) => url.endsWith('/debt-entries') && init?.method === 'POST')
+      .at(-1);
+    expect((reopened?.[1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe(keys[5]);
   });
 
   it('sends the active ledger, trimmed title, and optional category without a ledger field', async () => {

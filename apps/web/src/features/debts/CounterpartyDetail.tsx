@@ -3,6 +3,7 @@ import type { LedgerSummary } from '@ledger/shared';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { FormError } from '../../components/FormError';
+import { createIdempotencyKey } from '../../lib/idempotency-key';
 import { getAvatarLabels } from '../../lib/avatar-labels';
 import { AnimatedDisclosure } from './AnimatedDisclosure';
 import { DebtEntriesList } from './DebtEntriesList';
@@ -46,6 +47,7 @@ export function CounterpartyDetail({
   );
 
   const [forgiveOpen, setForgiveOpen] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const [entryFormOpen, setEntryFormOpen] = useState(false);
 
   function closeForgive() {
@@ -54,7 +56,10 @@ export function CounterpartyDetail({
   }
 
   function confirmForgive() {
-    forgive.mutate({ counterpartyId, ledgerId: ledger.id }, { onSuccess: closeForgive });
+    forgive.mutate(
+      { counterpartyId, ledgerId: ledger.id, idempotencyKey },
+      { onSuccess: closeForgive },
+    );
   }
 
   if (counterparty.isLoading) {
@@ -143,7 +148,14 @@ export function CounterpartyDetail({
             記一筆
           </Button>
           {person.balance > 0 && (
-            <Button type="button" variant="secondary" onClick={() => setForgiveOpen(true)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIdempotencyKey(createIdempotencyKey());
+                setForgiveOpen(true);
+              }}
+            >
               免除剩餘
             </Button>
           )}

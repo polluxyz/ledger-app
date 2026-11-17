@@ -8,7 +8,10 @@ import type {
 } from '@ledger/shared';
 import { categoriesKey } from '../categories/use-categories';
 import { apiRequest } from '../../lib/api-client';
-import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
+import {
+  invalidateAfterMoneyWrite,
+  invalidateOnReusedKey,
+} from '../../lib/invalidate-after-money-write';
 
 /**
  * 某帳本交易快取的**前綴** key。實際的 key 還會接上查詢參數（見 `useTransactions`），
@@ -62,7 +65,8 @@ export function useCreateTransaction(ledgerId: string | null) {
     ...mutation,
     mutate: (input: CreateTransactionRequest, options?: Parameters<typeof mutation.mutate>[1]) =>
       mutation.mutate({ ledgerId, input }, options),
-    mutateAsync: (input: CreateTransactionRequest) => mutation.mutateAsync({ ledgerId, input }),
+    mutateAsync: (input: CreateTransactionRequest, idempotencyKey?: string) =>
+      mutation.mutateAsync({ ledgerId, input, idempotencyKey }),
   };
 }
 
@@ -76,19 +80,23 @@ export function useCreateTransactionForLedger() {
     mutationFn: ({
       ledgerId,
       input,
+      idempotencyKey,
     }: {
       ledgerId: string | null;
       input: CreateTransactionRequest;
+      idempotencyKey?: string;
     }) =>
       apiRequest<Transaction>(`/ledgers/${ledgerId!}/transactions`, {
         method: 'POST',
         body: input,
+        idempotencyKey,
       }),
     onSuccess: (_transaction, { ledgerId }) => {
       invalidateAfterMoneyWrite(queryClient);
       // AI 草稿可能順便建立新分類（4a W244），只有這本帳本的分類清單要重取。
       void queryClient.invalidateQueries({ queryKey: categoriesKey(ledgerId) });
     },
+    onError: (error) => invalidateOnReusedKey(error, () => invalidateAfterMoneyWrite(queryClient)),
   });
 }
 

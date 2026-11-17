@@ -1,4 +1,4 @@
-/** 為同一次寫入產生鍵；重試時由呼叫端保留並重用。 */
+/** 為同一次寫入產生 UUID v4；呼叫端負責在重試時保留並重用這把鍵。 */
 export function createIdempotencyKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6]! & 0x0f) | 0x40;

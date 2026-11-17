@@ -10,7 +10,10 @@ import type {
   UpdateSettlementRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
+import {
+  invalidateAfterMoneyWrite,
+  invalidateOnReusedKey,
+} from '../../lib/invalidate-after-money-write';
 
 /**
  * 共享帳本的結清（3e）：每個人的淨額與建議、記結清、補帳戶。
@@ -72,12 +75,17 @@ export function useLedgerSettlementPages(ledgerId: string | null) {
 export function useCreateSettlement(ledgerId: string) {
   const invalidate = useInvalidateSettlementWrites();
   return useMutation({
-    mutationFn: (input: CreateSettlementRequest) =>
+    mutationFn: ({
+      idempotencyKey,
+      ...input
+    }: CreateSettlementRequest & { idempotencyKey?: string }) =>
       apiRequest<SettlementResponse>(`/ledgers/${ledgerId}/settlements`, {
         method: 'POST',
         body: input,
+        idempotencyKey,
       }),
     onSuccess: invalidate,
+    onError: (error) => invalidateOnReusedKey(error, invalidate),
   });
 }
 

@@ -6,7 +6,10 @@ import type {
   UpdateSplitResponse,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
+import {
+  invalidateAfterMoneyWrite,
+  invalidateOnReusedKey,
+} from '../../lib/invalidate-after-money-write';
 import { DEBT_PROPOSALS_KEY } from '../linking/use-linking';
 
 /** 分帳與相關資料共用的快取前綴。 */
@@ -30,9 +33,10 @@ export function useSplit(splitId: string | null) {
 export function useCreateSplit() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateSplitRequest) =>
-      apiRequest<Split>('/splits', { method: 'POST', body: input }),
+    mutationFn: ({ idempotencyKey, ...input }: CreateSplitRequest & { idempotencyKey?: string }) =>
+      apiRequest<Split>('/splits', { method: 'POST', body: input, idempotencyKey }),
     onSuccess: () => invalidateAfterWrite(queryClient),
+    onError: (error) => invalidateOnReusedKey(error, () => invalidateAfterWrite(queryClient)),
   });
 }
 
