@@ -2,7 +2,7 @@
 
 spec：`docs/specs/r1-idempotency.md`（決策 361～372、W289～W292、SC-IK1～SC-IK16）。後端與網頁合成一個 PR（決策 372）。
 
-> 核可：spec 由開發者 2026-11-17 回「核可」（含 §10 的 2 項）。本 plan 與 `tasks/r1-idempotency-todo.md` 待開發者核可。
+> 核可：spec 由開發者 2026-11-17 回「核可」（含 §10 的 2 項）。本 plan 與 `tasks/r1-idempotency-todo.md` 開發者 2026-11-17 回「同意」核可。
 
 ## 0. 起點
 
