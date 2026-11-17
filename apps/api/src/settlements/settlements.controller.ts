@@ -12,7 +12,17 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiTags,
+  ApiHeader,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+} from '@nestjs/swagger';
+import { IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
+import { IdempotencyKeyHeader } from '../idempotency/idempotency-key-header.decorator';
+import { parseIdempotencyKey } from '../idempotency/idempotency.service';
 import type { JwtPayload, Paginated, SettlementSummary, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireLedgerRole } from '../common/decorators/require-ledger-role.decorator';
@@ -54,13 +64,22 @@ export class SettlementsController {
   }
 
   @Post('settlements')
+  @ApiHeader({
+    name: IDEMPOTENCY_KEY_HEADER,
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiBadRequestResponse({ description: 'IDEMPOTENCY_KEY_INVALID; VALIDATION_FAILED.' })
+  @ApiConflictResponse({ description: 'IDEMPOTENCY_KEY_REUSED; IDEMPOTENCY_RESOURCE_DELETED.' })
   @RequireLedgerRole('EDITOR')
   create(
     @Param('ledgerId') ledgerId: string,
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateSettlementDto,
+    @IdempotencyKeyHeader() rawKey: string | string[] | undefined,
   ): Promise<Transaction> {
-    return this.settlements.create(ledgerId, user.sub, dto);
+    const key = parseIdempotencyKey(rawKey);
+    return this.settlements.create(ledgerId, user.sub, dto, key);
   }
 
   @Patch('settlements/:settlementId')

@@ -1,6 +1,6 @@
 # Spec：R1 防重複送出（Idempotency-Key）
 
-> 狀態：**已核可，待實作**。實作計畫：`tasks/r1-idempotency-plan.md`、`tasks/r1-idempotency-todo.md`。
+> 狀態：**已完成**（2026-11-17）。實作計畫：`tasks/archive/r1-idempotency-plan.md`、`tasks/archive/r1-idempotency-todo.md`。
 > 上游：[`docs/reports/2026-11-11-project-review.md`](../reports/2026-11-11-project-review.md) §3 R1、§5 F1；[`security-baseline.md`](security-baseline.md)。
 > 依據：
 >

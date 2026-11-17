@@ -11,7 +11,7 @@ import type {
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, person, type Person } from './linking-utils';
 
 /**
@@ -49,6 +49,7 @@ describe('Transaction marks (e2e)', () => {
       .expect(200);
     const response = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',
@@ -251,6 +252,7 @@ describe('Transaction marks (e2e)', () => {
     });
     const response = await request(server())
       .post(`/api/ledgers/${homeId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: 'EXPENSE',
@@ -308,6 +310,7 @@ describe('Transaction marks (e2e)', () => {
     });
     const created = await request(server())
       .post(`/api/ledgers/${homeId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({ toPersonId: recipient.id, amount: 5000, date: DAY, fromAccountId: bob.cashId })
       .expect(201);
@@ -344,6 +347,7 @@ describe('Transaction marks (e2e)', () => {
     const counterparty = await createCounterparty(app, bob, '阿德');
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         counterparty: { id: counterparty.id },
@@ -399,6 +403,7 @@ describe('Transaction marks (e2e)', () => {
     ] as const) {
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(bob.token))
         .send({
           counterparty: { id: counterparty.id },
@@ -447,6 +452,7 @@ describe('Transaction marks (e2e)', () => {
     };
     const created = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send(input)
       .expect(201);
@@ -499,6 +505,7 @@ describe('Transaction marks (e2e)', () => {
     });
     const response = await request(server())
       .post(`/api/ledgers/${homeId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(carol.token))
       .send({
         type: 'EXPENSE',

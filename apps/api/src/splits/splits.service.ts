@@ -9,6 +9,11 @@ import type {
 import { AppException } from '../common/exceptions/app.exception';
 import { assertSelectableAccount } from '../accounts/account-selection';
 import type { Prisma } from '../generated/prisma/client';
+import {
+  IdempotencyService,
+  requestHash,
+  idempotencyResourceDeleted,
+} from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { assertLedgerWritable } from '../debts/debt-ledger-access';
@@ -30,13 +35,14 @@ type SplitRow = Awaited<ReturnType<SplitsService['loadOwned']>>;
 export class SplitsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
     private readonly transactions: TransactionsService,
   ) {}
 
   /** 先檢查內容與所有權，後寫入整份分帳；任何失敗由資料庫交易回滾。 */
-  async create(userId: string, input: Input): Promise<SplitResponse> {
+  async create(userId: string, input: Input, key: string): Promise<SplitResponse> {
     const shares = this.shares(input, false);
-    const id = await this.prisma.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient): Promise<string> => {
       await this.validateReferences(tx, userId, input);
       await lockCounterparties(tx, referencedCounterparties(input));
       if (input.fromTransactionId) {
@@ -90,8 +96,23 @@ export class SplitsService {
       });
       await this.writeComposition(tx, userId, split.id, input, shares, [], []);
       return split.id;
-    });
-    return this.get(userId, id);
+    };
+    const result = await this.idempotency.run(
+      { userId, key, operation: 'SPLIT_CREATE', scopeId: null, requestHash: requestHash(input) },
+      write,
+      async (resultId) => {
+        const row = await this.prisma.split.findFirst({
+          where: { id: resultId, ownerId: userId },
+          select: { ledgerId: true, deletedAt: true },
+        });
+        if (!row) throw notFound('Split');
+        await assertLedgerWritable(this.prisma, userId, row.ledgerId);
+        if (row.deletedAt !== null) throw idempotencyResourceDeleted();
+        await this.loadOwned(this.prisma, userId, resultId);
+        return this.get(userId, resultId);
+      },
+    );
+    return result.created ? this.get(userId, result.resultId) : result.response;
   }
 
   async get(userId: string, id: string): Promise<SplitResponse> {

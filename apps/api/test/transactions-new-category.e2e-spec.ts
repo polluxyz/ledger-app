@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import type { Category, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -27,6 +27,7 @@ describe('Create transaction with a new category (e2e)', () => {
   function create(ledgerId: string, body: Record<string, unknown> = {}) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(owner.token))
       .send({
         type: 'EXPENSE',

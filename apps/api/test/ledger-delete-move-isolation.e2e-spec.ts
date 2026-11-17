@@ -8,7 +8,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, createCounterparty, person, type Person } from './linking-utils';
 
 /**
@@ -67,6 +74,7 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
   async function expense(who: Person, ledgerId: string, title: string, amount: number) {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',
@@ -113,6 +121,7 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
     const ade = await createCounterparty(app, bob, '阿德');
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         counterparty: { id: ade.id },

@@ -102,7 +102,7 @@
 - 影響：伺服器已寫入但回應遺失時，重試會多記 1 筆，餘額與欠款跟著錯。
 - 修法：新增類請求帶一次性鍵，後端用唯一索引擋下。
 - 工作量中；修改風險中（要改 schema 與 API）；信心高。
-- 進度：spec 見 [`r1-idempotency.md`](../specs/r1-idempotency.md)（2026-11-17 草稿）。
+- 進度：已完成（#223，2026-11-17）。spec 見 [`r1-idempotency.md`](../specs/r1-idempotency.md)。
 
 **R2　Swagger（API 文件頁）永遠開啟（缺陷）**
 
@@ -287,7 +287,7 @@
 
 ### 下一輪處理
 
-- 需要先寫 spec 討論：R1 防重複送出（改 schema 與 API）、R6 憑證失效機制、R5 備份與還原程序。
+- 需要先寫 spec 討論：R6 憑證失效機制、R5 備份與還原程序。R1 防重複送出已完成（#223）。
 - 可直接做：R9、R7、R8、R11 的 `enableShutdownHooks`、R13、R14、X1、X2、F5。
 
 ### 後續評估

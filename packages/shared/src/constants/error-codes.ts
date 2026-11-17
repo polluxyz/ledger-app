@@ -156,6 +156,12 @@ export const ErrorCode = {
   AI_UNAVAILABLE: 'AI_UNAVAILABLE',
   /** 超過每人每日的 AI 記帳解析次數（4a 額度決策 296）。429。 */
   AI_DAILY_LIMIT: 'AI_DAILY_LIMIT',
+  /** 防重複送出的鍵缺少、空白、不是 UUID 或有多個值（R1 決策 363）。這時什麼都不寫入。400。 */
+  IDEMPOTENCY_KEY_INVALID: 'IDEMPOTENCY_KEY_INVALID',
+  /** 同一把鍵已用在別的端點、別的帳本或對象、或不同的內容（R1 決策 366 (a)）。409。 */
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  /** 同一把鍵建立的紀錄已經刪除；不重建、不還原（R1 決策 366 (e)）。409。 */
+  IDEMPOTENCY_RESOURCE_DELETED: 'IDEMPOTENCY_RESOURCE_DELETED',
   /** 請求過於頻繁（被限流）。 */
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
   /** 非預期的伺服器端錯誤；細節絕不外洩給客戶端。 */

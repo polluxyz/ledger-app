@@ -20,7 +20,10 @@ import type {
   UpdateDebtEntryRequest,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
-import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
+import {
+  invalidateAfterMoneyWrite,
+  invalidateOnReusedKey,
+} from '../../lib/invalidate-after-money-write';
 
 /**
  * 借還（3b-1 往來帳版）的伺服器狀態。規格見 `docs/specs/phase-3b1-web.md`。
@@ -127,9 +130,17 @@ export function useCounterpartyEntryPages(
 export function useCreateDebtEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateDebtEntryRequest) =>
-      apiRequest<CreateDebtEntryResponse>('/debt-entries', { method: 'POST', body: input }),
+    mutationFn: ({
+      idempotencyKey,
+      ...input
+    }: CreateDebtEntryRequest & { idempotencyKey?: string }) =>
+      apiRequest<CreateDebtEntryResponse>('/debt-entries', {
+        method: 'POST',
+        body: input,
+        idempotencyKey,
+      }),
     onSuccess: () => invalidateAfterMoneyWrite(queryClient),
+    onError: (error) => invalidateOnReusedKey(error, () => invalidateAfterMoneyWrite(queryClient)),
   });
 }
 
@@ -185,13 +196,16 @@ export function useForgiveCounterparty() {
   return useMutation({
     mutationFn: ({
       counterpartyId,
+      idempotencyKey,
       ...input
-    }: { counterpartyId: string } & ForgiveCounterpartyRequest) =>
+    }: { counterpartyId: string; idempotencyKey?: string } & ForgiveCounterpartyRequest) =>
       apiRequest<CreateDebtEntryResponse>(`/counterparties/${counterpartyId}/forgive`, {
         method: 'POST',
         body: input,
+        idempotencyKey,
       }),
     onSuccess: () => invalidateAfterMoneyWrite(queryClient),
+    onError: (error) => invalidateOnReusedKey(error, () => invalidateAfterMoneyWrite(queryClient)),
   });
 }
 

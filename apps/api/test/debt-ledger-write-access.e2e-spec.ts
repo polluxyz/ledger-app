@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import type { CreateDebtEntryResponse } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, linkPair, person, proposals, type Person } from './linking-utils';
 
 /**
@@ -35,6 +35,7 @@ describe('Debt ledger write access (e2e)', () => {
   ) {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         counterparty: { id: counterpartyId },

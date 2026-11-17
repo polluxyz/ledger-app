@@ -1,3 +1,4 @@
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { Module } from '@nestjs/common';
 import { LedgersModule } from '../ledgers/ledgers.module';
 import { LedgerPeopleModule } from '../ledger-people/ledger-people.module';
@@ -6,7 +7,7 @@ import { SettlementsController } from './settlements.controller';
 import { SettlementsService } from './settlements.service';
 
 @Module({
-  imports: [LedgersModule, LedgerPeopleModule, TransactionsModule],
+  imports: [IdempotencyModule, LedgersModule, LedgerPeopleModule, TransactionsModule],
   controllers: [SettlementsController],
   providers: [SettlementsService],
 })

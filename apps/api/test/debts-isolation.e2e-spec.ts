@@ -10,6 +10,7 @@ import {
   httpServer,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /**
@@ -73,6 +74,7 @@ describe('Debt ledger isolation (e2e)', () => {
   async function bothPaths(who: Person, ledgerId: string, accountId: string) {
     const viaEntry = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         counterparty: { name: '小明' },
@@ -83,6 +85,7 @@ describe('Debt ledger isolation (e2e)', () => {
       });
     const viaTransaction = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',
@@ -160,6 +163,7 @@ describe('Debt ledger isolation (e2e)', () => {
 
       const lend = await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(bob.token))
         .send({
           counterparty: { name: '小明' },
@@ -171,6 +175,7 @@ describe('Debt ledger isolation (e2e)', () => {
         .expect(201);
       await request(server())
         .post('/api/splits')
+        .set(idempotencyKey())
         .set(auth(bob.token))
         .send({
           type: 'EXPENSE',
@@ -232,9 +237,11 @@ describe('Debt ledger isolation (e2e)', () => {
       ).toBe(404);
       expect(
         (
-          await as('post', `/api/counterparties/${counterpartyId}/forgive`).send({
-            ledgerId: carol.ledgerId,
-          })
+          await as('post', `/api/counterparties/${counterpartyId}/forgive`)
+            .set(idempotencyKey())
+            .send({
+              ledgerId: carol.ledgerId,
+            })
         ).status,
       ).toBe(404);
       expect((await as('delete', `/api/counterparties/${counterpartyId}`)).status).toBe(404);
@@ -244,13 +251,15 @@ describe('Debt ledger isolation (e2e)', () => {
       expect((await as('delete', `/api/debt-entries/${entryId}`)).status).toBe(404);
 
       // 用對方的對象 id 記帳，同樣 404。
-      const viaId = await as('post', '/api/debt-entries').send({
-        counterparty: { id: counterpartyId },
-        kind: 'LEND',
-        amount: 1,
-        date: DAY,
-        record: { ledgerId: carol.ledgerId, accountId: carol.cashId },
-      });
+      const viaId = await as('post', '/api/debt-entries')
+        .set(idempotencyKey())
+        .send({
+          counterparty: { id: counterpartyId },
+          kind: 'LEND',
+          amount: 1,
+          date: DAY,
+          record: { ledgerId: carol.ledgerId, accountId: carol.cashId },
+        });
       expect(viaId.status).toBe(404);
 
       const carolsList = (await as('get', '/api/counterparties').expect(200))

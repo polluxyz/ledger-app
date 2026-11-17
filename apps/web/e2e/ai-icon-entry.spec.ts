@@ -22,7 +22,9 @@ import {
   homeActivityRow,
   newTransactionForm,
   openDashboard,
+  openNewTransaction,
   openTransactions,
+  selectCategory,
   switchLedger,
 } from './ui';
 
@@ -33,6 +35,95 @@ const TWO_MEALS_TEXT = '早餐 60 現金、午餐 120 刷卡';
  * 門檻情境用 Playwright route 延遲同一個真實請求，檢查跨頁共用與寫入鎖。
  */
 test.describe('AI 記帳圖示入口', () => {
+  test('SC-IK14：全部確認第 2 筆回應遺失後重試只記一次', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const { personal, cash, breakfastCategory } = await createPersonalAiCatalog(
+      request,
+      userA.token,
+    );
+    const titles = ['防重一', '防重二', '防重三'];
+    await page.route('**/ai/parse-transaction', (route) =>
+      route.fulfill({
+        json: {
+          drafts: titles.map((title) => ({
+            ledgerId: personal.id,
+            type: 'EXPENSE',
+            amount: 6000,
+            date: '2026-10-23',
+            title,
+            categoryId: breakfastCategory.id,
+            newCategoryName: null,
+            accountId: cash.id,
+            toAccountId: null,
+          })),
+        },
+      }),
+    );
+    let writes = 0;
+    await page.route('**/ledgers/*/transactions', async (route) => {
+      if (route.request().method() === 'POST' && ++writes === 2) {
+        expect((await route.fetch()).ok()).toBe(true);
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    await page.reload();
+    await openDashboard(page);
+    await submitFromCurrentPage(page, '三筆早餐');
+    await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(3);
+    await page.getByRole('button', { name: '全部確認', exact: true }).click();
+    await expect(page.getByText('尚未確認，請重試')).toBeVisible();
+    await page.getByRole('button', { name: '全部確認', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(0);
+    const records = (await listLedgerTransactions(request, userA.token, personal.id)).items;
+    for (const title of titles)
+      expect(records.filter((item) => item.title === title)).toHaveLength(1);
+    expect(
+      (await listAccounts(request, userA.token)).find((item) => item.id === cash.id)?.balance,
+    ).toBe(cash.balance - 18000);
+  });
+  test('SC-IK14：手動交易回應遺失後重試只記一次', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const { personal, cash, breakfastCategory } = await createPersonalAiCatalog(
+      request,
+      userA.token,
+    );
+    let lost = false;
+    await page.route('**/ledgers/*/transactions', async (route) => {
+      if (route.request().method() === 'POST' && !lost) {
+        lost = true;
+        expect((await route.fetch()).ok()).toBe(true);
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    await page.reload();
+    await openNewTransaction(page);
+    const form = newTransactionForm(page);
+    await form.getByLabel('金額').fill('60');
+    await form.getByLabel('名稱').fill('防重早餐');
+    await selectCategory(form, breakfastCategory.name);
+    await form.getByLabel('帳戶').selectOption(cash.id);
+    await form.getByRole('button', { name: '新增', exact: true }).click();
+    await expect(form.getByRole('alert')).toBeVisible();
+    await form.getByRole('button', { name: '新增', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await listLedgerTransactions(request, userA.token, personal.id)).items.filter(
+            (item) => item.title === '防重早餐',
+          ).length,
+      )
+      .toBe(1);
+    expect(
+      (await listAccounts(request, userA.token)).find((item) => item.id === cash.id)?.balance,
+    ).toBe(cash.balance - 6000);
+  });
+
   test('SC-P28：沒有帳本時隱藏入口，也不送解析請求', async ({ signedInPage: page }) => {
     let parseRequests = 0;
     await page.route('**/*', async (route) => {

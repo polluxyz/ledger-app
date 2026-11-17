@@ -12,7 +12,17 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiNoContentResponse,
+  ApiTags,
+  ApiHeader,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+} from '@nestjs/swagger';
+import { IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
+import { IdempotencyKeyHeader } from '../idempotency/idempotency-key-header.decorator';
+import { parseIdempotencyKey } from '../idempotency/idempotency.service';
 import type { JwtPayload, Paginated, Transaction } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AllowOnArchived } from '../common/decorators/allow-on-archived.decorator';
@@ -84,15 +94,24 @@ export class TransactionsController {
   }
 
   @Post()
+  @ApiHeader({
+    name: IDEMPOTENCY_KEY_HEADER,
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiBadRequestResponse({ description: 'IDEMPOTENCY_KEY_INVALID; VALIDATION_FAILED.' })
+  @ApiConflictResponse({ description: 'IDEMPOTENCY_KEY_REUSED; IDEMPOTENCY_RESOURCE_DELETED.' })
   @RequireLedgerRole('EDITOR')
   create(
     @Param('ledgerId') ledgerId: string,
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateTransactionDto,
+    @IdempotencyKeyHeader() rawKey: string | string[] | undefined,
   ): Promise<Transaction> {
+    const key = parseIdempotencyKey(rawKey);
     // `user.sub` 是 JWT 的 subject＝已驗證使用者的 id，會被記為交易的建立者。
     // 我們絕不採信 body 裡傳來的 creator id。
-    return this.transactions.create(ledgerId, user.sub, dto);
+    return this.transactions.create(ledgerId, user.sub, dto, key);
   }
 
   @Get(':transactionId')

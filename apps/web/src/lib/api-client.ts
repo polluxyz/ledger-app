@@ -1,4 +1,4 @@
-import type { ApiErrorResponse } from '@ledger/shared';
+import { IDEMPOTENCY_KEY_HEADER, type ApiErrorResponse } from '@ledger/shared';
 import { invalidateToken, readToken } from './token-storage';
 
 /**
@@ -39,13 +39,16 @@ interface RequestOptions {
   anonymous?: boolean;
   /** 讓具逾時或生命週期管理的呼叫端中止傳輸；一般呼叫不受影響。 */
   signal?: AbortSignal;
+  /** 有值時放進 IDEMPOTENCY_KEY_HEADER；只有 5 個建立金錢紀錄的端點會帶。 */
+  idempotencyKey?: string;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, anonymous = false, signal } = options;
+  const { method = 'GET', body, anonymous = false, signal, idempotencyKey } = options;
   const token = anonymous ? null : readToken();
 
   const headers: Record<string, string> = {};
+  if (idempotencyKey !== undefined) headers[IDEMPOTENCY_KEY_HEADER] = idempotencyKey;
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }

@@ -10,7 +10,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -153,6 +160,7 @@ describe('Ledger split isolation (e2e)', () => {
   function postTransaction(who: Person, ledgerId: string, body: CreateTransactionRequest) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body);
   }
@@ -160,6 +168,7 @@ describe('Ledger split isolation (e2e)', () => {
   function postSettlement(who: Person, ledgerId: string, body: CreateSettlementRequest) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body);
   }

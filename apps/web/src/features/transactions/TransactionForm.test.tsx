@@ -314,13 +314,17 @@ describe('TransactionForm', () => {
     );
   }
 
-  function renderTrackingForm(draft?: TransactionDraft) {
+  function renderTrackingForm(draft?: TransactionDraft, idempotencyKey?: string) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
           <AuthContext.Provider value={authValue}>
-            <TransactionForm ledger={trackingLedger} draft={draft} />
+            <TransactionForm
+              ledger={trackingLedger}
+              draft={draft}
+              idempotencyKey={idempotencyKey}
+            />
           </AuthContext.Provider>
         </QueryClientProvider>
       </MemoryRouter>,
@@ -649,6 +653,68 @@ describe('TransactionForm', () => {
     }, WAIT);
   });
 
+  it('SC-IK12 交易失敗與修改後沿用鍵，成功後換鍵', async () => {
+    routeFetch(trackingLedger);
+    const original = fetchMock.getMockImplementation()!;
+    let writes = 0;
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/transactions') && init?.method === 'POST' && ++writes <= 4) {
+        if (writes <= 2) return Promise.reject(new TypeError('network'));
+        const errorCode = writes === 3 ? 'IDEMPOTENCY_KEY_REUSED' : 'IDEMPOTENCY_RESOURCE_DELETED';
+        return Promise.resolve(
+          new Response(JSON.stringify({ statusCode: 409, errorCode, message: 'error' }), {
+            status: 409,
+          }),
+        );
+      }
+      return original(url, init);
+    });
+    const user = userEvent.setup();
+    const view = render(<App />);
+    await openTypeBar(user);
+    await user.type(screen.getByLabelText('金額'), '60');
+    await selectFoodCategory(user);
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    await user.click(submit);
+    await screen.findByText(/無法連線到伺服器/);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(2));
+    await user.clear(screen.getByLabelText('金額'));
+    await user.type(screen.getByLabelText('金額'), '70');
+    await user.click(submit);
+    await screen.findByText('已記錄過');
+    expect(screen.getByLabelText('金額')).toHaveValue(70);
+    await user.click(submit);
+    await screen.findByText('這筆已刪除');
+    expect(screen.getByLabelText('金額')).toHaveValue(70);
+    await user.click(submit);
+    await waitFor(() => expect(screen.getByLabelText('金額')).toHaveValue(null));
+    await user.type(screen.getByLabelText('金額'), '80');
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(6));
+    const calls = fetchMock.mock.calls.filter(
+      ([url, init]) => url.endsWith('/transactions') && init?.method === 'POST',
+    );
+    expect(calls[0]?.[1]?.body).toBe(calls[1]?.[1]?.body);
+    const keys = calls.map(
+      ([, init]) => (init?.headers as Record<string, string>)['Idempotency-Key'],
+    );
+    expect(keys[0]).toBeTruthy();
+    expect(keys.slice(0, 5)).toEqual([keys[0], keys[0], keys[0], keys[0], keys[0]]);
+    expect(keys[5]).not.toBe(keys[0]);
+    view.unmount();
+    render(<App />);
+    await openTypeBar(user);
+    await user.type(screen.getByLabelText('金額'), '90');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+    await waitFor(() => expect(writes).toBe(7));
+    const reopened = fetchMock.mock.calls
+      .filter(([url, init]) => url.endsWith('/transactions') && init?.method === 'POST')
+      .at(-1);
+    expect((reopened?.[1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe(keys[5]);
+  });
+
   it('converts a decimal amount to cents before submitting', async () => {
     routeFetch(trackingLedger);
     const user = userEvent.setup();
@@ -677,7 +743,7 @@ describe('TransactionForm', () => {
     };
     routeFetch(trackingLedger, { categories: [category, otherCategory] });
     const user = userEvent.setup();
-    renderTrackingForm(draft);
+    renderTrackingForm(draft, 'draft-key');
 
     const picker = await screen.findByRole('combobox', { name: '分類' }, WAIT);
     expect(picker).toHaveAttribute('aria-valuetext', '＋日用品');
@@ -688,6 +754,10 @@ describe('TransactionForm', () => {
     await user.click(screen.getByRole('button', { name: /^新增$/ }));
 
     const body = await postedTransactionBody();
+    const request = fetchMock.mock.calls.find(
+      ([url, init]) => url.endsWith('/transactions') && init?.method === 'POST',
+    );
+    expect((request?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBe('draft-key');
     expect(body).toHaveProperty('newCategoryName', '日用品');
     expect(body).not.toHaveProperty('categoryId');
   });
@@ -811,6 +881,96 @@ describe('TransactionForm', () => {
     );
 
     expect(await screen.findByRole('combobox', { name: '帳戶' }, WAIT)).toHaveValue('');
+  });
+
+  it('SC-IK12 分帳失敗與修改後保留鍵及內容，成功後換鍵', async () => {
+    routeFetch(trackingLedger);
+    const original = fetchMock.getMockImplementation()!;
+    let writes = 0;
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/splits') && init?.method === 'POST' && ++writes <= 4) {
+        if (writes <= 2) return Promise.reject(new TypeError('network'));
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              statusCode: 409,
+              errorCode: writes === 3 ? 'IDEMPOTENCY_KEY_REUSED' : 'IDEMPOTENCY_RESOURCE_DELETED',
+              message: 'error',
+            }),
+            { status: 409 },
+          ),
+        );
+      }
+      return original(url, init);
+    });
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
+    const amount = screen.getByLabelText('金額');
+    await user.type(amount, '750');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    const payer = screen.getByRole('combobox', { name: '付款人' });
+    await user.type(payer, '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    await user.click(submit);
+    await screen.findByText(/無法連線到伺服器/);
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(2));
+    await user.clear(amount);
+    await user.type(amount, '760');
+    await user.click(submit);
+    await screen.findByText('已記錄過');
+    expect(amount).toHaveValue(760);
+    await user.click(submit);
+    await screen.findByText('這筆已刪除');
+    expect(amount).toHaveValue(760);
+    await user.click(submit);
+    await waitFor(() => expect(amount).toHaveValue(null));
+    await user.type(amount, '770');
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    await user.type(screen.getByRole('combobox', { name: '付款人' }), '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+    await user.click(submit);
+    await waitFor(() => expect(writes).toBe(6));
+    const calls = fetchMock.mock.calls.filter(
+      ([url, init]) => url.endsWith('/splits') && init?.method === 'POST',
+    );
+    expect(calls[0]?.[1]?.body).toBe(calls[1]?.[1]?.body);
+    const keys = calls.map(
+      ([, init]) => (init?.headers as Record<string, string>)['Idempotency-Key'],
+    );
+    expect(keys[0]).toBeTruthy();
+    expect(keys.slice(0, 5)).toEqual([keys[0], keys[0], keys[0], keys[0], keys[0]]);
+    expect(keys[5]).not.toBe(keys[0]);
+    view.unmount();
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TransactionForm ledger={trackingLedger} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('combobox', { name: '帳戶' }, WAIT);
+    await user.type(screen.getByLabelText('金額'), '780');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    await user.type(screen.getByRole('combobox', { name: '付款人' }), '小明');
+    await user.click(await screen.findByRole('option', { name: '小明' }, WAIT));
+    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+    await waitFor(() => expect(writes).toBe(7));
+    const reopened = fetchMock.mock.calls
+      .filter(([url, init]) => url.endsWith('/splits') && init?.method === 'POST')
+      .at(-1);
+    expect((reopened?.[1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe(keys[5]);
   });
 
   it('uses POST /splits for another payer and previews my full share when splitting is off', async () => {
@@ -1024,6 +1184,10 @@ describe('TransactionForm', () => {
       method: 'EQUAL',
       participants: [{ counterpartyId: null }],
     });
+    const patch = fetchMock.mock.calls.find(
+      ([url, init]) => url.endsWith('/splits/split-legacy') && init?.method === 'PATCH',
+    );
+    expect((patch?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
   });
 
   it('submits an equal split with the selected account and all four participants', async () => {
@@ -1266,6 +1430,10 @@ describe('TransactionForm', () => {
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
     const request = await requestDetails('PATCH', '/ledgers/ledger-shared/transactions/txn-shared');
+    const patch = fetchMock.mock.calls.find(
+      ([url, init]) => url.endsWith('/transactions/txn-shared') && init?.method === 'PATCH',
+    );
+    expect((patch?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toBeUndefined();
     expect(request.path.endsWith('/ledgers/ledger-shared/transactions/txn-shared')).toBe(true);
     expect(request.method).toBe('PATCH');
     expect(request.body).toMatchObject({

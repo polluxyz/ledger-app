@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import type { CreateDebtEntryResponse, DebtEntry, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, listAccounts, resetDb } from './e2e-utils';
+import { createE2EApp, httpServer, listAccounts, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /** 3h 的借還路徑以 HTTP 與真實資料庫驗證：還款只寫一筆往來，分支與呆帳各是一筆交易。 */
@@ -24,6 +24,7 @@ describe('Every entry has an account — debts (e2e)', () => {
   function post(who: Person, body: Record<string, unknown>) {
     return request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({ date, record: record(who), ...body });
   }
@@ -177,11 +178,13 @@ describe('Every entry has an account — debts (e2e)', () => {
     const cashBeforeForgiveness = await cashBalance(who);
     await request(server())
       .post(`/api/counterparties/${ming}/forgive`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({})
       .expect(400);
     const response = await request(server())
       .post(`/api/counterparties/${ming}/forgive`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({ ledgerId: who.ledgerId })
       .expect(201);
@@ -292,6 +295,7 @@ describe('Every entry has an account — debts (e2e)', () => {
       .expect(200);
     await request(server())
       .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(a.token))
       .send({ ledgerId: a.ledgerId })
       .expect(201);
@@ -336,6 +340,7 @@ describe('Every entry has an account — debts (e2e)', () => {
     }).expect(201);
     await request(server())
       .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(a.token))
       .send({ ledgerId: a.ledgerId })
       .expect(201);

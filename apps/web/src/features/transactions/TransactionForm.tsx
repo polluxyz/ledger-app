@@ -31,6 +31,7 @@ import { FormError } from '../../components/FormError';
 import { Select } from '../../components/Select';
 import { TextField } from '../../components/TextField';
 import { formatMoney, toDateInputValue, TRANSACTION_TYPE_LABELS } from '../../lib/format';
+import { createIdempotencyKey } from '../../lib/idempotency-key';
 import { selectableAccounts, useAccounts } from '../accounts/use-accounts';
 import { useRecordDefaults } from '../accounts/use-record-defaults';
 import { useCurrentUser } from '../auth/use-current-user';
@@ -79,6 +80,7 @@ interface TransactionFormProps {
   copyFrom?: Transaction;
   /** AI 草稿模式：欄位照草稿呈現，null 不套用手動新增預設值。 */
   draft?: TransactionDraft;
+  idempotencyKey?: string;
   /** 下列欄位由複製模式外層提供，讓切帳本時可以重建整張表單。 */
   copySourceLedgerId?: string;
   copyIncludesPeople?: boolean;
@@ -438,6 +440,7 @@ function TransactionFormContent({
   transaction,
   copyFrom,
   draft,
+  idempotencyKey: draftIdempotencyKey,
   copySourceLedgerId,
   copyIncludesPeople = false,
   copyLedgerOptions,
@@ -456,6 +459,7 @@ function TransactionFormContent({
   sharedLoadPending,
   createLedgerPerson,
 }: TransactionFormContentProps) {
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const ledgerId = ledger.id;
   const isEdit = transaction !== undefined || split !== undefined;
 
@@ -1218,7 +1222,7 @@ function TransactionFormContent({
         };
         if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
         try {
-          await createTransaction.mutateAsync(input);
+          await createTransaction.mutateAsync(input, draftIdempotencyKey ?? idempotencyKey);
           if (draft !== undefined) {
             onSaved?.();
             return;
@@ -1227,6 +1231,7 @@ function TransactionFormContent({
           if (draft !== undefined) onDraftSavingChange?.(false);
         }
 
+        setIdempotencyKey(createIdempotencyKey());
         const nextPeople = createdPayerPerson
           ? [...ledgerPeople, createdPayerPerson]
           : ledgerPeople;
@@ -1318,9 +1323,22 @@ function TransactionFormContent({
             ...(note === '' ? { note: undefined } : {}),
             ...(transaction ? { fromTransactionId: transaction.id } : {}),
           };
-          await createSplit.mutateAsync(createInput);
+          if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
+          try {
+            await createSplit.mutateAsync({
+              ...createInput,
+              idempotencyKey: draftIdempotencyKey ?? idempotencyKey,
+            });
+            if (draft !== undefined) {
+              onSaved?.();
+              return;
+            }
+          } finally {
+            if (draft !== undefined) onDraftSavingChange?.(false);
+          }
           if (isEdit) onSaved?.();
           else {
+            setIdempotencyKey(createIdempotencyKey());
             setAmount('');
             setTitle('');
             setNote('');
@@ -1355,21 +1373,25 @@ function TransactionFormContent({
 
       if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
       try {
-        await createTransaction.mutateAsync({
-          type,
-          amount: amountCents!,
-          date: isoDate,
-          ...createCategoryInput(),
-          accountId: selectedAccountId === '' ? undefined : selectedAccountId,
-          toAccountId:
-            type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
-          title: title === '' ? undefined : title,
-          note: note === '' ? undefined : note,
-        });
+        await createTransaction.mutateAsync(
+          {
+            type,
+            amount: amountCents!,
+            date: isoDate,
+            ...createCategoryInput(),
+            accountId: selectedAccountId === '' ? undefined : selectedAccountId,
+            toAccountId:
+              type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
+            title: title === '' ? undefined : title,
+            note: note === '' ? undefined : note,
+          },
+          draftIdempotencyKey ?? idempotencyKey,
+        );
         if (draft !== undefined) {
           onSaved?.();
           return;
         }
+        setIdempotencyKey(createIdempotencyKey());
         setAmount('');
         setTitle('');
         setNote('');

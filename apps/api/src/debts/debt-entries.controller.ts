@@ -1,12 +1,17 @@
 import { Body, Controller, Delete, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiHeader,
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { CreateDebtEntryResponse, DebtEntry, JwtPayload } from '@ledger/shared';
+import { IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
+import { IdempotencyKeyHeader } from '../idempotency/idempotency-key-header.decorator';
+import { parseIdempotencyKey } from '../idempotency/idempotency.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DebtEntriesService } from './debt-entries.service';
 import { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
@@ -23,18 +28,27 @@ export class DebtEntriesController {
   constructor(private readonly entries: DebtEntriesService) {}
 
   @Post()
+  @ApiHeader({
+    name: IDEMPOTENCY_KEY_HEADER,
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiBadRequestResponse({ description: 'IDEMPOTENCY_KEY_INVALID; VALIDATION_FAILED.' })
   @ApiNotFoundResponse({
     description: 'The counterparty, ledger, account or category is not accessible.',
   })
   @ApiForbiddenResponse({ description: 'The caller is only a VIEWER of the ledger in `record`.' })
   @ApiConflictResponse({
-    description: 'LEDGER_ARCHIVED, NOTHING_TO_REPAY, or REPAYMENT_EXCEEDS_BALANCE.',
+    description:
+      'LEDGER_ARCHIVED, NOTHING_TO_REPAY, REPAYMENT_EXCEEDS_BALANCE, IDEMPOTENCY_KEY_REUSED, or IDEMPOTENCY_RESOURCE_DELETED.',
   })
   create(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateDebtEntryDto,
+    @IdempotencyKeyHeader() rawKey: string | string[] | undefined,
   ): Promise<CreateDebtEntryResponse> {
-    return this.entries.create(user.sub, dto);
+    const key = parseIdempotencyKey(rawKey);
+    return this.entries.create(user.sub, dto, key);
   }
 
   @Patch(':id')

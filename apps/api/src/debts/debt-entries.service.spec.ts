@@ -1,3 +1,4 @@
+import { createIdempotencyStub } from '../idempotency/idempotency.testing';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TransactionsService } from '../transactions/transactions.service';
 import { DebtEntriesService } from './debt-entries.service';
@@ -122,6 +123,7 @@ describe('DebtEntriesService', () => {
     transactions = buildTransactions();
     service = new DebtEntriesService(
       prisma as unknown as PrismaService,
+      createIdempotencyStub(prisma as unknown as PrismaService),
       transactions as unknown as TransactionsService,
       {
         partsByCounterparty: jest.fn().mockResolvedValue(new Map()),
@@ -162,7 +164,11 @@ describe('DebtEntriesService', () => {
       ['settle on PAID_FOR_ME', { kind: 'PAID_FOR_ME', categoryId: 'c', settle: true }],
     ])('rejects %s', async (_label, overrides) => {
       await expect(
-        service.create(USER, input(overrides as Partial<CreateDebtEntryDto>)),
+        service.create(
+          USER,
+          input(overrides as Partial<CreateDebtEntryDto>),
+          '00000000-0000-0000-0000-000000000001',
+        ),
       ).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -172,7 +178,7 @@ describe('DebtEntriesService', () => {
     it('records a LEND as a LEND transaction with a positive delta', async () => {
       prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 120 } });
 
-      const result = await service.create(USER, input());
+      const result = await service.create(USER, input(), '00000000-0000-0000-0000-000000000001');
 
       expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
         prisma,
@@ -189,13 +195,21 @@ describe('DebtEntriesService', () => {
     });
 
     it('records a BORROW with a negative delta', async () => {
-      await service.create(USER, input({ kind: 'BORROW', amount: 111 }));
+      await service.create(
+        USER,
+        input({ kind: 'BORROW', amount: 111 }),
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(createdData()).toMatchObject({ kind: 'BORROW', delta: -111 });
     });
 
     it('passes title and category to the shared debt transaction writer', async () => {
-      await service.create(USER, input({ title: '押金', categoryId: 'cat-1' }));
+      await service.create(
+        USER,
+        input({ title: '押金', categoryId: 'cat-1' }),
+        '00000000-0000-0000-0000-000000000001',
+      );
       expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
         prisma,
         expect.objectContaining({ title: '押金', categoryId: 'cat-1' }),
@@ -203,7 +217,11 @@ describe('DebtEntriesService', () => {
     });
 
     it('finds or creates the counterparty by name', async () => {
-      await service.create(USER, input({ counterparty: { name: '小明' } }));
+      await service.create(
+        USER,
+        input({ counterparty: { name: '小明' } }),
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(prisma.counterparty.upsert).toHaveBeenCalledWith({
         where: { ownerId_name: { ownerId: USER, name: '小明' } },
@@ -218,7 +236,9 @@ describe('DebtEntriesService', () => {
         ledger: { archivedAt: null },
       });
 
-      await expect(service.create(USER, input())).rejects.toMatchObject({ status: 403 });
+      await expect(
+        service.create(USER, input(), '00000000-0000-0000-0000-000000000001'),
+      ).rejects.toMatchObject({ status: 403 });
       expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
       expect(prisma.debtEntry.create).not.toHaveBeenCalled();
     });
@@ -230,7 +250,11 @@ describe('DebtEntriesService', () => {
         .mockResolvedValueOnce({ _sum: { delta: 100 } })
         .mockResolvedValueOnce({ _sum: { delta: 70 } });
 
-      const result = await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
+      const result = await service.create(
+        USER,
+        input({ kind: 'REPAYMENT', amount: 30 }),
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
         prisma,
@@ -245,7 +269,11 @@ describe('DebtEntriesService', () => {
         .mockResolvedValueOnce({ _sum: { delta: -50 } })
         .mockResolvedValueOnce({ _sum: { delta: 0 } });
 
-      await service.create(USER, input({ kind: 'REPAYMENT', amount: 50 }));
+      await service.create(
+        USER,
+        input({ kind: 'REPAYMENT', amount: 50 }),
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(transactions.createDebtTransaction).toHaveBeenCalledWith(
         prisma,
@@ -257,7 +285,11 @@ describe('DebtEntriesService', () => {
     it('locks the counterparty before reading the balance', async () => {
       prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: 100 } });
 
-      await service.create(USER, input({ kind: 'REPAYMENT', amount: 30 }));
+      await service.create(
+        USER,
+        input({ kind: 'REPAYMENT', amount: 30 }),
+        '00000000-0000-0000-0000-000000000001',
+      );
 
       expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -274,7 +306,11 @@ describe('DebtEntriesService', () => {
         prisma.debtEntry.aggregate.mockResolvedValue({ _sum: { delta: balance } });
 
         await expect(
-          service.create(USER, input({ kind: 'REPAYMENT', amount })),
+          service.create(
+            USER,
+            input({ kind: 'REPAYMENT', amount }),
+            '00000000-0000-0000-0000-000000000001',
+          ),
         ).rejects.toMatchObject({ status: 409, errorCode });
         expect(transactions.createDebtTransaction).not.toHaveBeenCalled();
         expect(prisma.debtEntry.create).not.toHaveBeenCalled();
@@ -306,6 +342,7 @@ describe('DebtEntriesService', () => {
         const result = await service.create(
           USER,
           input({ kind: 'REPAYMENT', amount: actual, settle: true }),
+          '00000000-0000-0000-0000-000000000001',
         );
         const cleared = Math.abs(before);
         expect(createdData()).toMatchObject({ kind, delta: -before, transactionId: 'txn-new' });

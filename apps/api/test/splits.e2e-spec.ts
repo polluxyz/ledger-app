@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import type { CreateSplitRequest, Paginated, Split, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import {
   auth,
   createCounterparty,
@@ -56,7 +56,7 @@ describe('Splits (e2e)', () => {
     };
   }
   const create = (who: Person, input: CreateSplitRequest) =>
-    request(server()).post('/api/splits').set(auth(who.token)).send(input);
+    request(server()).post('/api/splits').set(idempotencyKey()).set(auth(who.token)).send(input);
   async function list(who: Person): Promise<Paginated<Transaction>> {
     const result = await request(server())
       .get(`/api/ledgers/${who.ledgerId}/transactions`)
@@ -337,6 +337,7 @@ describe('Splits (e2e)', () => {
     const input = await body(alice, [ming.id]);
     const ordinary = await request(server())
       .post(`/api/ledgers/${alice.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -388,6 +389,7 @@ describe('Splits (e2e)', () => {
     expect((patch.body as { errorCode: string }).errorCode).toBe('SPLIT_ENTRY_READ_ONLY');
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         kind: 'PAID_FOR_ME',
@@ -440,6 +442,7 @@ describe('Splits (e2e)', () => {
     ).toBe(100 * CONCURRENT);
     const bad = await request(server())
       .post(`/api/ledgers/${alice.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -453,6 +456,7 @@ describe('Splits (e2e)', () => {
     expect((bad.body as { errorCode: string }).errorCode).toBe('VALIDATION_FAILED');
     const normal = await request(server())
       .post(`/api/ledgers/${alice.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

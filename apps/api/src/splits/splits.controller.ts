@@ -10,7 +10,16 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiHeader,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+} from '@nestjs/swagger';
+import { IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
+import { IdempotencyKeyHeader } from '../idempotency/idempotency-key-header.decorator';
+import { parseIdempotencyKey } from '../idempotency/idempotency.service';
 import type { JwtPayload, Split, UpdateSplitResponse } from '@ledger/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CreateSplitDto, UpdateSplitDto } from './dto/split.dto';
@@ -21,8 +30,21 @@ import { SplitsService } from './splits.service';
 @Controller('splits')
 export class SplitsController {
   constructor(private readonly splits: SplitsService) {}
-  @Post() create(@CurrentUser() user: JwtPayload, @Body() body: CreateSplitDto): Promise<Split> {
-    return this.splits.create(user.sub, body);
+  @Post()
+  @ApiHeader({
+    name: IDEMPOTENCY_KEY_HEADER,
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiBadRequestResponse({ description: 'IDEMPOTENCY_KEY_INVALID; VALIDATION_FAILED.' })
+  @ApiConflictResponse({ description: 'IDEMPOTENCY_KEY_REUSED; IDEMPOTENCY_RESOURCE_DELETED.' })
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: CreateSplitDto,
+    @IdempotencyKeyHeader() rawKey: string | string[] | undefined,
+  ): Promise<Split> {
+    const key = parseIdempotencyKey(rawKey);
+    return this.splits.create(user.sub, body, key);
   }
   @Get(':id') get(@CurrentUser() user: JwtPayload, @Param('id') id: string): Promise<Split> {
     return this.splits.get(user.sub, id);

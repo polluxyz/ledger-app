@@ -9,7 +9,14 @@ import type {
 import request from 'supertest';
 import { DebtEntriesService } from '../src/debts/debt-entries.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import {
   auth,
   createCounterparty,
@@ -58,6 +65,7 @@ describe('Ledger delete and archive (e2e)', () => {
   ) {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         counterparty: { id: counterpartyId },
@@ -108,6 +116,7 @@ describe('Ledger delete and archive (e2e)', () => {
   ) {
     const res = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         ledgerId,
@@ -149,6 +158,7 @@ describe('Ledger delete and archive (e2e)', () => {
     expect((after.body as LedgerSummary[]).some((row) => row.id === id)).toBe(true);
     await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -187,6 +197,7 @@ describe('Ledger delete and archive (e2e)', () => {
     const bankId = (bankRes.body as { id: string }).id;
     await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'TRANSFER',
@@ -366,6 +377,7 @@ describe('Ledger delete and archive (e2e)', () => {
     });
     const created = await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

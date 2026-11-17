@@ -16,6 +16,7 @@ import {
 } from '../ledger-people/ledger-people.service';
 import { resolvePayerAccount } from '../ledger-people/payer-account-rules';
 import { assertSelectableAccount, temporaryAccountIdOf } from '../accounts/account-selection';
+import { IdempotencyService, requestHash } from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { computeLedgerSummary } from './ledger-summary';
@@ -59,6 +60,7 @@ const LOCK_SETTLEMENT_SQL = [
 export class SettlementsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
     private readonly people: LedgerPeopleService,
     private readonly transactions: TransactionsService,
   ) {}
@@ -87,8 +89,9 @@ export class SettlementsService {
     ledgerId: string,
     callerUserId: string,
     input: CreateSettlementRequest,
+    key: string,
   ): Promise<Transaction> {
-    const transactionId = await this.prisma.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient): Promise<string> => {
       await this.assertSharedLedger(tx, ledgerId);
       let fromPersonId = input.fromPersonId;
       if (fromPersonId === undefined) {
@@ -150,9 +153,21 @@ export class SettlementsService {
         },
       });
       return transaction.id;
-    });
-
-    return this.transactions.getById(ledgerId, transactionId, callerUserId);
+    };
+    const result = await this.idempotency.run(
+      {
+        userId: callerUserId,
+        key,
+        operation: 'SETTLEMENT_CREATE',
+        scopeId: ledgerId,
+        requestHash: requestHash({ ...input, ledgerId }),
+      },
+      write,
+      (resultId) => this.transactions.replayCreated(callerUserId, resultId),
+    );
+    return result.created
+      ? this.transactions.getById(ledgerId, result.resultId, callerUserId)
+      : result.response;
   }
 
   async update(

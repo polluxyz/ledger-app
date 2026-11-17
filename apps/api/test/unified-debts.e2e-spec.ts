@@ -9,7 +9,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, linkPair, person, type Person } from './linking-utils';
 
 /**
@@ -68,6 +68,7 @@ describe('Unified debts scenario (e2e)', () => {
     // 個人往來：我借明哥 500 元（LEND → delta +50000），記進我的個人帳本與現金。
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         counterparty: { id: mingCounterpartyId },
@@ -194,6 +195,7 @@ describe('Unified debts scenario (e2e)', () => {
     // 名單刻意都不含我，讓「跟我有關的轉帳」只能來自結清算法。
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         type: 'EXPENSE',
@@ -213,6 +215,7 @@ describe('Unified debts scenario (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.mei.token))
       .send({
         type: 'EXPENSE',
@@ -227,6 +230,7 @@ describe('Unified debts scenario (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         type: 'EXPENSE',
@@ -348,6 +352,7 @@ describe('Unified debts scenario (e2e)', () => {
     // 都用更新後的數字：剩下小華欠我 139400）。
     await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(ming.token))
       .send({
         fromPersonId: people.ming.id,

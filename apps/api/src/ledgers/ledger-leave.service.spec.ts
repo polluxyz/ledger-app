@@ -1,3 +1,4 @@
+import { createIdempotencyStub } from '../idempotency/idempotency.testing';
 import { LedgerLeaveService } from './ledger-leave.service';
 import { DebtEntriesService } from '../debts/debt-entries.service';
 import { SplitsService } from '../splits/splits.service';
@@ -396,10 +397,11 @@ describe('removeInTransaction ledger-leave option', () => {
       kind === 'debt'
         ? new DebtEntriesService(
             {} as never,
+            createIdempotencyStub({} as never),
             { softDeleteDebtTransactions: jest.fn() } as never,
             {} as never,
           )
-        : new SplitsService({} as never, {} as never);
+        : new SplitsService({} as never, createIdempotencyStub({} as never), {} as never);
     return {
       tx,
       remove: (options?: { purpose: 'ledger-leave' }) =>
