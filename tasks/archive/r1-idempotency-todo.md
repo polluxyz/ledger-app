@@ -26,7 +26,8 @@ plan：`tasks/archive/r1-idempotency-plan.md`；spec：`docs/specs/r1-idempotenc
   - 「尚未確認，請重試」「已記錄過」「這筆已刪除」照 spec 文字。
   - Web e2e 種資料補 header；SC-IK14 寫好。
   - 只改 `apps/web`；沒有新套件；Web typecheck、lint 綠。
-- [ ] **T3 整合、驗收、PR、部署**（依賴 T1a、T1b、T2；協調者）：plan §1.5。
+- [x] **T3 整合、驗收、PR、部署**（依賴 T1a、T1b、T2；協調者）：plan §1.5。
       驗收：逐行看完 diff；lint、typecheck、test、format:check、build 綠；API e2e 全綠（含 SC-IK3、SC-IK9）；Web e2e 全綠（含 SC-IK14）；CI 全綠、squash merge；dev 先 `pg_dump` 再 `migrate deploy`；部署後手動記 1 筆成功；worker 的 worktree、分支、終端機、測試資料庫清掉。
-- [ ] **T4 文件收尾**（依賴 T3，併進同一個 PR；協調者）：plan §1.6。
+      狀態：合併前的本機與 CI 驗收結果見 PR #223；dev 部署在合併後執行，結果記在 `docs/handoff/main.md`。
+- [x] **T4 文件收尾**（依賴 T3，併進同一個 PR；協調者）：plan §1.6。
       驗收：審查報告 R1 標完成；`apps/api/CLAUDE.md` 加防重提醒；`專案決策脈絡.md`、`CLAUDE.md` §4、`docs/README.md`、`docs/handoff/main.md` 更新；spec 標已完成；plan 與 todo 移到 `tasks/archive/`。
