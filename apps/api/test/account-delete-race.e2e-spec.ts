@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { CategoriesService } from '../src/categories/categories.service';
@@ -38,6 +39,7 @@ describe('Account deletion race (e2e)', () => {
     const auth = { Authorization: `Bearer ${user.token}` };
     const creation = request(httpServer(app))
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth)
       .send({
         type: 'EXPENSE',
@@ -97,6 +99,7 @@ describe('Account deletion race (e2e)', () => {
         await waitForBlockedQueries(prisma, 1);
         await request(httpServer(app))
           .post(`/api/ledgers/${ledgerId}/transactions`)
+          .set(idempotencyKey())
           .set(auth)
           .send({
             type: 'TRANSFER',

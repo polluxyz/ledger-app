@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { Category, CreateDebtEntryResponse, DebtEntry, Paginated } from '@ledger/shared';
 import request from 'supertest';
@@ -61,6 +62,7 @@ describe('Debt entry edit — isolation (e2e)', () => {
       .expect(201);
     const lent = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         counterparty: { name: '明哥' },
@@ -165,6 +167,7 @@ describe('Debt entry edit — isolation (e2e)', () => {
 
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { id: s.counterpartyId },

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -86,6 +87,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
     const ticket = (
       await request(server())
         .post(`/api/ledgers/${travelId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(me.token))
         .send({
           type: 'EXPENSE',
@@ -100,6 +102,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
     const transfer = (
       await request(server())
         .post(`/api/ledgers/${travelId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(me.token))
         .send({
           type: 'TRANSFER',
@@ -118,6 +121,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
     const loan = (
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(me.token))
         .send({
           counterparty: { id: cpId },
@@ -340,6 +344,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
     const extra = (
       await request(server())
         .post(`/api/ledgers/${s.travelId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.me.token))
         .send({
           type: 'EXPENSE',
@@ -378,6 +383,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
       const repayment = (
         await request(server())
           .post('/api/debt-entries')
+          .set(idempotencyKey())
           .set(auth(s.me.token))
           .send({
             counterparty: { id: s.cpId },
@@ -396,6 +402,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
       const split = (
         await request(server())
           .post('/api/splits')
+          .set(idempotencyKey())
           .set(auth(s.me.token))
           .send({
             ledgerId: s.travelId,
@@ -417,6 +424,7 @@ describe('Personal ledger deletion with moves (e2e)', () => {
       const shared = (
         await request(server())
           .post(`/api/ledgers/${s.homeId}/transactions`)
+          .set(idempotencyKey())
           .set(auth(s.me.token))
           .send({
             type: 'EXPENSE',

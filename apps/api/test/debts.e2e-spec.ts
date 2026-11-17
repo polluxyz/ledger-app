@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -79,7 +80,11 @@ describe('Debt ledger (e2e)', () => {
   }
 
   function post(user: Me, body: Record<string, unknown>) {
-    return request(server()).post('/api/debt-entries').set(auth(user.token)).send(body);
+    return request(server())
+      .post('/api/debt-entries')
+      .set(idempotencyKey())
+      .set(auth(user.token))
+      .send(body);
   }
 
   /** 用名字記一筆，記進現金（`record` 可覆寫）。 */
@@ -119,6 +124,7 @@ describe('Debt ledger (e2e)', () => {
     }
     const response = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(user.token))
       .send({
         type: 'EXPENSE',
@@ -506,6 +512,7 @@ describe('Debt ledger (e2e)', () => {
 
     const forgiven = await request(server())
       .post(`/api/counterparties/${counterparty.id}/forgive`)
+      .set(idempotencyKey())
       .set(auth(user.token))
       .send({ ledgerId: user.ledgerId })
       .expect(201);
@@ -525,6 +532,7 @@ describe('Debt ledger (e2e)', () => {
 
     const again = await request(server())
       .post(`/api/counterparties/${counterparty.id}/forgive`)
+      .set(idempotencyKey())
       .set(auth(user.token))
       .send({ ledgerId: user.ledgerId });
     expect(again.status).toBe(409);
@@ -601,6 +609,7 @@ describe('Debt ledger (e2e)', () => {
 
     const create = await request(server())
       .post(`/api/ledgers/${user.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(user.token))
       .send({ type: 'LEND', amount: 1, date: DAY, accountId: user.cashId });
     expect(create.status).toBe(400);

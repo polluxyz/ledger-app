@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -153,6 +154,7 @@ describe('Ledger split isolation (e2e)', () => {
   function postTransaction(who: Person, ledgerId: string, body: CreateTransactionRequest) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body);
   }
@@ -160,6 +162,7 @@ describe('Ledger split isolation (e2e)', () => {
   function postSettlement(who: Person, ledgerId: string, body: CreateSettlementRequest) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body);
   }

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -67,6 +68,7 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
   async function expense(who: Person, ledgerId: string, title: string, amount: number) {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',
@@ -113,6 +115,7 @@ describe('Ledger delete with moves and transaction marks — isolation (e2e)', (
     const ade = await createCounterparty(app, bob, '阿德');
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         counterparty: { id: ade.id },

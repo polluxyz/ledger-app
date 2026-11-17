@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -80,6 +81,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
     const categoryId = (category.body as Array<{ id: string }>)[0]!.id;
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         counterparty: { id: linked.aCounterpartyId },
@@ -91,6 +93,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -167,6 +170,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({ toPersonId: alicePerson!.id, amount: 51200, date: day, fromAccountId: bob.cashId })
       .expect(201);
@@ -203,6 +207,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
       .expect(200);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

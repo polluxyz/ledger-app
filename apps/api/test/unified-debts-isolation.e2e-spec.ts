@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   ApiErrorResponse,
@@ -133,6 +134,7 @@ describe('Unified debts isolation (e2e)', () => {
   ): Promise<Transaction> {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);
@@ -146,6 +148,7 @@ describe('Unified debts isolation (e2e)', () => {
   ): Promise<Transaction> {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);
@@ -283,11 +286,13 @@ describe('Unified debts isolation (e2e)', () => {
 
       await request(server())
         .post(`/api/ledgers/${s.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send(expense(s, s.carol, 10000, [s.people.Alice.id, s.people.Carol.id], '偷記'))
         .expect(404);
       await request(server())
         .post(`/api/ledgers/${s.ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send({
           fromPersonId: s.people.Carol.id,

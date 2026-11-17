@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -53,6 +54,7 @@ describe('Debts inline scenario (e2e)', () => {
   async function postEntry(body: CreateDebtEntryRequest): Promise<CreateDebtEntryResponse> {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send(body)
       .expect(201);
@@ -202,6 +204,7 @@ describe('Debts inline scenario (e2e)', () => {
     ): Promise<Transaction> {
       const response = await request(server())
         .post(`/api/ledgers/${hualienId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(me.token))
         .send({
           fromPersonId: personOf(from).id,

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { Counterparty, DebtEntry, DebtProposal, Paginated } from '@ledger/shared';
 import request from 'supertest';
@@ -57,6 +58,7 @@ describe('Debt linking isolation (e2e)', () => {
 
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         counterparty: { id: aliceSide },
@@ -267,6 +269,7 @@ describe('Debt linking isolation (e2e)', () => {
       const aliceOld = await createCounterparty(app, alice, '舊小明');
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({
           counterparty: { id: aliceOld.id },

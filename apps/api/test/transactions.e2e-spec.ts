@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import { Account, Category, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -57,6 +58,7 @@ describe('Transactions (e2e)', () => {
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -74,6 +76,7 @@ describe('Transactions (e2e)', () => {
 
     const mismatch = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -102,12 +105,14 @@ describe('Transactions (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ ...body, amount: 2_000_000_001 })
       .expect(400);
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send(body)
       .expect(201);
@@ -131,6 +136,7 @@ describe('Transactions (e2e)', () => {
 
     const missing = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ type: 'EXPENSE', amount: 120, date: '2026-08-13T00:00:00.000Z', categoryId: cat });
     expect(missing.status).toBe(400);
@@ -139,6 +145,7 @@ describe('Transactions (e2e)', () => {
     // 別人的帳戶：404，不洩漏它存在。
     const foreign = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -175,6 +182,7 @@ describe('Transactions (e2e)', () => {
 
     const sameAccount = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ ...base, accountId: cash, toAccountId: cash });
     expect(sameAccount.status).toBe(400);
@@ -182,12 +190,14 @@ describe('Transactions (e2e)', () => {
 
     const withCategory = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ ...base, accountId: cash, toAccountId: bank, categoryId: cat });
     expect(withCategory.status).toBe(400);
 
     const ok = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ ...base, accountId: cash, toAccountId: bank });
     expect(ok.status).toBe(201);
@@ -213,6 +223,7 @@ describe('Transactions (e2e)', () => {
     const post = (body: Record<string, unknown>) =>
       request(server())
         .post(`/api/ledgers/${ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({ date: '2026-08-13T00:00:00.000Z', ...body });
 
@@ -234,6 +245,7 @@ describe('Transactions (e2e)', () => {
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -269,6 +281,7 @@ describe('Transactions (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -305,6 +318,7 @@ describe('Transactions (e2e)', () => {
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -340,6 +354,7 @@ describe('Transactions (e2e)', () => {
     for (const [i, date] of dates.entries()) {
       await request(server())
         .post(`/api/ledgers/${ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({ type: 'EXPENSE', amount: (i + 1) * 100, date, categoryId: cat, accountId });
     }
@@ -393,6 +408,7 @@ describe('Transactions (e2e)', () => {
 
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: 'EXPENSE',

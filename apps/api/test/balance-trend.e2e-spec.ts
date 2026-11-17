@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import type { INestApplication } from '@nestjs/common';
 import type { Account, BalanceTrend, Category, Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -68,6 +69,7 @@ describe('Balance trend (e2e)', () => {
     // 小美替我記帳，付款人是我而未指定帳戶，必須由後端放進我的臨時帳戶。
     const paid = await request(server())
       .post(`/api/ledgers/${s.homeLedgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.mei.token))
       .send({
         type: 'EXPENSE',
@@ -95,6 +97,7 @@ describe('Balance trend (e2e)', () => {
     });
     const deleted = await request(server())
       .post(`/api/ledgers/${s.dailyLedgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         type: 'EXPENSE',
@@ -139,6 +142,7 @@ describe('Balance trend (e2e)', () => {
       .expect(200);
     const expense = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         type: 'EXPENSE',
@@ -231,6 +235,7 @@ describe('Balance trend (e2e)', () => {
     const me = await person(app, 'forgive@example.com', '免除');
     const lent = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         counterparty: { name: '阿德' },
@@ -245,6 +250,7 @@ describe('Balance trend (e2e)', () => {
     const cpId = (lent.body as { counterparty: { id: string } }).counterparty.id;
     await request(server())
       .post(`/api/counterparties/${cpId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({ ledgerId: me.ledgerId })
       .expect(201);

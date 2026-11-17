@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -161,6 +162,7 @@ describe('Ledger settlements (e2e)', () => {
   function settlement(who: Person, ledgerId: string, body: CreateSettlementRequest) {
     return request(server())
       .post('/api/ledgers/' + ledgerId + '/settlements')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body);
   }
@@ -421,6 +423,7 @@ describe('Ledger settlements (e2e)', () => {
       .expect(404);
     await request(server())
       .post(base + '/settlements')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         toPersonId: settlementId,

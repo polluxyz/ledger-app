@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -104,6 +105,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
   async function expensePaidByBob(s: Scene): Promise<Transaction> {
     const res = await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.alice.token))
       .send({
         type: 'EXPENSE',
@@ -124,11 +126,13 @@ describe('Every entry has an account — isolation (e2e)', () => {
 
       await request(server())
         .post(`/api/ledgers/${s.alice.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({ type: 'EXPENSE', amount: 100, date: DAY, categoryId, accountId: bobTemp })
         .expect(404);
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { name: '明哥' },
@@ -147,6 +151,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
 
       const tx = await request(server())
         .post(`/api/ledgers/${s.alice.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({ type: 'EXPENSE', amount: 100, date: DAY, categoryId, accountId: aliceTemp })
         .expect(400);
@@ -154,6 +159,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
 
       const debt = await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { name: '明哥' },
@@ -167,6 +173,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
 
       const settlement = await request(server())
         .post(`/api/ledgers/${s.ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           fromPersonId: s.alicePersonId,
@@ -255,6 +262,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
       // Bob 記一筆自己付的，Alice 什麼都沒記：Alice 的預設值不能拿到 Bob 的帳戶或帳本。
       await request(server())
         .post(`/api/ledgers/${s.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.bob.token))
         .send({
           type: 'EXPENSE',
@@ -297,6 +305,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
       const s = await scene();
       const lent = await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { name: '房東' },
@@ -308,6 +317,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
         .expect(201);
       const repaid = await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { id: (lent.body as CreateDebtEntryResponse).counterparty.id },
@@ -333,6 +343,7 @@ describe('Every entry has an account — isolation (e2e)', () => {
       const s = await scene();
       const lent = await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { name: '明哥' },
@@ -346,17 +357,20 @@ describe('Every entry has an account — isolation (e2e)', () => {
 
       await request(server())
         .post(`/api/counterparties/${counterpartyId}/forgive`)
+        .set(idempotencyKey())
         .set(auth(s.eve.token))
         .send({ ledgerId: s.eve.ledgerId })
         .expect(404);
       await request(server())
         .post(`/api/counterparties/${counterpartyId}/forgive`)
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({ ledgerId: s.eve.ledgerId })
         .expect(404);
 
       const forgiven = await request(server())
         .post(`/api/counterparties/${counterpartyId}/forgive`)
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({ ledgerId: s.alice.ledgerId })
         .expect(201);

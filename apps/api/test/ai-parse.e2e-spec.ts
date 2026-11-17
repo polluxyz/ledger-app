@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -123,6 +124,7 @@ describe('AI parse transaction (e2e)', () => {
   async function transaction(ledgerId: string, accountId: string, category: string) {
     return request(httpServer(app))
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: 'EXPENSE',
@@ -173,6 +175,7 @@ describe('AI parse transaction (e2e)', () => {
     const draft = responseDrafts(res.body)[0]!;
     await request(httpServer(app))
       .post(`/api/ledgers/${draft.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: draft.type,

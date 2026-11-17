@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { INestApplication } from '@nestjs/common';
 import type { LedgerPerson, Transaction } from '@ledger/shared';
@@ -55,6 +56,7 @@ describe('Ledger split transactions (e2e)', () => {
   function create(s: Awaited<ReturnType<typeof scene>>, body: Record<string, unknown>) {
     return request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({ type: 'EXPENSE', amount: 150000, date, categoryId: s.categoryId, ...body });
   }
@@ -229,6 +231,7 @@ describe('Ledger split transactions (e2e)', () => {
     ).body[0].id as string;
     const personal = await request(server())
       .post(`/api/ledgers/${personalId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         type: 'EXPENSE',
@@ -280,6 +283,7 @@ describe('Ledger split transactions (e2e)', () => {
     const friend = await createCounterparty(app, s.me, '朋友');
     const split = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         type: 'EXPENSE',
@@ -312,6 +316,7 @@ describe('Ledger split transactions (e2e)', () => {
 
     const debt = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         counterparty: { id: friend.id },

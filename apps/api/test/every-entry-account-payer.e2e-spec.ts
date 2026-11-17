@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { Account, Category, Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -70,6 +71,7 @@ describe('Every entry has an account — payer (e2e)', () => {
     const initialCash = await balance(s.me, s.me.cashId);
     const response = await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.xiaohua.token))
       .send({
         type: 'EXPENSE',
@@ -115,6 +117,7 @@ describe('Every entry has an account — payer (e2e)', () => {
       const initialCash = await balance(s.me, s.me.cashId);
       const response = await request(server())
         .post(`/api/ledgers/${s.ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(s.xiaohua.token))
         .send({
           fromPersonId: side === 'from' ? s.myPersonId : s.huaPersonId,
@@ -162,6 +165,7 @@ describe('Every entry has an account — payer (e2e)', () => {
       .expect(201);
     const response = await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.xiaohua.token))
       .send({
         type: 'EXPENSE',

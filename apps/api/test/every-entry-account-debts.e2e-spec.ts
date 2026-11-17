@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { CreateDebtEntryResponse, DebtEntry, Paginated, Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -24,6 +25,7 @@ describe('Every entry has an account — debts (e2e)', () => {
   function post(who: Person, body: Record<string, unknown>) {
     return request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({ date, record: record(who), ...body });
   }
@@ -177,11 +179,13 @@ describe('Every entry has an account — debts (e2e)', () => {
     const cashBeforeForgiveness = await cashBalance(who);
     await request(server())
       .post(`/api/counterparties/${ming}/forgive`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({})
       .expect(400);
     const response = await request(server())
       .post(`/api/counterparties/${ming}/forgive`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({ ledgerId: who.ledgerId })
       .expect(201);
@@ -292,6 +296,7 @@ describe('Every entry has an account — debts (e2e)', () => {
       .expect(200);
     await request(server())
       .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(a.token))
       .send({ ledgerId: a.ledgerId })
       .expect(201);
@@ -336,6 +341,7 @@ describe('Every entry has an account — debts (e2e)', () => {
     }).expect(201);
     await request(server())
       .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(a.token))
       .send({ ledgerId: a.ledgerId })
       .expect(201);

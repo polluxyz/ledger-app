@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -102,6 +103,7 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
     };
     await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.bob.token))
       .send({
         type: 'EXPENSE',
@@ -115,6 +117,7 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.carol.token))
       .send({
         type: 'EXPENSE',
@@ -316,6 +319,7 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
 
       const expense = await request(server())
         .post(`/api/ledgers/${s.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send({
           type: 'EXPENSE',
@@ -328,6 +332,7 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
         .expect(201);
       const settlement = await request(server())
         .post(`/api/ledgers/${s.ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send({
           fromPersonId: s.bobPersonId,
@@ -377,6 +382,7 @@ describe('Ledger leave and merge — isolation (e2e)', () => {
       const mingge = await createCounterparty(app, s.bob, '明哥');
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.bob.token))
         .send({
           counterparty: { id: mingge.id },

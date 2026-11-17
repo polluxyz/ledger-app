@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -58,6 +59,7 @@ describe('Ledger delete and archive (e2e)', () => {
   ) {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         counterparty: { id: counterpartyId },
@@ -108,6 +110,7 @@ describe('Ledger delete and archive (e2e)', () => {
   ) {
     const res = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         ledgerId,
@@ -149,6 +152,7 @@ describe('Ledger delete and archive (e2e)', () => {
     expect((after.body as LedgerSummary[]).some((row) => row.id === id)).toBe(true);
     await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -187,6 +191,7 @@ describe('Ledger delete and archive (e2e)', () => {
     const bankId = (bankRes.body as { id: string }).id;
     await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'TRANSFER',
@@ -366,6 +371,7 @@ describe('Ledger delete and archive (e2e)', () => {
     });
     const created = await request(server())
       .post(`/api/ledgers/${id}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

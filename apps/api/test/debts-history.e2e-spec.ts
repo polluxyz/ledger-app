@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -31,6 +32,7 @@ describe('Debt history sections (e2e)', () => {
   ): Promise<CreateDebtEntryResponse> {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Account,
@@ -68,6 +69,7 @@ describe('Ledger settlements list (e2e)', () => {
   async function postSettlement(who: Person, ledgerId: string, body: CreateSettlementRequest) {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);

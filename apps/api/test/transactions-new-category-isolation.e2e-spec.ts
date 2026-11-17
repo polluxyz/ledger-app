@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type { Transaction } from '@ledger/shared';
 import request from 'supertest';
@@ -77,6 +78,7 @@ describe('Create transaction with a new category — isolation (e2e)', () => {
   function create(who: Person, ledgerId: string, body: Record<string, unknown> = {}) {
     return request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Counterparty,
@@ -62,6 +63,7 @@ describe('Debt linking (e2e)', () => {
   async function post(who: Person, body: Record<string, unknown>) {
     return request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({ date: DAY, record: record(who), ...body });
   }
@@ -580,6 +582,7 @@ describe('Debt linking (e2e)', () => {
 
       await request(server())
         .post(`/api/counterparties/${aliceSide}/forgive`)
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({ ledgerId: alice.ledgerId })
         .expect(201);
@@ -832,6 +835,7 @@ describe('Debt linking (e2e)', () => {
 
       const res = await request(server())
         .post('/api/splits')
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({
           type: 'EXPENSE',

@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import { Account, DEFAULT_ACCOUNTS, TEMPORARY_ACCOUNT_NAME } from '@ledger/shared';
 import request from 'supertest';
@@ -166,6 +167,7 @@ describe('Accounts (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'INCOME',
@@ -274,6 +276,7 @@ describe('Accounts (e2e)', () => {
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

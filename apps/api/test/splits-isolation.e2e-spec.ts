@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   CreateSplitRequest,
@@ -100,7 +101,11 @@ describe('Split isolation (e2e)', () => {
   }
 
   function postSplit(who: Person, body: CreateSplitRequest) {
-    return request(server()).post('/api/splits').set(auth(who.token)).send(body);
+    return request(server())
+      .post('/api/splits')
+      .set(idempotencyKey())
+      .set(auth(who.token))
+      .send(body);
   }
 
   describe('SC-S15：分帳只屬於擁有者', () => {
@@ -203,7 +208,12 @@ describe('Split isolation (e2e)', () => {
       const body = (await dinner(alice, [])) as unknown as Record<string, unknown>;
       body.participants = [{ counterpartyId: null }, { name: '新朋友' }];
 
-      await request(server()).post('/api/splits').set(auth(alice.token)).send(body).expect(400);
+      await request(server())
+        .post('/api/splits')
+        .set(idempotencyKey())
+        .set(auth(alice.token))
+        .send(body)
+        .expect(400);
       expect(await countRows('Counterparty')).toBe(0);
       await expectNothingWritten();
     });
@@ -218,6 +228,7 @@ describe('Split isolation (e2e)', () => {
       await addMember(bob, shared, 'alice@example.com', 'EDITOR');
       const original = await request(server())
         .post(`/api/ledgers/${shared}/transactions`)
+        .set(idempotencyKey())
         .set(auth(alice.token))
         .send({
           type: 'EXPENSE',

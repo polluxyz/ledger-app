@@ -1,3 +1,4 @@
+import { idempotencyKey } from './e2e-utils';
 import { INestApplication } from '@nestjs/common';
 import type {
   Category,
@@ -82,6 +83,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
   ): Promise<{ aliceEntry: DebtEntry; bobEntry: DebtEntry }> {
     const lent = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(s.alice.token))
       .send({
         counterparty: { id: s.aliceSide },
@@ -243,6 +245,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
         .expect(200);
       await request(server())
         .post(`/api/ledgers/${s.sharedLedgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.bob.token))
         .send({
           type: 'EXPENSE',
@@ -265,6 +268,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
       const s = await scene();
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { id: s.aliceSide },
@@ -298,6 +302,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
       const tripId = (trip.body as { id: string }).id;
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { id: s.aliceSide },
@@ -341,6 +346,7 @@ describe('Ledger delete and archive — isolation (e2e)', () => {
       });
       await request(server())
         .post(`/api/ledgers/${s.sharedLedgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send({
           type: 'EXPENSE',
