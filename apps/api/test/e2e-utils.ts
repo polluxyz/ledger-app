@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
-import { Account, AuthTokenResponse, AuthUser } from '@ledger/shared';
+import { Account, AuthTokenResponse, AuthUser, IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -142,4 +143,14 @@ export async function listAccounts(app: INestApplication, token: string): Promis
 export async function firstAccountId(app: INestApplication, token: string): Promise<string> {
   const accounts = await listAccounts(app, token);
   return accounts[0]!.id;
+}
+
+/**
+ * 防重複送出（R1）的 header，每次呼叫都是一把新鍵。用法：`.set(idempotencyKey())`。
+ *
+ * 建立金錢紀錄的 5 個端點必須帶它。同一筆要重送時，先把回傳值存起來再重複使用；
+ * 迴圈裡建立多筆時每筆各呼叫一次，否則第 2 筆會被當成第 1 筆的重送。
+ */
+export function idempotencyKey(): { [IDEMPOTENCY_KEY_HEADER]: string } {
+  return { [IDEMPOTENCY_KEY_HEADER]: randomUUID() };
 }
