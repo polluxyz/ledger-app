@@ -140,6 +140,7 @@ function setParseDrafts(...drafts: ParseTransactionResponse['drafts']) {
   mocks.parse.mockResolvedValueOnce({ drafts } satisfies ParseTransactionResponse);
 }
 
+/** 驗證草稿各自的防重鍵與錯誤訊息；以模擬解析及寫入回應檢查重試和重新解析。 */
 describe('SC-IK13 草稿防重鍵', () => {
   beforeEach(() => {
     mocks.parse.mockReset();

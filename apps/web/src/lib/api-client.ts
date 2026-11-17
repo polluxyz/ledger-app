@@ -39,6 +39,7 @@ interface RequestOptions {
   anonymous?: boolean;
   /** 讓具逾時或生命週期管理的呼叫端中止傳輸；一般呼叫不受影響。 */
   signal?: AbortSignal;
+  /** 有值時放進 IDEMPOTENCY_KEY_HEADER；只有 5 個建立金錢紀錄的端點會帶。 */
   idempotencyKey?: string;
 }
 
