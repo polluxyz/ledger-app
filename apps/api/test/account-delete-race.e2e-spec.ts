@@ -10,6 +10,7 @@ import {
   httpServer,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /** R7：讓刪除卡在帳戶鎖，再建立引用，驗證刪除重查引用並保留歷史。 */
@@ -38,6 +39,7 @@ describe('Account deletion race (e2e)', () => {
     const auth = { Authorization: `Bearer ${user.token}` };
     const creation = request(httpServer(app))
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth)
       .send({
         type: 'EXPENSE',
@@ -97,6 +99,7 @@ describe('Account deletion race (e2e)', () => {
         await waitForBlockedQueries(prisma, 1);
         await request(httpServer(app))
           .post(`/api/ledgers/${ledgerId}/transactions`)
+          .set(idempotencyKey())
           .set(auth)
           .send({
             type: 'TRANSFER',

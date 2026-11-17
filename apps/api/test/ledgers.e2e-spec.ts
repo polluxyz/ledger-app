@@ -10,6 +10,7 @@ import {
   httpServer,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /**
@@ -171,6 +172,7 @@ describe('Ledgers & members (e2e)', () => {
     // 寫入被擋下。
     const write = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -220,6 +222,7 @@ describe('Ledgers & members (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: 'EXPENSE',

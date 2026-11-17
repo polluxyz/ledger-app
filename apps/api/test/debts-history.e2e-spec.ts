@@ -8,7 +8,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /** 3g SC-G1、G2：用每筆都記進現金帳戶的明哥與房東往來紀錄，驗證歷史分界、個人餘額過濾與切頁。 */
@@ -31,6 +31,7 @@ describe('Debt history sections (e2e)', () => {
   ): Promise<CreateDebtEntryResponse> {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);

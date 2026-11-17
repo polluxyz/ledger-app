@@ -11,7 +11,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -42,6 +42,7 @@ describe('Debts inline isolation (e2e)', () => {
   async function postEntry(who: Person, body: CreateDebtEntryRequest) {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);
@@ -160,6 +161,7 @@ describe('Debts inline isolation (e2e)', () => {
   async function postSettlement(who: Person, ledgerId: string, body: CreateSettlementRequest) {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);

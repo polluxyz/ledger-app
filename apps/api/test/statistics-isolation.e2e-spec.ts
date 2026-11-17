@@ -8,7 +8,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, linkPair, person, proposals, type Person } from './linking-utils';
 
 /**
@@ -109,6 +109,7 @@ describe('Statistics — isolation (e2e)', () => {
   async function expense(who: Person, ledgerId: string, amount: number, accountId = who.cashId) {
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         type: 'EXPENSE',
@@ -214,6 +215,7 @@ describe('Statistics — isolation (e2e)', () => {
       const debt = (body: Record<string, unknown>) =>
         request(server())
           .post('/api/debt-entries')
+          .set(idempotencyKey())
           .set(auth(s.mei.token))
           .send({ date: DAY, record, ...body })
           .expect(201);
@@ -227,6 +229,7 @@ describe('Statistics — isolation (e2e)', () => {
       const ade = await lend('阿德', 50000);
       await request(server())
         .post(`/api/counterparties/${ade}/forgive`)
+        .set(idempotencyKey())
         .set(auth(s.mei.token))
         .send({ ledgerId: s.ledgerId })
         .expect(201);
@@ -240,6 +243,7 @@ describe('Statistics — isolation (e2e)', () => {
       const pair = await linkPair(app, frank, s.mei, '美美', '阿姨');
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(frank.token))
         .send({
           date: DAY,
@@ -259,6 +263,7 @@ describe('Statistics — isolation (e2e)', () => {
         .expect(200);
       await request(server())
         .post(`/api/counterparties/${pair.aCounterpartyId}/forgive`)
+        .set(idempotencyKey())
         .set(auth(frank.token))
         .send({ ledgerId: frank.ledgerId })
         .expect(201);

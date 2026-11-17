@@ -8,7 +8,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, linkPair, person, type Person } from './linking-utils';
 
 /** 同一份交易逐步驗金額、指向與退出，避免借還總額和結清摘要各走不同算法。 */
@@ -80,6 +80,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
     const categoryId = (category.body as Array<{ id: string }>)[0]!.id;
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         counterparty: { id: linked.aCounterpartyId },
@@ -91,6 +92,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -167,6 +169,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({ toPersonId: alicePerson!.id, amount: 51200, date: day, fromAccountId: bob.cashId })
       .expect(201);
@@ -203,6 +206,7 @@ describe('Ledger groups and counterparty totals (e2e)', () => {
       .expect(200);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

@@ -10,6 +10,7 @@ import {
   listAccounts,
   registerAndLogin,
   resetDb,
+  idempotencyKey,
 } from './e2e-utils';
 
 /**
@@ -166,6 +167,7 @@ describe('Accounts (e2e)', () => {
 
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'INCOME',
@@ -274,6 +276,7 @@ describe('Accounts (e2e)', () => {
 
     const created = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',

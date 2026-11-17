@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import type { Category, CreateDebtEntryResponse, DebtEntry, Paginated } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -61,6 +61,7 @@ describe('Debt entry edit — isolation (e2e)', () => {
       .expect(201);
     const lent = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         counterparty: { name: '明哥' },
@@ -165,6 +166,7 @@ describe('Debt entry edit — isolation (e2e)', () => {
 
       await request(server())
         .post('/api/debt-entries')
+        .set(idempotencyKey())
         .set(auth(s.alice.token))
         .send({
           counterparty: { id: s.counterpartyId },

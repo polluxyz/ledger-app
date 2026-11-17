@@ -10,7 +10,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, getCounterparty, linkPair, person, proposals, type Person } from './linking-utils';
 
 /** 3i SC-I1～I7：以真實 HTTP 與資料庫驗證交易標記、分支搬帳戶、餘額與連動提議。 */
@@ -46,6 +53,7 @@ describe('Debt entry edit (e2e)', () => {
   function create(who: Person, overrides: Partial<CreateDebtEntryRequest> = {}) {
     return request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send({
         counterparty: { name: '明哥' },
@@ -354,6 +362,7 @@ describe('Debt entry edit (e2e)', () => {
     const categoryId = await category(alice, 'EXPENSE');
     await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({
         type: 'EXPENSE',
@@ -373,6 +382,7 @@ describe('Debt entry edit (e2e)', () => {
     });
     await request(server())
       .post(`/api/counterparties/${counterpartyId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(alice.token))
       .send({ ledgerId: alice.ledgerId })
       .expect(201);

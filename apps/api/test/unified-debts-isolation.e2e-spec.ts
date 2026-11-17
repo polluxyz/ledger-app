@@ -11,7 +11,7 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, createCounterparty, linkPair, person, type Person } from './linking-utils';
 
 /**
@@ -133,6 +133,7 @@ describe('Unified debts isolation (e2e)', () => {
   ): Promise<Transaction> {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);
@@ -146,6 +147,7 @@ describe('Unified debts isolation (e2e)', () => {
   ): Promise<Transaction> {
     const res = await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(who.token))
       .send(body)
       .expect(201);
@@ -283,11 +285,13 @@ describe('Unified debts isolation (e2e)', () => {
 
       await request(server())
         .post(`/api/ledgers/${s.ledgerId}/transactions`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send(expense(s, s.carol, 10000, [s.people.Alice.id, s.people.Carol.id], '偷記'))
         .expect(404);
       await request(server())
         .post(`/api/ledgers/${s.ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(s.carol.token))
         .send({
           fromPersonId: s.people.Carol.id,

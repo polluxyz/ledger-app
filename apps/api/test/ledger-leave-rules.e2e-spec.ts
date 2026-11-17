@@ -9,7 +9,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import {
   auth,
   createCounterparty,
@@ -70,6 +77,7 @@ describe('Ledger leave rules (e2e)', () => {
   const expense = (s: Scene, payer: Person, caller = s.alice) =>
     request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(caller.token))
       .send({
         type: 'EXPENSE',
@@ -163,6 +171,7 @@ describe('Ledger leave rules (e2e)', () => {
       const post = () =>
         request(server())
           .post(`/api/ledgers/${s.ledgerId}/settlements`)
+          .set(idempotencyKey())
           .set(auth(s.alice.token))
           .send({ ...payload, amount: 200, date });
       const old = (await post().expect(201)).body as Transaction;
@@ -191,6 +200,7 @@ describe('Ledger leave rules (e2e)', () => {
     const before = await listAccounts(app, s.bob.token);
     const created = await request(server())
       .post(`/api/ledgers/${s.ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(s.alice.token))
       .send({ fromPersonId: s.personId(s.bob), toPersonId: s.personId(s.carol), amount: 100, date })
       .expect(201);
@@ -209,6 +219,7 @@ describe('Ledger leave rules (e2e)', () => {
     const { bCounterpartyId } = await linkPair(app, s.alice, s.bob);
     await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.alice.token))
       .send({
         type: 'EXPENSE',
@@ -258,6 +269,7 @@ describe('Ledger leave rules (e2e)', () => {
       if (kind === 'toAccount') {
         const res = await request(server())
           .post(`/api/ledgers/${s.ledgerId}/settlements`)
+          .set(idempotencyKey())
           .set(auth(s.bob.token))
           .send({
             fromPersonId: s.personId(s.alice),
@@ -303,6 +315,7 @@ describe('Ledger leave rules (e2e)', () => {
       if (kind === 'debt')
         await request(server())
           .post('/api/debt-entries')
+          .set(idempotencyKey())
           .set(auth(s.bob.token))
           .send({
             counterparty: { id: cp.id },
@@ -315,6 +328,7 @@ describe('Ledger leave rules (e2e)', () => {
       else
         await request(server())
           .post('/api/splits')
+          .set(idempotencyKey())
           .set(auth(s.bob.token))
           .send({
             ledgerId: s.ledgerId,
@@ -404,6 +418,7 @@ describe('Ledger leave rules (e2e)', () => {
     const cp = await createCounterparty(app, s.alice, 'Ming');
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(s.alice.token))
       .send({
         counterparty: { id: cp.id },

@@ -12,7 +12,14 @@ import request from 'supertest';
 import { DebtEntriesService } from '../src/debts/debt-entries.service';
 import { LedgersService } from '../src/ledgers/ledgers.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import {
   auth,
   createCounterparty,
@@ -82,6 +89,7 @@ describe('Ledger leave and merge (e2e)', () => {
       ] as const) {
         const res = await request(server())
           .post(`/api/ledgers/${ledgerId}/transactions`)
+          .set(idempotencyKey())
           .set(auth(who.token))
           .send({
             type: 'EXPENSE',
@@ -97,6 +105,7 @@ describe('Ledger leave and merge (e2e)', () => {
       }
       const res = await request(server())
         .post(`/api/ledgers/${ledgerId}/settlements`)
+        .set(idempotencyKey())
         .set(auth(me.token))
         .send({
           fromPersonId: huaId,
@@ -144,6 +153,7 @@ describe('Ledger leave and merge (e2e)', () => {
   async function debt(s: Scene, counterpartyId: string, kind = 'LEND', amount = 50000) {
     const res = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         counterparty: { id: counterpartyId },
@@ -161,6 +171,7 @@ describe('Ledger leave and merge (e2e)', () => {
     return (
       await request(server())
         .post('/api/splits')
+        .set(idempotencyKey())
         .set(auth(s.me.token))
         .send({
           ledgerId: s.ledgerId,
@@ -381,6 +392,7 @@ describe('Ledger leave and merge (e2e)', () => {
       const repayment = (
         await request(server())
           .post('/api/debt-entries')
+          .set(idempotencyKey())
           .set(auth(s.me.token))
           .send({
             counterparty: { id: cp.id },
@@ -550,6 +562,7 @@ describe('Ledger leave and merge (e2e)', () => {
     const c = await category(owner, ledgerId);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(owner.token))
       .send({
         type: 'EXPENSE',
@@ -562,6 +575,7 @@ describe('Ledger leave and merge (e2e)', () => {
       .expect(201);
     await request(server())
       .post(`/api/ledgers/${ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(owner.token))
       .send({
         fromPersonId: guestId,
@@ -584,6 +598,7 @@ describe('Ledger leave and merge (e2e)', () => {
     const s = await scene(false);
     const res = await request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.ming.token))
       .send({
         type: 'EXPENSE',
@@ -648,6 +663,7 @@ describe('Ledger leave and merge (e2e)', () => {
     });
     await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         counterparty: { id: cp.id },

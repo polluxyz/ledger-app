@@ -3,7 +3,14 @@ import type { Account, BalanceTrend, Category, Transaction } from '@ledger/share
 import request from 'supertest';
 import { AccountsService } from '../src/accounts/accounts.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 import { createStatisticsExamples, createStatisticsTransaction } from './statistics-fixtures';
 
@@ -68,6 +75,7 @@ describe('Balance trend (e2e)', () => {
     // 小美替我記帳，付款人是我而未指定帳戶，必須由後端放進我的臨時帳戶。
     const paid = await request(server())
       .post(`/api/ledgers/${s.homeLedgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.mei.token))
       .send({
         type: 'EXPENSE',
@@ -95,6 +103,7 @@ describe('Balance trend (e2e)', () => {
     });
     const deleted = await request(server())
       .post(`/api/ledgers/${s.dailyLedgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(s.me.token))
       .send({
         type: 'EXPENSE',
@@ -139,6 +148,7 @@ describe('Balance trend (e2e)', () => {
       .expect(200);
     const expense = await request(server())
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         type: 'EXPENSE',
@@ -231,6 +241,7 @@ describe('Balance trend (e2e)', () => {
     const me = await person(app, 'forgive@example.com', '免除');
     const lent = await request(server())
       .post('/api/debt-entries')
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({
         counterparty: { name: '阿德' },
@@ -245,6 +256,7 @@ describe('Balance trend (e2e)', () => {
     const cpId = (lent.body as { counterparty: { id: string } }).counterparty.id;
     await request(server())
       .post(`/api/counterparties/${cpId}/forgive`)
+      .set(idempotencyKey())
       .set(auth(me.token))
       .send({ ledgerId: me.ledgerId })
       .expect(201);

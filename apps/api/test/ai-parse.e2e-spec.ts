@@ -17,7 +17,7 @@ import { createLlmProvider } from '../src/ai/llm-provider.factory';
 import type { Env } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -123,6 +123,7 @@ describe('AI parse transaction (e2e)', () => {
   async function transaction(ledgerId: string, accountId: string, category: string) {
     return request(httpServer(app))
       .post(`/api/ledgers/${ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: 'EXPENSE',
@@ -173,6 +174,7 @@ describe('AI parse transaction (e2e)', () => {
     const draft = responseDrafts(res.body)[0]!;
     await request(httpServer(app))
       .post(`/api/ledgers/${draft.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(bob.token))
       .send({
         type: draft.type,

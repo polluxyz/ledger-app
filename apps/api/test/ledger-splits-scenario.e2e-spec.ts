@@ -11,7 +11,14 @@ import type {
 } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, listAccounts, resetDb } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  listAccounts,
+  resetDb,
+  idempotencyKey,
+} from './e2e-utils';
 import { auth, createCounterparty, person, type Person } from './linking-utils';
 
 /**
@@ -99,6 +106,7 @@ describe('Ledger split cross-module scenario (e2e)', () => {
   function createTransaction(s: Scene, actor: Person, body: Record<string, unknown>) {
     return request(server())
       .post(`/api/ledgers/${s.ledgerId}/transactions`)
+      .set(idempotencyKey())
       .set(auth(actor.token))
       .send({ date: DAY, categoryId: s.categoryId, ...body });
   }
@@ -118,6 +126,7 @@ describe('Ledger split cross-module scenario (e2e)', () => {
   function createSettlement(s: Scene, actor: Person, body: Record<string, unknown>) {
     return request(server())
       .post(`/api/ledgers/${s.ledgerId}/settlements`)
+      .set(idempotencyKey())
       .set(auth(actor.token))
       .send({ date: DAY, ...body });
   }
@@ -673,6 +682,7 @@ describe('Ledger split cross-module scenario (e2e)', () => {
     };
     const splitResponse = await request(server())
       .post('/api/splits')
+      .set(idempotencyKey())
       .set(auth(s.ming.token))
       .send(splitInput)
       .expect(201);
