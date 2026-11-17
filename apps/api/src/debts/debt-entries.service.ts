@@ -9,6 +9,11 @@ import {
 import type { CreateDebtEntryResponse, DebtEntry, UpdateDebtEntryRequest } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import type { Prisma } from '../generated/prisma/client';
+import {
+  IdempotencyService,
+  requestHash,
+  idempotencyResourceDeleted,
+} from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import { TransactionsService } from '../transactions/transactions.service';
@@ -55,15 +60,20 @@ import type { CreateDebtEntryDto } from './dto/create-debt-entry.dto';
 export class DebtEntriesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
     private readonly transactions: TransactionsService,
     private readonly ledgerDebts: LedgerDebtsService,
   ) {}
 
   /** 記一筆往來；帶 `settle` 時還款清掉全部欠款，實收差額另記交易分支。 */
-  async create(userId: string, input: CreateDebtEntryDto): Promise<CreateDebtEntryResponse> {
+  async create(
+    userId: string,
+    input: CreateDebtEntryDto,
+    key: string,
+  ): Promise<CreateDebtEntryResponse> {
     assertEntryShape(input);
-
-    const response = await this.prisma.$transaction(async (tx) => {
+    let response: CreateDebtEntryResponse | undefined;
+    const write = async (tx: Prisma.TransactionClient): Promise<string> => {
       const counterparty = await this.resolveCounterparty(tx, userId, input.counterparty);
       // 先鎖對象再讀餘額：還款方向、超額檢查與分支金額都依賴「寫入前的餘額」（決策 50）。
       await lockCounterparty(tx, counterparty.id);
@@ -113,7 +123,7 @@ export class DebtEntriesService {
         linkInfoFor(tx, [counterparty.id]),
         syncStatuses(tx, [entry]),
       ]);
-      return {
+      response = {
         counterparty: toCounterparty(
           counterparty,
           await currentBalance(tx, counterparty.id),
@@ -126,7 +136,21 @@ export class DebtEntriesService {
           }),
         ],
       };
-    });
+      return entry.id;
+    };
+    const result = await this.idempotency.run(
+      {
+        userId,
+        key,
+        operation: 'DEBT_ENTRY_CREATE',
+        scopeId: null,
+        requestHash: requestHash(input),
+      },
+      write,
+      (resultId) => this.replayCreated(userId, resultId),
+    );
+    if (!result.created) return result.response;
+    if (!response) throw new Error('Debt entry response is missing.');
     // 交易提交後再讀帳本來源，確保新紀錄的回應也使用與列表相同的總額。
     const parts = await this.ledgerDebts.partsByCounterparty(userId);
     response.counterparty.ledgerParts = parts.get(response.counterparty.id) ?? [];
@@ -135,6 +159,46 @@ export class DebtEntriesService {
       response.counterparty.ledgerParts,
     );
     return response;
+  }
+
+  /** 重送只重建目前回應，不再檢查還款餘額等首次寫入條件。 */
+  private async replayCreated(userId: string, resultId: string): Promise<CreateDebtEntryResponse> {
+    const entry = await this.prisma.debtEntry.findFirst({
+      where: { id: resultId, counterparty: { ownerId: userId } },
+      include: DEBT_ENTRY_INCLUDE,
+    });
+    if (!entry)
+      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Entry not found.');
+    const counterparty = await loadOwnedCounterparty(this.prisma, userId, entry.counterpartyId);
+    if (entry.transactionId) {
+      const transaction = await this.prisma.transaction.findUnique({
+        where: { id: entry.transactionId },
+        select: { ledgerId: true },
+      });
+      if (!transaction)
+        throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Transaction not found.');
+      await assertLedgerWritable(this.prisma, userId, transaction.ledgerId);
+    }
+    if (entry.deletedAt !== null) throw idempotencyResourceDeleted();
+    const [links, sync, parts] = await Promise.all([
+      linkInfoFor(this.prisma, [counterparty.id]),
+      syncStatuses(this.prisma, [entry]),
+      this.ledgerDebts.partsByCounterparty(userId),
+    ]);
+    return {
+      counterparty: toCounterparty(
+        counterparty,
+        await currentBalance(this.prisma, counterparty.id),
+        links.get(counterparty.id) ?? null,
+        parts.get(counterparty.id) ?? [],
+      ),
+      entries: [
+        toDebtEntry(entry, {
+          sync: sync.get(entry.id),
+          difference: await this.differenceOf(this.prisma, entry.transactionId),
+        }),
+      ],
+    };
   }
 
   /**

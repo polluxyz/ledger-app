@@ -21,8 +21,14 @@ import {
 } from '@ledger/shared';
 import { AppException } from '../common/exceptions/app.exception';
 import { Prisma } from '../generated/prisma/client';
+import {
+  IdempotencyService,
+  requestHash,
+  idempotencyResourceDeleted,
+} from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
+import { assertLedgerWritable } from '../debts/debt-ledger-access';
 import { deriveSync } from '../debts/debt-proposal-rules';
 import { LedgerPeopleService } from '../ledger-people/ledger-people.service';
 import { isAccountPending, resolvePayerAccount } from '../ledger-people/payer-account-rules';
@@ -262,6 +268,7 @@ interface ViewContext {
 export class TransactionsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly idempotency: IdempotencyService,
     private readonly people: LedgerPeopleService,
     private readonly categories: CategoriesService,
   ) {}
@@ -384,18 +391,21 @@ export class TransactionsService {
     ledgerId: string,
     creatorId: string,
     input: CreateTransactionInput,
+    key: string,
   ): Promise<Transaction> {
-    const ledger = await this.getLedger(ledgerId);
-    this.assertSplitAllowed(input, ledger.kind, input.type);
-    if (ledger.kind === 'SHARED' && this.isIncomeExpense(input.type)) {
-      if (input.toAccountId !== undefined) {
-        throw new AppException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.VALIDATION_FAILED,
-          'toAccountId is only valid for a transfer.',
-        );
-      }
-      const createdId = await this.prisma.$transaction(async (tx) => {
+    let createdTransaction: TransactionRow | undefined;
+    const write = async (tx: Prisma.TransactionClient): Promise<string> => {
+      const ledger = await this.getLedger(ledgerId, tx);
+      this.assertSplitAllowed(input, ledger.kind, input.type);
+      if (ledger.kind === 'SHARED' && this.isIncomeExpense(input.type)) {
+        if (input.toAccountId !== undefined) {
+          throw new AppException(
+            HttpStatus.BAD_REQUEST,
+            ErrorCode.VALIDATION_FAILED,
+            'toAccountId is only valid for a transfer.',
+          );
+        }
+
         const caller = await this.people.findCallerPerson(tx, ledgerId, creatorId);
         if (!caller) throw this.notFound('Person');
         const payerId = input.payerPersonId ?? caller.id;
@@ -443,11 +453,9 @@ export class TransactionsService {
         });
         if (split && shares) await this.writeLedgerSplit(tx, created.id, split, shares);
         return created.id;
-      });
-      return this.getById(ledgerId, createdId, creatorId);
-    }
-    // 分類與交易一起提交；後續寫入失敗時，不留下使用者尚未成功確認的分類。
-    const transaction = await this.prisma.$transaction(async (tx) => {
+      }
+      // 分類與交易一起提交；後續寫入失敗時，不留下使用者尚未成功確認的分類。
+
       // 建立時，「最終值」與「這次指定的值」是同一組。
       await this.assertAccountRules(ledgerId, creatorId, input.type, input, input, tx);
       const categoryId = await this.assertCategoryRules(
@@ -457,7 +465,7 @@ export class TransactionsService {
         input.categoryId,
         input.newCategoryName,
       );
-      return tx.transaction.create({
+      const transaction = await tx.transaction.create({
         data: {
           ledgerId,
           creatorId,
@@ -472,8 +480,36 @@ export class TransactionsService {
         },
         include: transactionInclude(creatorId),
       });
+      createdTransaction = transaction;
+      return transaction.id;
+    };
+    const result = await this.idempotency.run(
+      {
+        userId: creatorId,
+        key,
+        operation: 'TRANSACTION_CREATE',
+        scopeId: ledgerId,
+        requestHash: requestHash({ ...input, ledgerId }),
+      },
+      write,
+      (resultId) => this.replayCreated(creatorId, resultId),
+    );
+    if (!result.created) return result.response;
+    return createdTransaction
+      ? this.toTransaction(createdTransaction, creatorId)
+      : this.getById(ledgerId, result.resultId, creatorId);
+  }
+
+  /** 重送以結果目前所在的帳本重驗寫入權，再檢查軟刪除。 */
+  async replayCreated(userId: string, resultId: string): Promise<Transaction> {
+    const row = await this.prisma.transaction.findUnique({
+      where: { id: resultId },
+      select: { ledgerId: true, deletedAt: true },
     });
-    return this.toTransaction(transaction, creatorId);
+    if (!row) throw this.notFound('Transaction');
+    await assertLedgerWritable(this.prisma, userId, row.ledgerId);
+    if (row.deletedAt !== null) throw idempotencyResourceDeleted();
+    return this.getById(row.ledgerId, resultId, userId);
   }
 
   /**
@@ -923,8 +959,11 @@ export class TransactionsService {
     );
   }
 
-  private async getLedger(ledgerId: string) {
-    const ledger = await this.prisma.ledger.findUnique({
+  private async getLedger(
+    ledgerId: string,
+    client: Pick<Prisma.TransactionClient, 'ledger'> = this.prisma,
+  ) {
+    const ledger = await client.ledger.findUnique({
       where: { id: ledgerId },
       select: { kind: true },
     });

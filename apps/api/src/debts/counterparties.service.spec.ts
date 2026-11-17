@@ -1,3 +1,4 @@
+import { createIdempotencyStub } from '../idempotency/idempotency.testing';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { LedgerDebtsService } from '../ledger-groups/ledger-debts.service';
 import type { TransactionsService } from '../transactions/transactions.service';
@@ -68,6 +69,7 @@ describe('CounterpartiesService.merge', () => {
       tx,
       service: new CounterpartiesService(
         prisma as unknown as PrismaService,
+        createIdempotencyStub(prisma as unknown as PrismaService),
         ledgerDebts as unknown as LedgerDebtsService,
         {} as TransactionsService,
       ),
@@ -153,6 +155,7 @@ describe('CounterpartiesService.list', () => {
     };
     const service = new CounterpartiesService(
       prisma as unknown as PrismaService,
+      createIdempotencyStub(prisma as unknown as PrismaService),
       ledgerDebts as unknown as LedgerDebtsService,
       {} as TransactionsService,
     );
@@ -220,6 +223,7 @@ describe('CounterpartiesService.list', () => {
     };
     const service = new CounterpartiesService(
       prisma as unknown as PrismaService,
+      createIdempotencyStub(prisma as unknown as PrismaService),
       ledgerDebts as unknown as LedgerDebtsService,
       {} as TransactionsService,
     );

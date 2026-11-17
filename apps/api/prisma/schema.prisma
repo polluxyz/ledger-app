@@ -42,6 +42,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   aiParseDailyUsages   AiParseDailyUsage[]
+  idempotencyKeys      IdempotencyKey[]
   homeLayouts          UserHomeLayout[]
   memberships          LedgerMember[]
   ledgerPeople         LedgerPerson[]
@@ -69,6 +70,38 @@ model User {
   debtProposalsSent       DebtProposal[]     @relation("DebtProposalFrom")
   debtProposalsReceived   DebtProposal[]     @relation("DebtProposalTo")
   splits                  Split[]
+}
+
+/// 防重複送出的鍵（R1）；鍵與結果在同一個資料庫交易內提交。
+model IdempotencyKey {
+  id          String                @id @default(uuid())
+  userId      String
+  key         String
+  operation   IdempotencyOperation
+  scopeId     String?
+  requestHash String
+  resultType  IdempotencyResultType
+  /// 搶鍵時留空，提交前由共用服務填回；結果跨表，不設資源外鍵。
+  resultId    String?
+  createdAt   DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+enum IdempotencyOperation {
+  TRANSACTION_CREATE
+  DEBT_ENTRY_CREATE
+  SPLIT_CREATE
+  SETTLEMENT_CREATE
+  COUNTERPARTY_FORGIVE
+}
+
+enum IdempotencyResultType {
+  TRANSACTION
+  DEBT_ENTRY
+  SPLIT
 }
 
 enum HomeLayoutSurface {

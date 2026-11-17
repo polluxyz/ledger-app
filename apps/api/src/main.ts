@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import type { Env } from './config/env.validation';
+import { corsOptions } from './config/cors-options';
 
 /**
  * 應用程式進入點（bootstrap）。在這裡把「全域」設定一次裝好：CORS、路由前綴、
@@ -24,9 +25,7 @@ async function bootstrap() {
    * `CORS_ORIGIN` 支援逗號分隔的多個來源，驗證時已經拆成陣列
    * （見 `env.validation.ts`）。每一筆仍是完全比對，清單長短不影響嚴格程度。
    */
-  app.enableCors({
-    origin: config.get('CORS_ORIGIN', { infer: true }),
-  });
+  app.enableCors(corsOptions(config));
 
   // 所有路由都掛在 /api 之下；Swagger UI 另外放在 /docs（見下方）。
   app.setGlobalPrefix('api');
