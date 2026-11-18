@@ -164,9 +164,7 @@ export function DebtEntryEditForm({
       <div className={fieldLayoutStyles.amount}>
         <TextField
           label="金額"
-          type="number"
-          min="0.01"
-          step="0.01"
+          type="text"
           inputMode="decimal"
           value={amount}
           required

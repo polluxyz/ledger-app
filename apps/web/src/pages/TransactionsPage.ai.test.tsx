@@ -310,7 +310,7 @@ describe('AI drafts on the transactions page', () => {
 
     await user.click(screen.getByRole('button', { name: '編輯草稿：名稱未提供' }));
     const form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByLabelText('金額')).toHaveValue(null);
+    expect(within(form).getByLabelText('金額')).toHaveValue('');
     expect(within(form).getByLabelText('日期')).toHaveValue('');
     expect(within(form).getByLabelText('帳戶')).toHaveValue('');
     expect(within(form).getByLabelText('名稱')).toHaveValue('');
@@ -327,7 +327,7 @@ describe('AI drafts on the transactions page', () => {
       'aria-pressed',
       'true',
     );
-    expect(within(transferForm).getByLabelText('金額')).toHaveValue(100);
+    expect(within(transferForm).getByLabelText('金額')).toHaveValue('100');
     expect(within(transferForm).getByLabelText('日期')).toHaveValue('2026-10-21');
     expect(within(transferForm).getByLabelText('轉出帳戶')).toHaveValue('acc-cash');
     expect(within(transferForm).getByLabelText('轉入帳戶')).toHaveValue('acc-bank');
@@ -338,7 +338,7 @@ describe('AI drafts on the transactions page', () => {
       () => expect(within(sharedForm).getByLabelText('日期')).toHaveValue('2026-10-22'),
       WAIT,
     );
-    expect(within(sharedForm).getByLabelText('金額')).toHaveValue(250);
+    expect(within(sharedForm).getByLabelText('金額')).toHaveValue('250');
     expect(within(sharedForm).getByLabelText('帳戶')).toHaveValue('acc-bank');
     expect(within(sharedForm).getByLabelText('名稱')).toHaveValue('計程車');
     expect(within(sharedForm).getByRole('combobox', { name: '分類' })).toHaveAttribute(
@@ -379,7 +379,7 @@ describe('AI drafts on the transactions page', () => {
 
     await user.click(screen.getByRole('button', { name: '編輯草稿：早餐' }));
     form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByLabelText('金額')).toHaveValue(80);
+    expect(within(form).getByLabelText('金額')).toHaveValue('80');
     transactionResponses.push(new ApiError(400, 'VALIDATION_ERROR', '安全錯誤'));
     await user.click(within(form).getByRole('button', { name: '新增' }));
     expect(await screen.findByText('安全錯誤', undefined, WAIT)).toBeInTheDocument();

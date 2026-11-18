@@ -177,14 +177,14 @@ describe('Accounts page', () => {
     await user.type(dialog().getByLabelText('名稱'), '信用卡');
     const openingBalance = dialog().getByLabelText('初始餘額');
     await user.clear(openingBalance);
-    await user.type(openingBalance, '-333.33');
+    await user.paste('-1,234.56');
     await user.click(dialog().getByRole('button', { name: '新增' }));
 
     const posted = fetchMock.mock.calls.find(
       (call) => (call[1] as RequestInit | undefined)?.method === 'POST',
     );
     const body = JSON.parse((posted?.[1] as RequestInit).body as string) as Record<string, unknown>;
-    expect(body.initialBalance).toBe(-33333);
+    expect(body.initialBalance).toBe(-123456);
   });
 
   it('renames without offering the initial balance', async () => {
