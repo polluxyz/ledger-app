@@ -2,7 +2,7 @@
 
 spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC-TV1～SC-TV16）。後端與網頁合成一個 PR（決策 381 (a)）。
 
-> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/r6-token-revocation-todo.md` 待核可。
+> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/r6-token-revocation-todo.md` 開發者 2026-11-18 回「核可」。
 
 ## 0. 起點
 
