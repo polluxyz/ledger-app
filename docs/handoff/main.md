@@ -9,13 +9,14 @@
 - 2k～2m 首頁改版已合併。2j 工作區的收尾見 [`stats-2j`](stats-2j.md)。
 - 桌機 Chrome 語音輸入已合併（#209、#212），真實驗收尚未完成。詳見 `tasks/ai-voice-todo.md`。
 - 專案審查報告已合併（#217），各項處理另開工作區進行。
-- R1 防重複送出已合併（#223）：建立金錢紀錄的 5 個端點必填 `Idempotency-Key`，合併後部署 dev。審查報告剩 R5、R6 要先寫 spec。
+- R1 防重複送出已合併（#223）並部署 dev（11-17，備份 `ledger_dev_before_r1_20261117_1534.dump`）：建立金錢紀錄的 5 個端點必填 `Idempotency-Key`。
+- 11-18 交接：R5、R6 的 spec 交給 [`review-specs`](review-specs.md)；語音 T3、T4 與 DeepSeek 複查交給 [`ai-4a`](ai-4a.md)。
 
 ## 下一步
 
 - 節省 token：L1～L4 已完成，L2、L3 的實測都通過。剩 L5 的 7 天觀察，見 `tasks/token-saving-plan.md` §4、§5。
-- 完成語音真實驗收與收尾，見 `tasks/ai-voice-plan.md` §1.4～1.5。
 - 各項審查修正合併後，依下方步驟部署到 dev。
+- 審查報告「可直接做」的小項（R9、R7、R8、R11、R13、R14、X1、X2、F5）還沒有人接，開發者決定後再派。
 
 ## 替開發者部署
 
