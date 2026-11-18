@@ -1,4 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { DEFAULT_ACCOUNTS, TEMPORARY_ACCOUNT_NAME } from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
@@ -23,6 +25,12 @@ describe('AuthService', () => {
   let prisma: {
     user: { findUnique: jest.Mock; create: jest.Mock };
     account: { createMany: jest.Mock };
+    authSession: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+      updateMany: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let ledgers: { createLedgerForUser: jest.Mock };
@@ -54,6 +62,12 @@ describe('AuthService', () => {
     prisma = {
       user: { findUnique: jest.fn(), create },
       account: { createMany: jest.fn() },
+      authSession: {
+        create: jest.fn().mockResolvedValue({ id: 'session-1' }),
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+        updateMany: jest.fn(),
+      },
       // 預設：以一個「行為等同 prisma 本身」的 tx client 執行 callback。
       $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
         cb({ user: prisma.user, account: prisma.account }),
@@ -65,6 +79,7 @@ describe('AuthService', () => {
       prisma as unknown as PrismaService,
       ledgers as unknown as LedgersService,
       jwt as unknown as JwtService,
+      new ConfigService({ JWT_EXPIRES_IN: '7d' }),
     );
   });
 
@@ -156,6 +171,25 @@ describe('AuthService', () => {
     expect(createArgs?.data.passwordHash).toHaveLength(60);
   });
 
+  describe('logout', () => {
+    it('revokes only the active session owned by this user when count is 1', async () => {
+      prisma.authSession.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.logout('user-1', 'session-1')).resolves.toBeUndefined();
+      expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+        where: { id: 'session-1', userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) as Date },
+      });
+    });
+
+    it('rejects count 0 with 401 UNAUTHORIZED', async () => {
+      prisma.authSession.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.logout('user-1', 'session-1')).rejects.toMatchObject({
+        errorCode: 'UNAUTHORIZED',
+        status: 401,
+      });
+    });
+  });
+
   describe('login', () => {
     const loginDto: LoginDto = { email: dto.email, password: dto.password };
 
@@ -165,12 +199,22 @@ describe('AuthService', () => {
 
       const result = await service.login(loginDto);
 
-      // R6 T0：sid 暫時是隨機值；T1 改成登入紀錄的 id 並加上 exp。
       expect(jwt.signAsync).toHaveBeenCalledWith({
         sub: dbUser.id,
         email: dbUser.email,
-        sid: expect.any(String) as string,
+        sid: 'session-1',
+        exp: expect.any(Number) as number,
       });
+      expect(prisma.authSession.create).toHaveBeenCalledWith({
+        data: { userId: dbUser.id, expiresAt: expect.any(Date) as Date },
+      });
+      const [created] = prisma.authSession.create.mock.calls[0]! as [{ data: { expiresAt: Date } }];
+      expect(jwt.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ exp: created.data.expiresAt.getTime() / 1000 }),
+      );
+      expect(prisma.authSession.create.mock.invocationCallOrder[0]).toBeLessThan(
+        jwt.signAsync.mock.invocationCallOrder[0]!,
+      );
       expect(result).toEqual({ accessToken: 'signed.jwt.token' });
     });
 
@@ -185,6 +229,8 @@ describe('AuthService', () => {
         errorCode: 'INVALID_CREDENTIALS',
       });
       expect(jwt.signAsync).not.toHaveBeenCalled();
+      expect(prisma.authSession.create).not.toHaveBeenCalled();
+      expect(prisma.authSession.findMany).not.toHaveBeenCalled();
     });
 
     it('rejects an unknown email with the same 401 (no user enumeration)', async () => {
@@ -195,6 +241,45 @@ describe('AuthService', () => {
         errorCode: 'INVALID_CREDENTIALS',
       });
       expect(jwt.signAsync).not.toHaveBeenCalled();
+      expect(prisma.authSession.create).not.toHaveBeenCalled();
+      expect(prisma.authSession.findMany).not.toHaveBeenCalled();
+    });
+
+    it('SC-TV11: returns a token when cleanup fails and logs only the error name', async () => {
+      const passwordHash = await bcrypt.hash(loginDto.password, 10);
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, passwordHash });
+      prisma.authSession.findMany.mockRejectedValue(new TypeError('private token and email'));
+
+      await expect(service.login(loginDto)).resolves.toEqual({ accessToken: 'signed.jwt.token' });
+      expect(warn).toHaveBeenCalledWith('TypeError');
+    });
+
+    it('deletes at most one selected batch and rechecks expiration without filtering revocation', async () => {
+      const passwordHash = await bcrypt.hash(loginDto.password, 10);
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, passwordHash });
+      prisma.authSession.findMany.mockResolvedValue([{ id: 'expired-1' }, { id: 'expired-2' }]);
+
+      await service.login(loginDto);
+
+      expect(prisma.authSession.findMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) as Date } },
+        select: { id: true },
+        take: 100,
+      });
+      const [args] = prisma.authSession.findMany.mock.calls[0]! as [
+        { where: { expiresAt: { lt: Date } } },
+      ];
+      expect(prisma.authSession.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['expired-1', 'expired-2'] }, expiresAt: args.where.expiresAt },
+      });
+    });
+
+    it('does not issue a delete query for an empty batch', async () => {
+      const passwordHash = await bcrypt.hash(loginDto.password, 10);
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, passwordHash });
+      await service.login(loginDto);
+      expect(prisma.authSession.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

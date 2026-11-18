@@ -138,7 +138,10 @@ describe('Auth session isolation (e2e)', () => {
       expectNoUserData(res, alice, bob);
 
       // A 的登入沒有被這次偽造牽連。
-      // T1 建表後在這裡補上：A 的登入紀錄 revokedAt 仍為 null（plan §1.2 第 7 步）。
+      expect(
+        (await prisma.authSession.findUniqueOrThrow({ where: { id: sidOf(alice.token) } }))
+          .revokedAt,
+      ).toBeNull();
       await getMe(alice.token).expect(200);
     });
   });
