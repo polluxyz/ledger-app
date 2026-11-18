@@ -37,3 +37,11 @@
 金額解析以 1,000 筆正負金額驗證格式化後還原。分帳以 112 組比例及精度對照整數計算。兩組均通過。帳戶餘額重算的既有測試涵蓋軟刪除、收入、支出與轉帳方向，見 `apps/api/src/accounts/accounts.service.spec.ts:201`、`:232`、`:348`。同鍵防重驗證在 `apps/api/src/idempotency/idempotency.service.spec.ts:49`、`:69`。瀏覽器貼上使用 Chromium。此次沒有量測 Firefox、Safari、真實模型或正式資料。
 
 各工作區的驗證分開計算。API 修正測過 1,221 項 API 單元測試。Web 與金額修正測過 1,313 項 Web、161 項 shared 與 1,213 項當時的 API 單元測試。兩份結果含重疊案例。文件前後計量與重跑方式見[Session 文件讀取量](2026-11-18-session-input.md)。
+
+## 主工作區驗收
+
+主工作區以 `80d91b2` 整合上述改動。凍結鎖檔離線安裝、共用套件建置、格式、lint、型別檢查與正式版建置通過。共 2,695 項單元測試通過，分別是 API 1,221、Web 1,313、shared 161。
+
+專用測試資料庫的 API 端對端測試通過 68 組、766 項。包含同一筆支出同時轉分帳、編輯後餘額 −150 分及刪除後餘額 −500 → 0 分。案例在 `apps/api/test/splits.e2e-spec.ts:371`、`apps/api/test/transactions.e2e-spec.ts:340` 與 `:240`。Web 工作區以 Chromium 跑完 144 項，包含剪貼簿金額與記帳後餘額。複驗指令為 `pnpm --filter @ledger/api test:e2e` 與 `pnpm --filter @ledger/web test:e2e`。需先依[測試環境](../operations/test-environment.md)準備專用資料庫。
+
+實作及檢查紀錄見[分帳扣款 #234](https://github.com/polluxyz/ledger-app/pull/234)、[表單重試 #235](https://github.com/polluxyz/ledger-app/pull/235)、[金額輸入 #236](https://github.com/polluxyz/ledger-app/pull/236)、[列表讀取 #237](https://github.com/polluxyz/ledger-app/pull/237)及[內部程式與相依清理 #238](https://github.com/polluxyz/ledger-app/pull/238)。
