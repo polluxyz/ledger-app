@@ -3,7 +3,6 @@ import type {
   CreateLedgerRequest,
   LedgerDetail,
   LedgerLeavePreview,
-  LedgerRemovalPreview,
   LedgerSummary,
   LeaveMove,
   LeaveRequest,
@@ -61,7 +60,7 @@ export function useLedger(ledgerId: string | null) {
 }
 
 /**
- * 以下四個 mutation 都不攔截錯誤——`apiRequest` 已把後端的統一錯誤格式轉成
+ * 帳本寫入不攔截錯誤——`apiRequest` 已把後端的統一錯誤格式轉成
  * `ApiError`，呼叫端交給 `FormError` 呈現。訊息內容仍由後端定義；前端只負責把
  * `errorCode` 對應到在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣
  * 顯示後端訊息。
@@ -114,41 +113,6 @@ export function useArchiveLedger() {
   });
 }
 
-/**
- * 刪除帳本。後端要求 `confirm` 與帳本名稱完全相符，否則回 400——所以呼叫端
- * 一定要有一個讓使用者打字的輸入框，這是契約而非 UI 選擇。
- *
- * 帳本內若有其他成員記的交易，後端回 409 `LEDGER_HAS_OTHERS_TRANSACTIONS`，
- * 該情況請引導使用者改用封存。
- */
-export function useDeleteLedger() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    // 成功時後端回 204 無 body，`apiRequest` 會回 undefined。
-    mutationFn: ({
-      id,
-      confirm,
-      withdrawDebts,
-    }: {
-      id: string;
-      confirm: string;
-      withdrawDebts?: boolean;
-    }) => {
-      const query = new URLSearchParams({ confirm });
-      if (withdrawDebts) {
-        query.set('withdrawDebts', 'true');
-      }
-      return apiRequest<void>(`/ledgers/${id}?${query.toString()}`, { method: 'DELETE' });
-    },
-    onSuccess: (_data, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
-      queryClient.removeQueries({ queryKey: ['ledger', id] });
-      invalidateAfterMoneyWrite(queryClient);
-    },
-  });
-}
-
 /** 已封存帳本的取消封存動作；成功後更新切換器與明細快取。 */
 export function useUnarchiveLedger() {
   const queryClient = useQueryClient();
@@ -161,17 +125,6 @@ export function useUnarchiveLedger() {
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledger.id] });
       invalidateAfterMoneyWrite(queryClient);
     },
-  });
-}
-
-/** 刪除帳本前的伺服器計算預覽；每次打開刪除對話框都重新查詢。 */
-export function useRemovalPreview(ledgerId: string, enabled = true) {
-  return useQuery({
-    queryKey: ['ledger-removal-preview', ledgerId],
-    queryFn: () => apiRequest<LedgerRemovalPreview>(`/ledgers/${ledgerId}/removal-preview`),
-    enabled,
-    staleTime: 0,
-    refetchOnMount: 'always',
   });
 }
 
@@ -242,7 +195,6 @@ export function useLeaveLedger() {
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       void queryClient.removeQueries({ queryKey: ['ledger', id] });
-      void queryClient.invalidateQueries({ queryKey: ['members', id] });
       invalidateAfterMoneyWrite(queryClient);
     },
   });
