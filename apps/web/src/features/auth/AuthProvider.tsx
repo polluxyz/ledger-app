@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clearLocalSession]);
 
-  useEffect(() => onTokenExpired(clearLocalSession), [clearLocalSession]);
+  useEffect(() => onTokenExpired(() => clearLocalSession()), [clearLocalSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
