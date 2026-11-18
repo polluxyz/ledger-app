@@ -761,7 +761,7 @@ describe('Home dashboard', () => {
     const recent = await recentRegion();
     await user.click(recent.getAllByRole('button', { name: /^編輯/ })[0]!);
     const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(panel).getByLabelText('金額')).toHaveValue(101);
+    expect(within(panel).getByLabelText('金額')).toHaveValue('101');
 
     await user.click(within(panel).getByRole('button', { name: '關閉' }));
     await waitFor(() => {
@@ -843,7 +843,7 @@ describe('Home dashboard', () => {
     expect(within(marked).getByText('家用')).toBeInTheDocument();
     await user.click(within(marked).getByRole('button', { name: /^編輯/ }));
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(dialog).getByLabelText('金額')).toHaveValue(99);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue('99');
     expect(localStorage.getItem('ledger.activeLedgerId')).toBe(otherLedger.id);
 
     await user.click(screen.getByRole('tab', { name: '最近' }));
@@ -851,7 +851,7 @@ describe('Home dashboard', () => {
     expect(screen.getByRole('dialog', { name: '編輯交易' })).toBeInTheDocument();
     expect(
       within(screen.getByRole('dialog', { name: '編輯交易' })).getByLabelText('金額'),
-    ).toHaveValue(99);
+    ).toHaveValue('99');
   });
 
   it('keeps a cross-ledger fill-account intent and submits against the marked ledger', async () => {
@@ -925,7 +925,7 @@ describe('Home dashboard', () => {
     );
     expect(
       within(screen.getByRole('group', { name: '新增一筆交易' })).getByLabelText('金額'),
-    ).toHaveValue(321);
+    ).toHaveValue('321');
     expect(
       within(screen.getByRole('group', { name: '新增一筆交易' })).getByLabelText('備註'),
     ).toHaveValue('保留內容');

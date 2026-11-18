@@ -326,9 +326,7 @@ export function DebtEntryForm({
         <TextField
           label="金額"
           id={amountFieldId}
-          type="number"
-          min="0.01"
-          step="0.01"
+          type="text"
           inputMode="decimal"
           value={amount}
           required

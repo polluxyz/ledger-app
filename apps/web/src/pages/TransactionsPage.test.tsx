@@ -201,7 +201,7 @@ describe('Transactions page', () => {
     await user.click(within(item).getByText('午餐'));
 
     const panel = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(panel).getByLabelText('金額')).toHaveValue(120);
+    expect(within(panel).getByLabelText('金額')).toHaveValue('120');
   });
 
   it('deletes from the editor, confirms, refreshes the list, and closes the panel', async () => {
@@ -602,7 +602,7 @@ describe('Transactions page', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
     expect(within(dialog).getByText('借出 · 小明')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('金額')).toHaveValue(5000);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue('5000');
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-09-01');
     expect(within(dialog).getByLabelText('備註')).toHaveValue('借出款項');
     expect(within(dialog).queryByText('會送給小明確認')).not.toBeInTheDocument();
@@ -745,7 +745,7 @@ describe('Transactions page', () => {
     await user.click(within(item).getByRole('button', { name: /^編輯/ }));
 
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' }, WAIT);
-    expect(within(dialog).getByLabelText('金額')).toHaveValue(90);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue('90');
   });
 
   it('keeps an open add panel open while switching between details and debts', async () => {
@@ -897,7 +897,7 @@ describe('Transactions page', () => {
     await waitFor(() => {
       expect(within(form as HTMLFormElement).getByLabelText('付錢的人')).toHaveValue(min.id);
       expect(within(form as HTMLFormElement).getByLabelText('收錢的人')).toHaveValue(me.id);
-      expect(within(form as HTMLFormElement).getByLabelText('金額')).toHaveValue(2050);
+      expect(within(form as HTMLFormElement).getByLabelText('金額')).toHaveValue('2050');
     }, WAIT);
     await user.click(within(form as HTMLFormElement).getByRole('button', { name: '新增' }));
     await waitFor(() => expect(createCalled).toBe(true), WAIT);
@@ -956,7 +956,7 @@ describe('Transactions page', () => {
     await waitFor(() => {
       expect(within(group).getByLabelText('付錢的人')).toHaveValue(me.id);
       expect(within(group).getByLabelText('收錢的人')).toHaveValue(other.id);
-      expect(within(group).getByLabelText('金額')).toHaveValue(512);
+      expect(within(group).getByLabelText('金額')).toHaveValue('512');
     }, WAIT);
     await waitFor(() => {
       expect(window.location.search).toBe('?view=debts&tab=shared');

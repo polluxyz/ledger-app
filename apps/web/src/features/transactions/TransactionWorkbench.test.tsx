@@ -156,7 +156,7 @@ describe('Transaction workbench in the right panel', () => {
     const form = await findAddForm();
     expect(within(form).getByLabelText('帳本')).toHaveValue('ledger-1');
     expect(within(form).getByLabelText('日期')).toHaveValue(toDateInputValue());
-    expect(within(form).getByLabelText('金額')).toHaveValue(120);
+    expect(within(form).getByLabelText('金額')).toHaveValue('120');
     expect(within(form).getByLabelText('帳戶')).toHaveValue('acc-1');
     expect(within(form).getByLabelText('名稱')).toHaveValue('便當');
     expect(within(form).getByLabelText('備註')).toHaveValue('午餐');
@@ -215,7 +215,7 @@ describe('Transaction workbench in the right panel', () => {
       'aria-pressed',
       'true',
     );
-    expect(within(form).getByLabelText('金額')).toHaveValue(120);
+    expect(within(form).getByLabelText('金額')).toHaveValue('120');
     expect(within(form).getByLabelText('日期')).toHaveValue(toDateInputValue());
     expect(within(form).getByRole('combobox', { name: '分類' })).toHaveAttribute(
       'aria-valuetext',
@@ -272,7 +272,7 @@ describe('Transaction workbench in the right panel', () => {
     const panel = editPanel();
     expect(panel).toBeInTheDocument();
     // 面板裡是那一筆的值，不是一張空表單。
-    expect(within(panel as HTMLElement).getByLabelText('金額')).toHaveValue(120);
+    expect(within(panel as HTMLElement).getByLabelText('金額')).toHaveValue('120');
     // 兩張表單互斥：新增的那張讓位給編輯。
     expect(newForm()).not.toBeInTheDocument();
   });

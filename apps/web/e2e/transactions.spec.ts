@@ -173,6 +173,42 @@ test('3c-0：列表將小數金額顯示到分、整數金額不補小數', asyn
   await expect(homeActivityRow(page, '-$3,000.00')).toHaveCount(0);
 });
 
+test('SC-M11：貼上金額保留千分位並拒絕錯誤分組', async ({ signedInPage: page, userA, request }) => {
+  const { expense } = await personalSetup(request, userA.token);
+  await openNewTransaction(page);
+  const form = newTransactionForm(page);
+  await selectCategory(form, expense.name);
+  const amount = form.getByLabel('金額');
+  const submit = form.getByRole('button', { name: '新增', exact: true });
+  const postedAmounts: number[] = [];
+  page.on('request', (sent) => {
+    if (sent.method() === 'POST' && new URL(sent.url()).pathname.endsWith('/transactions')) {
+      postedAmounts.push((sent.postDataJSON() as { amount: number }).amount);
+    }
+  });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+
+  async function paste(text: string) {
+    await amount.fill('5');
+    await amount.selectText();
+    await page.evaluate((value) => navigator.clipboard.writeText(value), text);
+    await amount.press('ControlOrMeta+V');
+    await expect(amount).toHaveValue(text);
+  }
+
+  for (const invalid of ['1,23', '1,,23']) {
+    await paste(invalid);
+    await expect(submit).toBeDisabled();
+    await amount.press('Enter');
+  }
+
+  await paste('1,234.56');
+  await submit.click();
+  await expect(homeActivityRow(page, '-$1,234.56')).toBeVisible();
+  await expect(page.getByLabel('現金餘額')).toHaveText('-$1,234.56');
+  expect(postedAmounts).toEqual([123456]);
+});
+
 test('情境 10：篩選只留下符合條件的交易', async ({ signedInPage: page, userA, request }) => {
   const { ledger, cash, expense, income } = await personalSetup(request, userA.token);
 
