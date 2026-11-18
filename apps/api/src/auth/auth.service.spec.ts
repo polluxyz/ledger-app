@@ -165,9 +165,11 @@ describe('AuthService', () => {
 
       const result = await service.login(loginDto);
 
+      // R6 T0：sid 暫時是隨機值；T1 改成登入紀錄的 id 並加上 exp。
       expect(jwt.signAsync).toHaveBeenCalledWith({
         sub: dbUser.id,
         email: dbUser.email,
+        sid: expect.any(String) as string,
       });
       expect(result).toEqual({ accessToken: 'signed.jwt.token' });
     });

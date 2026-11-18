@@ -2,9 +2,9 @@
 
 plan：`tasks/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocation.md`。
 
-- [ ] **D docs PR**（協調者）：spec、plan、todo、`docs/README.md`、`docs/handoff.md` 編號、審查報告進度。
+- [x] **D docs PR**（協調者）：spec、plan、todo、`docs/README.md`、`docs/handoff.md` 編號、審查報告進度。
       驗收：format:check 綠；CI 全綠、squash merge；主工作區 `git pull` 完成。
-- [ ] **T0 契約與先紅的測試**（依賴 D；協調者）：plan §1.1。
+- [x] **T0 契約與先紅的測試**（依賴 D；協調者）：plan §1.1。
       驗收：
   - shared 的 `JwtPayload` 有 `sid: string`，`pnpm --filter @ledger/shared build` 綠。
   - `.env.test` 指向 `ledger_review_test`，migration 已套用。

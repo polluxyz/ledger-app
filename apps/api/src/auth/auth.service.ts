@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -119,7 +120,8 @@ export class AuthService {
       );
     }
 
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    // R6 T0 暫時值：T1 換成登入紀錄的 id（決策 375），並拿掉這個 import。
+    const payload: JwtPayload = { sub: user.id, email: user.email, sid: randomUUID() };
     return { accessToken: await this.jwt.signAsync(payload) };
   }
 }

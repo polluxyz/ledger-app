@@ -67,13 +67,14 @@ describe('JwtAuthGuard', () => {
     jwt.verifyAsync.mockResolvedValue({
       sub: 'user-1',
       email: 'alice@example.com',
+      sid: 'session-1',
       iat: 1,
       exp: 2,
     });
     const request: MockRequest = { headers: { authorization: 'Bearer good' } };
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
-    // 只有 sub + email 會被複製到 request（iat/exp 不會滲漏進去）。
-    expect(request.user).toEqual({ sub: 'user-1', email: 'alice@example.com' });
+    // 只有 sub、email、sid 會被複製到 request（iat/exp 不會滲漏進去）。
+    expect(request.user).toEqual({ sub: 'user-1', email: 'alice@example.com', sid: 'session-1' });
   });
 });

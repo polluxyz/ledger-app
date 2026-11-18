@@ -39,6 +39,8 @@ export class JwtAuthGuard implements CanActivate {
       (request as Request & { user: JwtPayload }).user = {
         sub: payload.sub,
         email: payload.email,
+        // R6 T0 暫時值：T1 改寫成決策 376 的 6 步檢查，這裡只為了讓型別通過。
+        sid: typeof payload.sid === 'string' ? payload.sid : '',
       };
       return true;
     } catch {

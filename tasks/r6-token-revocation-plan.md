@@ -259,3 +259,23 @@ spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC
 ## 7. 實作紀錄
 
 （實作時填寫：migration SQL、`sid` 非 UUID 的 Prisma 實測、`stats-perf` 結果、偏離與待辦。）
+
+### D（2026-11-18）
+
+- docs PR #225 squash merge（`a9bc3a3`），CI 3 項綠。主工作區已 `git pull`。
+
+### T0（2026-11-18）
+
+- `apps/api/.env.test` 改指向 `ledger_review_test`，`prisma migrate deploy` 套用 30 個 migration。指令前先 `export DATABASE_URL=...`（從 `.env.test` 讀）；只靠預設會讀到 `.env` 的 `ledger_dev`。
+- 正式程式的 2 處暫時值照 §1.1：`auth.service.ts` 的 `sid: randomUUID()`、guard 的 `sid` 型別不符當空字串，都標了「R6 T0 暫時值」註解。
+- 計畫外但在範圍內：加了 `sid` 後，2 個單元測試的預期值要跟著改，整合分支才會綠。
+  - `jwt-auth.guard.spec.ts`：mock payload 與 `request.user` 的預期多 `sid`。
+  - `auth.service.spec.ts`：`signAsync` 的預期多 `sid: expect.any(String)`。
+  - `sub`、`email` 的斷言不變。
+- `signRawToken` 另建一個沒有預設選項的 `JwtService`。原因：`@nestjs/jwt` 會把模組的 `signOptions.expiresIn` 併進每次簽發，用 app 裡那個就簽不出「沒有 `exp`」的憑證。
+- 先紅的結果（`pnpm --filter @ledger/api test:e2e -- auth-session-isolation`）：10 條全紅，原因都符合預期。
+  - SC-TV1、SC-TV2：登出那步拿到 404。
+  - SC-TV5：偽造的憑證拿到 200。
+  - SC-TV6：沒有 `sid`、沒有 `exp`、`sid` 不是字串、`sid` 空字串、`sid` 指向不存在的紀錄都拿到 200。
+  - SC-TV6：`sub` 是數字拿到 500（Prisma 驗證錯誤），`sub` 空字串拿到 404。T1 的 guard 第 3 步會把這 2 種擋成 401。
+- typecheck（全部 package）、API lint 綠。API 單元測試 70 suites、1084 tests 全過。
