@@ -116,7 +116,7 @@ interface TransactionFormProps {
  * 輸入框顯示以元為單位的字串；送出前由 shared 將字串解析成整數分，讓畫面與 API
  * 使用各自清楚的單位。
  *
- * 前端只做「體驗性」的必填與型別限制（required、type="number"）；真正的驗證
+ * 前端只做必填與輸入格式檢查。金額保留原文，由 shared 解析。真正的驗證
  * 一律由後端負責。失敗時訊息的內容仍來自後端，前端只把 `errorCode` 換成
  * 在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣顯示。
  *
@@ -1468,9 +1468,7 @@ function TransactionFormContent({
         <TextField
           label="金額"
           id={amountFieldId}
-          type="number"
-          min="0.01"
-          step="0.01"
+          type="text"
           inputMode="decimal"
           value={amount}
           required

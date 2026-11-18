@@ -307,12 +307,12 @@ describe('DebtEntryForm', () => {
     await user.type(amount, '13');
     await user.click(submit);
     await screen.findByText('已記錄過');
-    expect(amount).toHaveValue(13);
+    expect(amount).toHaveValue('13');
     await user.click(submit);
     await screen.findByText('這筆已刪除');
-    expect(amount).toHaveValue(13);
+    expect(amount).toHaveValue('13');
     await user.click(submit);
-    await waitFor(() => expect(amount).toHaveValue(null));
+    await waitFor(() => expect(amount).toHaveValue(''));
     await user.type(amount, '14');
     await user.click(submit);
     await waitFor(() => expect(writes).toBe(6));
@@ -343,7 +343,8 @@ describe('DebtEntryForm', () => {
     renderForm(anotherLedger, '小明');
     await screen.findByText('目前小明欠你 $9');
     await waitFor(() => expect(screen.getByLabelText('從哪個帳戶借出')).toHaveValue('acc-cash'));
-    await user.type(screen.getByLabelText('金額'), '12');
+    await user.click(screen.getByLabelText('金額'));
+    await user.paste('1,234.56');
     await user.type(screen.getByLabelText('名稱'), '  押金  ');
     await user.click(screen.getByRole('combobox', { name: '分類' }));
     await user.click(screen.getByRole('option', { name: '居住' }));
@@ -351,6 +352,7 @@ describe('DebtEntryForm', () => {
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     const body = await postedBody();
+    expect(body.amount).toBe(123456);
     expect(body.record).toEqual({ ledgerId: 'ledger-2', accountId: 'acc-cash' });
     expect(body.title).toBe('押金');
     expect(body.categoryId).toBe('category-expense');
@@ -570,7 +572,7 @@ describe('DebtEntryForm', () => {
     expect(body.record).toEqual({ ledgerId: 'ledger-1', accountId: 'acc-bank' });
     expect(body.note).toBe('臨時周轉');
     await waitFor(() => {
-      expect(screen.getByLabelText('金額')).toHaveValue(null);
+      expect(screen.getByLabelText('金額')).toHaveValue('');
       expect(screen.getByLabelText('備註')).toHaveValue('');
       expect(screen.getByLabelText('對象')).toHaveValue(' 小明 ');
       expect(screen.getByRole('button', { name: '借入' })).toHaveAttribute('aria-pressed', 'true');
@@ -670,7 +672,7 @@ describe('DebtEntryForm', () => {
     expect(await postedBody()).toMatchObject({ kind: 'REPAYMENT', amount: 900 });
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '借出' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByLabelText('金額')).toHaveValue(null);
+      expect(screen.getByLabelText('金額')).toHaveValue('');
       expect(screen.getByLabelText('備註')).toHaveValue('');
       expect(screen.getByLabelText('對象')).toHaveValue('小明');
     });

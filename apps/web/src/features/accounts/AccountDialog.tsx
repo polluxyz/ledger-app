@@ -88,8 +88,7 @@ function AccountDialogForm({
         {isNew && (
           <TextField
             label="初始餘額"
-            type="number"
-            step="0.01"
+            type="text"
             inputMode="decimal"
             hint="開始使用本系統時這個帳戶已有的金額，建立後不可更改。信用卡的欠款請填負數。"
             value={initialBalance}

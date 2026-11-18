@@ -105,6 +105,13 @@ export function parseMoneyInput(text: string, options?: { allowNegative?: boolea
 
 `apps/web/src/lib/format.ts` 的 `formatAmount`、`formatMoney` 改成轉呼叫 shared 的版本，或直接移除並改 import（plan 決定）。
 
+### 金額輸入的千分位（2026-11-18 核可）
+
+- Web 的交易、借還新增與編輯、結清、帳戶期初餘額、分帳自訂金額欄保留輸入原文，再用 `parseMoneyInput` 解析。
+- 接受 `1234.56` 與 `1,234.56`，兩者都送出 `123456` 分。逗號只可放在整數部分，每組 3 位，第一組 1 至 3 位。
+- 拒絕 `1,23`、`1,,23` 等錯誤分組。保留原文供使用者修正，停用送出。分帳自訂金額有錯時停用分帳選項的「儲存」。
+- 輸入仍限 2 位小數。期初餘額仍接受負數。金額上限、整數分介面與分帳比例欄沿用既有規則。
+
 ---
 
 ## 5. 可驗證的成功條件
@@ -119,6 +126,7 @@ export function parseMoneyInput(text: string, options?: { allowNegative?: boolea
 - **SC-M8**：還款、以此結清、免除、連動提議的既有 e2e 改用分之後全綠；結清差額可以是零頭（例：欠 `333.33`、還 `333` 並結清 → 結清差額 `−0.33`）。
 - **SC-M9**：`grep` 前端元件，除了 shared 的工具函式以外沒有 `* 100`、`/ 100`、`toFixed`。
 - **SC-M10**：`pnpm lint / typecheck / test / build / format:check` 與兩套 e2e 全綠；migration 進版控且重跑無 pending。
+- **SC-M11**：在 Chromium 的新增交易金額欄貼上 `1,23` 或 `1,,23`，畫面保留原文且不能送出。貼上 `1,234.56` 則送出 `123456` 分，列表顯示 `-$1,234.56`。
 
 ---
 

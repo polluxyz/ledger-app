@@ -78,6 +78,14 @@ describe('centsToInput', () => {
 });
 
 describe('parseMoneyInput', () => {
+  it('只接受整數部分的合法千分位', () => {
+    assert.equal(parseMoneyInput('1,234.56'), 123456);
+    assert.equal(parseMoneyInput('123,456,789.01'), 12345678901);
+    for (const invalid of ['1,23', '1,,23', ',123', '123,', '1234,567', '1.23,4', '-1,23']) {
+      assert.equal(parseMoneyInput(invalid, { allowNegative: true }), null, invalid);
+    }
+  });
+
   const valid: Array<[string, number]> = [
     ['333.33', 33333],
     ['3000', 300000],

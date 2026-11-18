@@ -683,12 +683,12 @@ describe('TransactionForm', () => {
     await user.type(screen.getByLabelText('金額'), '70');
     await user.click(submit);
     await screen.findByText('已記錄過');
-    expect(screen.getByLabelText('金額')).toHaveValue(70);
+    expect(screen.getByLabelText('金額')).toHaveValue('70');
     await user.click(submit);
     await screen.findByText('這筆已刪除');
-    expect(screen.getByLabelText('金額')).toHaveValue(70);
+    expect(screen.getByLabelText('金額')).toHaveValue('70');
     await user.click(submit);
-    await waitFor(() => expect(screen.getByLabelText('金額')).toHaveValue(null));
+    await waitFor(() => expect(screen.getByLabelText('金額')).toHaveValue(''));
     await user.type(screen.getByLabelText('金額'), '80');
     await user.click(submit);
     await waitFor(() => expect(writes).toBe(6));
@@ -929,12 +929,12 @@ describe('TransactionForm', () => {
     await user.type(amount, '760');
     await user.click(submit);
     await screen.findByText('已記錄過');
-    expect(amount).toHaveValue(760);
+    expect(amount).toHaveValue('760');
     await user.click(submit);
     await screen.findByText('這筆已刪除');
-    expect(amount).toHaveValue(760);
+    expect(amount).toHaveValue('760');
     await user.click(submit);
-    await waitFor(() => expect(amount).toHaveValue(null));
+    await waitFor(() => expect(amount).toHaveValue(''));
     await user.type(amount, '770');
     await user.click(screen.getByRole('button', { name: '改為選付款人' }));
     await user.type(screen.getByRole('combobox', { name: '付款人' }), '小明');
@@ -1174,7 +1174,7 @@ describe('TransactionForm', () => {
     );
 
     await screen.findByLabelText('分類', {}, WAIT);
-    expect(screen.getByLabelText('金額')).toHaveValue(800);
+    expect(screen.getByLabelText('金額')).toHaveValue('800');
     expect(screen.queryByRole('region', { name: '分帳' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
@@ -1536,8 +1536,8 @@ describe('TransactionForm', () => {
     await user.click(screen.getByRole('tab', { name: '金額' }));
     await user.clear(screen.getByLabelText('我 金額'));
     await user.type(screen.getByLabelText('我 金額'), '1000');
-    expect(screen.getByLabelText('小明 金額')).toHaveValue(1000);
-    expect(screen.getByLabelText('小華 金額')).toHaveValue(1000);
+    expect(screen.getByLabelText('小明 金額')).toHaveValue('1000');
+    expect(screen.getByLabelText('小華 金額')).toHaveValue('1000');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
     const total = screen.getByLabelText('金額');

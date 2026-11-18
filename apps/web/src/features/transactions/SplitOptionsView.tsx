@@ -71,8 +71,21 @@ export function SplitOptionsView({
         : (me?.key ?? null);
   const fallbackKey = suppliedFallbackKey ?? (suppliedPayerKey === undefined ? me?.key : undefined);
 
+  const customValues = active.map((person) => ({
+    key: person.key,
+    value:
+      method === 'AMOUNT'
+        ? person.amountFixed
+          ? parseMoneyInput(person.amountInput)
+          : undefined
+        : person.ratioFixed
+          ? person.ratioValue
+          : undefined,
+  }));
+  // 錯誤的金額不可參與自動分配，修正輸入後才重新預覽。
+  const hasInvalidAmount = customValues.some(({ value }) => value === null);
   const filled =
-    method === 'EQUAL'
+    method === 'EQUAL' || hasInvalidAmount
       ? null
       : fillRemainingSharesByKey({
           total: total ?? 0,
@@ -80,21 +93,11 @@ export function SplitOptionsView({
           precision,
           payerKey,
           ...(fallbackKey === undefined ? {} : { fallbackKey }),
-          participants: active.map((person) => ({
-            key: person.key,
-            value:
-              method === 'AMOUNT'
-                ? person.amountFixed
-                  ? person.amountValue
-                  : undefined
-                : person.ratioFixed
-                  ? person.ratioValue
-                  : undefined,
-          })),
+          participants: customValues.map(({ key, value }) => ({ key, value: value ?? undefined })),
         });
 
   const preview =
-    total !== null && total > 0
+    !hasInvalidAmount && total !== null && total > 0
       ? computeSharesByKey({
           total,
           method,
@@ -145,13 +148,17 @@ export function SplitOptionsView({
   }
 
   function changeValue(key: string, value: string) {
-    const parsed = parseMoneyInput(value) ?? 0;
     setParticipants((current) =>
       current.map((person) =>
         person.key === key
           ? method === 'AMOUNT'
-            ? { ...person, amountFixed: true, amountInput: value, amountValue: parsed }
-            : { ...person, ratioFixed: true, ratioInput: value, ratioValue: parsed }
+            ? { ...person, amountFixed: true, amountInput: value }
+            : {
+                ...person,
+                ratioFixed: true,
+                ratioInput: value,
+                ratioValue: parseMoneyInput(value) ?? 0,
+              }
           : person,
       ),
     );
@@ -237,11 +244,12 @@ export function SplitOptionsView({
                 <div className={styles.custom}>
                   <TextField
                     label={method === 'AMOUNT' ? `${person.name} 金額` : `${person.name} 比例`}
-                    type="number"
-                    min="0"
+                    type={method === 'AMOUNT' ? 'text' : 'number'}
+                    min={method === 'RATIO' ? '0' : undefined}
                     max={method === 'RATIO' ? '100' : undefined}
-                    step="0.01"
+                    step={method === 'RATIO' ? '0.01' : undefined}
                     inputMode="decimal"
+                    aria-invalid={customValues[index]?.value === null || undefined}
                     value={
                       method === 'AMOUNT'
                         ? person.amountFixed

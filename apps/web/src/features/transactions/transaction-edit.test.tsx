@@ -132,7 +132,7 @@ describe('Editing and deleting a transaction', () => {
     render(<App />);
     const dialog = await openEditor();
 
-    expect(within(dialog).getByLabelText('金額')).toHaveValue(120);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue('120');
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-08-12');
     expect(within(dialog).getByLabelText('備註')).toHaveValue('午餐');
     expect(within(dialog).getByRole('combobox', { name: '分類' })).toHaveAttribute(
@@ -148,7 +148,7 @@ describe('Editing and deleting a transaction', () => {
     await user.click(await screen.findByRole('button', { name: /^編輯/ }));
     const dialog = await screen.findByRole('dialog', { name: '編輯交易' });
 
-    expect(within(dialog).getByLabelText('金額')).toHaveValue(120);
+    expect(within(dialog).getByLabelText('金額')).toHaveValue('120');
     expect(within(dialog).getByLabelText('日期')).toHaveValue('2026-08-12');
     expect(within(dialog).getByRole('combobox', { name: '分類' })).toHaveAttribute(
       'aria-valuetext',
