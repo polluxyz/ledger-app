@@ -135,11 +135,13 @@ Specify --> Plan --> Tasks --> Implement
 3. **四件事一律先說明再做**（完整清單見 §14）：資料模型變更、API 介面變更、新增相依套件、修改 CI。即使 plan 裡提過也一樣。
 4. **遇到計畫外的問題**：在已核可的範圍內解得掉就解掉，記進 plan 的實作紀錄；會改變方向或觸及上一條的，停下來說明。**偏離已核可的 spec 或 plan 之前一定要先講。**
 5. **Git 全自動**（見 §10），**CI 失敗自動修並重推**，修完報告原因與改動。
-6. **要開發者拍板的決策，先徵詢 `advisor` 角色**，報告時並列雙方看法與分歧（做法與例外見 `docs/orca-multi-agent.md` §1.1）。
+6. **要開發者拍板的決策，先同時徵詢 2 位獨立的 `advisor`**。報告時並列兩份顧問意見、規劃者的建議與分歧。做法與例外見 `docs/orca-multi-agent.md` §1.1。
 
 ### 報告方式
 
 執行中不需要旁白。**每個階段結束時給完整交代**：做了什麼、驗證結果的實際數字、與 plan 的偏離、沒解決的問題。偏離與已知問題主動講，不等問。
+
+各工作區直接和開發者討論當地決策。規格核可、跨工作區相依解除、驗收、PR 合併等節點，各工作區才向主工作區回報結果、證據與剩餘事項。
 
 ---
 
@@ -221,8 +223,8 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 3. `git push -u origin <branch>`。
 4. `gh pr create`，標題與描述依上述規範。
 5. `gh pr checks --watch` 盯 CI。**紅了就自己修、重推、再盯**，修完報告原因與改動。
-6. CI 全綠後 `gh pr merge --squash --delete-branch`。
-7. 切回 `main`、`git pull`。
+6. CI 全綠後 `gh pr merge --squash`。
+7. 主工作區更新 `main`。工作區與分支按 §11 的清理規則處理。
 
 **PR 落後 `main` 時**（訊息 `the head branch is not up to date with the base branch`）：用 `gh pr update-branch <n>` 把 `main` 併進該分支，**等 CI 重跑完再合併**。它是 merge 不是 rebase，不需要 force push。**不要用 `--admin` 繞過**——分支保護正是「main 永遠可部署」的執行機制。
 
@@ -238,7 +240,7 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 worktree 規則（原因與細節見 `docs/orca-multi-agent.md` §7.1）：
 
-1. **一個任務 = 一個 worktree = 一個分支。** 同一個分支不能同時簽出在兩個 worktree。
+1. **各獨立實作使用自己的 worktree 與分支。** 已有合適的 worktree 就沿用。唯讀徵詢可用既有 worktree。同一個分支不能同時簽出在兩個 worktree。
 2. **新 worktree 第一件事跑 `pnpm install`**（連帶 `prisma generate`）。**不要跨 worktree 共用 `node_modules`。**
 3. **`.worktreeinclude`** 列出新 worktree 要複製的未版控檔案。新增這類檔案時同步更新它。
 4. **同時只有一個 worktree 跑 e2e**（共用 `ledger_test`、固定 port）。例外：API e2e 的 `.env.test` 指向自己的資料庫就能平行。
@@ -249,17 +251,14 @@ Orca 的 skill（`orca-cli`、`orchestration` 等）使用前先執行 `orca ski
 
 ### 多代理
 
-Claude Code 是協調者，主要工作是規劃與驗收，不是實作。
-
-- 實作預設派給 worker，能拆就拆，能平行的一次全部派出去。協調者自己動手的只有三種：`packages/shared` 的型別契約、授權與資料隔離的測試（先寫、先看到紅燈）、寫 Task spec 比自己改還久的瑣碎改動。
-- 網頁（`apps/web`）例外：設計與實作都由 Codex 全權負責，瑣碎改動也派出去。協調者看設計只給建議，不自己出設計稿、不改網頁程式（開發者 2026-10-24）。細節見 `docs/orca-multi-agent.md` §1。
-- 派工走 `orca orchestration`，不要用 Claude Code 內建的 Agent tool。它指定不了 Codex、Pi 等其他 agent。
-- 要用哪個模型，看 `docs/orca-multi-agent.md` §0 的角色表。這是唯一記錄模型 id 的地方，其他文件只寫角色名（`default`、`backend`、`fallback-1`～`3`）。
-- 難或要求高準確的工作（migration SQL、授權與資料隔離、鎖、金額與帳戶規則）派 `backend` 角色；其餘，包括單純的 API 端點與補測試，派 `default`。schema、API、授權的產出不管哪個角色做，驗收時都逐行看 diff，自己重跑隔離測試與 e2e。
-- 額度用完由協調者主動查，自動換到下一層；上層恢復後，下一次派工自動回到原本的層。程序見 `docs/orca-multi-agent.md` §4。
+- 主工作區統整方向、優先序、跨工作區相依與共用資源。主工作區建立任務，並指派工作區與 worker。
+- 各工作區在當地規劃、執行、測試與驗收。當地續派限於主工作區已建立並指派的任務與 worker。實作角色與驗收責任見 `docs/orca-multi-agent.md` §1。
+- 派工用 `orca orchestration`。新 worker 預設放在子工作區。預建時明確指定父工作區。已有工作區時沿用。只有使用者明確要求才建頂層工作區。
+- `docs/orca-multi-agent.md` §0 的角色表是模型與強度的唯一來源。新聊天依角色表啟動，既有聊天沿用原設定。每次新開子工作區的規劃前，依 §4 查 Codex 的 5 小時與週用量。
 - 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
-- worker 的產出一律由協調者驗收後才進 PR。
-- 一件事完成就換 session，不等 context 滿（`docs/orca-multi-agent.md` §6.3）。換 session 時先讀 `docs/handoff.md` 與自己工作區的 `docs/handoff/<工作區>.md`。交接後舊 session 要收掉，但不要自己關自己，改成報告 handle 與關閉指令，由使用者關。
+- worker 的產出一律由當地工作區驗收後才進 PR。
+- 依 `docs/orca-multi-agent.md` §6 確認交接條件。新 session 先讀 `docs/handoff.md` 與自己工作區的 `docs/handoff/<工作區>.md`。
+- 每週日 10:00（Asia/Taipei）從主工作區清理本專案。關閉前依 `docs/orca-multi-agent.md` §7.2 即時重查保存與活動狀態。
 
 派工指令、Task spec 格式、換層、各 agent 的坑、交接程序，都在 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
 
