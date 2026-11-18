@@ -71,7 +71,7 @@
 | [`phase-2l-home-layout.md`](specs/phase-2l-home-layout.md)                         | 2l 首頁 A+ 版面與可編輯版面（拖卡片、調寬高、存伺服器） | 已完成             |
 | [`phase-2m-home-visual-refresh.md`](specs/phase-2m-home-visual-refresh.md)         | 2m 首頁風格、借還圖卡與雙指標柱狀圖動畫                 | 已完成             |
 | [`r1-idempotency.md`](specs/r1-idempotency.md)                                     | R1 防重複送出（Idempotency-Key）                        | 已完成（#223）     |
-| [`r6-token-revocation.md`](specs/r6-token-revocation.md)                           | R6 登出讓憑證失效（登入紀錄表）                         | 已完成（#R6PR）    |
+| [`r6-token-revocation.md`](specs/r6-token-revocation.md)                           | R6 登出讓憑證失效（登入紀錄表）                         | 已完成（#227）     |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                                        | 長期有效           |
 
 已廢止的規格放 [`docs/specs/archive/`](specs/archive/)，檔頭會標明被誰取代。

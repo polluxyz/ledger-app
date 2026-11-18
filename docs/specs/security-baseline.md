@@ -87,7 +87,7 @@
   作法未定（token 版本號欄位、session 表、短效 access token + refresh token）。屬後端變更，另立 Step 討論。
   但空窗期現在就要定：若採短效 access token，**失效空窗不得超過 15 分鐘**，且必須在該 Step 的 spec 寫明這是刻意接受的近似。
   驗證：e2e——登入取 token → 登出 → 用舊 token 打 `/users/me` → 期望 `401`（若採短效 token 方案，改驗「超過空窗期後回 401」）。
-  **已達成**（2026-11-18，#R6PR）：採登入紀錄表，登出立刻失效、沒有空窗。見 [`r6-token-revocation.md`](r6-token-revocation.md) 決策 376、378，e2e 為 `SC-TV1`。
+  **已達成**（2026-11-18，#227）：採登入紀錄表，登出立刻失效、沒有空窗。見 [`r6-token-revocation.md`](r6-token-revocation.md) 決策 376、378，e2e 為 `SC-TV1`。
 - **SEC-3｜安全標頭**：分兩層，別混在一起。
   **API**（`apps/api`）：`X-Content-Type-Options: nosniff`、`Referrer-Policy`，以 `helmet` 一次配齊即可。
   **Web**（`apps/web` 的靜態主機）：再加 `X-Frame-Options`（或 CSP 的 `frame-ancestors`）與 SEC-4 的 CSP。防止被嵌進 iframe 對純 API 沒什麼意義，對有畫面的 Web 才有。
