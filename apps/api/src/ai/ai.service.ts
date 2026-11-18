@@ -99,6 +99,10 @@ export class AiService {
       });
       usage = response.usage ?? null;
       timings = response.timings;
+      if (response.refused) {
+        outcome = 'refusal';
+        return { drafts: [] };
+      }
       if (response.truncated) {
         outcome = 'truncated';
         return { drafts: [] };

@@ -126,6 +126,33 @@ describe('AiService', () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('outcome=truncated'));
   });
 
+  it.each([false, true])(
+    'SC-P45 SC-P46.5 SC-P48: refusal precedes truncation (%s) and records usage once',
+    async (truncated) => {
+      const { service, provider, quota } = setup();
+      const usage = { promptTokens: 120, completionTokens: 30 };
+      provider.complete.mockResolvedValue({ content: null, refused: true, truncated, usage });
+      expect(await service.parseTransaction('me', dto)).toEqual({ drafts: [] });
+      expect(quota.reserve).toHaveBeenCalledTimes(1);
+      expect(quota.record).toHaveBeenCalledTimes(1);
+      expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', usage);
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(
+        expect.stringMatching(/^outcome=refusal .*reasoningTokens=unknown$/),
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain(dto.text.trim());
+    },
+  );
+
+  it('SC-P44.5: invalid provider content logs only the fixed invalid outcome', async () => {
+    const { service, provider, quota } = setup();
+    const usage = { promptTokens: 10, completionTokens: 2 };
+    provider.complete.mockResolvedValue({ content: null, truncated: false, usage });
+    expect(await service.parseTransaction('me', dto)).toEqual({ drafts: [] });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('outcome=invalid'));
+    expect(quota.record).toHaveBeenCalledWith('me', '2040-01-01', usage);
+  });
+
   it('SC-P37.5 / SC-P37.6: appends timings and reasoning tokens without changing quota usage', async () => {
     const { service, provider, quota } = setup();
     const usage = { promptTokens: 10, completionTokens: 20, reasoningTokens: 7 };
