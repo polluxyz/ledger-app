@@ -2,7 +2,7 @@
 
 spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC-TV1～SC-TV16）。後端與網頁合成一個 PR（決策 381 (a)）。
 
-> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/r6-token-revocation-todo.md` 開發者 2026-11-18 回「核可」。
+> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/archive/r6-token-revocation-todo.md` 開發者 2026-11-18 回「核可」。
 
 ## 0. 起點
 
@@ -259,3 +259,52 @@ spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC
 ## 7. 實作紀錄
 
 （實作時填寫：migration SQL、`sid` 非 UUID 的 Prisma 實測、`stats-perf` 結果、偏離與待辦。）
+
+### D（2026-11-18）
+
+- docs PR #225 squash merge（`a9bc3a3`），CI 3 項綠。主工作區已 `git pull`。
+
+### T0（2026-11-18）
+
+- `apps/api/.env.test` 改指向 `ledger_review_test`，`prisma migrate deploy` 套用 30 個 migration。指令前先 `export DATABASE_URL=...`（從 `.env.test` 讀）；只靠預設會讀到 `.env` 的 `ledger_dev`。
+- 正式程式的 2 處暫時值照 §1.1：`auth.service.ts` 的 `sid: randomUUID()`、guard 的 `sid` 型別不符當空字串，都標了「R6 T0 暫時值」註解。
+- 計畫外但在範圍內：加了 `sid` 後，2 個單元測試的預期值要跟著改，整合分支才會綠。
+  - `jwt-auth.guard.spec.ts`：mock payload 與 `request.user` 的預期多 `sid`。
+  - `auth.service.spec.ts`：`signAsync` 的預期多 `sid: expect.any(String)`。
+  - `sub`、`email` 的斷言不變。
+- `signRawToken` 另建一個沒有預設選項的 `JwtService`。原因：`@nestjs/jwt` 會把模組的 `signOptions.expiresIn` 併進每次簽發，用 app 裡那個就簽不出「沒有 `exp`」的憑證。
+- 先紅的結果（`pnpm --filter @ledger/api test:e2e -- auth-session-isolation`）：10 條全紅，原因都符合預期。
+  - SC-TV1、SC-TV2：登出那步拿到 404。
+  - SC-TV5：偽造的憑證拿到 200。
+  - SC-TV6：沒有 `sid`、沒有 `exp`、`sid` 不是字串、`sid` 空字串、`sid` 指向不存在的紀錄都拿到 200。
+  - SC-TV6：`sub` 是數字拿到 500（Prisma 驗證錯誤），`sub` 空字串拿到 404。T1 的 guard 第 3 步會把這 2 種擋成 401。
+- typecheck（全部 package）、API lint 綠。API 單元測試 70 suites、1084 tests 全過。
+
+### T2（2026-11-18）
+
+- `r6-web` 2 個 commit：`2fa4bfe`（登出、Vitest、SC-TV15）、`22a3136`（退回修正）。只改 `apps/web`，沒有新套件。
+- 退回 1 處：`onTokenExpired(clearLocalSession)` 會把瀏覽器的 Event 當成 `expectedToken` 傳入。行為碰巧正確，但違反型別語意。改成 `onTokenExpired(() => clearLocalSession())`。listener 在 `invalidateToken` 清完 storage 後同步執行，不帶參數就是無條件清本機。既有的 401 Vitest 涵蓋這條路徑。
+- 已知且接受：登出回應晚到、而期間別的分頁已換新憑證時，本分頁仍會清 React 狀態、`activeLedgerId` 與查詢快取，只有 storage 裡的新憑證保留。重新整理就恢復登入，不會誤刪新憑證（W295(b)）。
+- Worker 回報：Web Vitest 143 檔、1311 項通過；lint、typecheck、format:check 綠。`StatsPage` 既有測試在並行時 1 次 5000ms 逾時，單獨重跑通過，與本次改動無關。
+- 派工的坑：worker_done 後終端機會被自動釋放（`autoReleaseAt`），退回修正無法送回原終端機，要另開新 worker。context 壓縮後協調者要先 `run-use --id <run>` 重新綁定。
+
+### T1（2026-11-18）
+
+- `r6-api` 1 個 commit：`659c7da`。17 個檔案，只改 `apps/api` 與 `.env.example`，沒有新套件。
+- migration `20261118090000_r6_auth_session`：1 個 CREATE TABLE、2 個 INDEX（`userId`、`expiresAt`）、1 個外鍵（`ON DELETE CASCADE`），不改現有的表。
+- 逐行驗收：guard 照決策 376 的 6 步，`findUnique` 不在 try/catch 內；login 先寫紀錄再簽，`exp` 與 `expiresAt` 共用取整到秒的值；`auth.module.ts` 已拿掉 `expiresIn`；登出 where 是 `{ id: sid, userId, revokedAt: null }`；清理只看 `expiresAt`、每次最多 100 筆，失敗只記錯誤名稱。3 個既有測試只改取得憑證的行與 import。既有單元測試只刪了 T0 的暫時註解與 constructor 那 1 行。
+- `sid` 非 UUID 實測：`findUnique({ where: { id: 'not-a-uuid' } })` 回 `null`，不丟錯（`id` 是 TEXT）。guard 不需另加 UUID 格式檢查。已寫成 `auth-session.e2e-spec.ts` 的 1 條測試。
+- Worker 回報：API e2e 67 suites、761 tests 全過；API 單元測試 71 suites、1122 tests；lint、typecheck、format:check 綠。
+- `stats-perf`：worker 跑 1 次，統計端點 p95 1066.0ms 未過（median 296.7ms）。協調者在 worker 都停下後重跑 1 次：統計 305.3ms、趨勢 108.0ms、資產趨勢 37.9ms，全過。2j 也出現過同樣的單次尖峰（966.7ms，plan 2j 實作紀錄），判斷是當時另一個 worker 同時跑 Vitest 造成的負載。guard 每個請求多 1 次主鍵查詢，median 從 2j 的約 270ms 到 287ms。
+- 整合時協調者自己改 1 處：`auth.controller.ts` 登入那行的註解被改成「保持既有的登入回應狀態碼」，少了原因。改回說明「為什麼維持 200」。
+
+### T3（2026-11-18）
+
+- 整合分支：T1 → T2 依序 merge（`0ba10cc`、`65a5166`），沒有衝突。
+- 根目錄 lint、typecheck、format:check、build 綠。
+- `pnpm test`：shared 160、API 1122 全過。Web 每輪都有 4～8 條 5000ms 逾時，每輪是不同的測試。
+  - 對照：在 `main`（`a9bc3a3`，不含 R6）跑同一套 Web 測試，13 條逾時。逾時不是 R6 造成的，是本機在 Vitest 預設並行數下的負載（CPU 閒置時也發生，Windows Defender 掃描佔用最高）。
+  - `vitest run --maxWorkers=6`（不改 5000ms 上限）：143 檔、1311 條全過。
+  - 沒有改 Vitest 設定。要改是網頁範圍，屬 Codex；CI 上 `main` 一直是綠的，先記錄不處理。
+- API e2e（`ledger_review_test`）：67 suites、761 tests 全過，525 秒。`auth-session-isolation` 與 `auth-session` 單獨重跑：2 suites、20 tests 全過（SC-TV1～SC-TV12）。
+- Web e2e：143 條全過，8.0 分鐘，含 `logout.spec.ts`（SC-TV15）。

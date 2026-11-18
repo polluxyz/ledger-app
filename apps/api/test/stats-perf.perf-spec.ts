@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { cpus, platform, totalmem } from 'node:os';
 import type { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import type { AuthTokenResponse } from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { Prisma } from '../src/generated/prisma/client';
@@ -147,7 +147,11 @@ async function seedPerformanceData(
       })),
     ],
   });
-  const token = await app!.get(JwtService).signAsync({ sub: userId, email });
+  const login = await request(httpServer(app!))
+    .post('/api/auth/login')
+    .send({ email, password: 'stats-perf-fixture-password' })
+    .expect(200);
+  const token = (login.body as AuthTokenResponse).accessToken;
   const primaryCashId = createId();
   const primaryTemporaryId = createId();
   const primarySavingsId = createId();

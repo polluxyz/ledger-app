@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { Account, AuthTokenResponse, AuthUser, IDEMPOTENCY_KEY_HEADER } from '@ledger/shared';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import type { Env } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -103,6 +106,35 @@ export async function registerAndLogin(
   const token = (loggedIn.body as AuthTokenResponse).accessToken;
 
   return { token, userId };
+}
+
+/**
+ * 已註冊的使用者再登入 1 次，回傳新的憑證（R6）。每次登入都是一筆新的登入紀錄，
+ * 所以要「同一個人拿 2 張憑證」或「換一張憑證再試」時用它，不要自己簽。
+ */
+export async function loginAgain(app: INestApplication, email: string): Promise<string> {
+  const res = await request(httpServer(app))
+    .post('/api/auth/login')
+    .send({ email, password: PASSWORD })
+    .expect(200);
+  return (res.body as AuthTokenResponse).accessToken;
+}
+
+/**
+ * 用正式的密鑰直接簽一張憑證。**只給負面測試用**（R6 決策 384 (c)）：模擬偽造、
+ * 格式錯誤、過期或部署前的舊憑證，斷言 guard 會拒絕。要「能用的憑證」一律走
+ * `registerAndLogin` 或 `loginAgain`，因為只有真的登入才會寫登入紀錄。
+ *
+ * 刻意另建一個沒有預設選項的 `JwtService`：app 裡那個帶著模組的 `expiresIn`，
+ * 會自動補上 `exp`，就簽不出「沒有 exp」的憑證。內容與選項完全由呼叫端決定。
+ */
+export function signRawToken(
+  app: INestApplication,
+  payload: Record<string, unknown>,
+  options: JwtSignOptions = {},
+): Promise<string> {
+  const secret = app.get(ConfigService<Env, true>).get('JWT_SECRET', { infer: true });
+  return new JwtService({ secret }).signAsync(payload, options);
 }
 
 /** 取得使用者第一個（註冊時自動建立的個人）帳本 id。 */

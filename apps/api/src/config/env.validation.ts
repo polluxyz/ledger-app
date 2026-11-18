@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseDurationToMs } from './duration';
 
 /**
  * API 啟動所需環境變數的 schema。在啟動時驗證一次，讓缺漏／不合法的值「早死」
@@ -7,7 +8,17 @@ import { z } from 'zod';
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must contain at least 32 characters'),
-  JWT_EXPIRES_IN: z.string().min(1).default('7d'),
+  JWT_EXPIRES_IN: z
+    .string()
+    .default('7d')
+    .refine((value) => {
+      try {
+        parseDurationToMs(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, '必須是正整數加 s、m、h、d，例如 7d'),
   PORT: z.coerce.number().int().positive().default(3000),
   /**
    * API 監聽的網路位址。預設只聽本機，同一個網路裡的其他裝置連不到；

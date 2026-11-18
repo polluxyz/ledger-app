@@ -19,10 +19,15 @@ export interface AuthTokenResponse {
   accessToken: string;
 }
 
-/** 解出的 JWT payload。`sub` 是使用者 id（JWT 標準 claim）。 */
+/**
+ * 解出的 JWT payload。`sub` 是使用者 id（JWT 標準 claim）。
+ * `sid` 是這一次登入在登入紀錄表的 id（R6 決策 375、383）：guard 每個請求用它查
+ * 紀錄是否已撤銷或過期，登出也只撤銷這一筆。
+ */
 export interface JwtPayload {
   sub: string;
   email: string;
+  sid: string;
 }
 
 /**
