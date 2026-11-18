@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1021,6 +1021,35 @@ describe('TransactionForm', () => {
     expect(body).not.toHaveProperty('accountId');
   });
 
+  it('retries a split without recreating a typed counterparty', async () => {
+    routeFetch(trackingLedger);
+    const route = fetchMock.getMockImplementation()!;
+    let splitAttempts = 0;
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/splits') && init?.method === 'POST' && ++splitAttempts === 1) {
+        return Promise.reject(new TypeError('connection lost'));
+      }
+      return route(url, init);
+    });
+    const user = userEvent.setup();
+    renderTrackingForm();
+    await user.type(screen.getByLabelText('金額'), '750');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    await user.type(screen.getByRole('combobox', { name: '付款人' }), '新對象');
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    await user.click(submit);
+    await screen.findByRole('alert');
+    await user.click(submit);
+    await waitFor(() => expect(splitAttempts).toBe(2));
+
+    const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(writes.filter(([url]) => url.endsWith('/counterparties'))).toHaveLength(1);
+    const splitWrites = writes.filter(([url]) => url.endsWith('/splits'));
+    expect(splitWrites[1]?.[1]?.body).toBe(splitWrites[0]?.[1]?.body);
+    expect(splitWrites[1]?.[1]?.headers).toEqual(splitWrites[0]?.[1]?.headers);
+  });
+
   it('starts the payer picker blank and never offers me', async () => {
     routeFetch(trackingLedger);
     const user = userEvent.setup();
@@ -1376,7 +1405,7 @@ describe('TransactionForm', () => {
     expect(screen.getByRole('button', { name: /^新增$/ })).toBeDisabled();
   });
 
-  it('SC-W90 creates a typed payer first, then POSTs its returned id on the transaction', async () => {
+  it('SC-W90 creates a typed payer once even if the form submits twice before rendering', async () => {
     routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
     const user = userEvent.setup();
     renderSharedForm();
@@ -1387,13 +1416,24 @@ describe('TransactionForm', () => {
     await selectFoodCategory(user);
     await user.click(screen.getByRole('button', { name: '改為選付款人' }));
     await user.type(screen.getByRole('combobox', { name: '付款人' }), '新客人');
-    await user.click(screen.getByRole('button', { name: /^新增$/ }));
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    expect(submit).toBeEnabled();
+    const form = submit.closest('form')!;
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
 
     const peopleRequest = await requestDetails('POST', '/ledgers/ledger-shared/people');
     const transactionRequest = await requestDetails('POST', '/ledgers/ledger-shared/transactions');
     expect(peopleRequest.path.endsWith('/ledgers/ledger-shared/people')).toBe(true);
     expect(peopleRequest.method).toBe('POST');
     expect(peopleRequest.body).toEqual({ name: '新客人' });
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) => url.endsWith('/ledgers/ledger-shared/people') && init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
     const peopleCallIndex = fetchMock.mock.calls.findIndex(
       ([url, init]) => url.endsWith('/ledgers/ledger-shared/people') && init?.method === 'POST',
     );
@@ -1411,6 +1451,37 @@ describe('TransactionForm', () => {
     });
     const submittedSplit = transactionRequest.body.ledgerSplit as { shares?: unknown[] };
     expect(Array.isArray(submittedSplit.shares)).toBe(true);
+  });
+
+  it('reuses the created payer when retrying before the people query has refreshed', async () => {
+    routeFetch(sharedLedger, { ledgerPeople: sharedPeople });
+    const route = fetchMock.getMockImplementation()!;
+    let transactionAttempts = 0;
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/transactions') && init?.method === 'POST' && ++transactionAttempts === 1) {
+        return Promise.reject(new TypeError('connection lost'));
+      }
+      return route(url, init);
+    });
+    const user = userEvent.setup();
+    renderSharedForm();
+    await waitForSharedPeople();
+    await user.type(screen.getByLabelText('金額'), '500');
+    await selectFoodCategory(user);
+    await user.click(screen.getByRole('button', { name: '改為選付款人' }));
+    await user.type(screen.getByRole('combobox', { name: '付款人' }), '新客人');
+    const submit = screen.getByRole('button', { name: /^新增$/ });
+    await user.click(submit);
+    await screen.findByRole('alert');
+    await user.click(submit);
+    await waitFor(() => expect(transactionAttempts).toBe(2));
+
+    const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+    const payerWrites = writes.filter(([url]) => url.endsWith('/people'));
+    const transactionWrites = writes.filter(([url]) => url.endsWith('/transactions'));
+    expect(payerWrites).toHaveLength(1);
+    expect(transactionWrites[1]?.[1]?.body).toBe(transactionWrites[0]?.[1]?.body);
+    expect(transactionWrites[1]?.[1]?.headers).toEqual(transactionWrites[0]?.[1]?.headers);
   });
 
   it('SC-W91 opens a legacy shared transaction with no split and PATCHes current members only', async () => {

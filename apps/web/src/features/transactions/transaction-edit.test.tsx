@@ -190,6 +190,7 @@ describe('Editing and deleting a transaction', () => {
 
     const body = await patchedBody();
     expect(body.amount).toBe(20000);
+    expect(body.date).toBe(lunch.date);
     expect(body.categoryId).toBe('cat-1');
     expect(body.accountId).toBe('acc-1');
   });
