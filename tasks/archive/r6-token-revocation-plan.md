@@ -2,7 +2,7 @@
 
 spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC-TV1～SC-TV16）。後端與網頁合成一個 PR（決策 381 (a)）。
 
-> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/r6-token-revocation-todo.md` 開發者 2026-11-18 回「核可」。
+> 核可：spec 由開發者 2026-11-18 回「核可」（含 §10：登出最多等 5 秒）。本 plan 與 `tasks/archive/r6-token-revocation-todo.md` 開發者 2026-11-18 回「核可」。
 
 ## 0. 起點
 
@@ -306,3 +306,5 @@ spec：`docs/specs/r6-token-revocation.md`（決策 373～384、W293～W296、SC
   - 對照：在 `main`（`a9bc3a3`，不含 R6）跑同一套 Web 測試，13 條逾時。逾時不是 R6 造成的，是本機在 Vitest 預設並行數下的負載（CPU 閒置時也發生，Windows Defender 掃描佔用最高）。
   - `vitest run --maxWorkers=6`（不改 5000ms 上限）：143 檔、1311 條全過。
   - 沒有改 Vitest 設定。要改是網頁範圍，屬 Codex；CI 上 `main` 一直是綠的，先記錄不處理。
+- API e2e（`ledger_review_test`）：67 suites、761 tests 全過，525 秒。`auth-session-isolation` 與 `auth-session` 單獨重跑：2 suites、20 tests 全過（SC-TV1～SC-TV12）。
+- Web e2e：143 條全過，8.0 分鐘，含 `logout.spec.ts`（SC-TV15）。

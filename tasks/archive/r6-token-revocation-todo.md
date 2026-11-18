@@ -1,6 +1,6 @@
 # R6 任務清單：登出讓憑證失效（登入紀錄表）
 
-plan：`tasks/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocation.md`。
+plan：`tasks/archive/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocation.md`。
 
 - [x] **D docs PR**（協調者）：spec、plan、todo、`docs/README.md`、`docs/handoff.md` 編號、審查報告進度。
       驗收：format:check 綠；CI 全綠、squash merge；主工作區 `git pull` 完成。
@@ -34,5 +34,5 @@ plan：`tasks/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocat
   - 只改 `apps/web`；沒有新套件；Web typecheck、lint 綠。
 - [ ] **T3 整合、驗收、PR、部署**（依賴 T1、T2；協調者）：plan §1.4。
       驗收：逐行看完 diff；lint、typecheck、test、format:check、build 綠；API e2e 全綠（含 SC-TV1～SC-TV8）；Web e2e 全綠（含 SC-TV15）；CI 全綠、squash merge；dev 先 `pg_dump` 再 `migrate deploy`；部署後手動走 1 次登入、記帳、登出，舊憑證 401；worker 的 worktree、分支、終端機、測試資料庫清掉。
-- [ ] **T4 文件收尾**（依賴 T3，併進同一個 PR；協調者）：plan §1.5。
+- [x] **T4 文件收尾**（依賴 T3，併進同一個 PR；協調者）：plan §1.5。
       驗收：審查報告 R6 標完成；`security-baseline.md` SEC-2 標達成；`apps/api/CLAUDE.md` 加 e2e 憑證規則；`專案決策脈絡.md`、`CLAUDE.md` §4、`docs/README.md`、`docs/handoff.md`、`docs/handoff/review-specs.md` 更新；spec 標已完成；plan 與 todo 移到 `tasks/archive/`。
