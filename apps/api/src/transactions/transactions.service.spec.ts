@@ -298,6 +298,17 @@ describe('TransactionsService', () => {
       },
     );
 
+    it('does not recount an empty first page of marks', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      expect(await service.listMarked(creatorId, {})).toEqual({
+        items: [],
+        page: 1,
+        limit: 10,
+        total: 0,
+      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
     it('preserves total for a page beyond the last mark', async () => {
       prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: 7n }]);
       expect(await service.listMarked(creatorId, { page: 99, limit: 10 })).toEqual({
@@ -306,6 +317,7 @@ describe('TransactionsService', () => {
         limit: 10,
         total: 7,
       });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
     });
 
     it('normalizes a settlement branch to its repayment for PUT, DELETE and marked responses', async () => {
@@ -573,6 +585,28 @@ describe('TransactionsService', () => {
   });
 
   describe('list', () => {
+    it('does not recount an empty first page of transactions', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      expect(await service.list(ledgerId, creatorId, {})).toEqual({
+        items: [],
+        page: 1,
+        limit: 20,
+        total: 0,
+      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves total for a page beyond the last transaction', async () => {
+      prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: 7n }]);
+      expect(await service.list(ledgerId, creatorId, { page: 99 })).toEqual({
+        items: [],
+        page: 99,
+        limit: 20,
+        total: 7,
+      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    });
+
     it('runs grouping and pagination in SQL', async () => {
       const result = await service.list(ledgerId, creatorId, { page: 3, limit: 500 });
       expect(prisma.$queryRaw).toHaveBeenCalled();
