@@ -30,27 +30,11 @@ test/         e2e（*.e2e-spec.ts）
 
 ## Prisma
 
-Schema 在 `prisma/schema.prisma`。**schema 變更前要先說明並取得同意**（見根目錄 §14）。
-
-```bash
-pnpm --filter @ledger/api exec prisma migrate dev --name <描述>  # 建 migration 並套用
-pnpm --filter @ledger/api exec prisma generate                   # 重新產生 Client
-pnpm --filter @ledger/api exec prisma studio                     # 看資料
-```
-
-- **不可手動改資料庫**，一律走 migration。
-- `prisma migrate dev` 在 agent 的非互動環境不能跑。改用 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 SQL，放進新的 migration 資料夾。
-- worktree 裡的 `apps/api/.env` 指向開發者的 `ledger_dev`。agent 跑 `migrate`／`db` 指令只能對 `.env.test` 的資料庫。
-- `pnpm install` 會透過 `postinstall` 自動跑 `prisma generate`。新 worktree 裡忘了裝相依，型別就會整批紅。
+Schema 在 `prisma/schema.prisma`。變更前依根目錄 §14 取得同意。非互動環境以 `prisma migrate diff --from-schema <舊> --to-schema <新> --script` 產生 migration SQL，放進新的 migration 資料夾。用 `pnpm --filter @ledger/api exec prisma generate` 重新產生 Client。`pnpm install` 會透過 postinstall 產生 Client。執行資料庫指令前讀[測試環境](../../docs/operations/test-environment.md)。
 
 ## 測試
 
-```bash
-pnpm --filter @ledger/api test       # 單元測試
-pnpm --filter @ledger/api test:e2e   # e2e，需要 apps/api/.env.test
-```
-
-e2e 跑的是真的應用程式對真的 `ledger_test` 資料庫，每個測試前清空。**不要與 web 的 Playwright 同時跑**，兩者共用同一個資料庫。
+單元測試用 Jest：`pnpm --filter @ledger/api test`。端對端測試見[測試環境](../../docs/operations/test-environment.md)。
 
 - **e2e 的憑證一律用真的登入取得**（`registerAndLogin`、`loginAgain`）。guard 會查登入紀錄，自己簽的憑證沒有紀錄，會被擋成 401。只有負面測試（驗證「這種憑證要被拒絕」）可以用 `signRawToken`。規則見 `docs/specs/r6-token-revocation.md` 決策 384。
 

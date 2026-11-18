@@ -1,149 +1,45 @@
 # CLAUDE.md
 
-本檔是 Claude Code 在此專案工作的權威指引。與你的通用做法衝突時，以本檔為準。
-
-各項決策「當初為何這樣選」記在《專案決策脈絡.md》。變更選型前先讀它。
-
----
+本檔是專案共用規範。依任務讀相應的分層指引與規格。
 
 ## 1. 專案目標
 
-一套**記帳系統**，兩種使用模式共用同一套帳本模型：
-
-- **個人模式**：使用者管理自己的帳本與交易。
-- **家庭模式**：多人共享同一本帳本，依角色控制權限。
-
-提供 **Web 版**與**行動 App 版（Android / iOS）**，兩者都只透過後端 API 取資料。後續階段的亮點功能是 **AI 自動記帳**：使用者用自然語言（最終目標為語音）描述消費，系統解析成交易草稿，經確認後寫入。
-
-**專案目標是交付一套實際可用的產品**：功能完整、能部署、別人拿去用不會出事。流程與文件的嚴謹度服務於這個目標。
-
-### 四個設計原則
-
-1. **可維護性**：清楚的模組邊界、一致的命名、完整型別，避免過度設計。
-2. **可擴充性**：新功能（特別是 AI provider、新帳本類型）能在不改動核心的前提下加入。
-3. **安全性**：涉及金錢與多人共享資料，授權與資料隔離是第一優先。
-4. **單一後端原則**：業務邏輯只存在於 NestJS 後端。Web 與 App 是純前端，**絕不在前端實作業務邏輯**。兩個前端共用同一套 API。此原則不因前端框架更換而改變。
-
----
+交付可部署的個人與家庭記帳系統。兩種模式共用帳本模型。Web 與行動 App 共用後端 API。業務邏輯只在後端。AI 只產生交易草稿，由使用者確認後走原有寫入流程。
 
 ## 2. 技術選型（已定案，勿擅自更換）
 
-| 層       | 技術                                    |
-| -------- | --------------------------------------- |
-| 語言     | TypeScript（strict），全端統一          |
-| 資料庫   | PostgreSQL                              |
-| 後端     | NestJS                                  |
-| ORM      | Prisma                                  |
-| 驗證     | class-validator（DTO）、Zod（環境變數） |
-| Web      | React + Vite                            |
-| 行動 App | React Native + Expo                     |
-| API 規格 | OpenAPI（NestJS 自動產生）              |
-| 套件管理 | pnpm workspaces（monorepo）             |
-
-認為某項選型在特定情境不適用時，**先提出建議與理由，不要直接替換**。
-
----
+TypeScript strict、NestJS、PostgreSQL、Prisma、class-validator（DTO）、Zod（環境變數）、OpenAPI、React + Vite、React Native + Expo（行動 App 待建）、pnpm workspaces。替換前讀[專案決策脈絡](專案決策脈絡.md)，說明理由並取得同意。
 
 ## 3. 架構與專案結構
 
-```
-[ Web (React) ]  [ App (React Native) ]
-         \            /
-        [ NestJS API ] -- [ Prisma ] -- [ PostgreSQL ]
-```
-
-後端模組：**Auth**（認證授權、JWT、密碼雜湊）、**Users**、**Ledgers**（帳本、成員、角色）、**Accounts**（帳戶與即時餘額）、**Categories**、**Transactions**（核心，介面務必乾淨）。階段四再加 **Ai**（封裝 STT 與 LLM 解析，只產出草稿，不直接寫資料庫，改呼叫 `TransactionsService`）。
-
-```
-apps/api/        NestJS 後端
-apps/web/        React + Vite 前端
-apps/mobile/     React Native App（待建立）
-packages/shared/ 跨端共用型別、常數、工具
-docs/specs/      功能規格
-docs/README.md   文件索引
-tasks/           進行中的 plan 與 todo（做完移到 tasks/archive/）
-```
-
-跨端共用的型別（特別是 API 的 request / response）放 `packages/shared`，確保前後端一致。
-
-- 改了 `packages/shared` 要跑 `pnpm --filter @ledger/shared build`。`dist` 舊了，其他 package 的 typecheck 會說 shared 的欄位不存在。
-- shared 的測試用 Node 內建 test runner 直接跑 `.ts`。被測檔只能 `import type`，不帶副檔名的值匯入會解析不到。
-- 改含中文的檔案不要用 PowerShell 的 `Get-Content`／`Set-Content`，編碼會壞。用 Edit 工具或 Bash。
-
-### 常用指令（repo 根目錄）
-
-```bash
-pnpm lint          # ESLint
-pnpm typecheck     # TypeScript 型別檢查
-pnpm test          # 單元測試
-pnpm build         # 建置
-pnpm format        # Prettier 寫入
-pnpm format:check  # Prettier 檢查（CI 用）
-```
-
-單一 package 用 `pnpm --filter <package-name> <script>`。commit 前至少跑過 lint、typecheck、test、format:check（對齊 CI）。
-
-### 分層規範
-
-NestJS / Prisma 的細節見 `apps/api/CLAUDE.md`；React / Vite 的細節見 `apps/web/CLAUDE.md`。本檔只管全局。
-
----
+- 修改後端或 Web 前，讀對應的 [API 指引](apps/api/CLAUDE.md)或 [Web 指引](apps/web/CLAUDE.md)。
+- 共用型別與工具放 `packages/shared`。修改後先跑 `pnpm --filter @ledger/shared build`，再檢查使用這個套件的程式。
+- shared 使用 Node 內建測試工具。被測檔只能用 `import type`，避免無法解析省略副檔名的值匯入。
+- 用能維持 UTF-8 的工具編輯繁中檔案。
+- 提交前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。平行工作只格式化自己的檔案。
 
 ## 4. 開發階段
 
-**階段三（好友、借還帳、代墊與分帳）已完成到 3l，2j 統計已完成（#154），2k 首頁改版已完成，2l 首頁可編輯版面已完成，2m 首頁風格已完成（#189），階段四 4a AI 文字記帳已完成（#155，真的模型 GLM 驗過），4a 換模型到 Vertex AI 的 DeepSeek V4.1 Flash 已完成（#192、#195），審查修正 R1 防重複送出已完成（#223），R6 登出讓憑證失效已完成（#227），4a 換模型到 Vertex AI 的 Claude Haiku 5.5 程式已合併（#230，真的模型待驗收）。**下一步與分工見 `docs/handoff.md`。階段二已完成。
-
-完整階段表、每份 spec 的用途與狀態見 [`docs/README.md`](docs/README.md)。後續依序是：階段三 好友 + 借還帳 → 階段四 AI 文字版 → 階段五 語音 + 本地模型。
-
-**除非當前階段任務明確要求，不要提前實作後續階段的功能。** 也不要預先建立未來階段才需要的檔案，除非該階段明確要求預留擴充點（如 `LLMProvider` 介面）。
-
----
+階段與規格狀態見[文件索引](docs/README.md#開發階段)。只實作當前核可的範圍與明確要求的擴充點。
 
 ## 5. 開發工作流程
 
-核心原則：**決策要討論，執行不要停。**
-
-```
-Specify --> Plan --> Tasks --> Implement
-   |          |        |          |
-開發者核可 開發者核可 隨 plan 送審 自動做到完
-```
-
-1. **Specify**：新功能或重大變更動工前，先在 `docs/specs/` 寫 spec：目標與成功樣貌、對專案結構的影響、測試策略、界線（Always / Ask first / Never）、**可驗證的成功條件**。**動筆前先列假設清單請開發者確認**——未說出口的假設是最危險的誤解來源。
-2. **Plan**：spec 核可後，技術實作計畫寫進 `tasks/<功能>-plan.md`：元件與相依關係、實作順序、風險與對策、驗證點。
-3. **Tasks**：拆成離散任務寫進 `tasks/<功能>-todo.md`，每個任務有驗收條件與驗證方式，依相依順序排列。**與 plan 一起送審。**
-4. **Implement**：依任務清單做到完。
-
-補充：
-
-- **模糊需求先轉譯成可驗證的成功條件**（「查詢要快」→「交易列表 API 回應 < 500ms」）。
-- **spec 是活文件**：需求或設計變更時先更新 spec 再改程式；spec 與程式碼一起進版控；PR 描述連回對應章節。
-- 單行修正、錯字這類自足的小變更不需完整 spec，但仍要先說清楚驗收條件。
+1. 新功能或重大變更先請開發者確認假設。再寫 `docs/specs/` 規格，列目標、結構影響、界線、測試策略及可驗證的成功條件。
+2. 規格核可後，在 `tasks/` 寫計畫與任務清單。列相依、順序、風險、替代方案、選擇理由與各項驗收方式。兩份文件一起送審。
+3. 計畫核可後一路執行。核可範圍內的問題直接修並記進計畫。偏離前先取得同意。改設計時先更新規格，與程式一同提交。結案後把計畫與任務清單移到 `tasks/archive/`。
+4. 自足的小修先說清楚驗收條件。要開發者拍板時，依[多代理指南 §1.1](docs/orca-multi-agent.md#11-徵詢-advisor)同時徵詢 2 位獨立顧問。
 
 ### 專案 skills
 
-權威指令在 `.agents/skills/`，讓 Codex 讀得到；`.claude/skills/` 的同名入口只連過去：
-
-- [`pr`](.agents/skills/pr/SKILL.md)：建立或更新 PR 時讀。
-- [`implement-spec`](.agents/skills/implement-spec/SKILL.md)：使用者啟動後，在核可範圍內把整份 spec 派工、整合、驗收到完。
-- [`retro`](.agents/skills/retro/SKILL.md)：使用者手動啟動，只提有證據的改善候選。
+建立或更新 PR 時用 [pr](.agents/skills/pr/SKILL.md)。由使用者啟動的流程有 [implement-spec](.agents/skills/implement-spec/SKILL.md) 與 [retro](.agents/skills/retro/SKILL.md)。權威內容在 `.agents/skills/`，Claude Code 的同名入口在 `.claude/skills/`。
 
 ### 決策門控
 
-1. **Spec 與 plan 要核可才動工。** 這是唯一擋得住「整個方向做錯」的閘門，所以要寫得具體：可驗證的成功條件、替代方案、為什麼選這個。
-2. **核可之後一路做到完**，不逐步等同意。過程中可以報告進度，但不停下來等回覆。
-3. **四件事一律先說明再做**（完整清單見 §14）：資料模型變更、API 介面變更、新增相依套件、修改 CI。即使 plan 裡提過也一樣。
-4. **遇到計畫外的問題**：在已核可的範圍內解得掉就解掉，記進 plan 的實作紀錄；會改變方向或觸及上一條的，停下來說明。**偏離已核可的 spec 或 plan 之前一定要先講。**
-5. **Git 全自動**（見 §10），**CI 失敗自動修並重推**，修完報告原因與改動。
-6. **要開發者拍板的決策，先同時徵詢 2 位獨立的 `advisor`**。報告時並列兩份顧問意見、規劃者的建議與分歧。做法與例外見 `docs/orca-multi-agent.md` §1.1。
+§14 的界線即使已列在計畫仍適用。Git 與 CI 依 §10。
 
 ### 報告方式
 
-執行中不需要旁白。**每個階段結束時給完整交代**：做了什麼、驗證結果的實際數字、與 plan 的偏離、沒解決的問題。偏離與已知問題主動講，不等問。
-
-各工作區直接和開發者討論當地決策。規格核可、跨工作區相依解除、驗收、PR 合併等節點，各工作區才向主工作區回報結果、證據與剩餘事項。
-
----
+階段結束時列完成範圍、驗收證據與數字、計畫偏離及剩餘問題。跨工作區回報節點見[多代理指南 §1](docs/orca-multi-agent.md#1-分工)。
 
 ## 6. 資料模型原則
 
@@ -192,101 +88,44 @@ API 採 REST，由 NestJS 產生 OpenAPI：
 
 ## 9. 測試
 
-- 框架 **Jest**（NestJS 內建），Web 端對端用 **Playwright**。
-- 單元測試 `*.spec.ts` 與被測程式碼同目錄；e2e 放各 app 的 `test/` 或 `e2e/`。
-- 核心業務邏輯（交易、授權、帳本權限）要有單元測試。
-- **授權與資料隔離必須有測試覆蓋**，這是安全性的防線。
-- 新增功能一併補測試，勿事後補。
-
----
+新增功能補測試。交易、授權及帳本隔離要有單元測試。測試位置見分層指引。需要資料庫或端對端測試時，先讀[測試環境](docs/operations/test-environment.md)。
 
 ## 10. Git / GitHub 流程
 
 ### 分支與 commit
 
-- `main` 永遠可部署，**禁止直接 push**。
-- 所有開發在 feature branch，透過 PR 合併。分支前綴：`feature/`、`fix/`、`refactor/`、`docs/`、`test/`、`chore/`。
-- Commit 遵循 **Conventional Commits**：`<type>: <簡述>`，type 用 `feat` / `fix` / `docs` / `refactor` / `test` / `chore` / `perf` / `ci`。一個 commit 聚焦一件事。
+從 `main` 開分支，禁止直接推送 `main`。用 `feature/`、`fix/`、`refactor/`、`docs/`、`test/` 或 `chore/` 前綴。每個 commit 聚焦一件事。
 
 ### Pull Request
 
-- 每個 feature / fix 開獨立 PR，**不把無關變更混在一起**。
-- 描述依 `.github/pull_request_template.md` 的三節填：改動與原因、驗證證據、合併風險與回復。實際執行結果對應驗證 commit，未執行的項目如實註明。
-- **標題用 Conventional Commits 格式**，英文。squash merge 後它就是 `main` 上的 commit 標題，必須能獨立看懂。
-- 必須通過 CI 才能合併，合併用 squash merge。
-- 單人開發時亦進行自我 code review，把 PR 當成留給未來審查者的決策紀錄。
+每個工作用獨立 PR。commit 與英文 PR 標題用 Conventional Commits。PR 依 [pr](.agents/skills/pr/SKILL.md) 撰寫，連回規格章節並列對應驗證提交的結果。提交前自我審查。
 
 ### 自動化（不必逐次徵求同意）
 
-1. 自 `main` 開 feature branch。
-2. commit。
-3. `git push -u origin <branch>`。
-4. `gh pr create`，標題與描述依上述規範。
-5. `gh pr checks --watch` 盯 CI。**紅了就自己修、重推、再盯**，修完報告原因與改動。
-6. CI 全綠後 `gh pr merge --squash`。
-7. 主工作區更新 `main`。工作區與分支按 §11 的清理規則處理。
-
-**PR 落後 `main` 時**（訊息 `the head branch is not up to date with the base branch`）：用 `gh pr update-branch <n>` 把 `main` 併進該分支，**等 CI 重跑完再合併**。它是 merge 不是 rebase，不需要 force push。**不要用 `--admin` 繞過**——分支保護正是「main 永遠可部署」的執行機制。
+在授權範圍內自動 commit、push、開 PR、監看 CI、修復並重推。落後 `main` 時用 `gh pr update-branch` 並等 CI 重跑。禁止用 `--admin` 繞過分支保護。全綠後 squash merge，由主工作區更新 `main`。
 
 ### CI
 
-`.github/workflows/`，每個 PR 必跑：安裝相依 → format:check → lint → typecheck → 測試 → build → 兩套 e2e（對 PostgreSQL service container）。
-
----
+`.github/workflows/` 定義 PR 檢查，包含格式、lint、型別、單元測試、建置與兩套端對端測試。
 
 ## 11. Orca 工作環境
 
-開發在 **Orca**（桌面程式，讓多個 agent 各自在獨立 git worktree 平行工作）上進行。
-
-worktree 規則（原因與細節見 `docs/orca-multi-agent.md` §7.1）：
-
-1. **各獨立實作使用自己的 worktree 與分支。** 已有合適的 worktree 就沿用。唯讀徵詢可用既有 worktree。同一個分支不能同時簽出在兩個 worktree。
-2. **新 worktree 第一件事跑 `pnpm install`**（連帶 `prisma generate`）。**不要跨 worktree 共用 `node_modules`。**
-3. **`.worktreeinclude`** 列出新 worktree 要複製的未版控檔案。新增這類檔案時同步更新它。
-4. **同時只有一個 worktree 跑 e2e**（共用 `ledger_test`、固定 port）。例外：API e2e 的 `.env.test` 指向自己的資料庫就能平行。
-5. **多個 PR 同時開著是常態。** 處理方式見 §10「PR 落後 `main` 時」。
-6. **Orca 不是專案相依**，**不可讓任何建置或測試流程依賴它**。
-
-Orca 的 skill（`orca-cli`、`orchestration` 等）使用前先執行 `orca skills get <名稱>` 取得版本相符的說明。
+- 各獨立實作用自己的 worktree 與分支。已有合適的 worktree 就沿用。唯讀徵詢可用既有 worktree。新 worktree 先跑 `pnpm install`。禁止共用 `node_modules`。新增需複製的未版控檔案時更新 `.worktreeinclude`。建置與測試不得依賴 Orca。此專案維持 `CLAUDE.md`，不要新增 `AGENTS.md`。
+- 端對端測試的共用限制見[測試環境](docs/operations/test-environment.md)。dev 部署由主工作區依[部署手冊](docs/operations/dev-deployment.md)執行。
 
 ### 多代理
 
-- 主工作區統整方向、優先序、跨工作區相依與共用資源。主工作區建立任務，並指派工作區與 worker。
-- 各工作區在當地規劃、執行、測試與驗收。當地續派限於主工作區已建立並指派的任務與 worker。實作角色與驗收責任見 `docs/orca-multi-agent.md` §1。
-- 派工用 `orca orchestration`。新 worker 預設放在子工作區。預建時明確指定父工作區。已有工作區時沿用。只有使用者明確要求才建頂層工作區。
-- `docs/orca-multi-agent.md` §0 的角色表是模型與強度的唯一來源。新聊天依角色表啟動，既有聊天沿用原設定。每次新開子工作區的規劃前，依 §4 查 Codex 的 5 小時與週用量。
-- 不要新增 `AGENTS.md`。Pi 遇到它就不讀同目錄的 `CLAUDE.md`。
-- worker 的產出一律由當地工作區驗收後才進 PR。
-- 依 `docs/orca-multi-agent.md` §6 確認交接條件。新 session 先讀 `docs/handoff.md` 與自己工作區的 `docs/handoff/<工作區>.md`。
-- 每週日 10:00（Asia/Taipei）從主工作區清理本專案。關閉前依 `docs/orca-multi-agent.md` §7.2 即時重查保存與活動狀態。
-
-派工指令、Task spec 格式、換層、各 agent 的坑、交接程序，都在 [`docs/orca-multi-agent.md`](docs/orca-multi-agent.md)。派工或交接前先讀它。
-
----
+- 主工作區指派任務。各區負責當地規劃、執行與驗收。先驗收 worker 成果才整合。
+- 派工、規劃角色、交接或整理工作區時讀[多代理指南](docs/orca-multi-agent.md)。用 `orca skills get <名稱>` 取得操作所需的 Orca 說明。
+- 接手既有工作區讀[交接入口](docs/handoff.md)與自己的交接檔。已派 worker 依 Task 指定章節與規格執行。
 
 ## 12. 程式碼檢索（codebase-memory-mcp）
 
-工具用法由 SessionStart hook 注入。**圖譜是衍生視圖**，可能落後於未提交的變更；要據以斷言前回去看實際檔案。
-
-索引名稱 `D-Projects-ledger-app`（`project` 參數填這個）。第一次使用前先跑 `index_status`，`head_sha` 與目前 HEAD 不符就是過期，先重新索引。重新索引的指令、參數陷阱與已知限制見 [`docs/README.md`](docs/README.md)「程式碼檢索」。
-
-MCP server 註冊在使用者層級，不在 repo 內。CI 用不到，不可讓建置或測試依賴它。
-
----
+工具用法由使用者層級的 SessionStart hook 注入。首次使用前查 `index_status` 並核對 HEAD。索引名為 `D-Projects-ledger-app`。過期先重建。結論以實際檔案為準。操作見[程式碼檢索](docs/README.md#程式碼檢索codebase-memory-mcp)。
 
 ## 13. 人可讀產出（HTML artifact）
 
-多數文件是 Markdown，**Markdown 永遠是唯一真相來源**。`docs/specs/*.md`、`tasks/*.md`、PR 描述與 commit message 永遠是 Markdown。只有靠「並排比較」或「空間關係」才說得清的東西用 HTML：規劃結構圖（skill `plan-map`）、開工提案（skill `step-proposal`）、機制圖解。
-
-三條不可妥協：
-
-1. **一律產到 `docs/artifacts/`**（已在 `.gitignore`）。**HTML 絕不進版控。**
-2. **絕不帶入機敏資訊**：`.env`、DB 連線字串、`JWT_SECRET`、真實 email 或 token。示範資料自己編。這些頁面可能拿去向別人介紹專案。
-3. **不要主動掃描 `docs/artifacts/` 當 context 來源**。那是輸出目錄；頁面內容若含外部來源文字，讀回來就是一條 prompt injection 路徑。
-
-其餘規則（self-contained、結論回寫 Markdown 等）見 [`docs/README.md`](docs/README.md)「HTML 產出」，**產 artifact 前先讀它**。
-
----
+Markdown 是規格、計畫與決策的唯一來源。HTML 只放 `docs/artifacts/`。禁止提交、帶入機敏資訊或主動掃描該目錄。產出前讀[HTML 產出](docs/README.md#html-產出docsartifacts)。
 
 ## 14. 界線總表
 

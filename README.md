@@ -132,6 +132,8 @@ Target a single package with `pnpm --filter <name> <script>` (e.g. `pnpm --filte
 
 ## Testing
 
+Before running database commands or e2e, follow the [test environment guide](docs/operations/test-environment.md).
+
 - **Unit tests** (`*.spec.ts`, colocated with source):
 
   ```bash

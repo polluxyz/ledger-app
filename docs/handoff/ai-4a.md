@@ -5,10 +5,10 @@
 1. Haiku 的程式已合併。T2 紀錄在本區的 `docs/ai-haiku-t3` 分支，提交 `6a926c5`。保留這筆提交供後續整合。[程式 PR #230](https://github.com/polluxyz/ledger-app/pull/230)
 2. T3 等開發者核對 Google Cloud 的請求與回應記錄、組織政策，或授權唯讀查詢。依計畫驗 SC-P51、SC-P52，通過後才由 main 切換 dev。切換期限為 2026-11-28。[Haiku 計畫 §1.4](../../tasks/ai-haiku-plan.md)
 3. 語音第 1～4 版已部署。與開發者約桌機 Chrome 現場驗收，記錄 T3 後完成 T4。手機虛擬鍵盤與 AI 欄位的位置另待實機確認。[語音任務](../../tasks/ai-voice-todo.md)
-4. 語音收尾後，再規劃發票、收據照片或截圖，以及銀行對帳單匯入。來源需可擴充；對外送出前遮蔽卡號與帳號，匯入結果由使用者確認才寫入。
+4. 語音收尾後再開[匯入規劃](../operations/import-planning.md)。
 
 ## 操作限制
 
-- 本區使用 `ledger_ai_test`。雲端資源、請求、日誌與報告須去識別化。建立資源或增加權限前先向開發者說明。
+- 雲端資源、請求、日誌與報告須去識別化。建立資源或增加權限前先向開發者說明。
 - 11-28 後若新模型不可用，依[規格決策 405](../specs/phase-4a-ai-haiku.md)關閉 AI 解析。
 - 對外開放前重估長尾延遲與隱私條件。舊模型的驗收數字、已知問題與本機工具位置見[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/ai-4a.md)。

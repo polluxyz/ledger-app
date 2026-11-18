@@ -21,4 +21,4 @@ plan：`tasks/ai-voice-plan.md`；spec：`docs/specs/phase-4a-voice.md`。
 - [ ] **T3 真實驗收**（依賴 T2b；開發者現場，協調者記錄）：plan §1.4。
       驗收：SC-SR16 冒煙（含 3 個時間點的取消）、SC-SR14 20 句、SC-SR15 6 種逆境的結果填進 plan §7，失敗也照記；最多 26 次解析；測前測後交易筆數相同；門檻結果照實報告。
 - [ ] **T4 收尾**（依賴 T3；協調者）：plan §1.5。
-      驗收：`專案決策脈絡.md`、`CLAUDE.md` §4 更新；plan 與 todo 移到 `tasks/archive/`；docs PR 合併。
+      驗收：`專案決策脈絡.md`、[文件索引](../docs/README.md#開發階段) 更新；plan 與 todo 移到 `tasks/archive/`；docs PR 合併。
