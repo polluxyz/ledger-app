@@ -46,7 +46,7 @@ spec §6 指定 SC-SR5、SC-SR6 由協調者先寫、先紅。這兩條管「舊
     5. 卸載 → `abort` 1 次，`console.error` 沒有被呼叫。
     6. 在 `<StrictMode>` 裡重跑第 1 項與 SC-SR5 第 1、3 項，結果相同。
 - 紅的原因：現在沒有麥克風按鈕，`getByRole('button', { name: '開始語音記帳' })` 找不到。只接受這個原因。其他原因（型別錯、mock 寫錯）先修好再交出去。
-- 這兩個檔案只是測試，不改正式程式。「協調者不改網頁程式」有一個例外：隔離測試先寫、先紅（根目錄 `CLAUDE.md` §11）。
+- 這兩個檔案只是測試，不改正式程式。「協調者不改網頁程式」有一個例外：隔離測試先寫、先紅（[多代理指南 §1](../docs/orca-multi-agent.md#1-分工)）。
 
 ### 1.2 語音 hook 與畫面（T1，`default` 的 Codex）
 
@@ -223,7 +223,7 @@ T1k 依開發者「更強的codex」的要求用 `backend` 角色，因為要處
 
 ### 1.5 收尾（T4，協調者）
 
-- 開一個 docs PR：`專案決策脈絡.md` 補「語音為什麼先用瀏覽器內建辨識」（spec §9）；`CLAUDE.md` §4 更新進度；plan 與 todo 移到 `tasks/archive/`。
+- 開一個 docs PR：`專案決策脈絡.md` 補「語音為什麼先用瀏覽器內建辨識」（spec §9）；[文件索引](../docs/README.md#開發階段) 更新進度；plan 與 todo 移到 `tasks/archive/`。
 
 ## 2. 實作順序
 

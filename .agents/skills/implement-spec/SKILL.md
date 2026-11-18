@@ -28,7 +28,7 @@ metadata:
 
 可開工代表前置任務已驗收且整合到本批工作的基底。資源限制另行協調，資源忙碌時先派可獨立進行的工作，不能把忙碌判成任務失敗：
 
-- **測試資料庫**：會碰 Prisma 的 worker，派工前由協調者把它 worktree 的 `apps/api/.env` 與 `.env.test` 都指向專屬的 `ledger_<名稱>_test`（細節見 `docs/orca-multi-agent.md` §3）。`ledger_dev` 永遠不碰。
+- **測試資料庫**：派工前由協調者依[測試環境](../../../docs/operations/test-environment.md)配置及核對。worker 禁止接觸 `ledger_dev`。
 - **Web e2e**：Playwright 用固定 port 3100／5273，整台機器同時只能一個 worktree 跑，平行的其他分支 session 也算在內。跑之前先看 port 有沒有被占。API e2e 各用各的資料庫就能平行。
 - **dev 環境**：port 3000／5173 是開發者在主工作區跑的 dev 伺服器。部署到 dev 只在主工作區做，依交接文件的部署步驟。
 - **Codex 額度**：每次啟動子工作區的新規劃前，依 `docs/orca-multi-agent.md` §4 查當前 5 小時與週用量。該門檻只用於那次規劃。實作與顧問各依 §0 的角色表。
@@ -48,7 +48,7 @@ metadata:
 
 ## 決策門控與溝通
 
-- `CLAUDE.md` §5 決策門控第 3 條的四件事（資料模型、API 介面、相依套件、CI），即使 plan 已寫到，動手前仍先向使用者說明。偏離已核可的 spec 或 plan 之前先停下說明；在核可範圍內解得掉的問題，解掉並記進 plan 的實作紀錄。
+- `CLAUDE.md` §5 「決策門控」的四件事（資料模型、API 介面、相依套件、CI），即使 plan 已寫到，動手前仍先向使用者說明。偏離已核可的 spec 或 plan 之前先停下說明；在核可範圍內解得掉的問題，解掉並記進 plan 的實作紀錄。
 - 跟自己派出的 worker 透過 `orca orchestration` 溝通。需要開發者決定時，在當地依 `docs/orca-multi-agent.md` §1.1 同時徵詢 2 位獨立顧問，再直接與開發者討論。
 - 規格核可、跨工作區相依解除、驗收、PR 合併等節點，各工作區才向主工作區回報結果、證據與剩餘事項。跨工作區阻塞交由主工作區協調。
 

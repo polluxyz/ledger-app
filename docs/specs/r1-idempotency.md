@@ -226,7 +226,7 @@ API 端的 SC 用 API e2e（真的 PostgreSQL）驗證，進 CI。網頁端的 S
 ## 8. 部署
 
 1. 後端與網頁同一個 PR 合併（決策 372）。
-2. 照 `docs/handoff/main.md`「替開發者部署」第 3 步：先 `pg_dump` 備份 `ledger_dev`，`prisma generate`，再 `prisma migrate deploy`。
+2. 照 [部署手冊](../operations/dev-deployment.md#替開發者部署)：先 `pg_dump` 備份 `ledger_dev`，`prisma generate`，再 `prisma migrate deploy`。
 3. 重開 API 與 Vite。提醒開發者按 `Ctrl + Shift + R`，舊分頁沒有鍵會收到 400。
 4. 回復：revert PR 後重新部署。新表留著不影響舊程式；要移除就另開 migration。
 

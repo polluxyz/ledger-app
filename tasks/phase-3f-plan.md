@@ -94,7 +94,7 @@ W137 的跨頁傳遞：借還頁送出「切到帳本 X、打開結清表單、�
   - 自己重跑 `unified-debts-isolation.e2e-spec.ts`（要從紅轉綠）與兩套 e2e。
   - 用 dev 資料對 SC-F1、F2 的數字（明哥 101200、小華 139400）。
   - `pnpm lint / typecheck / test / build / format:check` 全綠。
-- 合併後：替開發者備份並部署（handoff「替開發者部署」，含 `prisma generate`、`migrate deploy`）。
+- 合併後：替開發者備份並部署（[部署手冊](../docs/operations/dev-deployment.md#替開發者部署)，含 `prisma generate`、`migrate deploy`）。
 
 ## 5. 派工
 

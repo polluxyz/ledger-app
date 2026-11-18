@@ -42,13 +42,7 @@ shared 編譯成 CommonJS，而 Vite 預設不預先打包 workspace 連結的�
 
 ## 指令
 
-```bash
-pnpm --filter @ledger/web dev        # 開發伺服器（5173）
-pnpm --filter @ledger/web test       # 單元測試
-pnpm --filter @ledger/web test:e2e   # Playwright，自己起 API 3100 與 web 5273
-```
-
-Playwright 會自己啟動前後端，不必先開。**不要與 api 的 e2e 同時跑**，兩者共用 `ledger_test` 資料庫。第一次要先裝瀏覽器：`pnpm --filter @ledger/web exec playwright install chromium`。
+開發指令見[專案 README](../../README.md#common-commands)。單元測試用 Vitest：`pnpm --filter @ledger/web test`。端對端測試見[測試環境](../../docs/operations/test-environment.md)。
 
 ## 新增相依
 

@@ -71,26 +71,22 @@ orca orchestration worker-start --task <task_id> --worktree <既有工作區> <�
 
 ## 3. Task spec
 
-worker 只拿得到你寫的 Task spec，所以 spec 要自足。五欄：**Target**（範圍內的檔案）、**Change**（要產出的結果）、**Constraints**（不准碰的邊界）、**Ownership**（可以改什麼、與其他 worker 的界線）、**Observable acceptance**（證明完成的測試或輸出，寫成可逐項打勾的清單）。
+Task spec 要自足。已派 worker 讀本節、任務指定規格與適用分層指引。需要派工或交接時再讀全份指南。五欄：**Target**（範圍內的檔案）、**Change**（要產出的結果）、**Constraints**（不准碰的邊界）、**Ownership**（可以改什麼、與其他 worker 的界線）、**Observable acceptance**（證明完成的測試或輸出，寫成可逐項打勾的清單）。
 
 Constraints 每次都寫下適用的環境與品質限制：
 
 - 不准動 Prisma schema 與 API 介面，需要動就回報（Task spec 明確指派的除外）。
-- 不要跑 e2e，除非 spec 指定。預設多個 worktree 共用 `ledger_test` 資料庫與固定 port（API e2e 的例外見下方）。
-- Prisma 的 `migrate`／`db` 指令只能對 `.env.test` 的資料庫跑。`.worktreeinclude` 會把指向開發者 `ledger_dev` 的 `apps/api/.env` 複製進 worktree，3c 與 3e 的 migration 都曾因此在合併前被套用到 dev 資料庫。
+- 除非 Task 指定，worker 不跑 e2e。若需跑資料庫指令或 e2e，先依[測試環境](operations/test-environment.md)核對目標與平行限制。
 
 - 只對自己的 Target 檔案跑 `pnpm exec prettier --write <檔案>`，不要跑根目錄的 `pnpm format`。平行時會改到別人的檔案。
 - 完成前跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
 - 遇到 provider 錯誤時，把錯誤訊息原文用 escalation 或 `worker_done --outcome failed` 帶回來。不要自己重試，也不要只寫「失敗」。（額度完全用完時 worker 發不出回報，所以協調者還要自己查，見 §4。）
 
-派工前由當地協調者確認環境：
-
-1. 會碰 Prisma 的 worker，其 worktree 的 `apps/api/.env` 和 `apps/api/.env.test` 都要指向專屬測試資料庫。資料庫名稱用 `ledger_<名稱>_test`。Web e2e 只允許清空名稱以 `_test` 結尾的資料庫。
-2. API e2e 用獨立測試資料庫時可平行。Web e2e 使用固定連接埠，仍須一次只跑一個 worktree。
+會碰 Prisma 時，派工前由當地協調者依[測試環境](operations/test-environment.md)準備專屬資料庫。
 
 依 agent 再加：
 
-- **Codex**：開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Codex 預設只讀 `AGENTS.md`，而這個 repo 刻意不建 `AGENTS.md`，因為 Pi 遇到 `AGENTS.md` 就不讀同目錄的 `CLAUDE.md`。本機的 Codex 設定（`~/.codex` 與 Orca 各帳號目錄的 `config.toml`）已加上 `project_doc_fallback_filenames = ["CLAUDE.md"]`（2026-10-21），新 session 會自動載入根目錄的 `CLAUDE.md`。開頭那句仍要寫：worker 從 worktree 根目錄啟動，`apps/api`、`apps/web` 的 `CLAUDE.md` 不會自動載入。Orca 新增 Codex 帳號時，要在新帳號目錄的 `config.toml` 補這一行。
+- **Codex**：Task 開頭寫「先讀根目錄與對應 app 的 `CLAUDE.md`」。Orca 的 Codex 帳號以 `project_doc_fallback_filenames = ["CLAUDE.md"]` 載入根目錄。從根目錄啟動的 worker 仍要讀對應 app 指引。新增帳號時在該帳號的 `config.toml` 補上此設定。
 - **Claude**：加一句「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」。Claude 做長任務時，可能報完進度就停下，`worker_done` 也沒送出。
 
 通用規則（金額不用浮點數、授權 deny by default、前端不寫業務邏輯、註解用繁體中文）已寫在 `CLAUDE.md`，不必重抄。
@@ -167,7 +163,7 @@ worktree 是硬碟上獨立的一份簽出，與主工作區共用同一個 `.gi
 
 - `pnpm install` 會連帶執行 `postinstall: prisma generate`，把 Prisma Client 產到該 worktree 自己的 `node_modules`。不同分支的 lock 檔與 Prisma schema 可能不同，所以不能跨 worktree 共用 `node_modules`。
 - `.worktreeinclude` 目前列 `apps/api/.env`、`apps/api/.env.test`、`.claude/settings.local.json`。
-- 兩套 e2e 共用 `ledger_test` 資料庫，每個測試前都清空，同時跑會互相洗掉資料。port 也是固定的（dev：API 3000 / Vite 5173；e2e：3100 / 5273），會撞。API e2e 不佔 port，worktree 的 `.env.test` 改指向自己的資料庫就能平行（見 §3）。
+- 資料庫、連接埠及平行限制見[測試環境](operations/test-environment.md)。
 - Orca 的 hook 在 `~/.claude/settings.json` 與 `~/.orca/`，skill 在 `~/.agents/skills/`，都在 repo 之外，CI 用不到。可用的 skill：`orca-cli`（worktree、終端機、內建瀏覽器）、`orchestration`（多 agent 協調）、`orca-per-workspace-env`（容器 / VM 環境配方，目前用不到）。
 
 ### 7.2 每週清理

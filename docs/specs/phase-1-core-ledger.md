@@ -311,7 +311,7 @@ packages/shared/src/
 
 ## 8. 界線（Always / Ask first / Never）— 階段一補充
 
-依 CLAUDE.md §12 為準，本階段特別強調：
+依 [安全性規範 §8](../../CLAUDE.md#8-安全性不可妥協)，本階段特別強調：
 
 - **Always**：每個 `/ledgers/{ledgerId}/**` 端點過帳本 guard；所有交易查詢過濾 `deletedAt: null`；schema 變更走 Prisma migration；新增環境變數同步 `.env.example`。
 - **Ask first**：偏離本 spec 的任何設計（含 schema 欄位增減、端點增減、錯誤碼語意變更）；新增本文未列的相依套件。
