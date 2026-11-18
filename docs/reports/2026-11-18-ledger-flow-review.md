@@ -47,3 +47,9 @@
 實作及檢查紀錄見[分帳扣款 #234](https://github.com/polluxyz/ledger-app/pull/234)、[表單重試 #235](https://github.com/polluxyz/ledger-app/pull/235)、[金額輸入 #236](https://github.com/polluxyz/ledger-app/pull/236)、[列表讀取 #237](https://github.com/polluxyz/ledger-app/pull/237)、[內部程式與相依清理 #238](https://github.com/polluxyz/ledger-app/pull/238)及[AI 草稿跨入口重試 #239](https://github.com/polluxyz/ledger-app/pull/239)。
 
 另以 `81f78f4` 跑過 AI 草稿相關的 78 項測試及 Chromium 的 2 項 SC-IK14 情境。後者以專用 PostgreSQL 執行，使用合成模型結果。
+
+### 最後一次整合驗收
+
+主工作區以 `4859863` 整合 AI 草稿修正與測試工具修正。格式、lint、型別檢查、建置及 2,705 項單元測試通過（API 1,221、Web 1,323、shared 161）。其中 6 項專門檢查測試資料庫清理。建置與瀏覽器測試曾同時執行，開發伺服器重新啟動時有一項操作逾時。分開執行後，Chromium 在專用 PostgreSQL 上的 144 項全部通過（7.3 分鐘）。
+
+#237 與 #238 的遠端測試各記錄 1 次測試前清理資料庫的死結。PostgreSQL 會中止當次清空指令。現在只對錯誤碼 `40P01` 最多重試 2 次，其他錯誤立即傳回。位置為 `apps/web/e2e/db.ts:54`。回歸測試位於 `apps/web/src/test/db-reset.test.ts:26`。修前 6 項中有 2 項失敗，修後 6 項都通過。產品的資料庫操作不經過這段測試工具。
