@@ -91,6 +91,7 @@
 | -------------------------------------------------------------------- | ---------------------------- |
 | [`phase-0-technical-report.md`](reports/phase-0-technical-report.md) | 階段零：專案初始化的技術決策 |
 | [Session 文件用量](reports/2026-11-18-session-input.md)              | 文件盤點、前後數字與驗證     |
+| [記帳流程與內部程式審查](reports/2026-11-18-ledger-flow-review.md)   | 帳務、效能與刪除依據         |
 
 ## HTML 產出（`docs/artifacts/`）
 
