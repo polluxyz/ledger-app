@@ -1,3 +1,13 @@
+/**
+ * 呼叫模型 API 的共用安全傳輸（Haiku 決策 396 (a)～(c)）。
+ *
+ * `vertex`、`glm` 與 `vertex-anthropic` 都經過這裡：拿 token、總期限、`fetch`、
+ * 拒絕轉址、64 KiB 回應上限、3 段耗時、固定的錯誤轉換。這些是安全邊界，集中一處
+ * 才不會某個 provider 漏掉。請求本文、用量、結束原因與 JSON 解析各家格式不同，
+ * 留在各自的 provider。
+ *
+ * 錯誤一律轉成只帶數字的 `LlmProviderError`，非 2xx 的錯誤本文不讀（決策 403 (b)）。
+ */
 import { LlmProviderError, type LlmTimings } from './llm-provider';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
