@@ -211,10 +211,10 @@ describe('SettlementForm', () => {
     await user.type(amount, '100');
     await user.click(submit);
     await screen.findByText('已記錄過');
-    expect(amount).toHaveValue(100);
+    expect(amount).toHaveValue('100');
     await user.click(submit);
     await screen.findByText('這筆已刪除');
-    expect(amount).toHaveValue(100);
+    expect(amount).toHaveValue('100');
     await user.click(submit);
     await waitFor(() => expect(writes).toBe(5));
     await waitFor(() => expect(submit).toBeEnabled());
@@ -243,7 +243,7 @@ describe('SettlementForm', () => {
     await screen.findByRole('option', { name: '現金' });
     expect(from).toHaveValue(hua.id);
     expect(to).toHaveValue(min.id);
-    expect(screen.getByLabelText('金額')).toHaveValue(2050);
+    expect(screen.getByLabelText('金額')).toHaveValue('2050');
     await waitFor(() => expect(screen.getByLabelText('帳戶')).toHaveValue(account.id));
     expect(screen.getByLabelText('帳戶')).toHaveValue(account.id);
     expect(screen.queryByRole('option', { name: '臨時帳戶 2' })).not.toBeInTheDocument();
@@ -291,6 +291,9 @@ describe('SettlementForm', () => {
 
     await screen.findByRole('option', { name: '現金' });
     await user.selectOptions(await screen.findByLabelText('帳戶'), account.id);
+    const amount = screen.getByLabelText('金額');
+    await user.clear(amount);
+    await user.paste('1,234.56');
     await user.click(screen.getByRole('button', { name: '新增' }));
 
     await waitFor(() => {
@@ -305,7 +308,7 @@ describe('SettlementForm', () => {
     expect(body).toMatchObject({
       fromPersonId: min.id,
       toPersonId: hua.id,
-      amount: 100000,
+      amount: 123456,
       toAccountId: account.id,
     });
     expectDateString(body);

@@ -241,6 +241,81 @@ describe('AI drafts on the transactions page', () => {
     expect(screen.queryByText('private error detail')).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      first: '確認草稿：早餐',
+      retry: '新增',
+      overrides: {},
+    },
+    {
+      first: '全部確認',
+      retry: '新增',
+      overrides: { title: '衛生紙', categoryId: null, newCategoryName: '日用品' },
+    },
+    {
+      first: '新增',
+      retry: '確認草稿：轉帳',
+      overrides: { title: '轉帳', type: 'TRANSFER', categoryId: null, toAccountId: 'acc-bank' },
+    },
+    {
+      first: '新增',
+      retry: '全部確認',
+      overrides: { title: '午餐', amount: 12345 },
+    },
+  ] satisfies Array<{ first: string; retry: string; overrides: Partial<TransactionDraft> }>)(
+    'W290 resends the same draft from $first to $retry',
+    async ({ first, retry, overrides }) => {
+      const user = userEvent.setup();
+      const draft = makeDraft(overrides);
+      render(<App />);
+      await parseDrafts(user, [draft]);
+      transactionResponses.push(new TypeError('connection lost'));
+
+      const editor = screen.getByRole('button', { name: `編輯草稿：${draft.title}` });
+      const form = () => screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
+      async function submitDraft(entry: string) {
+        if (entry === '新增') {
+          await user.click(editor);
+          await user.click(within(await form()).getByRole('button', { name: entry }));
+        } else {
+          await user.click(screen.getByRole('button', { name: entry }));
+        }
+      }
+
+      await submitDraft(first);
+      if (first === '新增') {
+        expect(await within(await form()).findByRole('alert')).toBeVisible();
+        await user.click(screen.getByRole('button', { name: '收起新增面板' }));
+      } else {
+        expect(await screen.findByText('尚未確認，請重試')).toBeVisible();
+      }
+      expect(editor).toBeVisible();
+      await submitDraft(retry);
+      await waitFor(() => expect(editor).not.toBeInTheDocument(), WAIT);
+
+      const writes = requestApi.mock.calls
+        .filter(([path, options]) => path.endsWith('/transactions') && options?.method === 'POST')
+        .map(([path, options]) => ({
+          path,
+          key: options?.idempotencyKey,
+          // JSON 會省略值為 undefined 的欄位，這裡比對實際傳送的內容。
+          body: JSON.parse(JSON.stringify(options?.body)) as Record<string, unknown>,
+        }));
+      expect(writes).toHaveLength(2);
+      expect(writes[0]?.key).toBeTruthy();
+      expect(writes[1]).toEqual(writes[0]);
+      expect(writes[1]?.body).toMatchObject({
+        date: '2026-10-23T00:00:00.000Z',
+        amount: draft.amount,
+        ...(draft.type === 'TRANSFER'
+          ? { toAccountId: draft.toAccountId }
+          : draft.categoryId === null
+            ? { newCategoryName: draft.newCategoryName }
+            : { categoryId: draft.categoryId }),
+      });
+    },
+  );
+
   it('W211 writes complete A, skips incomplete B, stops when C fails, and retry does not write A again', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -310,7 +385,7 @@ describe('AI drafts on the transactions page', () => {
 
     await user.click(screen.getByRole('button', { name: '編輯草稿：名稱未提供' }));
     const form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByLabelText('金額')).toHaveValue(null);
+    expect(within(form).getByLabelText('金額')).toHaveValue('');
     expect(within(form).getByLabelText('日期')).toHaveValue('');
     expect(within(form).getByLabelText('帳戶')).toHaveValue('');
     expect(within(form).getByLabelText('名稱')).toHaveValue('');
@@ -327,7 +402,7 @@ describe('AI drafts on the transactions page', () => {
       'aria-pressed',
       'true',
     );
-    expect(within(transferForm).getByLabelText('金額')).toHaveValue(100);
+    expect(within(transferForm).getByLabelText('金額')).toHaveValue('100');
     expect(within(transferForm).getByLabelText('日期')).toHaveValue('2026-10-21');
     expect(within(transferForm).getByLabelText('轉出帳戶')).toHaveValue('acc-cash');
     expect(within(transferForm).getByLabelText('轉入帳戶')).toHaveValue('acc-bank');
@@ -338,7 +413,7 @@ describe('AI drafts on the transactions page', () => {
       () => expect(within(sharedForm).getByLabelText('日期')).toHaveValue('2026-10-22'),
       WAIT,
     );
-    expect(within(sharedForm).getByLabelText('金額')).toHaveValue(250);
+    expect(within(sharedForm).getByLabelText('金額')).toHaveValue('250');
     expect(within(sharedForm).getByLabelText('帳戶')).toHaveValue('acc-bank');
     expect(within(sharedForm).getByLabelText('名稱')).toHaveValue('計程車');
     expect(within(sharedForm).getByRole('combobox', { name: '分類' })).toHaveAttribute(
@@ -379,7 +454,7 @@ describe('AI drafts on the transactions page', () => {
 
     await user.click(screen.getByRole('button', { name: '編輯草稿：早餐' }));
     form = await screen.findByRole('group', { name: '新增一筆交易' }, WAIT);
-    expect(within(form).getByLabelText('金額')).toHaveValue(80);
+    expect(within(form).getByLabelText('金額')).toHaveValue('80');
     transactionResponses.push(new ApiError(400, 'VALIDATION_ERROR', '安全錯誤'));
     await user.click(within(form).getByRole('button', { name: '新增' }));
     expect(await screen.findByText('安全錯誤', undefined, WAIT)).toBeInTheDocument();

@@ -41,7 +41,6 @@ import {
   useSendLinkInvite,
 } from '../features/linking/use-linking';
 import {
-  useClearLedgerPointer,
   useLedgerGroups,
   useSetLedgerPointer,
 } from '../features/ledger-people/use-ledger-pointers';
@@ -59,7 +58,6 @@ import {
 import {
   useArchiveLedger,
   useCreateLedger,
-  useDeleteLedger,
   useLeaveLedger,
   useRenameLedger,
   useUnarchiveLedger,
@@ -309,15 +307,6 @@ const mutationCases: MutationCase[] = [
     },
     true,
   ),
-  mutationCase(
-    'useClearLedgerPointer',
-    () => useClearLedgerPointer(),
-    {
-      ledgerId: LEDGER_ID,
-      personId: 'person-1',
-    },
-    true,
-  ),
   mutationCase('useAddMember', () => useAddMember(LEDGER_ID), {}, true),
   mutationCase(
     'useAddMemberTo',
@@ -341,6 +330,12 @@ const mutationCases: MutationCase[] = [
   mutationCase('useRemoveMember', () => useRemoveMember(LEDGER_ID), 'user-1', true),
   mutationCase('useLeaveLedger', () => useLeaveLedger(), { id: LEDGER_ID }, true),
   mutationCase(
+    'useLeaveLedger (delete)',
+    () => useLeaveLedger(),
+    { id: LEDGER_ID, deleteLedger: true, moves: [] },
+    true,
+  ),
+  mutationCase(
     'useRenameLedger',
     () => useRenameLedger(),
     { id: LEDGER_ID, name: 'Renamed' },
@@ -348,15 +343,6 @@ const mutationCases: MutationCase[] = [
   ),
   mutationCase('useArchiveLedger', () => useArchiveLedger(), LEDGER_ID, true),
   mutationCase('useUnarchiveLedger', () => useUnarchiveLedger(), LEDGER_ID, true),
-  mutationCase(
-    'useDeleteLedger',
-    () => useDeleteLedger(),
-    {
-      id: LEDGER_ID,
-      confirm: LEDGER_ID,
-    },
-    true,
-  ),
   mutationCase('useCreateLedger', () => useCreateLedger(), {}, false),
   mutationCase(
     'useSetTransactionMark',
@@ -640,7 +626,6 @@ describe('money-write mutation invalidation decisions', () => {
     const friendRequestsKey = ['friend-requests', 'incoming', 'PENDING'] as const;
     const ledgerListKey = ['ledgers'] as const;
     const ledgerDetailKey = ['ledger', LEDGER_ID] as const;
-    const memberListKey = ['members', OTHER_LEDGER_ID] as const;
     const otherLedgerDetailKey = ['ledger', OTHER_LEDGER_ID] as const;
     const categoriesKey = ['categories', OTHER_LEDGER_ID] as const;
     const ledgerPeopleKey = ['ledger-people', OTHER_LEDGER_ID] as const;
@@ -650,7 +635,6 @@ describe('money-write mutation invalidation decisions', () => {
       friendRequestsKey,
       ledgerListKey,
       ledgerDetailKey,
-      memberListKey,
       otherLedgerDetailKey,
       categoriesKey,
       ledgerPeopleKey,
@@ -690,7 +674,6 @@ describe('money-write mutation invalidation decisions', () => {
       mutationCase('useAddMember', () => useAddMember(OTHER_LEDGER_ID), undefined, true).hook,
       {},
     );
-    expect(queryClient.getQueryState(memberListKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(otherLedgerDetailKey)?.isInvalidated).toBe(true);
 
     await runMutation(

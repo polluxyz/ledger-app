@@ -459,7 +459,8 @@ function draftRequest(draft: TransactionDraft): CreateTransactionRequest {
   return {
     type: draft.type,
     amount: draft.amount!,
-    date: draft.date!,
+    // 與交易表單送同一個 UTC 時刻及字串，讓未修改的草稿可以換入口重送。
+    date: new Date(draft.date!).toISOString(),
     ...(draft.type === 'TRANSFER'
       ? {}
       : draft.categoryId !== null

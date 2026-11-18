@@ -331,15 +331,14 @@ export class TransactionsService {
       ORDER BY "sortDate" DESC, "createdAt" DESC, "id" DESC
       OFFSET ${(page - 1) * limit} LIMIT ${limit}
     `);
-    const total = selected.length
-      ? Number(selected[0]!.total)
-      : Number(
-          (
-            await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+    let total = Number(selected[0]?.total ?? 0n);
+    // 第 1 頁沒有偏移量。只有後續空頁仍需確認全表總數。
+    if (selected.length === 0 && page > 1) {
+      const [count] = await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
           ${visible} SELECT COUNT(*) AS count FROM visible
-        `)
-          )[0]?.count ?? 0n,
-        );
+        `);
+      total = Number(count?.count ?? 0n);
+    }
     const rows = selected.length
       ? await this.prisma.transaction.findMany({
           where: {
@@ -566,11 +565,10 @@ export class TransactionsService {
         })
       : [];
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const total = selected.length
-      ? Number(selected[0]!.total)
-      : Number(
-          (
-            await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+    let total = Number(selected[0]?.total ?? 0n);
+    // 第 1 頁沒有偏移量。只有後續空頁仍需確認全表總數。
+    if (selected.length === 0 && page > 1) {
+      const [count] = await this.prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
       SELECT COUNT(DISTINCT CASE WHEN s."id" IS NULL THEN t."id" ELSE s."id" END) AS count
       FROM "Transaction" t LEFT JOIN "Split" s ON s."id" = t."splitId" AND s."ownerId" = ${viewerUserId} AND s."deletedAt" IS NULL
       WHERE t."ledgerId" = ${ledgerId} AND t."deletedAt" IS NULL AND t."differenceOfId" IS NULL
@@ -581,14 +579,18 @@ export class TransactionsService {
         ${query.categoryId ? Prisma.sql`AND COALESCE(s."categoryId", t."categoryId") = ${query.categoryId}` : Prisma.empty}
         ${query.from ? Prisma.sql`AND COALESCE(s."date", t."date") >= ${new Date(query.from)}` : Prisma.empty}
         ${query.to ? Prisma.sql`AND COALESCE(s."date", t."date") <= ${new Date(query.to)}` : Prisma.empty}
-    `)
-          )[0]?.count ?? 0n,
-        );
+    `);
+      total = Number(count?.count ?? 0n);
+    }
 
     const context = await this.viewContext(ledgerId, viewerUserId);
     await this.loadRowContext(ledgerId, viewerUserId, rows, context);
     return {
-      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
+      items: selected.flatMap(({ id }) => {
+        // 分頁後交易可能已刪除或已搬出帳本，依第二次查詢的結果呈現。
+        const row = byId.get(id);
+        return row ? [this.toTransaction(row, viewerUserId, context)] : [];
+      }),
       page,
       limit,
       total,

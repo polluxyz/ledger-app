@@ -32,6 +32,46 @@ const participants = [
 ];
 
 describe('SplitOptionsView', () => {
+  it('keeps the pasted share and refuses to save an invalid amount over a valid one', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn<(value: { participants: SplitParticipantDraft[] }) => void>();
+    render(
+      <SplitOptionsView
+        total={300000}
+        type="EXPENSE"
+        payerKey="me"
+        payerName="我"
+        method="AMOUNT"
+        precision="CENT"
+        participants={participants}
+        onBack={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    const amount = screen.getByLabelText('小明 金額');
+    const save = screen.getByRole('button', { name: '儲存' });
+    await user.clear(amount);
+    await user.paste('500');
+    expect(save).toBeEnabled();
+
+    for (const invalid of ['1,23', '1,,23']) {
+      await user.clear(amount);
+      await user.paste(invalid);
+      expect(amount).toHaveValue(invalid);
+      expect(save).toBeDisabled();
+      await user.click(save);
+      expect(onSave).not.toHaveBeenCalled();
+    }
+
+    await user.clear(amount);
+    await user.paste('1,234.56');
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledOnce();
+    const saved = onSave.mock.calls[0]?.[0].participants;
+    expect(saved?.find(({ key }) => key === 'xiao-ming')?.amountValue).toBe(123456);
+  });
+
   it('fills the remaining ratio and disables save when the total reaches 115%', async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
