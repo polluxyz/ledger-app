@@ -586,7 +586,11 @@ export class TransactionsService {
     const context = await this.viewContext(ledgerId, viewerUserId);
     await this.loadRowContext(ledgerId, viewerUserId, rows, context);
     return {
-      items: selected.map((item) => this.toTransaction(byId.get(item.id)!, viewerUserId, context)),
+      items: selected.flatMap(({ id }) => {
+        // 分頁後交易可能已刪除或已搬出帳本，依第二次查詢的結果呈現。
+        const row = byId.get(id);
+        return row ? [this.toTransaction(row, viewerUserId, context)] : [];
+      }),
       page,
       limit,
       total,
