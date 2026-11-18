@@ -67,6 +67,7 @@
 | [`phase-4a-ai-quota.md`](specs/phase-4a-ai-quota.md)                               | 4a 補充：AI 記帳的每日額度與輸出上限                    | 已完成             |
 | [`phase-4a-ai-vertex.md`](specs/phase-4a-ai-vertex.md)                             | 4a 補充：換模型到 Vertex AI 的 DeepSeek V4.1 Flash      | 已完成             |
 | [`phase-4a-voice.md`](specs/phase-4a-voice.md)                                     | 4a 補充：語音記帳（桌機 Chrome 先試）                   | 已實作，待真實驗收 |
+| [`phase-4a-ai-haiku.md`](specs/phase-4a-ai-haiku.md)                               | 4a 補充：換模型到 Vertex AI 的 Claude Haiku 5.5         | 已核可，實作中     |
 | [`phase-2k-home-redesign.md`](specs/phase-2k-home-redesign.md)                     | 2k 首頁改版：卡片版面、資產卡、借還卡、分類條配色       | 已完成             |
 | [`phase-2l-home-layout.md`](specs/phase-2l-home-layout.md)                         | 2l 首頁 A+ 版面與可編輯版面（拖卡片、調寬高、存伺服器） | 已完成             |
 | [`phase-2m-home-visual-refresh.md`](specs/phase-2m-home-visual-refresh.md)         | 2m 首頁風格、借還圖卡與雙指標柱狀圖動畫                 | 已完成             |
