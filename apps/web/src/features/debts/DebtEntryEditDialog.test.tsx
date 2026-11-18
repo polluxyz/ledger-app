@@ -98,7 +98,7 @@ describe('DebtEntryEditDialog', () => {
     const title = within(dialog).getByLabelText('名稱');
     const note = within(dialog).getByLabelText('備註');
 
-    expect(amount).toHaveValue(120);
+    expect(amount).toHaveValue('120');
     expect(date).toHaveValue('2026-09-01');
     await waitFor(() => {
       expect(category).toHaveAttribute('aria-valuetext', '居住');
@@ -122,15 +122,20 @@ describe('DebtEntryEditDialog', () => {
     const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
 
     const amount = within(dialog).getByLabelText('金額');
-    expect(amount).toHaveValue(120);
+    expect(amount).toHaveValue('120');
+    const save = within(dialog).getByRole('button', { name: '儲存' });
     await user.clear(amount);
-    await user.type(amount, '250');
-    await user.click(within(dialog).getByRole('button', { name: '儲存' }));
+    await user.paste('1,,23');
+    expect(amount).toHaveValue('1,,23');
+    expect(save).toBeDisabled();
+    await user.clear(amount);
+    await user.paste('1,234.56');
+    await user.click(save);
 
     const [url, options] = await patchedRequest();
     expect(url).toContain('/debt-entries/entry-1');
     expect(options.method).toBe('PATCH');
-    expect(parseRequestBody(options)).toEqual({ amount: 25000 });
+    expect(parseRequestBody(options)).toEqual({ amount: 123456 });
   });
 
   it('prefills and submits the received amount for a repayment with a difference', async () => {
@@ -145,7 +150,7 @@ describe('DebtEntryEditDialog', () => {
     const dialog = await screen.findByRole('dialog', { name: '修改往來紀錄' });
 
     const amount = within(dialog).getByLabelText('金額');
-    expect(amount).toHaveValue(90);
+    expect(amount).toHaveValue('90');
     await user.clear(amount);
     await user.type(amount, '95');
     await user.click(within(dialog).getByRole('button', { name: '儲存' }));
