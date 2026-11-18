@@ -1,6 +1,5 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import type { Express } from 'express';
 import type { Account, Category, ParseTransactionResponse, TransactionDraft } from '@ledger/shared';
 import request from 'supertest';
@@ -17,7 +16,14 @@ import { createLlmProvider } from '../src/ai/llm-provider.factory';
 import type { Env } from '../src/config/env.validation';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
-import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
+import {
+  createE2EApp,
+  createSharedLedger,
+  httpServer,
+  resetDb,
+  idempotencyKey,
+  loginAgain,
+} from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -514,9 +520,7 @@ describe('AI parse transaction (e2e)', () => {
   });
 
   it('SC-P9: same user shares ten across different verified tokens, IPs and ledgers; other endpoints keep their own limits', async () => {
-    const token2 = app
-      .get(JwtService)
-      .sign({ sub: bob.userId, email: bob.email, jti: 'second-verified-token' });
+    const token2 = await loginAgain(app, bob.email);
     expect(token2).not.toBe(bob.token);
     process.env.NODE_ENV = 'ai-throttle-test';
     for (let index = 0; index < 10; index += 1) {

@@ -52,6 +52,8 @@ pnpm --filter @ledger/api test:e2e   # e2e，需要 apps/api/.env.test
 
 e2e 跑的是真的應用程式對真的 `ledger_test` 資料庫，每個測試前清空。**不要與 web 的 Playwright 同時跑**，兩者共用同一個資料庫。
 
+- **e2e 的憑證一律用真的登入取得**（`registerAndLogin`、`loginAgain`）。guard 會查登入紀錄，自己簽的憑證沒有紀錄，會被擋成 401。只有負面測試（驗證「這種憑證要被拒絕」）可以用 `signRawToken`。規則見 `docs/specs/r6-token-revocation.md` 決策 384。
+
 ## 環境變數
 
 由 `src/config/` 以 Zod 驗證後載入，缺值直接啟動失敗。**新增變數時同步更新 `.env.example` 與 `.worktreeinclude` 相關說明**，實際值只放 `apps/api/.env`（不進版控）。

@@ -1,5 +1,4 @@
 import { HttpStatus, INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ErrorCode } from '@ledger/shared';
 import request from 'supertest';
 import { AppException } from '../src/common/exceptions/app.exception';
@@ -11,7 +10,7 @@ import {
   type LlmResponse,
 } from '../src/ai/llm-provider';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, loginAgain, resetDb } from './e2e-utils';
 import { auth, person, type Person } from './linking-utils';
 
 /**
@@ -140,9 +139,7 @@ describe('AI parse daily quota — isolation (e2e)', () => {
       await parse(bob.token, bob.ledgerId).expect(200);
       await parse(bob.token, tripId).expect(200);
 
-      const freshToken = await app
-        .get(JwtService)
-        .signAsync({ sub: bob.userId, email: bob.email }, { expiresIn: '1h' });
+      const freshToken = await loginAgain(app, bob.email);
       expect(freshToken).not.toBe(bob.token);
       const res = await parse(freshToken, tripId).expect(429);
       expect(res.body).toMatchObject({ errorCode: ErrorCode.AI_DAILY_LIMIT });

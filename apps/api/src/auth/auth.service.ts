@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   AuthTokenResponse,
@@ -10,6 +11,8 @@ import {
 } from '@ledger/shared';
 import * as bcrypt from 'bcrypt';
 import { AppException } from '../common/exceptions/app.exception';
+import { parseDurationToMs } from '../config/duration';
+import type { Env } from '../config/env.validation';
 import { Prisma } from '../generated/prisma/client';
 import { LedgersService } from '../ledgers/ledgers.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +21,7 @@ import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
 /**
- * 認證的業務邏輯：註冊、登入、簽發 JWT。所有與安全相關的取捨都集中在這裡，因此
+ * 認證的業務邏輯：註冊、登入、簽發 JWT 與撤銷登入紀錄。安全相關取捨集中在這裡，因此
  * 特別著重兩件事——密碼絕不明文外流（一律經 bcrypt 雜湊），以及登入回應不洩漏
  * 「某個 email 是否已註冊」。
  */
@@ -35,11 +38,17 @@ const DUMMY_HASH = bcrypt.hashSync('timing-attack-mitigation', BCRYPT_ROUNDS);
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly sessionDurationMs: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgers: LedgersService,
     private readonly jwt: JwtService,
-  ) {}
+    config: ConfigService<Env, true>,
+  ) {
+    this.sessionDurationMs = parseDurationToMs(config.get('JWT_EXPIRES_IN', { infer: true }));
+  }
 
   /**
    * 註冊使用者，並在同一個資料庫交易（transaction）內，一併備妥他的預設帳戶與
@@ -119,7 +128,52 @@ export class AuthService {
       );
     }
 
-    const payload: JwtPayload = { sub: user.id, email: user.email };
-    return { accessToken: await this.jwt.signAsync(payload) };
+    // 先寫紀錄才簽發；兩邊共用取整到秒的截止時間，避免憑證與紀錄相差 1 秒。
+    const now = Date.now();
+    const expiresAt = new Date(Math.floor((now + this.sessionDurationMs) / 1000) * 1000);
+    const session = await this.prisma.authSession.create({ data: { userId: user.id, expiresAt } });
+    const payload: JwtPayload & { exp: number } = {
+      sub: user.id,
+      email: user.email,
+      sid: session.id,
+      exp: expiresAt.getTime() / 1000,
+    };
+    const accessToken = await this.jwt.signAsync(payload);
+    await this.cleanupExpiredSessions(new Date(now));
+    return { accessToken };
+  }
+
+  /** 清理不影響登入；只刪過期紀錄，每次最多 100 筆，避免登入負擔隨資料量成長。 */
+  private async cleanupExpiredSessions(now: Date): Promise<void> {
+    try {
+      const expired = await this.prisma.authSession.findMany({
+        where: { expiresAt: { lt: now } },
+        select: { id: true },
+        take: 100,
+      });
+      if (expired.length > 0) {
+        await this.prisma.authSession.deleteMany({
+          where: { id: { in: expired.map((session) => session.id) }, expiresAt: { lt: now } },
+        });
+      }
+    } catch (error) {
+      // 不記錄錯誤訊息，避免資料庫錯誤夾帶憑證或使用者資訊。
+      this.logger.warn(error instanceof Error ? error.name : 'UnknownError');
+    }
+  }
+
+  /** 用使用者與登入紀錄共同限定撤銷範圍；同時登出的競態也只能成功 1 次。 */
+  async logout(userId: string, sid: string): Promise<void> {
+    const result = await this.prisma.authSession.updateMany({
+      where: { id: sid, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count === 0) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.UNAUTHORIZED,
+        'Invalid or expired token',
+      );
+    }
   }
 }
