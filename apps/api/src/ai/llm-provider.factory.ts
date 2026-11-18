@@ -8,6 +8,7 @@ import { GlmLlmProvider } from './glm-llm.provider';
 import type { LLMProvider } from './llm-provider';
 import { unavailableTokenSource, type AccessTokenSource } from './access-token-source';
 import { OpenAiCompatibleLlmProvider } from './openai-compatible-llm.provider';
+import { AnthropicVertexLlmProvider } from './anthropic-vertex-llm.provider';
 
 /**
  * 依 `LLM_PROVIDER` 選模型。設定不完整只影響 AI 請求，不能阻止其他記帳功能啟動，
@@ -19,6 +20,27 @@ export function createLlmProvider(
 ): LLMProvider {
   const selected = config.get('LLM_PROVIDER', { infer: true });
   if (selected === 'fake') return new FakeLlmProvider();
+  if (selected === 'vertex-anthropic') {
+    const project = config.get('VERTEX_PROJECT_ID', { infer: true })?.trim();
+    // model 不 trim：含空白就不是合法的單一路徑片段，不能悄悄修正後送出。
+    const model = config.get('VERTEX_MODEL', { infer: true });
+    const location = config.get('VERTEX_LOCATION', { infer: true }) ?? 'global';
+    if (
+      !project ||
+      !model ||
+      model.trim() !== model ||
+      location !== 'global' ||
+      !/^[A-Za-z0-9._@-]+$/.test(model)
+    ) {
+      return unconfiguredProvider('vertex-anthropic');
+    }
+    return new AnthropicVertexLlmProvider({
+      descriptor: { configured: true, provider: 'vertex-anthropic', model },
+      url: `https://aiplatform.googleapis.com/v1/projects/${project}/locations/global/publishers/anthropic/models/${encodeURIComponent(model)}:rawPredict`,
+      getBearerToken: () => tokenSource.getAccessToken(),
+      timeoutMs: 60_000,
+    });
+  }
   if (selected === 'vertex') {
     const project = config.get('VERTEX_PROJECT_ID', { infer: true })?.trim();
     const model = config.get('VERTEX_MODEL', { infer: true })?.trim();

@@ -29,7 +29,7 @@ import { GoogleAccessTokenSource } from './google-access-token-source';
       provide: VERTEX_TOKEN_SOURCE,
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) =>
-        config.get('LLM_PROVIDER', { infer: true }) === 'vertex'
+        ['vertex', 'vertex-anthropic'].includes(config.get('LLM_PROVIDER', { infer: true }))
           ? new GoogleAccessTokenSource(
               config.get('GOOGLE_APPLICATION_CREDENTIALS', { infer: true }),
             )

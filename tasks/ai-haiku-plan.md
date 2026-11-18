@@ -17,7 +17,7 @@ spec：`docs/specs/phase-4a-ai-haiku.md`（決策 395～406、SC-P41～P52）。
 ### 1.1 協調者自己做（T0：契約與先紅的測試）
 
 - `apps/api/src/ai/llm-provider.ts`：
-  - `LlmRequest` 加必填的 `codes: { ledgers: string[]; categories: string[]; accounts: string[] }`。註解寫「只有 `vertex-anthropic` 用來產生 enum，其他 provider 忽略；enum 不是授權（決策 398 (c)、(f)）」。
+  - `LlmRequest` 加選填的 `codes?: { ledgers: string[]; categories: string[]; accounts: string[] }`。註解寫「只有 `vertex-anthropic` 用來產生 enum，其他 provider 忽略；enum 不是授權（決策 398 (c)、(f)）」。`vertex-anthropic` 收到沒有 `codes` 的請求時當成空清單（見 §7 T0）。
   - `LlmResponse` 加選填的 `refused?: true`。註解寫「模型拒答（決策 400）。`content` 一定是 `null`，用量照記；拒答文字與類別不放進來」。
 - `apps/api/src/ai/ai.service.ts`：`complete` 的參數多帶 `codes`，值是 `catalog.ledgers`、`catalog.categories`、`catalog.accounts` 的 key（`L1`、`C1`、`A1`…）。拒答的處理留給 T1，T0 的 e2e 才會先紅。
 - 既有的測試 stub 不用改：多一個請求欄位不影響它們。`FakeLlmProvider` 忽略 `codes`。
@@ -141,4 +141,19 @@ T1 只有一個 worker：共用傳輸、provider、factory 會碰到同一組檔
 
 ## 7. 實作紀錄
 
-（實作時填）
+### T0（2026-11-18，協調者）
+
+- **偏離 §1.1：`codes` 改成選填。** 設成必填後，`fake-llm.provider.spec.ts`、`glm-llm.provider.spec.ts`、`openai-compatible-llm.provider.spec.ts` 呼叫 `complete` 都缺這個欄位，typecheck 失敗。改這 3 份測試會違反 T1 驗收「內容不改」。`AiService` 一律會帶 `codes`；T1 的 `vertex-anthropic` 收到沒帶的請求時當成空清單，enum 只剩 `null` 與 `"?"`，不會放寬限制。
+- 新增 `apps/api/test/ai-haiku-isolation.e2e-spec.ts`。對 `ledger_ai_test` 跑：fake 正向對照綠；SC-P45、SC-P48、SC-P49 共 3 條紅，都停在 503（factory 落到 GLM 分支，`GLM_API_KEY` 設成空字串）。
+- 其他 AI e2e 88 條綠；API 單元測試 70 個 suite、1,084 條綠；API typecheck、lint、format:check 綠。
+
+### T1（2026-11-18，`backend` 實作，協調者驗收）
+
+- 5 個 commit 照 §1.2 的順序：`24a1dc3` 抽出共用傳輸、`e03a286` 環境變數、`fe68e64` schema 轉換、`38eb51e` provider、`c8a1e67` 組裝與拒答。沒有偏離。
+- 驗收：
+  - 逐行看了全部程式 diff。抽取前後的邏輯一致；第 1 個 commit 只動 `llm-http-transport.ts`、它的測試與 `openai-compatible-llm.provider.ts`。
+  - 受保護的 5 份檔案（3 份既有 provider 測試、T0 e2e、`llm-provider.ts`）對 `cc60730` 沒有差異。
+  - enum 用長度產生 `L1..Ln` 成立的前提：`ai-catalog.ts` 的代號從 1 起連號。wire schema 的 4 個代號欄位都允許 `null`。
+  - 專案 ID 直接組進網址，靠 `env.validation.ts` 的格式 regex 把關；model 另做字元檢查與網址編碼。
+- 協調者重跑：typecheck、lint、format:check 綠；API 單元測試 74 個 suite、1,175 條綠；API e2e 66 個 suite、745 條綠（含 Haiku 隔離 4 條）。
+- 協調者補上 `llm-http-transport.ts` 的檔頭總述（`9ade7c1`）。

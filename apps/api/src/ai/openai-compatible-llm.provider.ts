@@ -1,13 +1,11 @@
 import {
-  LlmProviderError,
   type LLMProvider,
   type LlmProviderDescriptor,
   type LlmRequest,
   type LlmResponse,
-  type LlmTimings,
 } from './llm-provider';
 
-const MAX_RESPONSE_BYTES = 64 * 1024;
+import { sendLlmHttpRequest } from './llm-http-transport';
 
 interface ProviderOptions {
   descriptor: LlmProviderDescriptor;
@@ -28,131 +26,49 @@ export class OpenAiCompatibleLlmProvider implements LLMProvider {
   }
 
   async complete(request: LlmRequest): Promise<LlmResponse> {
-    const startedAt = Date.now();
-    const controller = new AbortController();
-    const timings: LlmTimings = {};
-    let timedOut = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_resolve, reject) => {
-      timeout = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-        reject(new LlmProviderError('timeout', null, Date.now() - startedAt, { ...timings }));
-      }, this.options.timeoutMs);
+    const { text: responseText, timings } = await sendLlmHttpRequest({
+      url: this.options.url,
+      getBearerToken: this.options.getBearerToken,
+      timeoutMs: this.options.timeoutMs,
+      fetchImplementation: this.options.fetchImplementation,
+      body: {
+        model: this.options.model,
+        max_tokens: request.maxOutputTokens,
+        messages: [
+          {
+            role: 'system',
+            content: `${request.system}\n\nJSON schema:\n${JSON.stringify(request.schema)}`,
+          },
+          { role: 'user', content: request.user },
+        ],
+        stream: false,
+        response_format: { type: 'json_object' },
+        ...(this.options.reasoningEffort ? { reasoning_effort: this.options.reasoningEffort } : {}),
+      },
     });
-
-    const operation = async (): Promise<LlmResponse> => {
-      let token: string;
-      try {
-        const pendingToken = this.options.getBearerToken();
-        // GoogleAuth 不收 AbortSignal；逾時後的背景認證失敗也必須被接住，不能外洩。
-        void pendingToken.catch(() => undefined);
-        token = await Promise.race([pendingToken, deadline]);
-        if (!token.trim()) throw new Error('Empty access token');
-      } catch {
-        if (timedOut)
-          throw new LlmProviderError('timeout', null, Date.now() - startedAt, { ...timings });
-        timings.tokenMs = Date.now() - startedAt;
-        // 認證例外可能含金鑰路徑與 email，連 cause 都不能保留。
-        throw new LlmProviderError('auth', null, timings.tokenMs, { ...timings });
-      }
-      timings.tokenMs = Date.now() - startedAt;
-      if (timedOut || timings.tokenMs >= this.options.timeoutMs) {
-        throw new LlmProviderError('timeout', null, Date.now() - startedAt, { ...timings });
-      }
-      const response = await (this.options.fetchImplementation ?? fetch)(this.options.url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.options.model,
-          max_tokens: request.maxOutputTokens,
-          messages: [
-            {
-              role: 'system',
-              content: `${request.system}\n\nJSON schema:\n${JSON.stringify(request.schema)}`,
-            },
-            { role: 'user', content: request.user },
-          ],
-          stream: false,
-          response_format: { type: 'json_object' },
-          ...(this.options.reasoningEffort
-            ? { reasoning_effort: this.options.reasoningEffort }
-            : {}),
-        }),
-        redirect: 'error',
-        signal: controller.signal,
-      });
-      timings.headersMs = Date.now() - startedAt;
-      if (!response.ok) {
-        throw new LlmProviderError('http', response.status, Date.now() - startedAt, { ...timings });
-      }
-      const responseText = await this.readResponseBody(response, controller);
-      timings.bodyMs = Date.now() - startedAt;
-      const empty = { content: null, truncated: false, timings: { ...timings } };
-      if (responseText === null) return empty;
-      let payload: unknown;
-      try {
-        payload = JSON.parse(responseText) as unknown;
-      } catch {
-        return empty;
-      }
-      const usage = this.getUsage(payload);
-      const truncated = this.getFinishReason(payload) === 'length';
-      const result = {
-        content: null,
-        truncated,
-        ...(usage ? { usage } : {}),
-        timings: { ...timings },
-      };
-      const messageContent = this.getMessageContent(payload);
-      if (typeof messageContent !== 'string') return result;
-      try {
-        return { ...result, content: JSON.parse(messageContent) as unknown };
-      } catch {
-        return result;
-      }
-    };
-
+    const empty = { content: null, truncated: false, timings: { ...timings } };
+    if (responseText === null) return empty;
+    let payload: unknown;
     try {
-      // fetch 或測試的 body 即使不理會 AbortSignal，也不能讓呼叫者超過期限。
-      return await Promise.race([operation(), deadline]);
-    } catch (error: unknown) {
-      if (error instanceof LlmProviderError) throw error;
-      throw new LlmProviderError(timedOut ? 'timeout' : 'network', null, Date.now() - startedAt, {
-        ...timings,
-      });
-    } finally {
-      clearTimeout(timeout);
+      payload = JSON.parse(responseText) as unknown;
+    } catch {
+      return empty;
     }
-  }
-
-  /** 逐塊累計 byte 數，避免超大回應先被完整讀進記憶體。 */
-  private async readResponseBody(
-    response: Response,
-    controller: AbortController,
-  ): Promise<string | null> {
-    if (!response.body) return '';
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      totalBytes += result.value.byteLength;
-      if (totalBytes > MAX_RESPONSE_BYTES) {
-        controller.abort();
-        void reader.cancel().catch(() => undefined);
-        return null;
-      }
-      chunks.push(result.value);
+    const usage = this.getUsage(payload);
+    const truncated = this.getFinishReason(payload) === 'length';
+    const result = {
+      content: null,
+      truncated,
+      ...(usage ? { usage } : {}),
+      timings: { ...timings },
+    };
+    const messageContent = this.getMessageContent(payload);
+    if (typeof messageContent !== 'string') return result;
+    try {
+      return { ...result, content: JSON.parse(messageContent) as unknown };
+    } catch {
+      return result;
     }
-    const body = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      body.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return new TextDecoder().decode(body);
   }
 
   private getMessageContent(payload: unknown): unknown {

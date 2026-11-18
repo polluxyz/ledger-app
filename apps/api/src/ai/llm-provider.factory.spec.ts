@@ -4,6 +4,8 @@ import { FakeLlmProvider } from './fake-llm.provider';
 import { GlmLlmProvider } from './glm-llm.provider';
 import type { Env } from '../config/env.validation';
 import { OpenAiCompatibleLlmProvider } from './openai-compatible-llm.provider';
+import { AnthropicVertexLlmProvider } from './anthropic-vertex-llm.provider';
+import { AI_WIRE_JSON_SCHEMA } from './ai-wire-format';
 
 /**
  * factory 不能在設定缺漏時阻止啟動，也不能悄悄回退假模型。
@@ -199,5 +201,130 @@ describe('LLM provider factory', () => {
       fetchMock.mockRestore();
       jest.useRealTimers();
     }
+  });
+});
+
+/** 以 mock fetch 驗證 Haiku 設定、固定網址、期限與退回路線，完全不連 Google。 */
+describe('Vertex Anthropic provider factory', () => {
+  const values = {
+    LLM_PROVIDER: 'vertex-anthropic' as const,
+    VERTEX_PROJECT_ID: 'test-project',
+    VERTEX_LOCATION: 'global',
+    VERTEX_MODEL: 'claude-haiku-5-5',
+  };
+  const request = {
+    system: '指示',
+    user: '早餐 60',
+    schema: AI_WIRE_JSON_SCHEMA,
+    maxOutputTokens: 2048,
+  };
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('SC-P41.2 selects vertex-anthropic with its descriptor', () => {
+    const source = { getAccessToken: jest.fn() };
+    const provider = createLlmProvider(new ConfigService<Env, true>(values), source);
+    expect(provider).toBeInstanceOf(AnthropicVertexLlmProvider);
+    expect(provider.descriptor).toEqual({
+      configured: true,
+      provider: 'vertex-anthropic',
+      model: values.VERTEX_MODEL,
+    });
+    expect(source.getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { VERTEX_PROJECT_ID: undefined },
+    { VERTEX_PROJECT_ID: ' ' },
+    { VERTEX_MODEL: undefined },
+    { VERTEX_MODEL: '' },
+    { VERTEX_LOCATION: 'us-central1' },
+    ...['/', '?', '#', '%', ' ', '\t', '\n'].map((character) => ({
+      VERTEX_MODEL: `model${character}`,
+    })),
+    { VERTEX_MODEL: ' model' },
+    { VERTEX_MODEL: 'a b' },
+    { VERTEX_MODEL: '模型' },
+  ])('SC-P41.3 keeps invalid Haiku config unconfigured (%p)', async (overrides) => {
+    const source = { getAccessToken: jest.fn() };
+    const fetchSpy = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Unexpected fetch'));
+    const provider = createLlmProvider(
+      new ConfigService<Env, true>({ ...values, ...overrides }),
+      source,
+    );
+    expect(provider.descriptor).toMatchObject({ configured: false, provider: 'vertex-anthropic' });
+    await expect(async () => provider.complete(request)).rejects.toMatchObject({
+      status: 503,
+      errorCode: 'AI_NOT_CONFIGURED',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(source.getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('SC-P43.1 encodes the allowed model segment and uses the fixed rawPredict URL', async () => {
+    const model = 'claude-haiku-5-5@version_1.test';
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: '{"drafts":[]}' }],
+        }),
+      ),
+    );
+    const source = { getAccessToken: jest.fn().mockResolvedValue('latest-token') };
+    await createLlmProvider(
+      new ConfigService<Env, true>({ ...values, VERTEX_MODEL: model }),
+      source,
+    ).complete(request);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      `https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/anthropic/models/claude-haiku-5-5%40version_1.test:rawPredict`,
+    );
+    expect(source.getAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('SC-P47.2 configures a 60 second deadline covering token acquisition', async () => {
+    jest.useFakeTimers();
+    const source = { getAccessToken: () => new Promise<string>(() => undefined) };
+    const fetchSpy = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Unexpected fetch'));
+    const operation = createLlmProvider(new ConfigService<Env, true>(values), source).complete(
+      request,
+    );
+    const assertion = expect(operation).rejects.toMatchObject({
+      kind: 'timeout',
+      durationMs: 60_000,
+    });
+    await jest.advanceTimersByTimeAsync(60_000);
+    await assertion;
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('SC-P41.5 SC-P50 switches both settings back to Vertex and uses its OpenAI URL', async () => {
+    const config = new ConfigService<Env, true>(values);
+    const source = { getAccessToken: jest.fn().mockResolvedValue('token') };
+    const haiku = createLlmProvider(config, source);
+    expect(haiku).toBeInstanceOf(AnthropicVertexLlmProvider);
+    config.set('LLM_PROVIDER', 'vertex');
+    config.set('VERTEX_MODEL', 'deepseek-ai/deepseek-v4.1-flash-maas');
+    const fallback = createLlmProvider(config, source);
+    expect(fallback).toBeInstanceOf(OpenAiCompatibleLlmProvider);
+    expect(fallback.descriptor).toEqual({
+      configured: true,
+      provider: 'vertex',
+      model: 'deepseek-ai/deepseek-v4.1-flash-maas',
+    });
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: '{"drafts":[]}' } }] })),
+      );
+    await fallback.complete(request);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      'https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/endpoints/openapi/chat/completions',
+    );
+    expect(JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string) as unknown).toMatchObject({
+      model: 'deepseek-ai/deepseek-v4.1-flash-maas',
+    });
   });
 });

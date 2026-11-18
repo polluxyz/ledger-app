@@ -14,7 +14,7 @@
 | -------------- | ------------------- | --------------------------------------- | -------------------- | -------------------------------------------------------------------------------- |
 | 主工作區       | `main`              | [main](handoff/main.md)                 | `ledger_test`        | 管理：handoff、部署 dev、跨分支協調                                              |
 | `stats-2j`     | 無（停在 `main`）   | [stats-2j](handoff/stats-2j.md)         | 無                   | 已收尾（10-30）：2j～2m 與後續全部合併並部署 dev，沒有待辦；工作區交給 main 關閉 |
-| `ai-4a`        | 無（停在 `main`）   | [ai-4a](handoff/ai-4a.md)               | `ledger_ai_test`     | 換模型到 Haiku 5.5：已核可，實作中（11-28 前合併）→ 語音 T3、T4 → 匯入           |
+| `ai-4a`        | 無（停在 `main`）   | [ai-4a](handoff/ai-4a.md)               | `ledger_ai_test`     | Haiku 5.5：程式 #230，待真的模型驗收（11-28 前切換）→ 語音 T3、T4 → 匯入         |
 | `review-specs` | 無（R5 動工時再開） | [review-specs](handoff/review-specs.md) | `ledger_review_test` | R6 已完成並部署 dev（#227）；R5 備份與還原等開發者決定正式部署位置               |
 
 ## 跨工作區的規則

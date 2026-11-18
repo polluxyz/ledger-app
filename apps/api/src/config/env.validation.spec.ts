@@ -82,6 +82,15 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...base, LLM_PROVIDER: 'unknown' })).toThrow(/LLM_PROVIDER/);
   });
 
+  it('SC-P41.1: accepts vertex-anthropic without requiring credentials at startup', () => {
+    expect(validateEnv({ ...base, LLM_PROVIDER: 'vertex-anthropic' })).toMatchObject({
+      LLM_PROVIDER: 'vertex-anthropic',
+      VERTEX_LOCATION: 'global',
+    });
+    expect(() => validateEnv({ ...base, LLM_PROVIDER: 'anthropic' })).toThrow('LLM_PROVIDER');
+    expect(validateEnv(base).LLM_PROVIDER).toBe('fake');
+  });
+
   it('SC-P33: accepts Vertex, defaults global, and retains the explicit credential path', () => {
     expect(
       validateEnv({
