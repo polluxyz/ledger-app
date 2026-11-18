@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthTokenResponse, AuthUser, LoginRequest, RegisterRequest } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
@@ -15,6 +15,7 @@ import { AuthContext, type AuthContextValue } from './auth-context';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => readToken());
   const queryClient = useQueryClient();
+  const logoutInProgress = useRef(false);
 
   const login = useCallback(async (credentials: LoginRequest) => {
     const { accessToken } = await apiRequest<AuthTokenResponse>('/auth/login', {
@@ -39,21 +40,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [login],
   );
 
-  const logout = useCallback(() => {
-    // 登出會使這位使用者的未完成版面與所有晚到請求失效。
-    homeLayoutEditStore.clearAll();
-    clearToken();
-    setToken(null);
-    // 作用中帳本只是偏好設定，但它是別人帳本的 id，沒有理由留在瀏覽器裡。
-    clearActiveLedgerId();
-    // 清掉快取，避免下一位登入者看到上一位的資料。
-    queryClient.clear();
-  }, [queryClient]);
+  const clearLocalSession = useCallback(
+    (expectedToken?: string | null) => {
+      // 登出會使這位使用者的未完成版面與所有晚到請求失效。
+      homeLayoutEditStore.clearAll();
+      if (expectedToken === undefined || readToken() === expectedToken) clearToken();
+      setToken(null);
+      // 作用中帳本只是偏好設定，但它是別人帳本的 id，沒有理由留在瀏覽器裡。
+      clearActiveLedgerId();
+      // 清掉快取，避免下一位登入者看到上一位的資料。
+      queryClient.clear();
+    },
+    [queryClient],
+  );
 
-  useEffect(() => onTokenExpired(logout), [logout]);
+  const logout = useCallback(async () => {
+    if (logoutInProgress.current) return;
+    logoutInProgress.current = true;
+    const tokenAtClick = readToken();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      if (tokenAtClick) {
+        await apiRequest('/auth/logout', { method: 'POST', signal: controller.signal });
+      }
+    } catch {
+      // 離線或伺服器失敗時仍清除本機，不顯示訊息。
+    } finally {
+      clearTimeout(timeout);
+      clearLocalSession(tokenAtClick);
+      logoutInProgress.current = false;
+    }
+  }, [clearLocalSession]);
+
+  useEffect(() => onTokenExpired(clearLocalSession), [clearLocalSession]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ token, isAuthenticated: token !== null, login, register, logout }),
+    () => ({
+      token,
+      isAuthenticated: token !== null,
+      login,
+      register,
+      logout: () => {
+        void logout();
+      },
+    }),
     [token, login, register, logout],
   );
 
