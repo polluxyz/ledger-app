@@ -46,28 +46,28 @@ export class SplitsService {
       await this.validateReferences(tx, userId, input);
       await lockCounterparties(tx, referencedCounterparties(input));
       if (input.fromTransactionId) {
+        const convertible = {
+          id: input.fromTransactionId,
+          creatorId: userId,
+          deletedAt: null,
+          splitId: null,
+          type: input.type,
+        };
         const original = await tx.transaction.findFirst({
-          where: {
-            id: input.fromTransactionId,
-            creatorId: userId,
-            deletedAt: null,
-            splitId: null,
-            type: input.type,
-          },
-          include: { debtEntry: true },
+          where: { ...convertible, debtEntry: { is: null } },
+          select: { ledgerId: true },
         });
-        if (!original || original.debtEntry !== null)
-          throw conflict(
-            ErrorCode.TRANSACTION_NOT_CONVERTIBLE,
-            'This transaction cannot become a split.',
-          );
+        if (!original) throw transactionNotConvertible();
         // 轉分帳會軟刪除原交易，等於對原交易所在的帳本做一次刪除，所以那本帳本也要可寫入。
         // 只看「是我記的」不夠：被移出共享帳本的人，不能藉這條路刪掉他以前記的交易。
         await assertLedgerWritable(tx, userId, original.ledgerId);
-        await tx.transaction.update({
-          where: { id: original.id },
+        // 再次查核條件，讓同時讀到同一筆原交易的請求只有一個能轉分帳。
+        // 往來紀錄只綁自己建立的交易，現有寫入流程不會替原交易新增 debtEntry。
+        const { count } = await tx.transaction.updateMany({
+          where: { ...convertible, ledgerId: original.ledgerId },
           data: { deletedAt: new Date() },
         });
+        if (count === 0) throw transactionNotConvertible();
       }
       const split = await tx.split.create({
         data: {
@@ -108,7 +108,6 @@ export class SplitsService {
         if (!row) throw notFound('Split');
         await assertLedgerWritable(this.prisma, userId, row.ledgerId);
         if (row.deletedAt !== null) throw idempotencyResourceDeleted();
-        await this.loadOwned(this.prisma, userId, resultId);
         return this.get(userId, resultId);
       },
     );
@@ -180,10 +179,8 @@ export class SplitsService {
       const oldTransactions = current.transactions.filter(
         (transaction) => transaction.deletedAt === null,
       );
-      const desired = dissolve ? [] : composeSplitEntries(input, shares);
       await lockCounterparties(tx, [
         ...oldEntries.map((entry) => entry.counterpartyId),
-        ...desired.map((entry) => entry.counterpartyId),
         ...referencedCounterparties(input),
         ...referencedCounterparties({
           participants: current.participants,
@@ -375,14 +372,7 @@ export class SplitsService {
         ErrorCode.CATEGORY_TYPE_MISMATCH,
         'Category type does not match.',
       );
-    const ids = [
-      ...new Set([
-        ...input.participants
-          .map((person) => person.counterpartyId)
-          .filter((id): id is string => id !== null),
-        ...(input.payer ? [input.payer.counterpartyId] : []),
-      ]),
-    ];
+    const ids = [...new Set(referencedCounterparties(input))];
     if (ids.length) {
       const count = await tx.counterparty.count({ where: { id: { in: ids }, ownerId: userId } });
       if (count !== ids.length) throw notFound('Counterparty');
@@ -406,7 +396,7 @@ export class SplitsService {
     }
   }
 
-  /** 舊、新往來組合共用同一個差異計畫；相關交易與提議均在此交易內同步。 */
+  /** 呼叫端已鎖住新舊對象；相關交易及提議在同一個資料庫交易內同步。 */
   private async writeComposition(
     tx: Prisma.TransactionClient,
     userId: string,
@@ -427,13 +417,6 @@ export class SplitsService {
     }));
     const plan = planSplitEntries(old, desired, date);
     const oldById = new Map(oldEntries.map((entry) => [entry.id, entry]));
-    const ids = [
-      ...new Set([
-        ...oldEntries.map((entry) => entry.counterpartyId),
-        ...desired.map((entry) => entry.counterpartyId),
-      ]),
-    ].sort();
-    for (const counterpartyId of ids) await lockCounterparty(tx, counterpartyId);
     const now = new Date();
     await this.deleteEntries(
       tx,
@@ -635,20 +618,20 @@ export class SplitsService {
  */
 async function lockCounterparties(
   tx: Prisma.TransactionClient,
-  ids: ReadonlyArray<string | null>,
+  ids: readonly string[],
 ): Promise<void> {
-  const unique = [...new Set(ids.filter((id): id is string => id !== null))].sort();
+  const unique = [...new Set(ids)].sort();
   for (const counterpartyId of unique) await lockCounterparty(tx, counterpartyId);
 }
 
 function referencedCounterparties(input: {
   participants: ReadonlyArray<{ counterpartyId: string | null }>;
   payer: { counterpartyId: string } | null;
-}): Array<string | null> {
+}): string[] {
   return [
     ...input.participants.map((person) => person.counterpartyId),
     input.payer?.counterpartyId ?? null,
-  ];
+  ].filter((id): id is string => id !== null);
 }
 
 /** 鎖住一筆分帳（同一筆分帳的修改、刪除互相排隊）。不存在時什麼都不鎖，交給 loadOwned 回 404。 */
@@ -659,8 +642,12 @@ async function lockSplit(tx: Prisma.TransactionClient, id: string): Promise<void
 function bad(message: string): AppException {
   return new AppException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, message);
 }
-function conflict(code: keyof typeof ErrorCode, message: string): AppException {
-  return new AppException(HttpStatus.CONFLICT, ErrorCode[code], message);
+function transactionNotConvertible(): AppException {
+  return new AppException(
+    HttpStatus.CONFLICT,
+    ErrorCode.TRANSACTION_NOT_CONVERTIBLE,
+    'This transaction cannot become a split.',
+  );
 }
 
 function displayName(counterparty: {
