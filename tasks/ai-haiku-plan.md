@@ -157,3 +157,12 @@ T1 只有一個 worker：共用傳輸、provider、factory 會碰到同一組檔
   - 專案 ID 直接組進網址，靠 `env.validation.ts` 的格式 regex 把關；model 另做字元檢查與網址編碼。
 - 協調者重跑：typecheck、lint、format:check 綠；API 單元測試 74 個 suite、1,175 條綠；API e2e 66 個 suite、745 條綠（含 Haiku 隔離 4 條）。
 - 協調者補上 `llm-http-transport.ts` 的檔頭總述（`9ade7c1`）。
+
+### T2（2026-11-18，協調者）
+
+- spec PR #228 合併（`9477734`）。main 的 R6（#227）併進來後，`docs/handoff.md` 與 plan 各衝突 1 次，都只在文件。shared 的 `dist` 過期造成 `sid` 型別錯誤，重建後通過。
+- 在 `c94b1ec` 重跑：lint、typecheck、format:check、build 綠；API 單元測試 75 個 suite、1,213 條綠；API e2e 68 個 suite、765 條綠（在 R6 的真實登入規則下）；shared 160 條綠。
+- Web 單元測試用預設平行數時，本機有 16 條 jsdom 測試超過 5 秒逾時；`--maxWorkers=8` 時 143 個檔、1,311 條全過。本步沒改 `apps/web`。
+- 上游 spec 照 spec §9 加註，README、交接檔、`CLAUDE.md` §4 已更新。
+- PR #230 CI 全綠（head `52b89a7`），squash merge 為 `d190f4f`。
+- 部署 dev：主工作區 `git pull`，build shared 與 API。沒有 migration。`.env` 維持 `LLM_PROVIDER=vertex`；用 3200 埠暫時啟動，正常啟動、沒有錯誤。
