@@ -91,6 +91,11 @@ export class AiService {
         user,
         schema: AI_WIRE_JSON_SCHEMA,
         maxOutputTokens: this.limits.maxOutputTokens,
+        codes: {
+          ledgers: [...catalog.ledgers.keys()],
+          categories: [...catalog.categories.keys()],
+          accounts: [...catalog.accounts.keys()],
+        },
       });
       usage = response.usage ?? null;
       timings = response.timings;

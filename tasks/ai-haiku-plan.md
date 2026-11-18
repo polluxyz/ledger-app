@@ -17,7 +17,7 @@ spec：`docs/specs/phase-4a-ai-haiku.md`（決策 395～406、SC-P41～P52）。
 ### 1.1 協調者自己做（T0：契約與先紅的測試）
 
 - `apps/api/src/ai/llm-provider.ts`：
-  - `LlmRequest` 加必填的 `codes: { ledgers: string[]; categories: string[]; accounts: string[] }`。註解寫「只有 `vertex-anthropic` 用來產生 enum，其他 provider 忽略；enum 不是授權（決策 398 (c)、(f)）」。
+  - `LlmRequest` 加選填的 `codes?: { ledgers: string[]; categories: string[]; accounts: string[] }`。註解寫「只有 `vertex-anthropic` 用來產生 enum，其他 provider 忽略；enum 不是授權（決策 398 (c)、(f)）」。`vertex-anthropic` 收到沒有 `codes` 的請求時當成空清單（見 §7 T0）。
   - `LlmResponse` 加選填的 `refused?: true`。註解寫「模型拒答（決策 400）。`content` 一定是 `null`，用量照記；拒答文字與類別不放進來」。
 - `apps/api/src/ai/ai.service.ts`：`complete` 的參數多帶 `codes`，值是 `catalog.ledgers`、`catalog.categories`、`catalog.accounts` 的 key（`L1`、`C1`、`A1`…）。拒答的處理留給 T1，T0 的 e2e 才會先紅。
 - 既有的測試 stub 不用改：多一個請求欄位不影響它們。`FakeLlmProvider` 忽略 `codes`。
@@ -141,4 +141,8 @@ T1 只有一個 worker：共用傳輸、provider、factory 會碰到同一組檔
 
 ## 7. 實作紀錄
 
-（實作時填）
+### T0（2026-11-18，協調者）
+
+- **偏離 §1.1：`codes` 改成選填。** 設成必填後，`fake-llm.provider.spec.ts`、`glm-llm.provider.spec.ts`、`openai-compatible-llm.provider.spec.ts` 呼叫 `complete` 都缺這個欄位，typecheck 失敗。改這 3 份測試會違反 T1 驗收「內容不改」。`AiService` 一律會帶 `codes`；T1 的 `vertex-anthropic` 收到沒帶的請求時當成空清單，enum 只剩 `null` 與 `"?"`，不會放寬限制。
+- 新增 `apps/api/test/ai-haiku-isolation.e2e-spec.ts`。對 `ledger_ai_test` 跑：fake 正向對照綠；SC-P45、SC-P48、SC-P49 共 3 條紅，都停在 503（factory 落到 GLM 分支，`GLM_API_KEY` 設成空字串）。
+- 其他 AI e2e 88 條綠；API 單元測試 70 個 suite、1,084 條綠；API typecheck、lint、format:check 綠。

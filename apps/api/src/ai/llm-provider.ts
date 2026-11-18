@@ -20,6 +20,17 @@ export interface LlmRequest {
   schema: Record<string, unknown>;
   /** 輸出 token 上限（額度決策 293）。由 `AI_QUOTA_LIMITS` 決定，provider 照實帶給模型。 */
   maxOutputTokens: number;
+  /**
+   * 本次清單的代號（`L1`、`C1`、`A1`…），順序同 `system` 裡的清單。
+   *
+   * 只有 `vertex-anthropic` 用來產生結構化輸出的 enum，其他 provider 忽略（Haiku 決策 398 (c)）。
+   * enum 不是授權：模型回的代號照舊由 `validateAiDrafts` 逐筆驗（決策 398 (f)）。
+   *
+   * 為什麼是選填：`AiService` 一律會帶。設成必填會逼既有 provider 的單元測試改內容，
+   * 而 plan 要求那些測試原封不動，用來證明抽共用傳輸沒改行為。沒帶時當成空清單，
+   * enum 只剩 `null`（與 `"?"`），模型選不到任何代號，不會放寬任何限制。
+   */
+  codes?: { ledgers: string[]; categories: string[]; accounts: string[] };
 }
 
 export interface LlmUsage {
@@ -55,6 +66,11 @@ export interface LlmResponse {
    * JSON 也算截斷。`false` 只代表沒有截斷訊號，不保證內容完整。
    */
   truncated: boolean;
+  /**
+   * 模型拒答（Haiku 決策 400）。此時 `content` 一定是 `null`，用量照記。
+   * 拒答的文字與 `stop_details` 的類別不放進來，避免進日誌或回前端。
+   */
+  refused?: true;
   timings?: LlmTimings;
 }
 
