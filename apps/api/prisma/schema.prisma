@@ -41,6 +41,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  authSessions         AuthSession[]
   aiParseDailyUsages   AiParseDailyUsage[]
   idempotencyKeys      IdempotencyKey[]
   homeLayouts          UserHomeLayout[]
@@ -70,6 +71,21 @@ model User {
   debtProposalsSent       DebtProposal[]     @relation("DebtProposalFrom")
   debtProposalsReceived   DebtProposal[]     @relation("DebtProposalTo")
   splits                  Split[]
+}
+
+/// 一次登入（R6）。JWT 的 sid 指向這一列；登出時填 revokedAt。
+model AuthSession {
+  id        String    @id @default(uuid())
+  userId    String
+  expiresAt DateTime  // 和 JWT 的 exp 使用同一個截止時間。
+  revokedAt DateTime? // 有值代表已登出。
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /// 防重複送出的鍵（R1）；鍵與結果在同一個資料庫交易內提交。

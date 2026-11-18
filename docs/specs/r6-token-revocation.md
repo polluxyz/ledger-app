@@ -1,6 +1,6 @@
 # Spec：R6 登出讓憑證失效（登入紀錄表）
 
-> 狀態：**已核可**（第 1 版，開發者 2026-11-18 回「核可」，含 §10 的登出最多等 5 秒）。實作計畫：`tasks/r6-token-revocation-plan.md`、`tasks/r6-token-revocation-todo.md`。
+> 狀態：**已完成**（#227，2026-11-18）。第 1 版由開發者 2026-11-18 回「核可」，含 §10 的登出最多等 5 秒。實作計畫：`tasks/archive/r6-token-revocation-plan.md`、`tasks/archive/r6-token-revocation-todo.md`。
 > 上游：[`docs/reports/2026-11-11-project-review.md`](../reports/2026-11-11-project-review.md) §3 R6；[`security-baseline.md`](security-baseline.md) SEC-2。
 > 依據：
 >

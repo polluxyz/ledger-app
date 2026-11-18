@@ -1,14 +1,21 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiConflictResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiNoContentResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { AuthTokenResponse, AuthUser } from '@ledger/shared';
+import { AuthTokenResponse, AuthUser, type JwtPayload } from '@ledger/shared';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 /**
- * 認證端點：註冊與登入。兩者都用 `@Public()` 豁免全域 JWT guard（尚未登入的人
+ * 認證端點：註冊、登入與登出。註冊與登入用 `@Public()` 豁免全域 JWT guard（尚未登入的人
  * 本來就無 token），並套用比全域更嚴的流量限制。
  */
 
@@ -31,10 +38,20 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('login')
-  // POST 預設回 201；登入不建立任何資源，故改回 200。
+  // POST 預設回 201。R6 起登入會寫一筆登入紀錄，但對前端來說仍是「換到憑證」，
+  // 維持原本的 200，免得改動 API 契約。
   @HttpCode(HttpStatus.OK)
   @ApiUnauthorizedResponse({ description: 'Invalid email or password.' })
   login(@Body() dto: LoginDto): Promise<AuthTokenResponse> {
     return this.authService.login(dto);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('jwt')
+  @ApiNoContentResponse({ description: 'Current login has been revoked.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  logout(@CurrentUser() user: JwtPayload): Promise<void> {
+    return this.authService.logout(user.sub, user.sid);
   }
 }
