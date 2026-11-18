@@ -73,11 +73,20 @@
 - GLM 10-28 到期。主工作區 `apps/api/.env` 已改成 `LLM_PROVIDER=vertex`（改之前的備份在 `$TEMP/ledger-api-env.bak`）。
 - T3（10-28，#195）：在 worktree 用暫時的 e2e 跑 SC-P40 第 1～9 項。語意、用量、認證都過；第 1 項 41/42（1 次 60 秒逾時），第 8 項 token 有換新但推論逾時。數字見 plan §7。
 - 開發者 10-28 回「好 核可」：2 項逾時照實接受，只在自用期間有效，不算 SC-P40 全部通過（spec 決策 341 (h)）。「雜支 50」回「到時候有遇到問題再說」，不調 prompt（決策 345 (e)）。advisor 與協調者意見一致。
-- **11-21 前複查**：官方只保證 DeepSeek V4.1 Flash 供應到 2026-11-28（決策 344 (c)）。
+- **11-21 前複查**：官方只保證 DeepSeek V4.1 Flash 供應到 2026-11-28（決策 344 (c)）。已由 Haiku spec 決策 405 取代。
+
+## 換模型到 Vertex AI 的 Claude Haiku 5.5（2026-11-18 開始，已核可）
+
+- 開發者 11-18：「現在已經改成haiku 5.5了 你可以參考pollux的部分」。同一個 GCP 專案已能用 rawPredict 呼叫 `claude-haiku-5-5`（10-28 回 404）。
+- spec `docs/specs/phase-4a-ai-haiku.md`（決策 395～406、SC-P41～P52），plan 與 todo 在 `tasks/ai-haiku-*.md`。開發者已確認 spec §0 的 8 條假設；§0 第 9～11 條、§10 的 9 項、plan 與 todo 已於 11-18 核可。
+- 做法：新 provider `vertex-anthropic`，沿用 Google token 來源與 60 秒上限；用結構化輸出（JSON schema）加代號 enum；拒答回 200 與 0 筆。不改 schema、API，不新增套件與環境變數。
+- advisor（Codex）2 輪，10 個題目都收斂，沒有分歧。
+- **GCP 操作去識別化**（開發者 11-18）：資源名、測試請求、日誌、報告不帶姓名、email、專案名；專案 ID 遮掉；要在 GCP 建資源或加權限前先列給開發者看。本步不建新資源。
+- 時程：要在 2026-11-28 前合併並切換，切換後 DeepSeek 才有退路。11-28 之後 Haiku 不能用就拿掉 `VERTEX_MODEL` 關閉 AI 解析（決策 405）。
 
 ## 下一步（2026-11-18 主工作區更新）
 
-1. **急件：2026-11-21 前複查 DeepSeek V4.1 Flash 的供應期限**（決策 344 (c)）。官方只保證供應到 11-28。查不到延長就向開發者提出換模型的選項，走 spec 改版。
+1. **急件：換模型到 Haiku 5.5**，11-28 前合併。spec、plan、todo 核可後照 `tasks/ai-haiku-todo.md` 做 T0～T3。
 2. 語音：第 1～4 版都已合併部署（#209、#212，`tasks/ai-voice-todo.md` T0～T2b 已勾）。接下來是 T3 真實驗收：開發者在自己的 Chrome 現場測，協調者記錄（plan §1.4）；之後 T4 收尾（plan §1.5）。T3 要開發者在場，接手後先約時間，不要自己跑。
 3. 長尾延遲（偶爾超過 25 秒、少數超過 60 秒）可另案改善：先做等待提示與讓使用者自己重送，再考慮 hedged request。開放給其他使用者前要重新評估這個例外。
 4. 之後：匯入，走 spec → plan → todo（範圍見「語音輸入與匯入」一節）。開放給其他使用者前的阻擋項見 `../handoff.md`。
