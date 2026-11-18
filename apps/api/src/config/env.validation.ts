@@ -22,7 +22,7 @@ const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().trim().min(1).default('localhost'),
   ),
-  LLM_PROVIDER: z.enum(['glm', 'fake', 'vertex']).default('fake'),
+  LLM_PROVIDER: z.enum(['glm', 'fake', 'vertex', 'vertex-anthropic']).default('fake'),
   VERTEX_PROJECT_ID: z.preprocess(
     blankAsUndefined,
     z
