@@ -1,3 +1,4 @@
+import type { CreateTransactionRequest } from '@ledger/shared';
 import { formatMoney } from '../src/lib/format';
 import {
   addMember,
@@ -35,7 +36,7 @@ const TWO_MEALS_TEXT = '早餐 60 現金、午餐 120 刷卡';
  * 門檻情境用 Playwright route 延遲同一個真實請求，檢查跨頁共用與寫入鎖。
  */
 test.describe('AI 記帳圖示入口', () => {
-  test('SC-IK14：全部確認第 2 筆回應遺失後重試只記一次', async ({
+  test('SC-IK14：全部確認第 2 筆回應遺失後改走表單重試只記一次', async ({
     signedInPage: page,
     userA,
     request,
@@ -62,9 +63,18 @@ test.describe('AI 記帳圖示入口', () => {
         },
       }),
     );
-    let writes = 0;
+    const writes: Array<{ key: string | null; body: CreateTransactionRequest }> = [];
     await page.route('**/ledgers/*/transactions', async (route) => {
-      if (route.request().method() === 'POST' && ++writes === 2) {
+      const sent = route.request();
+      if (sent.method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      writes.push({
+        key: await sent.headerValue('Idempotency-Key'),
+        body: sent.postDataJSON() as CreateTransactionRequest,
+      });
+      if (writes.length === 2) {
         expect((await route.fetch()).ok()).toBe(true);
         await route.abort('failed');
       } else await route.continue();
@@ -75,11 +85,55 @@ test.describe('AI 記帳圖示入口', () => {
     await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(3);
     await page.getByRole('button', { name: '全部確認', exact: true }).click();
     await expect(page.getByText('尚未確認，請重試')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(2);
+    const editSecond = page.getByRole('button', { name: '編輯草稿：防重二', exact: true });
+    await expect(editSecond).toBeVisible();
+    const savedBeforeRetry = await listLedgerTransactions(request, userA.token, personal.id);
+    expect(savedBeforeRetry.total).toBe(2);
+    const savedSecond = savedBeforeRetry.items.find((item) => item.title === '防重二');
+    expect(savedSecond).toMatchObject({ amount: 6000, date: '2026-10-23T00:00:00.000Z' });
+
+    await editSecond.click();
+    const form = newTransactionForm(page);
+    const submit = form.getByRole('button', { name: '新增', exact: true });
+    await expect(form.getByLabel('日期')).toHaveValue('2026-10-23');
+    await form.getByLabel('金額').fill('65');
+    const conflict = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/transactions') &&
+        response.status() === 409,
+    );
+    await submit.click();
+    await conflict;
+    await expect(form.getByRole('alert')).toHaveText('已記錄過');
+    await expect(editSecond).toBeVisible();
+
+    await form.getByLabel('金額').fill('60');
+    await submit.click();
+    await expect(editSecond).toHaveCount(0);
     await page.getByRole('button', { name: '全部確認', exact: true }).click();
     await expect(page.getByRole('button', { name: /^確認草稿：/ })).toHaveCount(0);
-    const records = (await listLedgerTransactions(request, userA.token, personal.id)).items;
+    expect(writes).toHaveLength(5);
+    expect(writes[1]?.key).toBeTruthy();
+    expect(writes[1]?.body.date).toBe('2026-10-23T00:00:00.000Z');
+    expect(writes[2]).toEqual({
+      key: writes[1]?.key,
+      body: { ...writes[1]?.body, amount: 6500 },
+    });
+    expect(writes[3]).toEqual(writes[1]);
+
+    const { items: records, total } = await listLedgerTransactions(
+      request,
+      userA.token,
+      personal.id,
+    );
+    expect(total).toBe(3);
+    expect(records.find((item) => item.title === '防重二')?.id).toBe(savedSecond?.id);
     for (const title of titles)
-      expect(records.filter((item) => item.title === title)).toHaveLength(1);
+      expect(records.filter((item) => item.title === title).map((item) => item.amount)).toEqual([
+        6000,
+      ]);
     expect(
       (await listAccounts(request, userA.token)).find((item) => item.id === cash.id)?.balance,
     ).toBe(cash.balance - 18000);
