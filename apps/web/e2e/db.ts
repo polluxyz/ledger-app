@@ -1,3 +1,4 @@
+import { setTimeout } from 'node:timers/promises';
 import { Client } from 'pg';
 import { requireEnv } from './env';
 
@@ -50,7 +51,20 @@ export async function resetDb(): Promise<void> {
     }
     // 一次清完：資料表之間有外鍵，分開清會被關聯擋住。CASCADE 連帶處理。
     const tableList = rows.map((row) => `"${row.tablename}"`).join(', ');
-    await client.query(`TRUNCATE ${tableList} RESTART IDENTITY CASCADE`);
+    const truncate = `TRUNCATE ${tableList} RESTART IDENTITY CASCADE`;
+    // TRUNCATE 獨立執行，PostgreSQL 偵測到死結時會回滾這個指令。
+    // 暫停片刻讓另一方釋放鎖，最多重試 2 次。
+    for (let retries = 0; ; retries++) {
+      try {
+        await client.query(truncate);
+        return;
+      } catch (error) {
+        const deadlock =
+          typeof error === 'object' && error !== null && 'code' in error && error.code === '40P01';
+        if (!deadlock || retries === 2) throw error;
+        await setTimeout(50 * (retries + 1));
+      }
+    }
   } finally {
     await client.end();
   }
