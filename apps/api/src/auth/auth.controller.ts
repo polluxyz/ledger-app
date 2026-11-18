@@ -38,7 +38,8 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('login')
-  // 保持既有的登入回應狀態碼。
+  // POST 預設回 201。R6 起登入會寫一筆登入紀錄，但對前端來說仍是「換到憑證」，
+  // 維持原本的 200，免得改動 API 契約。
   @HttpCode(HttpStatus.OK)
   @ApiUnauthorizedResponse({ description: 'Invalid email or password.' })
   login(@Body() dto: LoginDto): Promise<AuthTokenResponse> {

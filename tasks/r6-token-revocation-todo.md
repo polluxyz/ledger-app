@@ -11,7 +11,7 @@ plan：`tasks/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocat
   - `e2e-utils.ts` 有 `loginAgain()`、`signRawToken()`。
   - `auth-session-isolation.e2e-spec.ts` 的 SC-TV1、SC-TV2、SC-TV5、SC-TV6 紅，紅的原因是登出端點不存在或 guard 只驗簽章，不是測試本身寫錯。
   - 正式程式只有 plan §1.1 的 2 處暫時值；typecheck、lint 綠。
-- [ ] **T1 後端**（依賴 T0；`r6-api`，`backend`）：plan §1.2。
+- [x] **T1 後端**（依賴 T0；`r6-api`，`backend`）：plan §1.2。
       驗收：
   - migration 只新增 `AuthSession` 1 張表、2 個索引、1 個外鍵，不改現有的表；SQL 列在交付說明。
   - `JWT_EXPIRES_IN` 驗證的單元測試綠（SC-TV10 第 2 項）；`.env.example` 註解已改。
@@ -24,7 +24,7 @@ plan：`tasks/r6-token-revocation-plan.md`；spec：`docs/specs/r6-token-revocat
   - 既有 API 單元測試與 API e2e 全綠。
   - `sid` 非 UUID 的 Prisma 實測結果寫進 plan §7。
   - 只改 `apps/api`、`.env.example` 與 plan §7；沒有新套件。
-- [ ] **T2 網頁**（依賴 T0；`r6-web`，Codex）：plan §1.3。
+- [x] **T2 網頁**（依賴 T0；`r6-web`，Codex）：plan §1.3。
       驗收：
   - Vitest 綠：SC-TV13、SC-TV14。
   - 既有 Vitest 的斷言沒改；`api-client.test.ts:107` 還在。
