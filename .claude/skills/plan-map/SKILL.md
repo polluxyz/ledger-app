@@ -35,7 +35,7 @@ Plan §5 often gives sequence only. Infer dependencies from §3 components and �
 
 ## 代號連結（本 skill 的核心，必做）
 
-1. Link every occurrence of every ID, including inline references like D5, SC-14, Step 6 and SC-C9.
+1. Link every occurrence of every ID, including inline references like D1–D6, SC-14, Step 6 and SC-C9.
 2. Put one canonical entry per ID in the footer’s 「代號索引」: verbatim Markdown excerpt, source file:line (e.g. `tasks/archive/phase-2b-slice-1-plan.md:60`), and 「在 VS Code 開啟」 via `vscode://file/<絕對路徑>:<行號>`.
 3. On click show a slide-out right panel in place. `clone` the index entry to avoid duplicate content.
 4. For JS fallback use real `href="#ref-D5"` anchors to index DOM nodes outside JS strings.

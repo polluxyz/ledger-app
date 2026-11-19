@@ -21,7 +21,7 @@ After presenting, wait for explicit developer approval (「同意」「開始」
 
 1. Read the spec and plan. Map Step acceptance criteria to `SC-x` (e.g. Slice 1 to SC-14, SC-18).
 2. Verify affected files with Glob / Grep against the current tree.
-3. Check for data model, API interface, dependency and CI changes. Flag these root §14 Ask first items separately on the page. For new environment variables list purpose and example-file updates.
+3. Check for data model, API interface, dependency and CI changes. Flag these `CLAUDE.md §14` Ask first items separately on the page. For new environment variables list purpose and example-file updates.
 
 ## 頁面區塊（依 Step 性質取用，不必全上）
 

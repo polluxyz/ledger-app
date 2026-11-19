@@ -156,7 +156,7 @@ Use `orca` from the environment first. If missing from PATH, check the common Wi
 
 ### 7.1 worktree 規則的細節（`CLAUDE.md` §11）
 
-Worktrees share Git storage but have separate working files. `pnpm install` triggers `postinstall: prisma generate` to generate Prisma Client for that worktree. Branches may have different locks/schemas: never share `node_modules`.
+Worktrees share `.git` storage but have separate working files. `pnpm install` triggers `postinstall: prisma generate` to generate Prisma Client for that worktree. Branches may have different locks/schemas: never share `node_modules`.
 
 - `.worktreeinclude` copies files including `apps/api/.env`, `apps/api/.env.test` and `.claude/settings.local.json`.
 - For databases, ports and concurrency see [測試環境](operations/test-environment.md).

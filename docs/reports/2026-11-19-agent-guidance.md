@@ -1,6 +1,6 @@
 # Agent 指引英文版驗收
 
-根指引每次少 1019 個 token。按需文件各讀一次，合計少 6615 個。以下比較 ledger app 基底 `7b99e23e55ad65d305c9be1035e2982f01214afe` 與本報告所在的改版。兩版使用相同切分規則。
+根指引每次少 1019 個 token。按需文件各讀一次，合計少 6605 個。以下比較 ledger app 基底 `7b99e23e55ad65d305c9be1035e2982f01214afe` 與本報告所在的改版。兩版使用相同切分規則。
 
 ## 入口與使用時機
 
@@ -21,7 +21,7 @@ Git 基底沒有模式為 `120000` 的符號連結。3 個 Claude 轉接入口�
 | 文件群                   | 份數 |  原版 |  新版 |          節省 |
 | ------------------------ | ---: | ----: | ----: | ------------: |
 | 每次載入的根指引         |    1 |  3275 |  2256 | 1019（31.1%） |
-| 按需文件全文，各讀一次   |   24 | 28864 | 22249 | 6615（22.9%） |
+| 按需文件全文，各讀一次   |   24 | 28864 | 22259 | 6605（22.9%） |
 | 介面設定、範本與結案查閱 |    5 |   832 |   832 |             0 |
 
 按需總量包含不同工具的入口與不同角色的文件。例如，Codex 撰寫 PR 會用權威技能和範本，這 2 份合計 1603 → 1081。Claude 經轉接入口時另加 100 → 51。每次另以相同格式計算可見的 `pr: <description>` 文字為 48 → 19，少 29 個 token。這是專案描述的估值，未計工具外框，也不與含檔頭的全文加總。未量測線上帳單或快取折抵。
@@ -35,10 +35,10 @@ Git 基底沒有模式為 `120000` 的符號連結。3 個 Claude 轉接入口�
 | `.agents/skills/retro/SKILL.md`                                  | 按需           | 1384 |  894 |  490 |
 | `.agents/skills/retro/agents/openai.yaml`                        | 介面設定       |   50 |   50 |    0 |
 | `.claude/skills/implement-spec/SKILL.md`                         | 按需           |  101 |   64 |   37 |
-| `.claude/skills/plan-map/SKILL.md`                               | 按需           | 2170 | 1167 | 1003 |
+| `.claude/skills/plan-map/SKILL.md`                               | 按需           | 2170 | 1170 | 1000 |
 | `.claude/skills/pr/SKILL.md`                                     | 按需           |  100 |   51 |   49 |
 | `.claude/skills/retro/SKILL.md`                                  | 按需           |   94 |   66 |   28 |
-| `.claude/skills/step-proposal/SKILL.md`                          | 按需           | 1850 | 1088 |  762 |
+| `.claude/skills/step-proposal/SKILL.md`                          | 按需           | 1850 | 1093 |  757 |
 | `.claude/skills/systematic-debugging/SKILL.md`                   | 按需           | 2324 | 2324 |    0 |
 | `.claude/skills/systematic-debugging/condition-based-waiting.md` | 按需           |  885 |  885 |    0 |
 | `.claude/skills/systematic-debugging/defense-in-depth.md`        | 按需           |  814 |  814 |    0 |
@@ -57,7 +57,7 @@ Git 基底沒有模式為 `120000` 的符號連結。3 個 Claude 轉接入口�
 | `docs/operations/dev-deployment.md`                              | 按需           |  414 |  326 |   88 |
 | `docs/operations/import-planning.md`                             | 按需           |  153 |  106 |   47 |
 | `docs/operations/test-environment.md`                            | 按需           |  517 |  397 |  120 |
-| `docs/orca-multi-agent.md`                                       | 按需           | 5527 | 3895 | 1632 |
+| `docs/orca-multi-agent.md`                                       | 按需           | 5527 | 3897 | 1630 |
 
 重算時從本次提交簽出的目錄執行。使用 `tiktoken==0.14.0` 的 `o200k_base`。逐檔計算 UTF-8 全文，統一 LF，包含檔頭、Markdown、程式碼、指令、範例及結尾換行。此工具只用在工作區外的臨時環境。
 
@@ -135,6 +135,6 @@ for path in re.findall(r"^\|\s*`([^`]+)`\s*\|\s*(?:每次|按需|介面設定|�
 
 ## 結構與專案檢查
 
-核對 9 份 SKILL.md 的名稱及其原有手動限制、工具白名單，並逐一解析 3 個轉接目的地。比對 3 份 openai.yaml 原始內容、角色的啟動參數、2 條動態 Git 指令、修改文件中的 14 行 Bash 指令，以及 111 個既有標題。另檢查版控 Markdown 的相對連結與章節目標。封存計畫指向未版控 HTML 的 1 個舊引用依原規則略過。
+核對 9 份 SKILL.md 的名稱及其原有手動限制、工具白名單，並逐一解析 3 個轉接目的地。比對 3 份 openai.yaml 原始內容、角色的啟動參數、2 條動態 Git 指令、修改文件中的 14 行 Bash 指令，以及 111 個既有標題。另核對 184 份版控 Markdown，含 217 個相對連結與 22 個章節目標。逐檔比對舊版行內程式碼，確認路徑、指令與範例代號均可在新版找到。封存計畫指向未版控 HTML 的 1 個舊引用依原規則略過。
 
 本機通過 shared 建置、`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check` 與 `git diff --check`。單元測試共 2,705 項，shared 161、API 1,221、Web 1,323。首次執行時，新工作區的 Prisma Client 有空檔，導致 3 項檢查失敗。以 `pnpm --filter @ledger/api exec prisma generate` 重新產生後重跑通過。未改 schema 或測試設定。合併前的建置與兩套端對端結果以本 PR 的 CI 為準。

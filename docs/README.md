@@ -100,7 +100,7 @@ Generate HTML only when side-by-side comparison or spatial relationships are nee
 
 Before generation read these rules and `CLAUDE.md` §13. Use only `docs/artifacts/`, exclude secrets and never proactively scan it.
 
-1. Inline CSS, JS and data. No external `fetch` or CDNs. The developer opens `file://`.
+1. Inline CSS, JS and data. No external `fetch()` or CDNs. The developer opens `file://`.
 2. Use product design tokens from `apps/web/src/styles/global.css`.
 3. Give a brief conclusion in chat with the artifact. A path alone (「頁面做好了，路徑在 X」) is insufficient.
 4. Wait for explicit developer approval before starting proposed work.
