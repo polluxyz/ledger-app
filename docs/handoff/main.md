@@ -8,4 +8,4 @@
 
 ## 替開發者部署
 
-需要部署時讀[部署手冊](../operations/dev-deployment.md#替開發者部署)。
+For deployment read [部署手冊](../operations/dev-deployment.md#替開發者部署)。
