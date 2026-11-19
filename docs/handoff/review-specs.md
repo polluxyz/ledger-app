@@ -12,6 +12,6 @@ R5 的備份與還原方案取決於正式部署位置。等開發者在本區�
 
 ## 操作限制
 
-- R5 保留的編號見[交接入口](../handoff.md)。規格、計畫與任務清單依序核可才動工。
-- 本區兩套端對端測試共用 `ledger_review_test`，須分開跑。
-- 本機 Web 單元測試使用 `pnpm --filter @ledger/web exec vitest run --maxWorkers=6`。預設並行數曾使不同測試逾時。[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/review-specs.md)
+- R5 保留的編號見[交接入口](../handoff.md)。 Start only after approval of the spec, then the plan and task list.
+- Run this workspace’s two e2e suites separately. Both use `ledger_review_test`.
+- For local Web unit tests use `pnpm --filter @ledger/web exec vitest run --maxWorkers=6`. 預設並行數曾使不同測試逾時。[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/review-specs.md)

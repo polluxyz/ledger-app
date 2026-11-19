@@ -1,49 +1,42 @@
 # apps/web — 前端規範
 
-補充根目錄 `CLAUDE.md`，只寫這一層的慣例。全局規則（安全性、界線、Git 流程）仍以根目錄那份為準。
-
-**最重要的一條：前端不實作業務邏輯。** 金額計算規則、授權判斷、一致性驗證全部在後端。前端的檢查只為體驗（必填提示、格式提示），真正的驗證以後端回應為準。
+Apply root `CLAUDE.md` for global security, boundaries and Git rules. All business logic, money calculations, authorization and consistency checks belong on the backend. Client required-field and format hints serve UX. The backend response determines validity.
 
 ## 結構
 
-```
+```text
 src/
-  app/         路由、Provider、AppShell / Sidebar / TopBar、守衛（ProtectedRoute）
-  pages/       頁面元件，一個路由一個
-  features/    依領域切分，例如 accounts / ai / debts / statistics / transactions
-  components/  跨領域的無狀態 UI 元件（Button、Dialog、TextField…）
-  lib/         api-client、格式化、localStorage 存取等工具
-  styles/      global.css（設計 token 在這裡）
-e2e/           Playwright 測試
+  app/         routing, providers, AppShell / Sidebar / TopBar, ProtectedRoute
+  pages/       one page component per route
+  features/    domains, e.g. accounts / ai / debts / statistics / transactions
+  components/  shared stateless UI (Button, Dialog, TextField…)
+  lib/         api-client, formatting, localStorage
+  styles/      global.css defines design tokens
+e2e/           Playwright tests
 ```
 
-`features/` 的切分刻意與平台無關，方便未來搬到 React Native。新增領域時建新資料夾，不要塞進 `pages/`。
+Keep `features/` platform independent for React Native. Give new domains a folder here, outside `pages/`.
 
 ## 慣例
 
-- **樣式用 CSS Modules**（`X.module.css`）＋ `global.css` 的 CSS 變數。**不要另創配色**，顏色一律取設計 token。
-- 元件檔與它的 `.module.css`、`.test.tsx` 放一起。
-- 所有對後端的呼叫走 `lib/api-client.ts`，不要在元件裡直接 `fetch`。
-- token 存取集中在 `lib/token-storage.ts`。**除了 token，任何機敏資訊都不進前端或 log。**
-- 每個受保護頁面確認登入狀態（用 `app/ProtectedRoute.tsx`）。
+- Use CSS Modules (`X.module.css`) and CSS variables from `global.css`. Use design tokens for every color.
+- Colocate components, their `.module.css` and `.test.tsx`.
+- Route backend calls through `lib/api-client.ts`. Never `fetch` directly in a component.
+- Centralize token access in `lib/token-storage.ts`. **除了 token，任何機敏資訊都不進前端或 log。** Redact tokens in logs per root §8.
+- Check login on every protected page with `app/ProtectedRoute.tsx`.
 
 ## 已知陷阱
 
-**`@ledger/shared` 必須留在 `vite.config.ts` 的 `optimizeDeps.include` 裡。**
-shared 編譯成 CommonJS，而 Vite 預設不預先打包 workspace 連結的套件。拿掉這行，第一個「值」匯入（不是 `import type`）就會讓整頁全白。
-
-**改了 `packages/shared` 之後只要重新 build，不必刪 `.vite`。** `vite.config.ts` 的 `sharedPrebundleRefreshPlugin` 會把 shared `dist` 的雜湊算進預先打包的快取鍵，dev server 執行中也會監看 `dist` 並自動重開。拿掉這個插件，dev 與 Web e2e 就會拿到舊的預先打包結果，出現「xxx is not a function」。
-
-**右側欄收起時內容不卸載**（#84）。新增打開右側欄的入口時，要先設定面板目標；列表的選取標示要配合 `isOpen`。
-
-**借還交易本身的 `note` 一律是 `null`**，備註存在 `Transaction.debt.note`。顯示或編輯借還交易的備註要用後者。
-
-**共享帳本的其他成員看到分帳時是一筆一筆的交易**（`split` 為 `null`，spec 3c SC-S16），合併顯示只給擁有者。
+- Keep `@ledger/shared` in `vite.config.ts`’s `optimizeDeps.include`. Shared emits CommonJS. Without prebundling linked workspace packages, the first value import (unlike `import type`) blanks the page.
+- Rebuild after `packages/shared` changes. No need to delete `.vite`. Keep `sharedPrebundleRefreshPlugin` in `vite.config.ts`: it hashes shared `dist` into the cache key and watches `dist` to restart dev. Without it dev and Web e2e can use stale output (“xxx is not a function”).
+- Closing the right sidebar keeps its contents mounted (#84). Set the panel target before opening from a new entry point. Gate list selection highlighting on `isOpen`.
+- For debt transactions `note` is always `null`. Display and edit `Transaction.debt.note`.
+- On a shared ledger, only the owner sees a grouped split. Other members see individual transactions with `split` set to `null` (spec 3c SC-S16).
 
 ## 指令
 
-開發指令見[專案 README](../../README.md#common-commands)。單元測試用 Vitest：`pnpm --filter @ledger/web test`。端對端測試見[測試環境](../../docs/operations/test-environment.md)。
+See [project README](../../README.md#common-commands). Run Vitest with `pnpm --filter @ledger/web test`. For e2e see [測試環境](../../docs/operations/test-environment.md).
 
 ## 新增相依
 
-前端套件也算新增相依，**先說明再裝**（見根目錄 §14）。
+Explain new frontend dependencies before installation. Root §14 requires approval.

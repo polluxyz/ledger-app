@@ -2,15 +2,15 @@
 
 ## 替開發者部署
 
-只在 main 部署 dev 時讀本頁。正式備份及部署位置由 R5 追蹤。
+Use for dev deployment from main only. R5 tracks production backups and deployment location.
 
-開發者的 dev 伺服器在主工作區（`D:\Projects\ledger-app`）跑（2026-10-21 確認），API 用 `node dist/main`，不是 watch。
+The developer runs dev in the main workspace (`D:\Projects\ledger-app`, confirmed 2026-10-21). API runs `node dist/main` without watch.
 
-- 只改前端：Vite 會自動更新，請他按 `Ctrl + Shift + R`。
-- 後端或 `packages/shared` 有改：
-  1. 主工作區跑 `git pull`（它在 `main` 分支上，不是 detached）。
-  2. `pnpm --filter @ledger/shared build`。Vite 會自己更新預先打包，不必刪 `.vite`。
-  3. schema 有變：先 `pg_dump` 備份 `ledger_dev`，在 `apps/api` 手動跑 `prisma generate`（`pnpm install --frozen-lockfile` 不一定會重跑），再跑 `prisma migrate deploy`。
-  4. `apps/api` 跑 `pnpm build`，然後請他重開 API 與 Vite。
-- 需建立合成測試資料時，先依[測試環境](test-environment.md)隔離資料庫。若開發者的 3000 沒在跑，就暫時用 `PORT=3200 node dist/main` 起一個，用完關掉。登入端點有限流，同一個帳號只登入一次。
-- 對核可的資料庫用 `psql` 查含中文的資料：把 SQL 寫成 UTF-8 檔、加 `PGCLIENTENCODING=UTF8` 再用 `-f` 跑，直接在指令列打中文會遇到編碼錯誤。
+- Frontend only: Vite updates automatically. Ask the developer to press `Ctrl + Shift + R`.
+- Backend or `packages/shared` changes:
+  1. Run `git pull` in the main workspace on `main` (attached HEAD).
+  2. Run `pnpm --filter @ledger/shared build`. Vite refreshes prebundling without deleting `.vite`.
+  3. For schema changes, back up `ledger_dev` with `pg_dump` first. In `apps/api` run `prisma generate` manually (`pnpm install --frozen-lockfile` may skip it), then `prisma migrate deploy`.
+  4. In `apps/api` run `pnpm build`. Ask the developer to restart API and Vite.
+- Before creating synthetic test data isolate the DB per [測試環境](test-environment.md). If the developer’s port 3000 is idle, temporarily use `PORT=3200 node dist/main` and stop it afterward. Log in once per account to respect the rate limit.
+- For Chinese queries on an approved DB, write SQL to a UTF-8 file and run `psql` with `PGCLIENTENCODING=UTF8` and `-f` to avoid shell encoding errors.

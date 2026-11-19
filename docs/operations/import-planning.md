@@ -1,6 +1,6 @@
 # 匯入規劃
 
-規劃發票、收據照片或截圖、銀行對帳單匯入時讀本頁。待語音收尾後再規劃。
+Read when planning invoice, receipt photo/screenshot or bank statement import. Plan after voice work closes.
 
-- 保留擴充匯入來源的能力。對外送出前遮蔽卡號與帳號。匯入結果由使用者確認後才寫入。
-- 開發與審查使用合成資料。清理工作區時，真實帳務、匯入與憑證只記類別，省略檔名與內容。見[清理規則 §7.2](../orca-multi-agent.md#72-每週清理)。
+- Keep import sources extensible. Mask card and account numbers before external transmission. Write import results only after user confirmation.
+- Use synthetic data in development and review. During cleanup report only categories for real financial records, imports and credentials. Omit filenames and contents. See [清理規則 §7.2](../orca-multi-agent.md#72-每週清理).

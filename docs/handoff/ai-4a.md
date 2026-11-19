@@ -9,6 +9,6 @@
 
 ## 操作限制
 
-- 雲端資源、請求、日誌與報告須去識別化。建立資源或增加權限前先向開發者說明。
+- De-identify cloud resources, requests, logs and reports. Explain to the developer before creating resources or increasing permissions.
 - 11-28 後若新模型不可用，依[規格決策 405](../specs/phase-4a-ai-haiku.md)關閉 AI 解析。
-- 對外開放前重估長尾延遲與隱私條件。舊模型的驗收數字、已知問題與本機工具位置見[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/ai-4a.md)。
+- Reassess tail latency and privacy before opening to external users. 舊模型的驗收數字、已知問題與本機工具位置見[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/ai-4a.md)。

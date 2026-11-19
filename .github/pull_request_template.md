@@ -1,30 +1,38 @@
 <!--
-給建立 PR 的 agent：
-- 標題用 Conventional Commits 格式（`<type>: <簡述>`），英文。squash merge 後它就是 `main` 上的 commit 標題，要能獨立看懂。
-- 依下面三節填寫，提示註解填寫時一併刪除。寫法見 `.agents/skills/pr/SKILL.md`。
-- 在對話中草擬、交給開發者貼上時：標題與描述都要給，且整份輸出成一個可直接複製的 Markdown 區塊。標題另外單獨列出，不要混在描述內文裡（GitHub 的標題與內文是兩個輸入框）。內容若含程式碼圍欄，外層改用四個反引號以免提早結束。用 `gh pr create` 直接建立時不需要這一步。
+For the PR author:
+- Use an English Conventional Commits title (`<type>: <簡述>`) that stands alone as the squash commit on main.
+- Fill the three sections below. Remove the instructional comments. Follow .agents/skills/pr/SKILL.md.
+- For a chat draft the developer will paste, supply title and description in one copyable Markdown block. List the title separately from the body for GitHub’s two fields. Use four outer backticks if the body contains fences. Skip this packaging for gh pr create.
 -->
 
 ## 改動與原因
 
-<!-- 說清楚原本的問題、這次產生的行為與原因；連結對應 docs/specs/ 或 tasks/ 的章節。需要時用最小的流程圖、檔案樹或 diff 說明。一個 PR 聚焦一件事。 -->
+<!--
+State problem, changed behavior and rationale. Link the relevant docs/specs/ or tasks/ section. Use a minimal diagram, file tree or diff if helpful. One concern per PR.
+-->
 
 ## 驗證證據
 
-<!-- 填已執行的結果，不使用未勾選的清單代替證據。標明驗證的 commit；尚未執行、無法取得變更前基準或不適用時如實註明。純文件變更也保留實際檢查結果（例如 pnpm format:check）。 -->
+<!--
+Give actual results and tested commit. Explain unrun checks, missing baselines and inapplicable items. Docs-only changes still need actual checks (e.g. pnpm format:check). An unchecked list is not evidence.
+-->
 
 驗證 commit：
 
 | 驗收條件 | 實際指令／操作 | 實際結果 | 證據位置 |
 | -------- | -------------- | -------- | -------- |
 
-<!-- 依變更附失敗→通過的輸出、固定樣本的預期值與實際值、UI 前後截圖或 CI job 連結。機敏資訊先遮蔽；大型原始輸出放在可追溯的位置。 -->
+<!--
+As applicable, show failing/passing output, fixed-sample expected and actual results, before/after UI screenshots or CI job links. Redact sensitive data first. Link large raw outputs.
+-->
 
 ## 合併風險與回復
 
-<!-- 是否可逆、如何回復、可能影響哪些功能或資料。程式碼能 revert 不代表資料能復原。逐項註明，沒有就寫無：
-- Prisma schema／migration（部署要不要 migrate deploy、資料怎麼還原）
-- API（端點、DTO、packages/shared 型別、OpenAPI 契約）
+<!--
+Describe reversibility, recovery and affected features/data. A code revert may leave data changed. Cover each field, writing 無 if unchanged:
+- Prisma schema／migration (migrate deploy at deployment, data restoration)
+- API (endpoints, DTOs, packages/shared types, OpenAPI contract)
 - Web／App 端影響
-- 環境變數（.env.example、.worktreeinclude）
-- 相依套件 -->
+- 環境變數 (.env.example, .worktreeinclude)
+- 相依套件
+-->
