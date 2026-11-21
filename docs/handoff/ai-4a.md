@@ -2,8 +2,8 @@
 
 ## 現況與下一步
 
-1. Haiku 的格式修正已通過實測。SC-P51、SC-P52 共 74/74 筆，累計模型呼叫 80/100 次。[格式修正 PR #244](https://github.com/polluxyz/ledger-app/pull/244) · [實測紀錄](../../tasks/ai-haiku-plan.md#7-實作紀錄)
-2. 主工作區待切換 dev。依規格改 `LLM_PROVIDER` 與 `VERTEX_MODEL`，重開 API，再送 1 句確認。切換期限是 2026-11-28。[部署規格 §8](../specs/phase-4a-ai-haiku.md#8-部署)
+1. Haiku 的格式修正已合併。SC-P51、SC-P52 共 74/74 筆通過。[格式修正 PR #244](https://github.com/polluxyz/ledger-app/pull/244) · [實測紀錄](../../tasks/archive/ai-haiku-plan.md#7-實作紀錄)
+2. 主工作區已切換 Haiku。第 81 次在 3200 暫時服務驗證通過，累計 81/100 次。計畫與任務清單已封存。[任務清單](../../tasks/archive/ai-haiku-todo.md)
 3. 語音第 1～4 版已部署。與開發者約桌機 Chrome 現場驗收，記錄 T3 後完成 T4。手機虛擬鍵盤與 AI 欄位的位置另待實機確認。[語音任務](../../tasks/ai-voice-todo.md)
 4. 語音收尾後再開[匯入規劃](../operations/import-planning.md)。
 

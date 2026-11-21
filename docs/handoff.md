@@ -2,11 +2,11 @@
 
 On takeover read your workspace handoff. Update it and its index row. Merge both with the final PR for that work.
 
-| 工作區                                  | 現況與下一步                                     |
-| --------------------------------------- | ------------------------------------------------ |
-| [main](handoff/main.md)                 | 等主工作區切換 Haiku。R11 安全標頭已驗暫時服務。 |
-| [ai-4a](handoff/ai-4a.md)               | Haiku 已驗收，待主工作區切換。語音待現場驗收。   |
-| [review-specs](handoff/review-specs.md) | R6 已部署。R5 待決定正式部署位置。               |
+| 工作區                                  | 現況與下一步                          |
+| --------------------------------------- | ------------------------------------- |
+| [main](handoff/main.md)                 | Haiku 已切換。3200 暫時服務驗證通過。 |
+| [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。        |
+| [review-specs](handoff/review-specs.md) | R6 已部署。R5 待決定正式部署位置。    |
 
 ## 共用資源與操作限制
 
