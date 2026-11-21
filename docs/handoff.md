@@ -6,7 +6,8 @@ On takeover read your workspace handoff. Update it and its index row. Merge both
 | --------------------------------------- | ------------------------------------- |
 | [main](handoff/main.md)                 | Haiku 已切換。3200 暫時服務驗證通過。 |
 | [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。        |
-| [review-specs](handoff/review-specs.md) | R6 已部署。R5 待決定正式部署位置。    |
+| [review-specs](handoff/review-specs.md) | R5 選自管 Linux，待確認備份條件。     |
+| [web-unslop](handoff/web-unslop.md)     | 新規劃者已接手，待確認首頁範圍。      |
 
 ## 共用資源與操作限制
 

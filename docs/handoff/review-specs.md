@@ -2,13 +2,9 @@
 
 R6 已合併並部署 dev。登出後使用舊憑證，dev 回應 401。[部署紀錄 #229](https://github.com/polluxyz/ledger-app/pull/229)
 
-R5 的備份與還原方案取決於正式部署位置。等開發者在本區定案，再列假設並送審規格。[專案審查報告](../reports/2026-11-11-project-review.md)
+R5 已選自管 Linux。兩位 advisor 各完成 2 輪審閱。規劃者等待開發者確認主機與預算、可接受的資料缺口與復原時間、外部告警，再撰寫規格。假設清單 v2 已回報至 `run_39bcfae7f8b8` 的 `ctx_1cf49c673b35`。[審查報告](../reports/2026-11-11-project-review.md)
 
-2026-11-18 已向開發者列出 3 個選項。開發者還沒選，也還沒徵詢 advisor。開發者要建議時，先依 [§1.1](../orca-multi-agent.md) 徵詢 advisor，再並列雙方看法。
-
-1. 自己的 Linux 主機：排程跑 `pg_dump`，備份複製到別處。最省錢，排程與監控要自己寫。
-2. GCP 的 Cloud Run 加 Cloud SQL：內建每日備份與時間點還原，R5 只要寫還原演練。要付月費。
-3. 先留在這台 Windows 電腦：用工作排程器跑 `pg_dump`，備份要另外複製到別處。
+借還補驗由本線追蹤，`debt-f12-close` 是專用 worker 工作區。補驗已合併，worker 對話已釋放。F12 待開發者現場驗收，誤建成員清理另待授權。有結果時重查工作區與本機驗收資料。[補驗紀錄](../../tasks/phase-3f-plan.md#2026-11-21-f12-補驗)
 
 ## 操作限制
 

@@ -101,7 +101,7 @@ Within authorized scope, commit, push, open the PR, monitor CI, fix and repush a
 
 ### 多代理
 
-- Main allocates scope. Each workspace delegates and verifies within its approval. Report completed milestones to main only if they could affect other branches.
+- Use main → workline coordinator → worker. Main creates each workline directly under main, including splits. Each workline coordinator dispatches tasks, accepts results, reports cross-line milestones and closes accepted assignments. Workers execute assigned tasks without dispatching or creating workspaces. Check existing workspaces, sessions and tasks before every dispatch.
 - For dispatch, planning roles, handoff or cleanup read [多代理指南](docs/orca-multi-agent.md). Use `orca skills get <名稱>` for current operating instructions.
 - On takeover read the [handoff index](docs/handoff.md) and your workspace handoff. Dispatched workers follow their Task’s sections and spec.
 
