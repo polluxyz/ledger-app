@@ -51,7 +51,11 @@ export function createAnthropicOutputSchema(
         result[keyword] = structuredClone(value);
       }
     }
-    if (Object.hasOwn(enums, path)) result['enum'] = [...enums[path]!];
+    if (Object.hasOwn(enums, path)) {
+      // 列舉已限制值與型別。Vertex 不接受這 4 欄重複宣告型別（決策 398）。
+      delete result['type'];
+      result['enum'] = [...enums[path]!];
+    }
     return result;
   }
 
