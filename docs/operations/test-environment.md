@@ -8,10 +8,15 @@ Read before DB tests, Prisma DB commands or scheduling concurrent acceptance.
 - `.worktreeinclude` copies environment files. The copied `apps/api/.env` may target the developer’s `ledger_dev`. Before dispatch the coordinator points **both** env files in each Prisma worktree to its own `ledger_<名稱>_test`. Before `migrate` or `db` the worker verifies the actual connection targets the test DB specified by `.env.test`. Web may clear only DBs ending in `_test`.
 - Use synthetic data. Keep test accounts/passwords in local `docs/handoff/.env.test-accounts`. Never commit them. For e2e credentials follow [API 憑證規則](../../apps/api/CLAUDE.md#測試).
 
-| 工作區       | 測試資料庫           |
-| ------------ | -------------------- |
-| main         | `ledger_test`        |
-| ai-4a        | `ledger_ai_test`     |
-| review-specs | `ledger_review_test` |
+| 工作區           | 測試資料庫               |
+| ---------------- | ------------------------ |
+| main             | `ledger_test`            |
+| ai-4a            | `ledger_ai_test`         |
+| review-specs     | `ledger_review_test`     |
+| web-unslop       | `ledger_web_unslop_test` |
+| voice-acceptance | `ledger_voice_test`      |
+| debt-f12-close   | `ledger_debt_f12_test`   |
+
+The voice worker uses its assigned database for isolated tests. For the developer’s in-person acceptance, use the running main dev service and the designated test ledger.
 
 In 3c and 3e, misdirected env files applied migrations to dev before merge. Verify the actual target at dispatch and acceptance.

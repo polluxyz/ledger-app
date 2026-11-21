@@ -28,7 +28,7 @@ For the first advisor under Codex planning, use the fallback row only after an a
 ## 1. 分工
 
 - Main (`ledger-app` on `main`) coordinates direction, priorities, cross-workspace dependencies and shared resources. Main assigns scope to the responsible workspace.
-- Each workspace splits, dispatches, follows up, verifies and opens PRs within approved scope. Workers report to the dispatching coordinator. Discuss local issues and approvals with the developer there.
+- Each workline is a direct child of main. Its coordinator dispatches, accepts deliverables, opens PRs and owns closure. Main creates a sibling when a workline splits. Workers and advisors are leaves. Use sessions in the workline or a dedicated worker checkout directly beneath it. Handle local approvals there.
 - Report completed milestones to main only if they could affect other branches (e.g. merged shared API unblocks clients). Include branches, results, evidence and next step. Record local-only approvals, acceptance and merges in the local handoff.
 - Contact main immediately for cross-line blockers or shared-resource conflicts (e.g. simultaneous Web e2e).
 - Select `default` or `backend` per §0. Local coordinators may write `packages/shared` type contracts, write authorization/isolation tests first and verify failure, or handle small fixes cheaper than dispatch. Codex owns Web design and implementation. Local coordinators may review design. Return Web fixes to Codex.
@@ -49,6 +49,10 @@ For information or screen confirmation only, ask the developer locally.
 
 ## 2. 派工與放置
 
+Before each dispatch, compare deliverable, branch, owner and status across project-scoped `orca worktree ps --json`, handoffs, PRs and existing Runs, Tasks and Dispatches. Resume a matching task or reuse a suitable workspace. Keep one writer per deliverable.
+
+Main starts the workline coordinator as the §0/§4.1 planner. Use `agent launch` in an existing workline. Verify workspace, parent, model and effort in the receipt. For Web, the planner coordinates and assigns design and implementation to Codex after the applicable approvals.
+
 For a whole approved spec read [implement-spec](../.agents/skills/implement-spec/SKILL.md). Track dependencies in Orca Tasks. Dispatch dependents only after acceptance and integration into the base.
 
 ```bash
@@ -56,10 +60,10 @@ orca orchestration run-create --objective "<目標>" --json
 orca orchestration task-create --spec "<自足的 Task spec>" --deps '["<前置 Task ID>"]' --json
 orca orchestration task-list --ready --brief --json
 
-# Default to a child of the caller; take role parameters from §0.
+# From the workline, create a leaf worker checkout when isolation is needed.
 orca orchestration worker-start --task <task_id> --worktree new-child --name <短名> --base-branch <整合基底> --setup run <角色參數> --json
 
-# For precreation specify parent; use --branch to name the branch.
+# Main places a workline under main. A workline places workers under itself.
 orca worktree create --name <短名> --parent-worktree <父工作區> --base-branch <基底> --branch <分支> --setup run --json
 
 # Reuse existing workspaces; dispatch each read-only advisor separately.
@@ -67,7 +71,7 @@ orca orchestration worker-start --task <task_id> --worktree <既有工作區> <�
 ```
 
 - Run from the responsible workspace. Pass `--deps` only with actual prerequisites.
-- Default to children. Use `new-top-level` or `worktree create --no-parent` only on explicit user request. For cross-host placement verify actual parent in receipt per placement guide. Stop for confirmation if an older host cannot guarantee child placement.
+- Verify the parent in the receipt, including cross-host placement. For a misplaced workspace, match both IDs to ledger-app, check the owner and live resources, then use `orca worktree set --worktree <id> --parent-worktree <id> --json`. Verify the resulting parent. Reparenting changes placement only. Preserve active Dispatch ownership until an acknowledged handoff. If a move would interrupt work, record the owner and safe point to move.
 - Dispatch all independent work first. When no local work remains end the turn and await Orca wakeup. Follow concrete terminal `check` instructions. Never substitute polling, `check --wait` or watcher scripts for wakeup.
 - Orca settles Dispatch on `worker_done`. Accept and integrate before releasing dependencies. Send fixes via `send --to dispatch:<dispatch_id>` per guide, or redispatch a failed Task per §4.
 - For unclear activity inspect `worker-show` and `worker-read --dispatch <dispatch_id> --source auto`. Chat workers may lack terminals. Follow receipt `next` and recovery guide. Silence, timeout or unverified liveness cannot establish exit.
@@ -85,7 +89,7 @@ Include applicable environment and quality constraints each time:
 - Before completion run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm format:check`.
 - On provider error return the verbatim error via escalation or `worker_done --outcome failed`. Do not retry yourself or report only 「失敗」. Coordinators also check §4 because exhausted workers may be unable to report.
 
-Before dispatching Prisma work the local coordinator prepares a dedicated DB per [測試環境](operations/test-environment.md).
+Before dispatching Prisma work, prepare the worker checkout and its dedicated `ledger_<name>_test`. Connect separately with the effective settings from `apps/api/.env` and `apps/api/.env.test`. Both `SELECT current_database()` results must match the assigned DB. Report only the database name and result. Serialize suites sharing a DB. Reserve the fixed Web e2e ports for one suite per host and release the slot after exit. See [測試環境](operations/test-environment.md).
 
 - **Codex**: start Task with 「先讀根目錄與對應 app 的 `CLAUDE.md`」. Orca Codex accounts load the root via `project_doc_fallback_filenames = ["CLAUDE.md"]`. Workers launched from root still need the app guide. Set this in each new account’s `config.toml`.
 - **Claude**: include 「清單還有未完成項目、又沒有東西擋住你時，不要用摘要結束回合，直接做下一項」. Long tasks may otherwise stop after a progress update without `worker_done`.
@@ -167,16 +171,19 @@ Worktrees share `.git` storage but have separate working files. `pnpm install` t
 
 ### 7.2 每週清理
 
-Every Sunday **10:00 Asia/Taipei**, clean from `ledger-app` on `main`. Limit to this project. Preserve existing parent/child relationships. Only consider adjusting currently parentless workspaces.
+At task closure the dispatching coordinator performs the checks below. Every Sunday **10:00 Asia/Taipei**, main repeats them across ledger-app to catch missed closures and correct misplaced workspaces per §2, including those with an existing parent. Scope each operation by repo ID and execution host.
 
-1. Inventory workspace handoffs and PR status. Recheck immediately before closing.
+1. On `worker_done`, verify acceptance evidence, tests, PR and outstanding questions. Record the traceable result before releasing the coordinator-owned worker/advisor session with `orca orchestration worker-release --dispatch <id> --json`. Verify release in the receipt or worker list. Preserve pending decisions, user-owned sessions and uncertain releases. Recheck immediately before removing the workspace.
 2. Check branch-only commits, tracked changes, untracked and ignored files. Verify traceable preservation or merge evidence for branch-only commits. For financial records, imports and credentials report categories only, omitting filenames and contents.
 3. Check workers, chats, terminals, children, remote connections and activity. Inspect Orca-visible state then relevant hosts. Retain parents needed by active children or remote connections.
 4. Retain in-progress work, candidate drafts, unsaved work, connected resources and unknown state. Close only finished, verifiably saved, inactive work. For paused, confirmed saved and inactive work, you may remove just the workspace and retain the branch.
-5. First confirm target host supports branch retention. Use an explicit workspace selector. Retain the workspace if removal could delete a wanted branch or its effect is unclear. Report closed and retained workspaces with reasons.
+5. Record each retained workspace’s reason, owner and next review event in the workline handoff. Mark insufficient evidence 「原因待確認」. First confirm target host supports branch retention. Use an explicit workspace selector. Retain the workspace if removal could delete a wanted branch or its effect is unclear. Report closed and retained workspaces with reasons.
 
 Release completed coordinator-owned workers via current Orca recovery guide. If release is unconfirmed retain related workspaces. Example for hosts supporting branch retention:
 
 ```bash
 orca worktree rm --worktree <明確的工作區選擇值> --json
+orca worktree ps --json
 ```
+
+Verify the removed instance is absent from the project-scoped list and any required branch still exists. Report removals, moves and retained work separately.

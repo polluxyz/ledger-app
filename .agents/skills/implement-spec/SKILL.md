@@ -35,13 +35,13 @@ Check for cycles and cover every success criterion with a task or integration ch
 
 ## 派工與持續續派
 
-- Integrate into one confirmed feature branch. Reuse suitable worktrees/branches and preserve unintegrated work. For new workers default to `--worktree new-child` with integration base. For precreation specify `--parent-worktree`. Top-level only on explicit developer request.
+- Integrate into one confirmed feature branch. Reuse suitable worktrees/branches and preserve unintegrated work. Only the workline coordinator creates worker checkouts beneath the workline with its integration base. Main creates sibling worklines. Pre-create and verify Prisma workspaces before dispatch per §3.
 - Dispatch ready tasks per `docs/orca-multi-agent.md` §3. Take model/effort from §0 and implementation, Web and fallback rules from §1/§4.
 - Dispatch independent tasks, then advance local work. When none remains end the turn and await an Orca wakeup. Follow the receipt.
 - Workers test approved interfaces and implement item by item. Skip e2e by default. Report unauthorized e2e/external calls as unrun for coordinator acceptance. Respect resource limits for every test.
 - On `worker_done` verify current Dispatch, full `git status` and `git diff`, evidence and scope. Local coordinator reruns `pnpm typecheck` and `pnpm test`. Orca settles valid completion reports. If acceptance fails, fix per guide and hold dependents. For unknown causes use `systematic-debugging` first. Release dependencies only after acceptance and integration. Handle Dispatch per current guide.
 - Integrate serially. Have the worker merge the current integration branch and rerun affected checks before integrating its work. Assign one owner per conflict and reverify. Recompute ready tasks and dispatch immediately after prerequisites finish, without a new user prompt.
-- After acceptance/integration handle the Dispatch per current Orca guide. Main cleans worktrees and branches per §7.2.
+- After acceptance/integration handle the Dispatch per current Orca guide. The dispatching coordinator releases accepted workers and closes their workspaces per §7.2.
 - For quota, failures, timeouts and retries follow §4 and the receipt. Unknown liveness does not mean exit. Avoid duplicate editors. Keep completed edits and task mappings for recovery.
 
 ## 決策門控與溝通
@@ -54,6 +54,6 @@ Check for cycles and cover every success criterion with a task or integration ch
 
 After task acceptance verify every spec criterion and root §3 check on the integration branch. Run both e2e suites under the resource limits. For schema/API/authorization the coordinator reviews the diff line by line (authorization conditions, transaction boundaries, migration SQL) and personally reruns isolation tests and both e2e suites. Finally the local coordinator assigns a read-only reviewer who did not implement the reviewed part, including coordinator-written changes. Check project compliance and spec completeness, correctness and scope. Keep both sets of findings and evidence after fixes.
 
-Write the PR per [pr skill](../pr/SKILL.md). Follow `CLAUDE.md` §10 for PR, CI, updates when behind `main` and merge. Mark tasks done only after acceptance and integration. Close the spec only when all criteria pass. Main cleans worktrees/branches per `docs/orca-multi-agent.md` §7.2. Before deleting integration-branch test DBs, list them for developer confirmation. Preserve `ledger_dev`, `ledger_test` and DBs of active worktrees.
+Write the PR per [pr skill](../pr/SKILL.md). Follow `CLAUDE.md` §10 for PR, CI, updates when behind `main` and merge. Mark tasks done only after acceptance and integration. Close the spec only when all criteria pass. The dispatching coordinator owns closure per `docs/orca-multi-agent.md` §7.2; main performs the Sunday backstop. Before deleting integration-branch test DBs, list them for developer confirmation. Preserve `ledger_dev`, `ledger_test` and DBs of active worktrees.
 
 Per `CLAUDE.md` §5 報告方式, report completed scope, integration commit/PR, acceptance counts, deviations and remaining issues. Update spec status in `docs/README.md` and move completed plan/todo into `tasks/archive/`. For out-of-scope design, missing permission or unverifiable state, save state and report what needs attention. The user may later invoke `retro` manually. Do not change environment rules automatically.
