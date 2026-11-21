@@ -72,15 +72,14 @@ export function centsToInput(cents: Cents): string {
 /**
  * 使用者輸入 → 分。用字串運算，不經過浮點數。
  *
- * 先去掉前後空白與千分位逗號，再要求 `^-?\d+(\.\d{1,2})?$`：
- * "333.33" → 33333；"3000" → 300000；"0.5" → 50；"1,200" → 120000；"0.3" → 30。
+ * 去掉前後空白後，接受連續數字或合法千分位。逗號只能分隔整數部分的 3 位數字。
+ * "333.33" → 33333；"1,234.56" → 123456；"0.5" → 50；"1,23" → null。
  * 超過兩位小數（"1.234"）、空字串、非數字、只有小數點（".5"、"5."）→ null。
  * 負數只在 `allowNegative: true` 時接受（帳戶期初餘額），否則 null。
  * 結果超出 `Number.MAX_SAFE_INTEGER` → null。
  */
 export function parseMoneyInput(text: string, options?: { allowNegative?: boolean }): Cents | null {
-  const normalized = text.trim().replaceAll(',', '');
-  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(normalized);
+  const match = /^(-?)(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?$/.exec(text.trim());
 
   if (!match) {
     return null;
@@ -91,7 +90,7 @@ export function parseMoneyInput(text: string, options?: { allowNegative?: boolea
     return null;
   }
 
-  const wholeAmount = Number(wholeText);
+  const wholeAmount = Number(wholeText!.replaceAll(',', ''));
   const fraction = Number(fractionText.padEnd(2, '0'));
   if (!Number.isSafeInteger(wholeAmount)) {
     return null;

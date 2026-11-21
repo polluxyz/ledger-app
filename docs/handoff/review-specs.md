@@ -1,23 +1,17 @@
-# 交接：審查修正 spec（`review-specs`）
+# review-specs 交接
 
-入口與跨工作區規則見 [`../handoff.md`](../handoff.md)。
+R6 已合併並部署 dev。登出後使用舊憑證，dev 回應 401。[部署紀錄 #229](https://github.com/polluxyz/ledger-app/pull/229)
 
-## 現況（2026-11-18）
+R5 的備份與還原方案取決於正式部署位置。等開發者在本區定案，再列假設並送審規格。[專案審查報告](../reports/2026-11-11-project-review.md)
 
-- 來源：專案審查報告 [`docs/reports/2026-11-11-project-review.md`](../reports/2026-11-11-project-review.md) 的 R5、R6。
-- **R6**：已完成（#227）。登入紀錄表、`POST /api/auth/logout`、網頁登出最多等 5 秒。spec [`r6-token-revocation.md`](../specs/r6-token-revocation.md)，plan 與 todo 已移到 `tasks/archive/`。2026-11-18 已部署到 dev（備份 `ledger_dev_before_r6_20261118_1421.dump`），在 dev 走過登入、登出、舊憑證 401。部署後每個人要重新登入 1 次。
-- **R5**：等開發者決定正式部署的位置。
-- 編號：R6 用決策 373～384、W293～W296（W297～W299 保留）、`SC-TV1`～`SC-TV16`；R5 用決策 385～394、W300～W306、`SC-BK`。
-- 測試資料庫：`ledger_review_test`，`apps/api/.env.test` 指向它。兩套 e2e 共用，不能同時跑。
+2026-11-18 已向開發者列出 3 個選項。開發者還沒選，也還沒徵詢 advisor。開發者要建議時，先依 [§1.1](../orca-multi-agent.md) 徵詢 advisor，再並列雙方看法。
 
-## 下一步
+1. 自己的 Linux 主機：排程跑 `pg_dump`，備份複製到別處。最省錢，排程與監控要自己寫。
+2. GCP 的 Cloud Run 加 Cloud SQL：內建每日備份與時間點還原，R5 只要寫還原演練。要付月費。
+3. 先留在這台 Windows 電腦：用工作排程器跑 `pg_dump`，備份要另外複製到別處。
 
-1. R5：開發者決定部署位置後列假設清單，再寫 spec。
+## 操作限制
 
-## 已知狀況
-
-- 本機 Web Vitest 用預設並行數時，每輪有 4～13 條 5000ms 逾時，每輪是不同的測試，`main` 上也一樣。用 `pnpm --filter @ledger/web exec vitest run --maxWorkers=6` 全過。CI 不受影響。要改 Vitest 設定屬網頁範圍，派 Codex。
-
-## 開發者的偏好
-
-- 共用的偏好見入口檔。審查修正一律走 spec → plan → todo，核可才動工。
+- R5 保留的編號見[交接入口](../handoff.md)。 Start only after approval of the spec, then the plan and task list.
+- Run this workspace’s two e2e suites separately. Both use `ledger_review_test`.
+- For local Web unit tests use `pnpm --filter @ledger/web exec vitest run --maxWorkers=6`. 預設並行數曾使不同測試逾時。[歷史交接](https://github.com/polluxyz/ledger-app/blob/d190f4fd76c6f261e0bd84ff68d43eb46b2c4f25/docs/handoff/review-specs.md)

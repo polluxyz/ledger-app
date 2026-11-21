@@ -1,8 +1,9 @@
 /** 3c 分帳端到端測試：實際資料庫驗證份額、往來、提議、互轉與列表分頁。 */
 import { INestApplication } from '@nestjs/common';
-import type { CreateSplitRequest, Paginated, Split, Transaction } from '@ledger/shared';
+import type { Account, CreateSplitRequest, Paginated, Split, Transaction } from '@ledger/shared';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { holdLock, waitForBlockedQueries } from './concurrency-utils';
 import { createE2EApp, createSharedLedger, httpServer, resetDb, idempotencyKey } from './e2e-utils';
 import {
   auth,
@@ -366,6 +367,67 @@ describe('Splits (e2e)', () => {
     });
     expect(await prisma.debtEntry.count({ where: { splitId: split.id, deletedAt: null } })).toBe(0);
   });
+
+  it('SC-S11: concurrent conversions with different keys debit the account only once', async () => {
+    const alice = await person(app, 'alice@example.com', 'Alice');
+    const ming = await createCounterparty(app, alice, '小明');
+    const hua = await createCounterparty(app, alice, '小華');
+    const input = await body(alice, [ming.id]);
+    const ordinary = await request(server())
+      .post(`/api/ledgers/${alice.ledgerId}/transactions`)
+      .set(idempotencyKey())
+      .set(auth(alice.token))
+      .send({
+        type: 'EXPENSE',
+        amount: input.total,
+        date: day,
+        categoryId: input.categoryId,
+        accountId: alice.cashId,
+      })
+      .expect(201);
+    const originalId = (ordinary.body as Transaction).id;
+    const lock = await holdLock(
+      prisma,
+      (tx) => tx.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${originalId} FOR UPDATE`,
+    );
+    // 不同對象不會卡在同一個對象鎖。等兩個請求都在等原交易的鎖，再放行。
+    const responses = Promise.all(
+      [ming.id, hua.id].map((id) =>
+        create(alice, {
+          ...input,
+          participants: [{ counterpartyId: null }, { counterpartyId: id }],
+          fromTransactionId: originalId,
+        }).then(),
+      ),
+    );
+    try {
+      await waitForBlockedQueries(prisma, 2);
+    } finally {
+      await lock.release();
+      await responses;
+    }
+    const results = await responses;
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(results.find((result) => result.status === 409)?.body).toMatchObject({
+      errorCode: 'TRANSACTION_NOT_CONVERTIBLE',
+    });
+    expect(await prisma.split.count({ where: { ledgerId: alice.ledgerId } })).toBe(1);
+    expect(
+      (await prisma.transaction.findUniqueOrThrow({ where: { id: originalId } })).deletedAt,
+    ).not.toBeNull();
+    expect(
+      await prisma.transaction.count({ where: { accountId: alice.cashId, deletedAt: null } }),
+    ).toBe(2);
+    const accountResult = await request(server())
+      .get('/api/accounts')
+      .set(auth(alice.token))
+      .expect(200);
+    expect(
+      (accountResult.body as Account[]).find((account) => account.id === alice.cashId),
+    ).toMatchObject({
+      balance: -input.total,
+    });
+  }, 15000);
 
   it('SC-S12 and S13: delete is atomic and child records are read-only', async () => {
     const alice = await person(app, 'alice@example.com', 'Alice');

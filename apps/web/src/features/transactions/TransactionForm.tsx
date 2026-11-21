@@ -116,7 +116,7 @@ interface TransactionFormProps {
  * 輸入框顯示以元為單位的字串；送出前由 shared 將字串解析成整數分，讓畫面與 API
  * 使用各自清楚的單位。
  *
- * 前端只做「體驗性」的必填與型別限制（required、type="number"）；真正的驗證
+ * 前端只做必填與輸入格式檢查。金額保留原文，由 shared 解析。真正的驗證
  * 一律由後端負責。失敗時訊息的內容仍來自後端，前端只把 `errorCode` 換成
  * 在地化字串（`lib/error-messages.ts`），對不到的代碼就原樣顯示。
  *
@@ -600,6 +600,9 @@ function TransactionFormContent({
   const [splitEditWarningOpen, setSplitEditWarningOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
   const [resolvingNames, setResolvingNames] = useState(false);
+  const submissionInFlight = useRef(false);
+  const createdCounterparties = useRef(new Map<string, string>());
+  const createdLedgerPayers = useRef(new Map<string, LedgerPerson>());
   const ledgerSplitInitKey = useRef('');
   const mappedCategoryLedgerId = useRef('');
 
@@ -1137,26 +1140,34 @@ function TransactionFormContent({
   }
 
   async function submitTransactionOrSplit(confirmedSyncedEdit = false) {
+    if (submissionInFlight.current) return;
     if (split && hasSyncedSplitEntries && !confirmedSyncedEdit) {
       setSplitEditWarningOpen(true);
       return;
     }
     if (isSharedLedger && splitEnabled && type !== 'TRANSFER' && !ledgerSplitPreview?.ok) return;
+    if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
+    // 停用按鈕要等重繪。先同步上鎖，避免重送在記帳前重複建立付款人。
+    submissionInFlight.current = true;
     setSubmissionError(null);
     setResolvingNames(true);
-    const resolvedNames = new Map<string, string>();
-
     async function resolveName(name: string): Promise<string> {
       const normalized = name.trim();
-      const cached = resolvedNames.get(normalized);
+      // 重試時沿用已建立的對象，讓同一筆交易送出相同的對象 id。
+      const cached = createdCounterparties.current.get(normalized);
       if (cached) return cached;
       const created = await createCounterparty.mutateAsync({ name: normalized });
-      resolvedNames.set(normalized, created.id);
+      createdCounterparties.current.set(normalized, created.id);
       return created.id;
     }
 
     try {
-      const isoDate = new Date(date).toISOString();
+      const originalDate = split?.date ?? transaction?.date;
+      // 日期沒改就沿用原時間，避免只改金額卻改動交易排序。
+      const isoDate =
+        originalDate !== undefined && date === toDateInputValue(new Date(originalDate))
+          ? originalDate
+          : new Date(date).toISOString();
 
       if (isSharedLedger && type !== 'TRANSFER') {
         let createdPayerPerson: LedgerPerson | null = null;
@@ -1175,9 +1186,12 @@ function TransactionFormContent({
           if (existing) {
             payerPersonId = existing.id;
           } else {
-            const created = await createLedgerPerson!.mutateAsync({ name: normalizedName });
-            createdPayerPerson = created;
-            payerPersonId = created.id;
+            // 新增成功後，人員清單可能還在更新。重試先沿用收到的付款人。
+            createdPayerPerson =
+              createdLedgerPayers.current.get(normalizedName) ??
+              (await createLedgerPerson!.mutateAsync({ name: normalizedName }));
+            createdLedgerPayers.current.set(normalizedName, createdPayerPerson);
+            payerPersonId = createdPayerPerson.id;
           }
         }
 
@@ -1220,18 +1234,14 @@ function TransactionFormContent({
           ...(note === '' ? {} : { note }),
           ...(ledgerSplitInput === null ? {} : { ledgerSplit: ledgerSplitInput }),
         };
-        if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
-        try {
-          await createTransaction.mutateAsync(input, draftIdempotencyKey ?? idempotencyKey);
-          if (draft !== undefined) {
-            onSaved?.();
-            return;
-          }
-        } finally {
-          if (draft !== undefined) onDraftSavingChange?.(false);
+        await createTransaction.mutateAsync(input, draftIdempotencyKey ?? idempotencyKey);
+        if (draft !== undefined) {
+          onSaved?.();
+          return;
         }
 
         setIdempotencyKey(createIdempotencyKey());
+        createdLedgerPayers.current.clear();
         const nextPeople = createdPayerPerson
           ? [...ledgerPeople, createdPayerPerson]
           : ledgerPeople;
@@ -1323,22 +1333,18 @@ function TransactionFormContent({
             ...(note === '' ? { note: undefined } : {}),
             ...(transaction ? { fromTransactionId: transaction.id } : {}),
           };
-          if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
-          try {
-            await createSplit.mutateAsync({
-              ...createInput,
-              idempotencyKey: draftIdempotencyKey ?? idempotencyKey,
-            });
-            if (draft !== undefined) {
-              onSaved?.();
-              return;
-            }
-          } finally {
-            if (draft !== undefined) onDraftSavingChange?.(false);
+          await createSplit.mutateAsync({
+            ...createInput,
+            idempotencyKey: draftIdempotencyKey ?? idempotencyKey,
+          });
+          if (draft !== undefined) {
+            onSaved?.();
+            return;
           }
           if (isEdit) onSaved?.();
           else {
             setIdempotencyKey(createIdempotencyKey());
+            createdCounterparties.current.clear();
             setAmount('');
             setTitle('');
             setNote('');
@@ -1371,36 +1377,34 @@ function TransactionFormContent({
         return;
       }
 
-      if (draft !== undefined && onDraftSavingChange?.(true) === false) return;
-      try {
-        await createTransaction.mutateAsync(
-          {
-            type,
-            amount: amountCents!,
-            date: isoDate,
-            ...createCategoryInput(),
-            accountId: selectedAccountId === '' ? undefined : selectedAccountId,
-            toAccountId:
-              type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
-            title: title === '' ? undefined : title,
-            note: note === '' ? undefined : note,
-          },
-          draftIdempotencyKey ?? idempotencyKey,
-        );
-        if (draft !== undefined) {
-          onSaved?.();
-          return;
-        }
-        setIdempotencyKey(createIdempotencyKey());
-        setAmount('');
-        setTitle('');
-        setNote('');
-      } finally {
-        if (draft !== undefined) onDraftSavingChange?.(false);
+      await createTransaction.mutateAsync(
+        {
+          type,
+          amount: amountCents!,
+          date: isoDate,
+          ...createCategoryInput(),
+          accountId: selectedAccountId === '' ? undefined : selectedAccountId,
+          toAccountId:
+            type === 'TRANSFER' && selectedToAccountId !== '' ? selectedToAccountId : undefined,
+          title: title === '' ? undefined : title,
+          note: note === '' ? undefined : note,
+        },
+        draftIdempotencyKey ?? idempotencyKey,
+      );
+      if (draft !== undefined) {
+        onSaved?.();
+        return;
       }
+      setIdempotencyKey(createIdempotencyKey());
+      createdCounterparties.current.clear();
+      setAmount('');
+      setTitle('');
+      setNote('');
     } catch (error) {
       setSubmissionError(error);
     } finally {
+      submissionInFlight.current = false;
+      if (draft !== undefined) onDraftSavingChange?.(false);
       setResolvingNames(false);
     }
   }
@@ -1468,9 +1472,7 @@ function TransactionFormContent({
         <TextField
           label="金額"
           id={amountFieldId}
-          type="number"
-          min="0.01"
-          step="0.01"
+          type="text"
           inputMode="decimal"
           value={amount}
           required

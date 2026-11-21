@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AddMemberRequest, LedgerMemberInfo, LedgerRole } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
 import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
@@ -9,22 +9,8 @@ import { LEDGERS_KEY } from './use-ledgers';
  *
  * 前端不做任何權限判斷來決定「資料拿不拿得到」——那一律由後端的
  * `@RequireLedgerRole` 把關。呼叫端依角色隱藏按鈕只是體驗，不是授權。
- */
-export function membersKey(ledgerId: string) {
-  return ['members', ledgerId] as const;
-}
-
-/** 某帳本的成員清單。需要 VIEWER 以上；無權時後端回 404。 */
-export function useMembers(ledgerId: string | null) {
-  return useQuery({
-    queryKey: membersKey(ledgerId ?? ''),
-    queryFn: () => apiRequest<LedgerMemberInfo[]>(`/ledgers/${ledgerId as string}/members`),
-    enabled: ledgerId !== null,
-  });
-}
-
-/**
- * 以下三個 mutation 都不攔截錯誤——後端的 `errorCode` 才是呼叫端該分支判斷的
+ *
+ * 成員寫入不攔截錯誤——後端的 `errorCode` 才是呼叫端該分支判斷的
  * 依據（`USER_NOT_FOUND`、`ALREADY_MEMBER`、`LAST_OWNER_CANNOT_LEAVE`……）。
  */
 
@@ -39,7 +25,6 @@ export function useAddMember(ledgerId: string) {
         body: input,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
       invalidateAfterMoneyWrite(queryClient);
     },
@@ -62,7 +47,6 @@ export function useAddMemberTo() {
         body: input,
       }),
     onSuccess: (_data, { ledgerId }) => {
-      void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
       invalidateAfterMoneyWrite(queryClient);
     },
@@ -80,7 +64,6 @@ export function useUpdateMemberRole(ledgerId: string) {
         body: { role },
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
     },
   });
@@ -100,7 +83,6 @@ export function useRemoveMember(ledgerId: string) {
     mutationFn: (userId: string) =>
       apiRequest<void>(`/ledgers/${ledgerId}/members/${userId}`, { method: 'DELETE' }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: membersKey(ledgerId) });
       void queryClient.invalidateQueries({ queryKey: ['ledger', ledgerId] });
       void queryClient.invalidateQueries({ queryKey: LEDGERS_KEY });
       invalidateAfterMoneyWrite(queryClient);

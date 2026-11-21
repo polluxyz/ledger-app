@@ -9,7 +9,7 @@ import { apiRequest } from '../../lib/api-client';
 import { invalidateAfterMoneyWrite } from '../../lib/invalidate-after-money-write';
 
 /**
- * 共享帳本的人與「指向」（3f）：`GET /ledger-groups` 與 `PUT`／`DELETE …/pointer`。
+ * 共享帳本的人與「指向」（3f）：`GET /ledger-groups` 與 `PUT …/pointer`。
  *
  * 對象頁（W130）與借還頁（W135）都讀帳本群組，所以 hook 集中在這裡。金額、分組、有效指向
  * 都來自回應，前端只顯示（spec §7）。
@@ -44,11 +44,6 @@ export function useLedgerGroups(query: ListLedgerGroupsQuery = {}) {
   });
 }
 
-function useInvalidatePointers() {
-  const queryClient = useQueryClient();
-  return () => invalidateAfterMoneyWrite(queryClient);
-}
-
 interface PointerTarget {
   ledgerId: string;
   personId: string;
@@ -56,25 +51,13 @@ interface PointerTarget {
 
 /** 設定指向。`counterpartyId: null`＝明確「不指向」。不是成員的帳本回 404。 */
 export function useSetLedgerPointer() {
-  const invalidate = useInvalidatePointers();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ ledgerId, personId, ...body }: PointerTarget & SetLedgerPointerRequest) =>
       apiRequest<LedgerPointerResponse>(`/ledgers/${ledgerId}/people/${personId}/pointer`, {
         method: 'PUT',
         body,
       }),
-    onSuccess: invalidate,
-  });
-}
-
-/** 清掉設定，回到自動指向。 */
-export function useClearLedgerPointer() {
-  const invalidate = useInvalidatePointers();
-  return useMutation({
-    mutationFn: ({ ledgerId, personId }: PointerTarget) =>
-      apiRequest<LedgerPointerResponse>(`/ledgers/${ledgerId}/people/${personId}/pointer`, {
-        method: 'DELETE',
-      }),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfterMoneyWrite(queryClient),
   });
 }

@@ -9,7 +9,9 @@
 | `docs/reports/`   | 一次性的技術報告                   | 寫完不動               |
 | `docs/artifacts/` | HTML 產出（規劃圖、提案頁）        | **不進版控**，隨時可刪 |
 
-**換 session 時先讀 [`handoff.md`](handoff.md) 與自己工作區的 `handoff/<工作區>.md`**（每次交接更新）。
+On takeover first read [handoff.md](handoff.md) and your `handoff/<工作區>.md`. Update at each handoff.
+
+Read by operation: [部署手冊](operations/dev-deployment.md), [測試環境](operations/test-environment.md), [匯入規劃](operations/import-planning.md).
 
 規範文件另外放：根目錄的 `CLAUDE.md`（怎麼做）、[`orca-multi-agent.md`](orca-multi-agent.md)（多代理派工與交接）、`專案決策脈絡.md`（當初為何這樣決定）、`README.md`（怎麼跑起來）。分層規範在 `apps/api/CLAUDE.md` 與 `apps/web/CLAUDE.md`。
 
@@ -28,7 +30,7 @@
 
 階段二中途插入五個小步：**2c 帳戶與餘額**（取代已廢止的 2a 付款方式）、**2d 帳本類型**、**2e 端對端測試**、**2f 版面重整**、**2g 收尾**，各有自己的 spec。階段二結束後再追加 **2h 視覺改版**（黑金主題）與 **2i 版面第二輪**；兩者都已完成。**2j 統計**原屬階段二，在階段三之後補做，已完成。
 
-不要提前實作後續階段的功能，也不要預先建立未來階段才需要的檔案。
+Do not implement later phases or create files for them early.
 
 ## 規格（`docs/specs/`）
 
@@ -79,43 +81,44 @@
 
 ## 進行中的任務（`tasks/`）
 
-每個功能一組 `*-plan.md`（技術實作計畫）與 `*-todo.md`（離散任務與驗收條件）。兩者一起送審，核可後一路做到完。
+For each feature pair `*-plan.md` (implementation plan) with `*-todo.md` (tasks and acceptance). Submit both together and execute through completion after approval.
 
-做完的移到 [`tasks/archive/`](../tasks/archive/)，依階段命名。
+Move completed files to [`tasks/archive/`](../tasks/archive/) and name them by phase.
 
 ## 報告（`docs/reports/`）
 
-| 文件                                                                 | 內容                         |
-| -------------------------------------------------------------------- | ---------------------------- |
-| [`phase-0-technical-report.md`](reports/phase-0-technical-report.md) | 階段零：專案初始化的技術決策 |
+| 文件                                                                 | 內容                            |
+| -------------------------------------------------------------------- | ------------------------------- |
+| [`phase-0-technical-report.md`](reports/phase-0-technical-report.md) | 階段零：專案初始化的技術決策    |
+| [Session 文件用量](reports/2026-11-18-session-input.md)              | 文件盤點、前後數字與驗證        |
+| [記帳流程與內部程式審查](reports/2026-11-18-ledger-flow-review.md)   | 帳務、效能與刪除依據            |
+| [Agent 指引英文版驗收](reports/2026-11-19-agent-guidance.md)         | 載入入口、情境驗收與 token 量測 |
 
 ## HTML 產出（`docs/artifacts/`）
 
-只有靠「並排比較」或「空間關係」才說得清的東西才做成 HTML：規劃結構圖（skill `plan-map`）、開工提案（skill `step-proposal`）、機制圖解。範例 prompt 見 [`artifact-prompts.md`](artifact-prompts.md)。
+Generate HTML only when side-by-side comparison or spatial relationships are needed: planning maps (`plan-map`), proposals (`step-proposal`) and mechanism diagrams. See [sample prompts](artifact-prompts.md).
 
-三條不可妥協的規則寫在 `CLAUDE.md` §13：一律產到 `docs/artifacts/`（不進版控）、絕不帶入機敏資訊、不要主動掃描這個目錄當 context 來源。以下是其餘規則，**產 artifact 前先讀完**：
+Before generation read these rules and `CLAUDE.md` §13. Use only `docs/artifacts/`, exclude secrets and never proactively scan it.
 
-1. **完全 self-contained**：CSS / JS / 資料全部 inline，不 `fetch` 外部檔案、不引 CDN。開發者是用瀏覽器直接開 `file://`，`fetch()` 會被擋。
-2. **視覺沿用產品的設計 token**（`apps/web/src/styles/global.css`），不要另創一套配色。
-3. **產出後必須在對話中同時給簡短結論**，不可以只丟一句「頁面做好了，路徑在 X」。人不一定會馬上打開。
-4. **artifact 不是決策本身**。產出提案頁 ≠ 可以開工，仍要等開發者明確同意。
-5. **結論要回寫 Markdown**。artifact 上談定的決策必須寫回對應的 `docs/specs/` 或 `tasks/` 檔案，否則決策會隨頁面被刪而消失。
-6. 要參考某一頁時，由開發者明確指名，不要自己去翻。
+1. Inline CSS, JS and data. No external `fetch()` or CDNs. The developer opens `file://`.
+2. Use product design tokens from `apps/web/src/styles/global.css`.
+3. Give a brief conclusion in chat with the artifact. A path alone (「頁面做好了，路徑在 X」) is insufficient.
+4. Wait for explicit developer approval before starting proposed work.
+5. Record agreed decisions in the corresponding `docs/specs/` or `tasks/` Markdown.
+6. Read an artifact only when the developer names that page.
 
 判斷準則（三題都不明確時預設 Markdown）：要進版控嗎？會被反覆修訂嗎？是不是靠並排比較才說得清？前兩題為「是」就用 Markdown，第三題為「是」才用 HTML。
 
 ## 程式碼檢索（codebase-memory-mcp）
 
-`CLAUDE.md` §12 的細節。索引過期、或查詢結果和實際檔案對不上時讀這一節。
-
-重新索引（用 Bash，勿用 PowerShell）：
+Read when the index is stale or results disagree with files (`CLAUDE.md` §12). Reindex in Bash, never PowerShell:
 
 ```bash
 ~/.local/bin/codebase-memory-mcp.exe cli index_repository \
   --repo-path "d:/Projects/ledger-app" --mode moderate
 ```
 
-- 參數是 `--repo-path`，**不是** `--path`；傳錯會讓 indexing worker 靜悄悄崩潰。
-- `trace_path --function-name <NestJS Class>` 會回傳空的 callers，因為建構子注入不算 call edge；查類別關聯改用 `search_graph` 看 `in_degree`。
-- 大改動後圖譜會過期，先重新索引再依賴它。
-- 在 worktree 裡索引可能指向主工作區的路徑，第一次使用前先跑 `index_status` 確認。
+- Use `--repo-path`. Passing `--path` can silently crash the indexing worker.
+- `trace_path --function-name <NestJS Class>` returns no callers for constructor injection. Use `search_graph` and `in_degree` for class relationships.
+- Reindex after large changes before relying on the graph.
+- In a worktree the index may point to main. Check `index_status` before first use.
