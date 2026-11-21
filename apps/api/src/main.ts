@@ -2,18 +2,23 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { referrerPolicy, xContentTypeOptions } from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import type { Env } from './config/env.validation';
 import { corsOptions } from './config/cors-options';
 
 /**
- * 應用程式進入點（bootstrap）。在這裡把「全域」設定一次裝好：CORS、路由前綴、
+ * 應用程式進入點（bootstrap）。在這裡把「全域」設定一次裝好：安全標頭、CORS、路由前綴、
  * 輸入驗證管線、統一錯誤 filter、Swagger 文件，最後開始監聽埠口。
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService<Env, true>);
+
+  // 只啟用 SEC-3 的 API 標頭。先於 CORS 設定，讓預檢回應也帶有標頭。
+  // Swagger 文件沿用現有的資源載入規則。
+  app.use(xContentTypeOptions(), referrerPolicy({ policy: 'no-referrer' }));
 
   /**
    * 只放行設定中的前端來源。Web 前端與 API 位於不同 port／網域（不同來源），
