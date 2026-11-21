@@ -11,7 +11,7 @@ describe('createAnthropicOutputSchema', () => {
     return items['properties'] as Record<string, unknown>;
   }
 
-  it('SC-P42.1 strips only unsupported size limits throughout schema nodes', () => {
+  it('SC-P42.1 strips unsupported size limits throughout schema nodes and preserves patterns', () => {
     const schema = {
       ...AI_WIRE_JSON_SCHEMA,
       minItems: 0,
@@ -45,22 +45,22 @@ describe('createAnthropicOutputSchema', () => {
     expect(AI_WIRE_JSON_SCHEMA).toEqual(before);
   });
 
-  it('SC-P42.3 adds numbered enums with null and unknown account markers', () => {
+  it('SC-P42.3 replaces redundant types with numbered enums and preserves null and unknown account markers', () => {
     const properties = draftProperties(createAnthropicOutputSchema(AI_WIRE_JSON_SCHEMA, codes));
-    expect(properties['ledger']).toEqual({ type: ['string', 'null'], enum: ['L1', 'L2', null] });
-    expect(properties['category']).toEqual({ type: ['string', 'null'], enum: ['C1', null] });
+    expect(properties['ledger']).toEqual({ enum: ['L1', 'L2', null] });
+    expect(properties['category']).toEqual({ enum: ['C1', null] });
     for (const name of ['account', 'toAccount']) {
-      expect(properties[name]).toEqual({ type: ['string', 'null'], enum: ['A1', 'A2', '?', null] });
+      expect(properties[name]).toEqual({ enum: ['A1', 'A2', '?', null] });
     }
   });
 
   it('SC-P42.3 handles empty or omitted codes without widening enums', () => {
     for (const empty of [undefined, { ledgers: [], categories: [], accounts: [] }]) {
       const properties = draftProperties(createAnthropicOutputSchema(AI_WIRE_JSON_SCHEMA, empty));
-      expect(properties['ledger']).toEqual({ type: ['string', 'null'], enum: [null] });
-      expect(properties['category']).toEqual({ type: ['string', 'null'], enum: [null] });
+      expect(properties['ledger']).toEqual({ enum: [null] });
+      expect(properties['category']).toEqual({ enum: [null] });
       for (const name of ['account', 'toAccount']) {
-        expect(properties[name]).toEqual({ type: ['string', 'null'], enum: ['?', null] });
+        expect(properties[name]).toEqual({ enum: ['?', null] });
       }
     }
   });
