@@ -1,6 +1,6 @@
 # Spec：4a 補充：換模型到 Vertex AI 的 Claude Haiku 5.5
 
-> 狀態：**已核可**（開發者 2026-11-18），實作中。
+> 狀態：**實測通過，待切換 dev**。SC-P51、SC-P52 結果見[計畫 §7](../../tasks/ai-haiku-plan.md#7-實作紀錄)。
 > 上游：[`phase-4a-ai-vertex.md`](phase-4a-ai-vertex.md)（Vertex 認證、60 秒上限、決策 337～345）、[`phase-4a-ai-text.md`](phase-4a-ai-text.md)（`LLMProvider` 介面，決策 247～253）、[`phase-4a-ai-quota.md`](phase-4a-ai-quota.md)（額度與用量紀錄，決策 292～299）。
 > 依據：
 >
