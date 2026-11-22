@@ -25,5 +25,6 @@
   - 證據：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm --filter @ledger/web build` 結束碼皆為 0。單元測試 shared 161/161、API 1233/1233、Web 1323/1323 通過。
   - 證據：原樣執行 `pnpm format:check` 因未追蹤技能目錄的 8 個檔案結束碼為 1。透過暫時的 `--ignore-path` 只排除該目錄，複驗結束碼為 0。
   - 證據：全站 Web e2e 145/145 通過，耗時 8 分 40 秒，結束碼 0。16 張截圖見 [plan 執行紀錄](home-polish-plan.md#執行紀錄)。
-- [ ] **T7 協調者驗收**：讀完整 `git status` 與 `git diff`；自己重跑 typecheck、test、首頁與版面編輯 e2e；逐張對照基線截圖；開 PR，CI 全綠後交開發者確認，不自行合併。
+- [x] **T7 協調者驗收**：讀完整 `git status` 與 `git diff`；自己重跑 typecheck、test、首頁與版面編輯 e2e；逐張對照基線截圖；開 PR，CI 全綠後交開發者確認，不自行合併。
   - 驗收：plan「驗證結果」填入實際數字；PR 連結 spec 2n。
+  - 證據：typecheck 結束碼 0；單元測試 161＋1233＋1323 通過；首頁、版面編輯、CSP、統計 e2e 54/54 通過。截圖對照無缺失。合併等開發者確認。

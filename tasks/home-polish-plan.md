@@ -73,4 +73,11 @@ T1～T4 互不相依，順序只為降低 e2e 斷言衝突；T5 依賴 T1（卡�
 
 ## 驗證結果
 
-（驗收時填）
+協調者 2026-11-22 驗收 `399917c`：
+
+- 讀完整 `git diff 9e3d164 399917c`：18 個檔案，只含 `apps/web` 與 `tasks`。摘要卡橫排只用 CSS grid 擺位置，DOM 順序不變；金額仍由 `formatMoney` 產生；沒有 API、schema、相依或 CI 改動。
+- 重跑 `pnpm typecheck`：結束碼 0。
+- 重跑 `pnpm test`：shared 161/161、API 1233/1233、Web 1323/1323，結束碼 0。
+- 重跑 Web e2e `home.spec.ts`、`home-layout-edit.spec.ts`、`csp.spec.ts`、`stats.spec.ts`：54/54 通過（4.2 分鐘），結束碼 0。
+- 對照截圖（1280px 淺色共享、390px 淺色共享前後，以及 390px 深色個人）：W307～W312 都和 spec 一致；1280px 摘要卡與基線相同；分類色差異來自重建測試資料，已記在「未處理」。
+- PR 的 CI 全部通過後交開發者確認畫面，不自行合併（spec §8）。
