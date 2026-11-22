@@ -7,6 +7,10 @@
 3. 語音第 1～4 版已部署。`voice-acceptance` 已掛在本線，保有待填驗收表。沿用 `ctx_6c473e9890b7` 回報通道，主區接回本次結果，ai-4a 負責本線後續驗收。約到現場時重查。與開發者約桌機 Chrome 現場驗收，記錄 T3 後完成 T4。手機虛擬鍵盤與 AI 欄位的位置另待實機確認。[語音任務](../../tasks/ai-voice-todo.md)
 4. 語音收尾後再開[匯入規劃](../operations/import-planning.md)。
 
+## 2026-11-22 每週補查
+
+AI 線協調者保留 `ai-4a` 及直屬的 `voice-acceptance`。本線的 2 個獨有提交均列於已合併的 [#244](https://github.com/polluxyz/ledger-app/pull/244)。語音區有 1 個未提交的驗收表。派工 `ctx_6c473e9890b7` 尚無完成回報，對話由使用者指定保留。語音負責人約到桌機現場驗收時重查。
+
 ## 操作限制
 
 - De-identify cloud resources, requests, logs and reports. Explain to the developer before creating resources or increasing permissions.
