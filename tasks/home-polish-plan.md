@@ -43,11 +43,33 @@ T1～T4 互不相依，順序只為降低 e2e 斷言衝突；T5 依賴 T1（卡�
 
 ## 未處理（實作中發現、不在本次範圍）
 
-（實作時填）
+- 分類色依分類 ID（資料識別碼）選色。前後截圖各建測試資料，分類 ID 不同。截圖中的分類色可能不同，選色程式未改。
+- 本機未追蹤的 `.agents/skills/unslop/` 有 8 個既有格式差異。套用暫時忽略檔複驗，未改技能目錄或專案格式設定。
 
 ## 執行紀錄
 
-（實作時填）
+- T1：分類卡、編輯把手、移動選單與播報、拖動預覽及分隔線共用「支出分類」。本月支出摘要沿用原名。兩種帳本都顯示帳本名稱與年月。
+- T2：趨勢未選月份、選最新月份時，詳情區保持空白。選較早月份顯示該月和金額。主數字與摘要共用 0.48 倍的貨幣符號樣式，負號一起縮小。
+- T3：待確認小按鈕在 390px 實測為 44px，在 1280px 實測為 30px。日期放在「記了一筆」之後、箭頭之前。
+- T4：1280px 與 390px 的首頁無副標列都由 96.59px 降至 69px，縮短 27.59px。有副標列都是 97px。交易頁同筆交易實測 52px，SC-Y30 通過。
+- T5：依 `data-home-layout="narrow"` 切換摘要卡格線。390px 共享帳本的摘要區由 602px 降至 248px，待確認卡上緣由 y=845px 移至 y=491px。個人帳本摘要區由 536px 降至 248px，待確認卡上緣由 y=779px 移至 y=491px。1280px 個人與共享摘要區維持 180px 與 202px。
+- 320px 的摘要區實測為個人 248px、共享 266px。在 320px 與 390px，以 $12,345,678 支出和 -$12,300,678 結餘驗證兩種帳本。標題、金額、「我 $X」與副標的文字範圍都在卡內，彼此沒有重疊。
+- T6：使用 `ledger_web_unslop_test` 和虛構資料擷取深淺色、個人與共享、1280px 與 390px 的 16 張截圖。第一輪全站測試發現 CSP 測試仍用分類卡舊名，已依畫面中的分隔線名稱修正選取器。
+- 對照 16 張截圖。1280px 的摘要區 4 組像素相同。390px 可見摘要卡橫排、待確認卡提早出現、交易列縮短。結餘底色與圓弧仍可辨識。
+- 全站 Web e2e 重跑 145/145 通過，耗時 8 分 40 秒，結束碼 0。涵蓋 2l SC-Y1、SC-Y2、SC-Y30、W7、版面拖動與儲存、2m SC-V1～V4，以及原有摘要連結名稱斷言。2m SC-V5～V9 由既有首頁與單元測試，加上本次截圖對照確認。
+
+截圖路徑（各列是同一個畫面條件）
+
+| 寬度與帳本、主題 | 改動前                                                                                                | 改動後                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1280px 個人淺色  | [before-1280-light-personal.png](../docs/artifacts/home-unslop-before/before-1280-light-personal.png) | [after-1280-light-personal.png](../docs/artifacts/home-unslop-after/after-1280-light-personal.png) |
+| 1280px 個人深色  | [before-1280-dark-personal.png](../docs/artifacts/home-unslop-before/before-1280-dark-personal.png)   | [after-1280-dark-personal.png](../docs/artifacts/home-unslop-after/after-1280-dark-personal.png)   |
+| 1280px 共享淺色  | [before-1280-light-shared.png](../docs/artifacts/home-unslop-before/before-1280-light-shared.png)     | [after-1280-light-shared.png](../docs/artifacts/home-unslop-after/after-1280-light-shared.png)     |
+| 1280px 共享深色  | [before-1280-dark-shared.png](../docs/artifacts/home-unslop-before/before-1280-dark-shared.png)       | [after-1280-dark-shared.png](../docs/artifacts/home-unslop-after/after-1280-dark-shared.png)       |
+| 390px 個人淺色   | [before-390-light-personal.png](../docs/artifacts/home-unslop-before/before-390-light-personal.png)   | [after-390-light-personal.png](../docs/artifacts/home-unslop-after/after-390-light-personal.png)   |
+| 390px 個人深色   | [before-390-dark-personal.png](../docs/artifacts/home-unslop-before/before-390-dark-personal.png)     | [after-390-dark-personal.png](../docs/artifacts/home-unslop-after/after-390-dark-personal.png)     |
+| 390px 共享淺色   | [before-390-light-shared.png](../docs/artifacts/home-unslop-before/before-390-light-shared.png)       | [after-390-light-shared.png](../docs/artifacts/home-unslop-after/after-390-light-shared.png)       |
+| 390px 共享深色   | [before-390-dark-shared.png](../docs/artifacts/home-unslop-before/before-390-dark-shared.png)         | [after-390-dark-shared.png](../docs/artifacts/home-unslop-after/after-390-dark-shared.png)         |
 
 ## 驗證結果
 

@@ -127,6 +127,11 @@
   gap: var(--space-sm);
 }
 
+.card[data-home-card-id='categories'] .titleGroup {
+  flex-wrap: wrap;
+  row-gap: var(--space-xs);
+}
+
 .heading {
   min-width: 0;
   margin: 0;
@@ -170,6 +175,51 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* 固定單欄時，摘要卡共用格線。保留連結內標題和金額的原始閱讀順序。 */
+:global([data-home-layout='narrow'])
+  .linkCard:is(
+    [data-home-card-id='expense'],
+    [data-home-card-id='income'],
+    [data-home-card-id='net']
+  ) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+
+  > .header {
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    min-height: 0;
+    gap: var(--space-sm);
+    margin-bottom: 0;
+  }
+
+  > .body {
+    display: contents;
+  }
+
+  .controlsSlot {
+    display: none;
+  }
+
+  .titleGroup {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .summaryIcon {
+    grid-column: 1;
+    grid-row: 1;
+    width: 2rem;
+    height: 2rem;
+  }
 }
 
 .srOnly {

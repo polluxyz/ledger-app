@@ -1,0 +1,8 @@
+/* 首頁摘要與財務趨勢共用貨幣符號的字級與位置。 */
+.symbol {
+  margin-right: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: 0.48em;
+  font-weight: 400;
+  vertical-align: 12%;
+}

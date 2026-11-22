@@ -283,6 +283,21 @@ export function TransactionList({
                       : transaction.amount;
               const payerSubtitle = getPayerSubtitle(transaction, currentUserId);
               const ledgerArrows = getLedgerSplitArrows(transaction, currentUserId);
+              const name = rowName(transaction);
+              const mergeSource = transaction.merge?.sourceLedgerName;
+              const ledgerName = ledgerNames?.get(transaction.id);
+              const compactHomeRow =
+                homeActivity &&
+                !(
+                  name ||
+                  settlement ||
+                  mergeSource ||
+                  payerSubtitle ||
+                  ledgerName ||
+                  hasSplit ||
+                  hasMergeDetails ||
+                  transaction.difference
+                );
               const settlementFrom = settlement
                 ? labelPerson(settlement.from, currentUserId)
                 : undefined;
@@ -333,37 +348,34 @@ export function TransactionList({
                       </span>
                     )}
                   </span>
-                  <span className={styles.subtitle}>
-                    {settlement && settlementFrom && settlementTo ? (
-                      <DebtArrow
-                        from={settlementFrom}
-                        to={settlementTo}
-                        amount={transaction.amount}
-                        compact
-                        srText={`${settlementFrom}付給${settlementTo}`}
-                      />
-                    ) : (
-                      <span
-                        className={styles.name}
-                        data-home-activity-part={homeActivity ? 'name' : undefined}
-                      >
-                        {rowName(transaction)}
-                      </span>
-                    )}
-                    {transaction.merge?.sourceLedgerName && (
-                      <span className={styles.mergeSource}>
-                        {transaction.merge.sourceLedgerName}
-                      </span>
-                    )}
-                    {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
-                    {ledgerNames?.get(transaction.id) && (
-                      <span className={styles.ledgerName}>{ledgerNames.get(transaction.id)}</span>
-                    )}
-                  </span>
+                  {!compactHomeRow && (
+                    <span className={styles.subtitle}>
+                      {settlement && settlementFrom && settlementTo ? (
+                        <DebtArrow
+                          from={settlementFrom}
+                          to={settlementTo}
+                          amount={transaction.amount}
+                          compact
+                          srText={`${settlementFrom}付給${settlementTo}`}
+                        />
+                      ) : (
+                        <span
+                          className={styles.name}
+                          data-home-activity-part={homeActivity ? 'name' : undefined}
+                        >
+                          {name}
+                        </span>
+                      )}
+                      {mergeSource && <span className={styles.mergeSource}>{mergeSource}</span>}
+                      {payerSubtitle && <span className={styles.payer}>{payerSubtitle}</span>}
+                      {ledgerName && <span className={styles.ledgerName}>{ledgerName}</span>}
+                    </span>
+                  )}
                 </>
               );
               const rowClassNames = [
                 styles.row,
+                compactHomeRow ? styles.compactHomeRow : '',
                 isClickable ? styles.clickable : '',
                 transaction.marked ? styles.marked : '',
                 transaction.id === selectedId ? styles.selected : '',

@@ -470,6 +470,10 @@ describe('Home dashboard', () => {
     expect(screen.getByRole('link', { name: /結餘/ })).toHaveTextContent('$49,297');
     expect(screen.getByRole('link', { name: /本月支出/ })).not.toHaveTextContent('我 ');
     expect(screen.getByRole('list', { name: '支出分類' })).toHaveTextContent('餐飲');
+    const categories = screen.getByRole('region', { name: '支出分類' });
+    expect(
+      within(categories).getByText(new RegExp(`${ledger.name} · \\d{4} 年 \\d{1,2} 月`)),
+    ).toBeInTheDocument();
     expect(countRequest(`/ledgers/${ledger.id}/statistics`)).toBe(1);
   });
 
@@ -509,7 +513,9 @@ describe('Home dashboard', () => {
 
     expect(await screen.findByRole('link', { name: /本月支出.*1,200/ }, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('我 $450');
-    expect(screen.getByRole('heading', { name: '本月支出 · 家用' })).toBeInTheDocument();
+    const categories = screen.getByRole('region', { name: '支出分類' });
+    expect(within(categories).getByRole('heading', { name: '支出分類' })).toBeInTheDocument();
+    expect(within(categories).getByText(/家用 · \d{4} 年 \d{1,2} 月/)).toBeInTheDocument();
     expect(screen.getByLabelText('我的總資產 $11,100')).toBeInTheDocument();
     const recent = await recentRegion();
     expect(recent.getAllByRole('button', { name: /編輯.*家用分類/ })).toHaveLength(3);

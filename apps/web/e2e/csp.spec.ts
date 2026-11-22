@@ -138,7 +138,7 @@ test('SC-Y23：CSP build 下拖動與調整首頁版面沒有違規', async ({ p
   );
   await page.mouse.up();
 
-  const separator = page.getByRole('separator', { name: '本月支出與帳戶分隔線' });
+  const separator = page.getByRole('separator', { name: '支出分類與帳戶分隔線' });
   await separator.focus();
   await separator.press('ArrowRight');
   await page.getByRole('button', { name: '完成', exact: true }).click();

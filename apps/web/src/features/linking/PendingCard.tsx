@@ -689,15 +689,14 @@ function renderProposalSentence(proposal: DebtProposal): ReactNode {
       const settle = proposal.settle ? '，並以此結清' : '';
       return (
         <>
-          <strong>{name}</strong> 記了一筆：
+          <strong>{name}</strong>{' '}
+          <span className={styles.entryDate}>記了一筆 · {shortDate(proposal.date)}：</span>
           <DebtArrow
             from={direction.from}
             to={direction.to}
             amount={proposal.amount}
             srText={direction.srText}
           />
-          {' · '}
-          {shortDate(proposal.date)}
           {settle}
         </>
       );

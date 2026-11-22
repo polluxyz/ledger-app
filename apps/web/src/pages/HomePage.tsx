@@ -40,6 +40,7 @@ import { HomeLayoutRenderer, type HomeCardContents } from '../features/home/Home
 import { HomeLayoutConflictDialog } from '../features/home/HomeLayoutConflictDialog';
 import { useHomeLayout } from '../features/home/use-home-layout';
 import { HomeFinancialTrendChart } from '../features/statistics/HomeFinancialTrendChart';
+import currencyStyles from '../features/home/HomeCurrency.module.css';
 import { HomeTrendHeader, type HomeTrendMetric } from '../features/statistics/HomeTrendHeader';
 import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
@@ -101,6 +102,11 @@ export default function HomePage() {
       <AuthDialog mode={authDialog} onClose={() => setAuthDialog(null)} />
     </>
   );
+}
+
+/** 首頁月度卡片共用帳本與年月格式。 */
+function ledgerMonthLabel(name: string, periodStart: string): string {
+  return `${name} · ${periodStart.slice(0, 4)} 年 ${Number(periodStart.slice(5, 7))} 月`;
 }
 
 /**
@@ -445,7 +451,9 @@ function Dashboard({
       ),
     },
     categories: {
-      title: ledger.kind === 'SHARED' ? `本月支出 · ${ledger.name}` : '本月支出',
+      titleMeta: (
+        <span className={styles.categoryPeriod}>{ledgerMonthLabel(ledger.name, period.from)}</span>
+      ),
       action: <Link to={statisticsHref}>明細 →</Link>,
       children: categoryContent,
     },
@@ -958,17 +966,18 @@ function LedgerStatContent({
 
   return (
     <div className={styles.statContent}>
-      <strong className={styles.statValue}>
-        <span className={styles.statCurrency}>{formattedAmount.slice(0, currencyEnd)}</span>
+      <strong
+        className={styles.statValue}
+        data-long-amount={formattedAmount.length > 13 || undefined}
+      >
+        <span className={currencyStyles.symbol}>{formattedAmount.slice(0, currencyEnd)}</span>
         {formattedAmount.slice(currencyEnd)}
       </strong>
       {ledger.kind === 'SHARED' && (
         <span className={styles.statMine}>我 {formatMoney(mineTotals[field])}</span>
       )}
       <span className={styles.statFooter}>
-        {field === 'net'
-          ? '收入與支出的差額'
-          : `${ledger.name} · ${periodStart.slice(0, 4)} 年 ${Number(periodStart.slice(5, 7))} 月`}
+        {field === 'net' ? '收入與支出的差額' : ledgerMonthLabel(ledger.name, periodStart)}
       </span>
     </div>
   );
