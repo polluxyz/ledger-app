@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BalanceTrend } from '@ledger/shared';
 import { formatMoney } from '../../lib/format';
+import currencyStyles from '../home/HomeCurrency.module.css';
 import { getFinancialTrendLayout } from './financial-trend-layout';
 import type { HomeTrendMetric } from './HomeTrendHeader';
 import { useTrendAnimation } from './use-trend-animation';
@@ -70,6 +71,8 @@ export function HomeFinancialTrendChart({
   const activeIndex =
       selection?.metric === metric ? Math.min(selection.index, lastIndex) : lastIndex,
     active = months?.[activeIndex];
+  const latestAmount = latest && hasChart ? formatMoney(latest.total) : null;
+  const currencyEnd = latestAmount ? latestAmount.indexOf('$') + 1 : 0;
   const status = error
     ? `${isNet ? '結餘' : '資產'}暫時無法載入`
     : isLoading
@@ -85,20 +88,31 @@ export function HomeFinancialTrendChart({
         <div
           className={styles.total}
           aria-label={
-            latest && hasChart
-              ? `${isNet ? '本月結餘' : shared ? '我的總資產' : '總資產'} ${formatMoney(latest.total)}`
+            latestAmount
+              ? `${isNet ? '本月結餘' : shared ? '我的總資產' : '總資產'} ${latestAmount}`
               : undefined
           }
         >
           <span className={styles.totalLabel}>{label}</span>
-          <strong>{latest && hasChart ? formatMoney(latest.total) : '—'}</strong>
+          <strong>
+            {latestAmount ? (
+              <>
+                <span className={currencyStyles.symbol}>{latestAmount.slice(0, currencyEnd)}</span>
+                {latestAmount.slice(currencyEnd)}
+              </>
+            ) : (
+              '—'
+            )}
+          </strong>
         </div>
-        {active && hasChart && (
-          <div className={styles.detail} aria-live="polite">
-            <span>{formatMonth(active.month)}</span>
-            <strong>{formatMoney(active.total)}</strong>
-          </div>
-        )}
+        <div className={styles.detail} aria-live="polite">
+          {active && hasChart && activeIndex !== lastIndex && (
+            <>
+              <span>{formatMonth(active.month)}</span>
+              <strong>{formatMoney(active.total)}</strong>
+            </>
+          )}
+        </div>
       </div>
       {layout && months ? (
         <svg

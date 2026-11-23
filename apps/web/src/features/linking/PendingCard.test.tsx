@@ -316,7 +316,10 @@ describe('PendingCard', () => {
     expect(within(card).getByText('你欠王小明 $80')).toBeInTheDocument();
     expect(card).not.toHaveTextContent('你借給他');
     expect(card).not.toHaveTextContent('你向他借入');
-    expect(card).toHaveTextContent('09/25，並以此結清');
+    const settlement = within(card).getByText('王小明欠你 $50').closest('li');
+    expect(settlement).toHaveTextContent(
+      /王小明 記了一筆 · 09\/25：.*王小明欠你 \$50.*，並以此結清/,
+    );
     expect(card).toHaveTextContent('王小明 免除了你欠他的錢');
     expect(card).toHaveTextContent('王小明 把 09/20 的借入 $120 → $150 · 09/20 → 09/22');
     expect(card).toHaveTextContent('王小明 把一筆借入改成 $150 · 09/22');

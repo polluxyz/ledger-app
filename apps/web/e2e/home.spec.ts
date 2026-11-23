@@ -23,6 +23,7 @@ import {
   newTransactionForm,
   openDashboard,
   openNewTransaction,
+  openTransactions,
   openUserMenu,
   selectCategory,
   switchLedger,
@@ -216,10 +217,27 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
     await net.click();
     await expect(card.getByLabel('本月結餘 $3,750', { exact: true })).toBeVisible();
     await expect(card.locator('svg')).not.toHaveAttribute('data-animating', 'true');
+    const detail = card.locator('[aria-live="polite"]');
+    await expect(detail).toBeEmpty();
+    const latestTotal = card.getByLabel('本月結餘 $3,750', { exact: true });
+    const currencyRatio = (locator: Locator) =>
+      locator.evaluate((element) => {
+        const number = Number.parseFloat(getComputedStyle(element).fontSize);
+        const currency = Number.parseFloat(getComputedStyle(element.firstElementChild!).fontSize);
+        return currency / number;
+      });
+    const summaryValue = page.locator('[data-home-card-id="net"] strong');
+    expect(await currencyRatio(latestTotal.locator('strong'))).toBeCloseTo(
+      await currencyRatio(summaryValue),
+    );
     const month = card.locator('g[role="button"]').first();
     await month.focus();
     await page.keyboard.press('ArrowRight');
     await expect(card.locator('g[role="button"]').nth(1)).toBeFocused();
+    await expect(detail).toHaveText(/\d{4}年\d{1,2}月\$0/);
+    await page.keyboard.press('End');
+    await expect(card.locator('g[role="button"]').last()).toBeFocused();
+    await expect(detail).toBeEmpty();
     await assets.click();
     await net.click();
     await assets.click();
@@ -312,6 +330,93 @@ test.describe('2l 首頁 A+ 版面端對端', () => {
       expect(snapshot.cardIds).toEqual(HOME_CARD_IDS);
     });
     expect(desktop.cardIds).toEqual(HOME_CARD_IDS);
+  });
+
+  test('SC-N1、N3、N5：窄摘要、無副標交易列與待確認按鈕尺寸', async ({
+    signedInPage: page,
+    request,
+    userA,
+    userB,
+  }, testInfo) => {
+    const ledger = await createLedger(request, userA.token, { name: '家庭日常', kind: 'SHARED' });
+    await addMember(request, userA.token, ledger.id, { email: userB.email, role: 'EDITOR' });
+    const { inviteeSideId } = await linkByEmail(request, userA, userB);
+    const date = currentTaiwanDate();
+    await createDebtEntry(request, userB.token, {
+      counterparty: { id: inviteeSideId },
+      kind: 'LEND',
+      amount: 85_000,
+      date,
+    });
+    const { account } = await getHomeSetup(request, userA);
+    const categories = await listCategories(request, userA.token, ledger.id);
+    const category = categories.find(({ type }) => type === 'EXPENSE')!;
+    for (const [amount, title] of [
+      [1_234_567_800, undefined],
+      [4_500, '晚餐'],
+    ] as const) {
+      await createTransaction(request, userA.token, ledger.id, {
+        type: 'EXPENSE',
+        amount,
+        title,
+        date,
+        accountId: account.id,
+        categoryId: category.id,
+      });
+    }
+
+    const card = (id: string) => page.locator(`[data-home-card-id="${id}"]`);
+    const pending = page.getByRole('region', { name: '待確認' });
+    const recent = card('activity').getByRole('tabpanel');
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await page.reload();
+    await switchLedger(page, ledger.name);
+    await expect(card('expense')).toContainText('$12,345,723');
+    await expect(pending.getByText(/記了一筆 · \d{2}\/\d{2}：/)).toBeVisible();
+
+    const measurements = [];
+    for (const width of [1280, 390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      const [expense, net, pendingBox, plain, named, accept, reject] = await Promise.all([
+        getRect(card('expense')),
+        getRect(card('net')),
+        getRect(pending),
+        getRect(recent.getByRole('listitem').filter({ hasText: '12,345,678' })),
+        getRect(recent.getByRole('listitem').filter({ hasText: '晚餐' })),
+        getRect(pending.getByRole('button', { name: '接受', exact: true })),
+        getRect(pending.getByRole('button', { name: '拒絕', exact: true })),
+      ]);
+      const summaryHeight = net.y + net.height - expense.y;
+      if (width === 390) {
+        expect(summaryHeight).toBeLessThanOrEqual(320);
+        expect(pendingBox.y).toBeLessThan(844);
+      }
+      if (width !== 320) {
+        expect(plain.height).toBeLessThanOrEqual(76.59375);
+        expect(named.height).toBeLessThanOrEqual(97);
+      }
+      for (const box of [accept, reject]) {
+        if (width === 1280) expect(box.height).toBe(30);
+        else expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      await expectNoHorizontalPageOverflow(page);
+      measurements.push({
+        width,
+        summaryHeight,
+        pendingY: pendingBox.y,
+        plain,
+        named,
+        accept,
+        reject,
+      });
+    }
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await openTransactions(page);
+    const transactionRow = await getRect(
+      page.getByRole('listitem').filter({ hasText: '12,345,678' }),
+    );
+    expect(transactionRow.height).toBe(52);
+    await writeMeasurement(testInfo, { scenario: 'SC-N1、N3、N5', measurements, transactionRow });
   });
 
   test('SC-H3：首頁新增支出後相關數字一起更新，重抓期間保留舊值', async ({

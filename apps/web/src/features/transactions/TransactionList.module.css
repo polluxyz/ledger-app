@@ -408,6 +408,14 @@
     height: auto;
   }
 
+  .homeActivityRows .compactHomeRow {
+    padding-block: var(--space-xs);
+  }
+
+  .homeActivityRows .compactHomeRow .main {
+    min-height: 0;
+  }
+
   .homeActivityRows .homeActivityFooter {
     grid-column: 2;
     grid-row: 2;

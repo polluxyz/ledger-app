@@ -27,7 +27,7 @@ export const HOME_CARD_REGISTRY: Record<HomeCardId, HomeCardRegistration> = {
   income: registerCard('income', '本月收入', 309),
   net: registerCard('net', '本月結餘', 309),
   trend: registerCard('trend', '財務趨勢', 352),
-  categories: registerCard('categories', '本月支出', 314),
+  categories: registerCard('categories', '支出分類', 314),
   activity: registerCard('activity', '最近｜標註', 309),
   accounts: registerCard('accounts', '帳戶', 309),
   debts: registerCard('debts', '借還', 309),

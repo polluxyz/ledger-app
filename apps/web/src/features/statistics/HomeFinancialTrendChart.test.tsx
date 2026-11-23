@@ -50,7 +50,7 @@ describe('Home financial trend', () => {
 
   it('shows a selected month using pointer and keyboard without replacing the latest total', async () => {
     const user = userEvent.setup();
-    render(
+    const view = render(
       <HomeFinancialTrendChart
         months={series([10000, 25000, 30000])}
         isLoading={false}
@@ -58,9 +58,12 @@ describe('Home financial trend', () => {
         metric="net"
       />,
     );
+    expect(screen.queryByText('2026年10月')).not.toBeInTheDocument();
     const first = screen.getByRole('button', { name: '2026年8月 $100' });
     await user.hover(first);
     expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('2026年8月')).toBeVisible();
+    expect(screen.getByText('$100')).toBeVisible();
     expect(screen.getByLabelText('本月結餘 $300')).toBeInTheDocument();
     act(() => first.focus());
     fireEvent.keyDown(first, { key: 'ArrowRight' });
@@ -69,6 +72,22 @@ describe('Home financial trend', () => {
       'aria-pressed',
       'true',
     );
+    expect(screen.getByText('$250')).toBeVisible();
+    fireEvent.keyDown(screen.getByRole('button', { name: '2026年9月 $250' }), { key: 'End' });
+    expect(screen.queryByText('2026年10月')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('本月結餘 $300')).toBeVisible();
+    await user.hover(first);
+    view.rerender(
+      <HomeFinancialTrendChart
+        months={series([10000, 25000, -30000])}
+        isLoading={false}
+        error={null}
+      />,
+    );
+    expect(screen.queryByText('2026年8月')).not.toBeInTheDocument();
+    const total = screen.getByLabelText('總資產 -$300');
+    expect(total).toHaveTextContent('-$300');
+    expect(total.querySelector('strong > span')).toHaveTextContent(/^-\$$/);
   });
 
   it('keeps local loading and error states distinct from zero', () => {
