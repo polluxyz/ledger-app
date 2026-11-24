@@ -120,15 +120,22 @@
   font-weight: 700;
 }
 
+.stickyTabs {
+  /* 頁面底色遮住從分頁外框兩側捲過的內容。 */
+  --sticky-tabs-gutter: var(--space-md);
+  position: sticky;
+  top: var(--page-toolbar-height);
+  z-index: 4;
+  margin: 0 calc(-1 * var(--sticky-tabs-gutter)) var(--space-md);
+  padding-inline: var(--sticky-tabs-gutter);
+  background: var(--color-bg);
+}
+
 .tabs {
   composes: group from '../components/SegmentedControl.module.css';
-  position: sticky;
-  top: 0;
-  z-index: 4;
   display: flex;
   gap: var(--space-sm);
-  margin: 0 calc(-1 * var(--space-md)) var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--sticky-tabs-gutter);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
@@ -226,11 +233,8 @@
     gap: var(--space-sm);
   }
 
-  .tabs {
-    margin-right: calc(-1 * var(--space-sm));
-    margin-left: calc(-1 * var(--space-sm));
-    padding-right: var(--space-sm);
-    padding-left: var(--space-sm);
+  .stickyTabs {
+    --sticky-tabs-gutter: var(--space-sm);
   }
 }
 
@@ -247,17 +251,13 @@
   min-height: 2.25rem;
 }
 
-.tabs {
-  top: var(--page-toolbar-height);
-}
-
 @media (max-width: 900px) {
   .filterRow button[data-switchable],
   .filterRow [role='option'] {
     min-height: 2.75rem;
   }
 
-  .tabs {
+  .stickyTabs {
     top: calc(var(--topbar-height) + var(--page-toolbar-height));
   }
 

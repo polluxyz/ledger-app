@@ -312,21 +312,23 @@ export default function StatsPage() {
         </section>
       </section>
 
-      <nav className={styles.tabs} aria-label="統計分頁">
-        {(selectedLedger.kind === 'SHARED'
-          ? (['cat', 'trend', 'member'] as const)
-          : (['cat', 'trend'] as const)
-        ).map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-pressed={state.tab === tab}
-            onClick={() => changeTab(tab)}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </nav>
+      <div className={styles.stickyTabs}>
+        <nav className={styles.tabs} aria-label="統計分頁">
+          {(selectedLedger.kind === 'SHARED'
+            ? (['cat', 'trend', 'member'] as const)
+            : (['cat', 'trend'] as const)
+          ).map((tab) => (
+            <button
+              type="button"
+              key={tab}
+              aria-pressed={state.tab === tab}
+              onClick={() => changeTab(tab)}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       <section className={styles.panel} aria-label={TAB_LABELS[state.tab]}>
         {state.tab === 'cat' && (

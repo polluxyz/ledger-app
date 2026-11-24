@@ -803,6 +803,14 @@ test.describe('2j 統計頁端對端', () => {
 
       const categoryList = page.getByRole('list', { name: '支出分類清單' });
       await expect(categoryList.getByRole('listitem')).toHaveCount(15);
+      const tabs = await statsTabs(page).boundingBox();
+      expect(tabs).not.toBeNull();
+      for (const name of ['收支摘要', '分類']) {
+        const card = await page.getByRole('region', { name, exact: true }).boundingBox();
+        expect(card).not.toBeNull();
+        expect(Math.abs(tabs!.x - card!.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(tabs!.x + tabs!.width - (card!.x + card!.width))).toBeLessThanOrEqual(1);
+      }
       const longCategoryButton = categoryList.getByRole('button', {
         name: new RegExp(`^${LONG_CATEGORY_NAME}，\\$123,456,789，`),
       });
