@@ -1,13 +1,41 @@
 # web-unslop 工作區交接
 
-## 2026-11-22 每週補查
+## 2026-11-24 規劃者交接（2o 第 2 輪）
 
-Web 規劃者保留本區。首頁規格草稿、截圖與本機工具共 17 個未追蹤檔案。2 位審閱者均已回報成功並釋放對話。規劃者的聊天仍在。開發者審閱首頁規格草稿時重查。
+### 現況
 
-## 規劃交接
+- 分支 `feature/web-unslop-pages`。PR #251 OPEN，**未合併**。開發者 demo 後明確核可才可合併。
+- 開發者 2026-11-24 核可 spec §9、plan「第 2 輪修訂」、todo T12～T21。T12 已提交並併入 main（#250）。未追蹤的 `.agents/skills/unslop/` 不提交。
+- Orca Run：`run_c12ee42f7028`。advisor 與設計任務全部 succeeded，沒有執行中的 worker。
 
-`feature/web-unslop` 是 main 的直屬工作線。新規劃者 Claude Opus 5.5（high）已在原工作區確認接手，對話為 `47e9f837-f081-4296-8e43-7e391ffef1ef`。舊 Codex 對話 `72ea8226-cf0c-4417-85a9-744a8c7f7a60` 已停止寫入。
+### 開發者決定（2026-11-24 看 demo 後）
 
-- 已接手 12 張桌機與手機基準截圖、本機 unslop skill 與 2 份獨立審閱。`run_dc8c9e230b3b` 保存審閱結果，2 位 advisor 均已釋放。
-- 開發者要求保留顏色語意，包括支出與支付。沿用結餘淡金底、圓弧、柱狀圖及 8 張可自訂的卡。[首頁版面規格](../specs/phase-2l-home-layout.md)
-- 開發者已確認手機摘要卡窄寬橫排、縮短無副標交易列、整理圖上重複金額與幣別符號、手機待確認卡按鈕 44px 與日期同行、分類卡改名「支出分類」。借還姓名截斷沿用現況。規劃者以決策 407～414、W307～W312 撰寫規格並註記 2l W275 的修訂。規格與計畫核可後，由本線派 Codex 實作並驗收。現有截圖與未追蹤的 skill 留在本工作區。
+- 修同色分類；「趨勢」改掉；拿掉成員分頁與帳本／我切換，改在支出／收入右側加漏斗篩選（成員、分類、帳戶）；全站加點綴；全部留在 #251。
+- 漏斗＝錨點面板＋標籤。圖表＝收入、支出加兩條月均線（每月收支）。點綴三種方向都做，demo 時挑。同意改 API。
+- 規格寫成 spec §9，決策 424～432、W321～W327。下一個編號 433／W328 由 main 分配。
+
+### advisor 結論
+
+Codex sol xhigh 與 Antigravity hydrogen 已交流到定案：
+
+- 無效或無權的 id 回統一 400；網址失效條件要使用者按「清除失效條件」才清。
+- 顏色依帳本同方向分類穩定排序配色，同畫面撞色才補未用色。
+- 平均線分母合併兩方意見（已結束的月份、含 0 月，見決策 430）。Codex 原本主張 v1 不做，開發者選擇要做。
+- Antigravity 建議拆 PR，開發者選擇留在 #251。
+
+### demo 伺服器（背景執行，勿動 5180）
+
+- API 3200（資料庫 `ledger_web_unslop_test`）、新版 web 5190（本工作區，熱更新）、現版 web 5181（從 main 工作區）。PID 記在 `/tmp/unslop/demo-pids.txt`。
+- 帳號 `demo-a@example.test`，資料全為虛構，種子腳本 `/tmp/unslop/demo/seed.mjs`。
+- 本機不要跑 web e2e，會清掉 demo 資料庫。API e2e 跑完要重跑種子並通知開發者。
+
+### 下一步
+
+1. 派 Codex default worker 甲做第 5～8 組（一組一張 task），第 8 組完成後派 worker 乙做第 9～11 組。
+2. T20、T21 驗證，T10 再 demo，開發者挑點綴組。
+3. 合併後經同意才清 worker、工作區、分支，更新 README 2o 狀態，封存 plan 與 todo。
+
+### 本機證據（不提交）
+
+- 提案頁 `docs/artifacts/pages-unslop-2o-r2-proposal.html`。
+- advisor 交流紀錄 `/tmp/unslop/advisor-exchange.md`、`advisor-exchange-2.md`。
