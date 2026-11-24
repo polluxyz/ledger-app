@@ -259,3 +259,9 @@
   justify-content: center;
   gap: var(--space-sm);
 }
+
+/* 首頁原有操作維持卡片與頁首高度，身分彈窗使用自己的觸控尺寸。 */
+.guest,
+.dashboard {
+  --control-height: 2.25rem;
+}

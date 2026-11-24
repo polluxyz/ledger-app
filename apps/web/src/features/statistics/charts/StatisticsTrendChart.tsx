@@ -136,7 +136,9 @@ export function StatisticsTrendChart({
                   event.preventDefault();
                   const offset = event.key === 'ArrowRight' ? 1 : -1;
                   const next = (index + offset + months.length) % months.length;
-                  svgRef.current?.querySelectorAll<SVGGElement>('[data-month]')[next]?.focus();
+                  svgRef.current
+                    ?.querySelectorAll<SVGGElement>('[data-month]')
+                    [next]?.focus({ preventScroll: true });
                 }
               }}
             >

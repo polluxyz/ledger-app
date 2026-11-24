@@ -243,11 +243,20 @@
   background-color: var(--color-primary-soft);
 }
 
+.filterRow button[data-switchable] {
+  min-height: 2.25rem;
+}
+
 .tabs {
   top: var(--page-toolbar-height);
 }
 
 @media (max-width: 900px) {
+  .filterRow button[data-switchable],
+  .filterRow [role='option'] {
+    min-height: 2.75rem;
+  }
+
   .tabs {
     top: calc(var(--topbar-height) + var(--page-toolbar-height));
   }

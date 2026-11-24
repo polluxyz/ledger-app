@@ -566,9 +566,10 @@ test.describe('2j 統計頁端對端', () => {
     await expect(page.getByRole('group', { name: '趨勢圖型' })).toHaveCount(0);
     await expect(page.getByRole('table', { name: '趨勢表格' })).toHaveCount(0);
     const plot = trendChart.locator('svg');
-    const topBefore = (await plot.boundingBox())!.y;
+    await plot.scrollIntoViewIfNeeded();
     await currentMonth.focus();
     await expect(trendChart.locator('dl')).toHaveCount(0);
+    const topBefore = (await plot.boundingBox())!.y;
     await currentMonth.press('ArrowLeft');
     await expect(
       trendChart.getByRole('button', { name: new RegExp(trendMonthLabel(previousMonth)) }),
@@ -579,7 +580,6 @@ test.describe('2j 統計頁端對端', () => {
     expect(
       Number(await currentMonth.locator('[data-series="net"]').getAttribute('cy')),
     ).toBeGreaterThan(zeroY);
-    await currentMonth.press('ArrowLeft');
     await page.keyboard.press('Enter');
     await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBe(previousMonth);
     await page.goBack();
