@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { LedgerSummary } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
+import { LineArt } from '../../components/LineArt';
 import styles from './LedgerList.module.css';
 
 interface LedgerListProps {
@@ -29,7 +30,12 @@ export function LedgerList({ ledgers, isLoading, error }: LedgerListProps) {
     return <FormError error={error} />;
   }
   if (ledgers.length === 0) {
-    return <p className={styles.empty}>還沒有任何帳本。</p>;
+    return (
+      <p className={styles.empty}>
+        <LineArt subject="ledger" placement="empty" />
+        還沒有任何帳本。
+      </p>
+    );
   }
 
   return (
@@ -38,6 +44,7 @@ export function LedgerList({ ledgers, isLoading, error }: LedgerListProps) {
         <li className={styles.item} key={ledger.id}>
           <div className={styles.main}>
             <Link className={styles.name} to={`/ledgers/${ledger.id}`}>
+              <LineArt subject="ledger" placement="card" />
               {ledger.name}
             </Link>
             <div className={styles.tags}>

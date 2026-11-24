@@ -2,6 +2,7 @@ import type { Account } from '@ledger/shared';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
 import { formatMoney } from '../../lib/format';
+import { LineArt } from '../../components/LineArt';
 import styles from './AccountList.module.css';
 
 interface AccountListProps {
@@ -35,6 +36,7 @@ export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: Ac
   if (visibleAccounts.length === 0) {
     return (
       <p className={styles.empty}>
+        <LineArt subject="wallet" placement="empty" />
         還沒有任何帳戶。
         {/* 一般帳戶可以被刪光，但之後記帳仍需要至少一個真正帳戶。 */}
         <strong className={styles.emptyHint}>至少保留一個帳戶才能記帳。</strong>
@@ -49,7 +51,10 @@ export function AccountList({ accounts, isLoading, error, onEdit, onRemove }: Ac
         return (
           <li className={styles.item} key={account.id}>
             {/* 初始餘額建立後就不能改，列表只顯示後端算好的目前餘額。 */}
-            <span className={styles.name}>{name}</span>
+            <span className={styles.name}>
+              <LineArt subject="wallet" placement="card" />
+              {name}
+            </span>
             <span
               className={`${styles.balance} ${account.balance < 0 ? styles.negative : ''}`}
               // 讓螢幕閱讀器知道這個數字是什麼，不必依賴視覺上的位置。

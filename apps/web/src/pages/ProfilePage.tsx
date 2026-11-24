@@ -5,6 +5,7 @@ import { FormError } from '../components/FormError';
 import { PageHeader } from '../components/PageHeader';
 import { TextField } from '../components/TextField';
 import { useCurrentUser, useUpdateProfile } from '../features/auth/use-current-user';
+import { LineArt } from '../components/LineArt';
 import styles from './ProfilePage.module.css';
 
 /**
@@ -62,6 +63,9 @@ function ProfileForm({ user }: { user: AuthUser }) {
 
       <div className={styles.layout}>
         <section className={styles.card} aria-label="Email">
+          <span className={styles.emailArt}>
+            <LineArt subject="ledger" placement="card" />
+          </span>
           <span className={styles.emailLabel}>Email</span>
           <p className={styles.emailValue}>
             {user.email}
