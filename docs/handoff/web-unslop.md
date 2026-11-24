@@ -6,7 +6,7 @@
 
 - 分支 `feature/web-unslop-pages`。PR #251 OPEN，**未合併**。開發者 demo 後明確核可才可合併。
 - 開發者 2026-11-24 核可 spec §9、plan「第 2 輪修訂」、todo T12～T21。T12 已提交並併入 main（#250）。未追蹤的 `.agents/skills/unslop/` 不提交。
-- Orca Run：`run_c12ee42f7028`。advisor 與設計任務全部 succeeded，沒有執行中的 worker。
+- 第 1 輪與 advisor 的 Orca Run `run_c12ee42f7028` 已全部 succeeded（綁舊對話）。第 2 輪 Run `run_2cc1c21e985d`：T13（`1f077b5`）、T14（`0e69f58`）、T15（`1b671e6`）已驗收，demo 種子已在 T14 後重跑，API 3200 已換成含 T14 的版本；T16 由 worker 甲執行中。
 
 ### 開發者決定（2026-11-24 看 demo 後）
 
