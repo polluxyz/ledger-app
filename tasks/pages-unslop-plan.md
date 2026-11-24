@@ -176,6 +176,13 @@
 - 截圖核對發現統計分頁外框左右各比卡片寬 16px／8px（舊負外距殘留）。派修結果見「統計分頁對齊複驗」；重看 1280 淺色成員、390 深色分類截圖已對齊。
 - 交易頁「明細／借還」與「新增交易」高低不齊、手機統計範圍列分 4 行，基線截圖即如此，不在本次範圍。
 
+第 2 輪協調者驗收（T21，驗證 commit `03b56c3`）：
+
+- 第 5～11 組逐組驗收時讀過 diff；T21 重讀 API 與 shared 全部改動。篩選 ID 先驗帳本成員資格，再限定這本帳本或本人帳戶比對；SQL 全部參數化；`ledger`、`mine`、`people` 不套篩選。
+- 重跑：`pnpm lint`、`pnpm typecheck` 通過；shared 161、API 1,269、web 1,343（`--maxWorkers=8`）全過；分支改動的 106 個檔案 `prettier --check` 通過。
+- 52 張截圖由總覽圖逐張核對；T20 補修後的 30 張重看過頂列標誌。
+- revert：第 9、10、11 組各自撤回通過；第 8→6、第 8→5 組倒序撤回通過（見執行紀錄）。
+
 ## 第 2 輪修訂（spec §9，開發者 2026-11-24 核可）
 
 開發者 2026-11-24 看 demo 後選定方向並同意改 API。依 spec 決策 424～432、W321～W327、SC-O14～O22 實作，仍在 PR #251。
@@ -241,6 +248,6 @@
 - T19（`a64ddfe`）：Target 擴大到 `AiEntry`、`CounterpartyDetail`、`DebtEntryForm`、`SettlementForm`、`SettlementView`、`DebtHistoryView`，協調者核可。內嵌結清表單需要次要送出鈕，`DebtEntryForm` 與 `SettlementForm` 加 `submitVariant`，預設維持主要樣式。
 - T19 驗收時，本機全套 web 測試兩次各有 12～13 項 5 秒逾時。撤銷 T19 後同樣 12 項逾時；限制 8 個 worker 時 1,343 項全過。原因是 24 核機器預設 worker 太多互搶資源，與 T19 無關。上一條 `TransactionWorkbench` 失敗也是同一原因。CI 機器核數少，不受影響；本機驗收改用 `vitest run --maxWorkers=8`。
 - T20 截圖發現頂列品牌標誌仍是實心金底，與側欄、登入品牌欄的金色外框不同。`a781c12` 只改 `AppTopBar.module.css` 2 行。第 11 組改為 `a64ddfe`、`a781c12` 一起撤回，worker 驗過一起撤回後 typecheck 與 web 1,341 項通過。
-- T20 偏離 plan：第 5 組（`1f077b5`）單獨撤回會在 `StatsPage.tsx`、`StatsPage.test.tsx` 衝突，因為第 7、8 組改過同幾行配色程式。協調者改驗第 8→5 組倒序撤回（`d57dd65 0d93305 1b671e6 0e69f58 1f077b5`）：無衝突，web 1,321 項通過；型別錯誤只來自未重建的 shared 產物，與第 8→6 組相同，重建後通過。不要新配色時，要連同統計篩選與每月收支一起撤回。點綴三組不受影響。
+- T20 偏離 plan：第 5 組（`1f077b5`）單獨撤回會在 `StatsPage.tsx`、`StatsPage.test.tsx` 衝突，因為第 7、8 組改過同幾行配色程式。協調者改驗第 8→5 組倒序撤回（`d57dd65 0d93305 1b671e6 0e69f58 1f077b5`）：無衝突，web 1,321 項通過；在原工作區跑型別檢查會報 2 個錯，因為 shared 產物仍是 HEAD 版。T21 在暫時 worktree 撤回同 5 個 commit 並重建 shared：`pnpm typecheck` 通過，shared 161、API 1,233、web 1,321 全過。不要新配色時，要連同統計篩選與每月收支一起撤回。點綴三組不受影響。
 - T20 API e2e 清空 demo 資料庫後，協調者重跑 demo 種子。
 - 範圍外、基線已有：首頁與交易頁帳本下拉 34px、首頁「總資產變化／每月結餘」切換 38px，≤900px 低於 44px；手機交易頁分段與「新增交易」高低不齊；手機每月收支支出柱在首屏下方。
