@@ -1,7 +1,7 @@
-import type { StatisticsPerspective } from '@ledger/shared';
+import { appendStatsFilters, readStatsFilters, type StatsFilters } from './statistics-filters';
 
 /** 統計頁可分享的網址狀態。 */
-export type StatsTab = 'cat' | 'trend' | 'member';
+export type StatsTab = 'cat' | 'trend';
 
 export type StatsPeriod =
   | { mode: 'month'; month: string }
@@ -12,12 +12,10 @@ export interface StatsUrlState {
   tab: StatsTab;
   ledgerId: string | null;
   period: StatsPeriod;
-  perspective: StatisticsPerspective;
+  filters: StatsFilters;
 }
 
 export interface ParseStatsUrlOptions {
-  /** 非共享帳本不支援成員分頁，也不支援「我」口徑。 */
-  ledgerKind?: string;
   /** 網址未帶有效帳本時使用作用中帳本。 */
   defaultLedgerId?: string | null;
   /** 供純函式測試固定台灣月份；正式頁面省略時使用目前時間。 */
@@ -33,25 +31,10 @@ export function parseStatsUrl(
   options: ParseStatsUrlOptions = {},
 ): { state: StatsUrlState; search: string } {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  const requestedTab = params.get('tab');
-  let tab: StatsTab = isStatsTab(requestedTab) ? requestedTab : 'cat';
+  const tab = params.get('tab') === 'trend' ? 'trend' : 'cat';
   const ledgerId = normalizeLedgerId(params.get('ledger')) ?? options.defaultLedgerId ?? null;
-  const ledgerIsShared = options.ledgerKind === 'SHARED';
-
-  if (tab === 'member' && !ledgerIsShared) {
-    tab = 'cat';
-  }
-
   const period = parsePeriod(params, options.now ?? new Date());
-  const requestedPerspective = params.get('perspective');
-  const perspective: StatisticsPerspective =
-    !ledgerIsShared || tab === 'member'
-      ? 'LEDGER'
-      : requestedPerspective === 'MINE'
-        ? 'MINE'
-        : 'LEDGER';
-
-  const state: StatsUrlState = { tab, ledgerId, period, perspective };
+  const state: StatsUrlState = { tab, ledgerId, period, filters: readStatsFilters(params) };
   return { state, search: serializeStatsUrl(state) };
 }
 
@@ -70,7 +53,7 @@ export function serializeStatsUrl(state: StatsUrlState): string {
     params.set('from', state.period.from);
     params.set('to', state.period.to);
   }
-  params.set('perspective', state.perspective);
+  appendStatsFilters(params, state.filters);
   return `?${params.toString()}`;
 }
 
@@ -198,8 +181,4 @@ function isYear(value: string): boolean {
 function normalizeLedgerId(value: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
-}
-
-function isStatsTab(value: string | null): value is StatsTab {
-  return value === 'cat' || value === 'trend' || value === 'member';
 }

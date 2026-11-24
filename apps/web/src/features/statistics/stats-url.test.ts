@@ -11,7 +11,7 @@ import {
 /** 直接解析網址，驗證統計篩選與舊參數的正規化。 */
 describe('stats-url', () => {
   const now = new Date('2026-10-15T04:00:00.000Z');
-  const shared = { ledgerKind: 'SHARED', defaultLedgerId: 'active-ledger', now } as const;
+  const shared = { defaultLedgerId: 'active-ledger', now } as const;
 
   it('parses valid tab and ledger values and normalizes unknown values', () => {
     expect(parseStatsUrl('?tab=trend&ledger=family', shared).state).toMatchObject({
@@ -68,22 +68,20 @@ describe('stats-url', () => {
     });
   });
 
-  it('normalizes perspective for personal ledgers and the member tab', () => {
-    expect(parseStatsUrl('?perspective=MINE', shared).state.perspective).toBe('MINE');
-    expect(parseStatsUrl('?perspective=invalid', shared).state.perspective).toBe('LEDGER');
-    expect(parseStatsUrl('?tab=member&perspective=MINE', shared).state).toMatchObject({
-      tab: 'member',
-      perspective: 'LEDGER',
-    });
-    expect(
-      parseStatsUrl('?tab=member&perspective=MINE', { ...shared, ledgerKind: 'PERSONAL' }).state,
-    ).toMatchObject({ tab: 'cat', perspective: 'LEDGER' });
-    expect(
-      parseStatsUrl('?perspective=MINE', { ...shared, ledgerKind: 'PERSONAL' }).state,
-    ).toMatchObject({ perspective: 'LEDGER' });
+  it('normalizes the old member tab and preserves repeated filter ids and true flags', () => {
+    const { state, search } = parseStatsUrl(
+      '?tab=member&perspective=MINE&personIds=me&personIds=guest&personIds=me&includeUncategorized=true&includeOtherAccounts=false',
+      shared,
+    );
+    expect(state.tab).toBe('cat');
+    const params = new URLSearchParams(search);
+    expect(params.getAll('personIds')).toEqual(['me', 'guest']);
+    expect(params.get('includeUncategorized')).toBe('true');
+    expect(params.has('includeOtherAccounts')).toBe(false);
+    expect(params.has('perspective')).toBe(false);
   });
 
-  it.each(['cat', 'member', 'trend'])('drops legacy chart parameters on %s', (tab) => {
+  it.each(['cat', 'trend'])('drops legacy chart parameters on %s', (tab) => {
     const parsed = parseStatsUrl('?tab=' + tab + '&chart=bar&chart=table', shared);
     expect(parsed.state.tab).toBe(tab);
     expect(new URLSearchParams(parsed.search).has('chart')).toBe(false);
@@ -94,9 +92,7 @@ describe('stats-url', () => {
       '?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=MINE&chart=line',
       shared,
     ).state;
-    expect(serializeStatsUrl(state)).toBe(
-      '?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=MINE',
-    );
+    expect(serializeStatsUrl(state)).toBe('?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20');
     expect(getStatsPeriodRange({ mode: 'year', year: '2024' })).toEqual({
       from: '2024-01-01',
       to: '2024-12-31',

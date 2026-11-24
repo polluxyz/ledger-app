@@ -5,6 +5,7 @@ import type {
   StatisticsTrend,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { appendStatsFilters } from './statistics-filters';
 
 /**
  * 某帳本、結尾月份與視角的完整曆月趨勢。每一項查詢條件都放入 query key，圖型切換
@@ -14,13 +15,25 @@ export function useStatisticsTrend(ledgerId: string | null, query: GetStatistics
   const months = query.months ?? 12;
   const perspective: StatisticsPerspective = query.perspective ?? 'LEDGER';
 
+  const filters = new URLSearchParams();
+  appendStatsFilters(filters, query);
+  const filterKey = filters.toString();
+
   return useQuery({
-    queryKey: ['statistics-trend', ledgerId, query.endMonth, months, perspective] as const,
+    queryKey: [
+      'statistics-trend',
+      ledgerId,
+      query.endMonth,
+      months,
+      perspective,
+      ...(filterKey ? [filterKey] : []),
+    ] as const,
     queryFn: () => {
       const params = new URLSearchParams({ endMonth: query.endMonth, months: String(months) });
       if (query.perspective !== undefined) {
         params.set('perspective', query.perspective);
       }
+      for (const [key, value] of filters) params.append(key, value);
       return apiRequest<StatisticsTrend>(
         `/ledgers/${ledgerId as string}/statistics/trend?${params.toString()}`,
       );

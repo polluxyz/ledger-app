@@ -478,7 +478,7 @@ test.describe('2j 統計頁端對端', () => {
     }
   });
 
-  test('SC-R15：家用首頁、分類、趨勢、成員與相關交易', async ({
+  test('SC-R15：家用首頁、分類、趨勢、成員篩選與相關交易', async ({
     signedInPage: page,
     userA,
     userB,
@@ -512,8 +512,11 @@ test.describe('2j 統計頁端對端', () => {
     await expect(categories.getByRole('button', { name: '晚餐，$900，75%' })).toBeVisible();
     await expect(categories.getByRole('button', { name: '日用品，$300，25%' })).toBeVisible();
 
-    const perspective = page.getByRole('group', { name: '統計口徑' });
-    await perspective.getByRole('button', { name: '我', exact: true }).click();
+    await expect(page.getByRole('group', { name: '統計口徑' })).toHaveCount(0);
+    await page.getByRole('button', { name: '篩選', exact: true }).click();
+    const filter = page.getByRole('dialog', { name: '篩選' });
+    await filter.getByRole('checkbox', { name: '我', exact: true }).check();
+    await filter.getByRole('button', { name: '套用' }).click();
     await expect(categories.getByRole('listitem')).toHaveCount(1);
     await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
       '$450',
@@ -524,7 +527,7 @@ test.describe('2j 統計頁端對端', () => {
     await expectListBars(categories);
     await expectSummary(page, { income: '$200', expense: '$450', net: '-$250' });
 
-    await perspective.getByRole('button', { name: '帳本', exact: true }).click();
+    await page.getByRole('button', { name: '移除我', exact: true }).click();
     await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
     const trendChart = page.getByRole('region', { name: '收支趨勢圖' });
     await expect(trendChart.getByRole('button')).toHaveCount(12);
@@ -559,11 +562,8 @@ test.describe('2j 統計頁端對端', () => {
     await page.goBack();
     await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBe(month.value);
 
-    await statsTabs(page).getByRole('button', { name: '成員' }).click();
-    const members = page.getByRole('list', { name: '成員收支' });
-    await expect(members.getByRole('listitem', { name: '我，支出 $450，收入 $200' })).toBeVisible();
-    await expect(members.getByRole('listitem', { name: '小美，支出 $750，收入 $0' })).toBeVisible();
-    await expect.poll(() => new URL(page.url()).searchParams.get('perspective')).toBe('LEDGER');
+    await expect(statsTabs(page).getByRole('button', { name: '成員' })).toHaveCount(0);
+    await expect.poll(() => new URL(page.url()).searchParams.get('perspective')).toBeNull();
 
     await statsTabs(page).getByRole('button', { name: '分類' }).click();
     const dinnerRequestPromise = page.waitForRequest((candidate) => {
@@ -648,23 +648,27 @@ test.describe('2j 統計頁端對端', () => {
 
     await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
     await page.getByRole('button', { name: '上一個月' }).click();
-    await page.getByRole('group', { name: '統計口徑' }).getByRole('button', { name: '我' }).click();
+    await page.getByRole('button', { name: '篩選', exact: true }).click();
+    const filter = page.getByRole('dialog', { name: '篩選' });
+    await filter.getByRole('checkbox', { name: '我', exact: true }).check();
+    await filter.getByRole('button', { name: '套用' }).click();
     await page.reload();
 
     async function expectSharedUrlState(target: Page): Promise<void> {
       await expect.poll(() => new URL(target.url()).searchParams.get('tab')).toBe('trend');
       await expect.poll(() => new URL(target.url()).searchParams.get('ledger')).toBe(ledgerAId);
       await expect.poll(() => new URL(target.url()).searchParams.get('month')).toBe(previousMonth);
-      await expect.poll(() => new URL(target.url()).searchParams.get('perspective')).toBe('MINE');
+      await expect.poll(() => new URL(target.url()).searchParams.get('perspective')).toBeNull();
+      await expect
+        .poll(() => new URL(target.url()).searchParams.getAll('personIds').length)
+        .toBe(1);
       await expect.poll(() => new URL(target.url()).searchParams.get('chart')).toBeNull();
       await expect(statsTabs(target).getByRole('button', { name: '趨勢' })).toHaveAttribute(
         'aria-pressed',
         'true',
       );
       await expect(target.getByRole('region', { name: '收支趨勢圖' })).toBeVisible();
-      await expect(
-        target.getByRole('group', { name: '統計口徑' }).getByRole('button', { name: '我' }),
-      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(target.getByRole('button', { name: '移除我', exact: true })).toBeVisible();
       await expect(target.getByText(periodLabel(previousMonth), { exact: true })).toBeVisible();
     }
 
@@ -690,9 +694,7 @@ test.describe('2j 統計頁端對端', () => {
       await expect
         .poll(() => new URL(copiedPage.url()).searchParams.get('month'))
         .toBe(month.value);
-      await expect
-        .poll(() => new URL(copiedPage.url()).searchParams.get('perspective'))
-        .toBe('LEDGER');
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('perspective')).toBeNull();
       await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBeNull();
     } finally {
       await copiedPage.close();
@@ -700,10 +702,7 @@ test.describe('2j 統計頁端對端', () => {
 
     await statsTabs(page).getByRole('button', { name: '分類' }).click();
     await page.getByRole('button', { name: '下一個月' }).click();
-    await page
-      .getByRole('group', { name: '統計口徑' })
-      .getByRole('button', { name: '帳本' })
-      .click();
+    await page.getByRole('button', { name: '移除我', exact: true }).click();
     await expectSummary(page, { income: '$0', expense: '$1,000', net: '-$1,000' });
 
     const ledgerSwitcher = page.getByRole('group', { name: '作用中帳本' });
@@ -838,29 +837,15 @@ test.describe('2j 統計頁端對端', () => {
         await page.setViewportSize({ width: 390, height: 844 });
       }
 
-      await statsTabs(page).getByRole('button', { name: '成員' }).click();
-      const members = page.getByRole('list', { name: '成員收支' });
-      const longMember = members.getByRole('listitem', {
-        name: new RegExp(`^${LONG_MEMBER_NAME}，`),
-      });
+      await expect(statsTabs(page).getByRole('button', { name: '成員' })).toHaveCount(0);
+      await page.getByRole('button', { name: '篩選', exact: true }).click();
+      const filter = page.getByRole('dialog', { name: '篩選' });
+      const longMember = filter.getByRole('checkbox', { name: LONG_MEMBER_NAME, exact: true });
       await expect(longMember).toBeVisible();
-      const longMemberText = longMember.getByText(LONG_MEMBER_NAME, { exact: true });
-      await expect(longMemberText).toBeVisible();
-      await expect(async () => {
-        const memberTextMetrics = await longMemberText.evaluate((element) => ({
-          text: element.textContent?.trim(),
-          scrollWidth: element.scrollWidth,
-          clientWidth: element.clientWidth,
-          textOverflow: getComputedStyle(element).textOverflow,
-        }));
-        expect(memberTextMetrics.text).toBe(LONG_MEMBER_NAME);
-        expect(memberTextMetrics.scrollWidth).toBeLessThanOrEqual(memberTextMetrics.clientWidth);
-        expect(memberTextMetrics.textOverflow).not.toBe('ellipsis');
-      }).toPass({ timeout: 5_000 });
       await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
-      await expect(page.getByRole('region', { name: '成員支出圓餅圖' })).toBeVisible();
-      await expectListBars(members);
+      await page.keyboard.press('Escape');
+      await expect(filter).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '篩選', exact: true })).toBeFocused();
     }
   });
 });

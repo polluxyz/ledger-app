@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { LedgerStatistics } from '@ledger/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { CATEGORY_CHART_COLORS } from '../features/statistics/charts/chart-colors';
@@ -128,27 +129,23 @@ describe('Home dashboard', () => {
     };
   }
 
-  function statisticsFor(ledgerId: string) {
+  function statisticsFor(ledgerId: string): LedgerStatistics {
     const shared = ledgerId === otherLedger.id;
     const multiplier = afterCreate && !shared ? 1 : 0;
+    const totals = shared
+      ? { expense: 120000, income: 20000, net: -100000 }
+      : {
+          expense: 70300 + multiplier * 10000,
+          income: 5000000,
+          net: 4929700 + multiplier * 10000,
+        };
     return {
       ledgerId,
       from: '2026-10-01',
       to: '2026-10-31',
-      ledger: shared
-        ? { expense: 120000, income: 20000, net: -100000 }
-        : {
-            expense: 70300 + multiplier * 10000,
-            income: 5000000,
-            net: 4929700 + multiplier * 10000,
-          },
-      mine: shared
-        ? { expense: 45000, income: 20000, net: -25000 }
-        : {
-            expense: 70300 + multiplier * 10000,
-            income: 5000000,
-            net: 4929700 + multiplier * 10000,
-          },
+      ledger: totals,
+      mine: shared ? { expense: 45000, income: 20000, net: -25000 } : totals,
+      totals,
       expenseGroups: [
         {
           kind: 'CATEGORY',

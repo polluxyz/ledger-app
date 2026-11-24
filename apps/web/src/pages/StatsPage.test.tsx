@@ -24,10 +24,12 @@ import {
   type ActiveLedgerContextValue,
 } from '../features/ledgers/active-ledger-context';
 import { useHomeCategoryColors } from '../app/use-home-category-colors';
-import {
-  getChartColorForId,
-  CATEGORY_CHART_COLORS,
-} from '../features/statistics/charts/chart-colors';
+import { CATEGORY_CHART_COLORS } from '../features/statistics/charts/chart-colors';
+import { ApiError } from '../lib/api-client';
+
+vi.mock('../features/auth/use-current-user', () => ({
+  useCurrentUser: () => ({ data: { id: 'user-me', name: '我' }, isSuccess: true }),
+}));
 import StatsPage from './StatsPage';
 
 const statisticsApi = vi.hoisted(() => ({
@@ -46,12 +48,32 @@ vi.mock('../lib/api-client', async (importOriginal) => {
       if (path.includes('/statistics?')) {
         return statisticsApi.getStatistics(path) as Promise<T>;
       }
+      if (path.endsWith('/people')) {
+        return Promise.resolve([
+          { id: 'me', name: '我', userId: 'user-me' },
+          { id: 'xiaomei', name: '小美', userId: 'user-xiaomei' },
+        ]) as Promise<T>;
+      }
+      if (path === '/accounts') {
+        return Promise.resolve([
+          { id: 'cash', name: '現金' },
+          { id: 'bank', name: '銀行' },
+        ]) as Promise<T>;
+      }
       if (path.endsWith('/categories')) {
         const ledgerId = path.split('/')[2];
         const ids = ledgerId === 'family' ? ['supplies', 'dinner'] : ['lunch', 'breakfast'];
-        return Promise.resolve(
-          ids.map((id, sortOrder) => ({ id, sortOrder, type: 'EXPENSE' })),
-        ) as Promise<T>;
+        return Promise.resolve([
+          { id: 'salary', name: '薪水', sortOrder: 0, type: 'INCOME' },
+          ...ids
+            .map((id, sortOrder) => ({
+              id,
+              sortOrder,
+              name: { dinner: '晚餐', supplies: '日用品', lunch: '午餐', breakfast: '早餐' }[id],
+              type: 'EXPENSE',
+            }))
+            .reverse(),
+        ]) as Promise<T>;
       }
       return actual.apiRequest<T>(path, options);
     },
@@ -148,9 +170,10 @@ describe('StatsPage', () => {
     statisticsApi.getStatistics.mockImplementation((path) => {
       const url = new URL(path, 'http://localhost');
       const ledgerId = url.pathname.split('/')[2] ?? personalLedger.id;
-      const perspective = (url.searchParams.get('perspective') ??
-        'LEDGER') as StatisticsPerspective;
-      return Promise.resolve(statsFor(ledgerId, perspective));
+      expect(url.searchParams.get('perspective')).toBe('LEDGER');
+      return Promise.resolve(
+        statsFor(ledgerId, url.searchParams.get('personIds') === 'me' ? 'MINE' : 'LEDGER'),
+      );
     });
     statisticsApi.getTrend.mockImplementation((path) => {
       const url = new URL(path, 'http://localhost');
@@ -204,7 +227,7 @@ describe('StatsPage', () => {
     );
   }
 
-  it('uses the URL ledger, shows category summaries, and selects a category only in ledger perspective', async () => {
+  it('uses the URL ledger, shows category summaries, and opens the related transactions', async () => {
     const user = userEvent.setup();
     renderPage('/stats?tab=cat&ledger=family&month=2026-10');
 
@@ -224,20 +247,12 @@ describe('StatsPage', () => {
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER',
+        '/stats?tab=cat&ledger=family&month=2026-10',
       ),
     );
 
-    await user.click(screen.getByRole('button', { name: '我' }));
-    const mineCategoryList = await screen.findByRole('list', { name: '支出分類清單' });
-    expect(within(mineCategoryList).getByText('晚餐').parentElement).toHaveTextContent('$450100%');
-    expect(within(mineCategoryList).queryByRole('button')).not.toBeInTheDocument();
-    expect(
-      within(mineCategoryList).queryByRole('button', { name: /日用品/ }),
-    ).not.toBeInTheDocument();
-    expect(summary.getByText('-$250')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '帳本' }));
+    expect(screen.queryByRole('group', { name: '統計口徑' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '成員' })).not.toBeInTheDocument();
     const ledgerCategoryList = await screen.findByRole('list', { name: '支出分類清單' });
     await user.click(within(ledgerCategoryList).getByRole('button', { name: /晚餐，\$900，75%/ }));
     expect(screen.getByText('交易頁')).toBeInTheDocument();
@@ -247,7 +262,7 @@ describe('StatsPage', () => {
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER',
+        '/stats?tab=cat&ledger=family&month=2026-10',
       ),
     );
     expect(await screen.findByRole('heading', { name: '統計' })).toBeInTheDocument();
@@ -255,8 +270,8 @@ describe('StatsPage', () => {
 
   it('pushes ledger changes and restores the previous ledger and summary on browser back', async () => {
     const user = userEvent.setup();
-    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER';
-    const current = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER';
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09';
+    const current = '/stats?tab=cat&ledger=family&month=2026-10';
     renderPage(current, {
       initialLedgerId: familyLedger.id,
       initialEntries: [previous, current],
@@ -269,7 +284,7 @@ describe('StatsPage', () => {
     await user.click(screen.getByRole('option', { name: /日常/ }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER',
+        '/stats?tab=cat&ledger=daily&month=2026-10',
       ),
     );
     expect(screen.getByRole('region', { name: '收支摘要' })).toHaveTextContent('-$703');
@@ -284,7 +299,7 @@ describe('StatsPage', () => {
 
   it('supports tab, month, and category controls by keyboard and exposes precise amounts', async () => {
     const user = userEvent.setup();
-    const initial = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER';
+    const initial = '/stats?tab=cat&ledger=family&month=2026-10';
     renderPage(initial, { initialLedgerId: familyLedger.id });
 
     const firstCategoryList = await screen.findByRole('list', { name: '支出分類清單' });
@@ -405,7 +420,7 @@ describe('StatsPage', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER',
+        '/stats?tab=cat&ledger=daily&month=2026-10',
       ),
     );
     expect(
@@ -436,10 +451,8 @@ describe('StatsPage', () => {
       within(screen.getByRole('group', { name: '收支方向' })).getByRole('button', { name: '收入' }),
     );
     expect(screen.getByRole('region', { name: '收入分類圓餅圖' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '成員' }));
-    const members = await screen.findByRole('list', { name: '成員收支' });
-    expect(within(members).getAllByTestId('statistics-list-bar')).toHaveLength(2);
-    expect(screen.queryByRole('group', { name: '成員圖型' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '趨勢' }));
+    await screen.findByRole('region', { name: '收支趨勢圖' });
     expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
     expect(getItem).not.toHaveBeenCalledWith('stats.chart');
     expect(setItem).not.toHaveBeenCalledWith('stats.chart', expect.anything());
@@ -447,11 +460,10 @@ describe('StatsPage', () => {
 
   it.each([
     ['cat', 'bar'],
-    ['member', 'bar'],
     ['trend', 'table'],
   ])('replaces the old chart URL on %s', async (tab, chart) => {
     const user = userEvent.setup();
-    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER';
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09';
     const legacy = '/stats?tab=' + tab + '&chart=' + chart;
     renderPage(legacy, {
       initialLedgerId: familyLedger.id,
@@ -467,7 +479,7 @@ describe('StatsPage', () => {
   });
 
   it.each([false, true])(
-    'renders categories and members in viewport reading order (narrow: %s)',
+    'renders categories in viewport reading order (narrow: %s)',
     async (matches) => {
       vi.stubGlobal(
         'matchMedia',
@@ -476,43 +488,17 @@ describe('StatsPage', () => {
           .mockReturnValue({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
       );
       try {
-        const user = userEvent.setup();
         renderPage('/stats?tab=cat&ledger=family&month=2026-10');
-        for (const [tab, listLabel, chartLabel] of [
-          ['分類', '支出分類清單', '支出分類圓餅圖'],
-          ['成員', '成員收支', '成員支出圓餅圖'],
-        ] as const) {
-          await user.click(screen.getByRole('button', { name: tab }));
-          const list = await screen.findByRole('list', { name: listLabel });
-          const chart = screen.getByRole('region', { name: chartLabel });
-          const position = list.compareDocumentPosition(chart);
-          expect(position).toBe(
-            matches ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING,
-          );
-        }
+        const list = await screen.findByRole('list', { name: '支出分類清單' });
+        const chart = screen.getByRole('region', { name: '支出分類圓餅圖' });
+        expect(list.compareDocumentPosition(chart)).toBe(
+          matches ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING,
+        );
       } finally {
         vi.unstubAllGlobals();
       }
     },
   );
-
-  it('changes which member amount is primary and keeps zero values visible', async () => {
-    const user = userEvent.setup();
-    renderPage('/stats?tab=member&ledger=family&month=2026-10');
-    const members = await screen.findByRole('list', { name: '成員收支' });
-    const member = within(members).getByRole('listitem', { name: '小美，支出 $750，收入 $0' });
-    expect(member.querySelector('strong')).toHaveTextContent('$750');
-    expect(member.querySelector('small')).toHaveTextContent('收入 $0');
-    expect(within(member).getByTestId('statistics-list-bar')).toHaveStyle({ width: '100%' });
-    await user.click(
-      within(screen.getByRole('group', { name: '成員收支方向' })).getByRole('button', {
-        name: '收入',
-      }),
-    );
-    expect(member.querySelector('strong')).toHaveTextContent('$0');
-    expect(member.querySelector('small')).toHaveTextContent('支出 $750');
-    expect(within(member).getByTestId('statistics-list-bar')).toHaveStyle({ width: '0%' });
-  });
 
   it('requests twelve trend months, selects a month with browser history, and shows the range', async () => {
     const user = userEvent.setup();
@@ -532,13 +518,13 @@ describe('StatsPage', () => {
     await user.click(september);
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER',
+        '/stats?tab=trend&ledger=family&month=2026-09',
       ),
     );
     expect(await screen.findByText('2025 年 10 月 – 2026 年 9 月')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '返回' }));
     expect(await screen.findByTestId('location')).toHaveTextContent(
-      '/stats?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=LEDGER',
+      '/stats?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20',
     );
   });
 
@@ -576,57 +562,174 @@ describe('StatsPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('from=2026-10-05&to=2026-10-20');
   });
 
-  it('locks the member perspective, normalizes member URLs, and falls back to categories on a personal ledger', async () => {
+  const familyUrl = '/stats?tab=cat&ledger=family&month=2026-10';
+
+  async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /^篩選/ }));
+    return within(await screen.findByRole('dialog', { name: '篩選' }));
+  }
+
+  function urlFilters() {
+    return new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost')
+      .searchParams;
+  }
+
+  it('applies all three groups and sends the same repeated filters to both queries', async () => {
     const user = userEvent.setup();
-    renderPage('/stats?tab=member&ledger=family&month=2026-10&perspective=MINE');
-
-    const memberList = await screen.findByRole('list', { name: '成員收支' });
-    expect(within(memberList).getByText('我')).toBeInTheDocument();
+    renderPage(familyUrl);
+    const panel = await openFilters(user);
+    await panel.findByRole('checkbox', { name: '我' });
+    const category = within(panel.getByRole('group', { name: '分類' }));
     expect(
-      within(memberList).getByRole('listitem', {
-        name: '我，支出 $450，收入 $200',
-      }),
-    ).toBeInTheDocument();
-    expect(within(memberList).getByText('$450')).toBeInTheDocument();
-    expect(within(memberList).getByText('收入 $200')).toBeInTheDocument();
-    expect(within(memberList).getByText('$750')).toBeInTheDocument();
-    expect(within(memberList).getByText('收入 $0')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '帳本' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '我' })).toBeDisabled();
-    expect(screen.getByTestId('location')).toHaveTextContent(
-      'tab=member&ledger=family&month=2026-10&perspective=LEDGER',
-    );
-
-    const switcher = screen.getByRole('group', { name: '作用中帳本' });
-    await user.click(within(switcher).getByRole('button'));
-    await user.click(screen.getByRole('option', { name: /日常/ }));
-    expect(await screen.findByRole('button', { name: '分類' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(screen.queryByRole('button', { name: '成員' })).not.toBeInTheDocument();
+      category.getAllByRole('checkbox').map((input) => input.parentElement?.textContent),
+    ).toEqual(['日用品', '晚餐', '薪水', '未分類']);
+    for (const name of ['我', '小美', '晚餐', '未分類', '現金', '銀行', '其他']) {
+      await user.click(panel.getByRole('checkbox', { name }));
+    }
+    expect(urlFilters().has('personIds')).toBe(false);
+    await user.click(panel.getByRole('button', { name: '套用' }));
+    const funnel = screen.getByRole('button', { name: '篩選，已選 7 項' });
+    expect(funnel).toHaveTextContent('7');
+    expect(funnel).toHaveFocus();
+    expect(screen.getByRole('list', { name: '已套用的篩選' }).children).toHaveLength(7);
+    expect(urlFilters().getAll('personIds')).toEqual(['me', 'xiaomei']);
+    expect(urlFilters().getAll('categoryIds')).toEqual(['dinner']);
+    expect(urlFilters().getAll('accountIds')).toEqual(['cash', 'bank']);
+    expect(urlFilters().get('includeUncategorized')).toBe('true');
+    expect(urlFilters().get('includeOtherAccounts')).toBe('true');
+    await waitFor(() => {
+      for (const request of [statisticsApi.getStatistics, statisticsApi.getTrend]) {
+        const params = new URL(request.mock.lastCall?.[0] ?? '', 'http://localhost').searchParams;
+        expect(params.get('perspective')).toBe('LEDGER');
+        for (const key of [
+          'personIds',
+          'categoryIds',
+          'accountIds',
+          'includeUncategorized',
+          'includeOtherAccounts',
+        ]) {
+          expect(params.getAll(key)).toEqual(urlFilters().getAll(key));
+        }
+      }
+    });
   });
 
-  it('matches member bars to donut slices in both themes', async () => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    renderPage('/stats?tab=member&ledger=family&month=2026-10');
+  it('restores checked options from the URL, and pushes removal and clear actions to history', async () => {
+    const user = userEvent.setup();
+    renderPage(familyUrl + '&categoryIds=dinner&includeOtherAccounts=true');
+    const panel = await openFilters(user);
+    expect(await panel.findByRole('checkbox', { name: '晚餐' })).toBeChecked();
+    expect(panel.getByRole('checkbox', { name: '其他' })).toBeChecked();
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '篩選，已選 2 項' })).toHaveFocus();
 
-    const members = await screen.findByRole('list', { name: '成員收支' });
-    const me = within(members).getByRole('listitem', { name: '我，支出 $450，收入 $200' });
-    const bar = within(me).getByTestId('statistics-list-bar');
-    const donut = screen.getByRole('img', { name: /成員支出圓餅圖/ });
-    const slice = donut.querySelector('path');
+    await user.click(screen.getByRole('button', { name: '移除其他' }));
+    expect(urlFilters().has('includeOtherAccounts')).toBe(false);
+    const reopened = await openFilters(user);
+    await user.click(reopened.getByRole('button', { name: '清除全部' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '篩選' })).toHaveFocus();
+    expect(urlFilters().has('categoryIds')).toBe(false);
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    expect(urlFilters().get('categoryIds')).toBe('dinner');
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    expect(urlFilters().get('includeOtherAccounts')).toBe('true');
+  });
 
-    expect(bar).toHaveStyle({ width: '60%' });
-    expect(bar.style.getPropertyValue('--bar-color')).toBe(getChartColorForId('me', 'dark'));
-    expect(slice).toHaveAttribute('stroke', getChartColorForId('me', 'dark'));
+  it('hides the member group in personal ledgers and restores focus on outside click', async () => {
+    const user = userEvent.setup();
+    renderPage('/stats?ledger=daily&month=2026-10');
+    const panel = await openFilters(user);
+    expect(panel.queryByRole('group', { name: '成員' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('dialog'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '篩選' })).toHaveFocus();
+  });
 
-    document.documentElement.setAttribute('data-theme', 'light');
-    await waitFor(() => {
-      const color = getChartColorForId('me', 'light');
-      expect(bar.style.getPropertyValue('--bar-color')).toBe(color);
-      expect(slice).toHaveAttribute('stroke', color);
-    });
+  it.each([
+    ['statistics', 'categoryIds=stale&accountIds=cash', 'cash'],
+    ['trend', 'categoryIds=dinner', null],
+  ] as const)(
+    'hides all amounts after %s returns 400 and replaces the URL on confirmation',
+    async (endpoint, filters, remaining) => {
+      const user = userEvent.setup();
+      const request =
+        endpoint === 'statistics' ? statisticsApi.getStatistics : statisticsApi.getTrend;
+      const success = request.getMockImplementation()!;
+      request.mockImplementation((path) => {
+        if (new URL(path, 'http://localhost').searchParams.has('categoryIds')) {
+          return Promise.reject(new ApiError(400, 'INVALID_FILTER', 'invalid'));
+        }
+        return success(path);
+      });
+      const previous = familyUrl.replace('2026-10', '2026-09');
+      const current = familyUrl + '&' + filters;
+      renderPage(current, { initialEntries: [previous, current], initialIndex: 1 });
+      const clear = await screen.findByRole('button', { name: '清除失效條件' });
+      expect(screen.getByRole('alert')).toHaveTextContent('部分篩選條件已失效');
+      expect(screen.queryByRole('definition')).not.toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: '支出分類清單' })).not.toBeInTheDocument();
+      expect(urlFilters().has('categoryIds')).toBe(true);
+      await user.click(clear);
+      expect(urlFilters().has('categoryIds')).toBe(false);
+      expect(urlFilters().get('accountIds')).toBe(remaining);
+      await screen.findByRole('definition', { name: '支出 $1,200' });
+      await user.click(screen.getByRole('button', { name: '返回' }));
+      expect(screen.getByTestId('location')).toHaveTextContent(previous);
+    },
+  );
+
+  it('keeps the personal ledger owner filter when removing an invalid category', async () => {
+    const user = userEvent.setup();
+    const success = statisticsApi.getStatistics.getMockImplementation()!;
+    statisticsApi.getStatistics.mockImplementation((path) =>
+      path.includes('categoryIds=stale')
+        ? Promise.reject(new ApiError(400, 'INVALID_FILTER', 'invalid'))
+        : success(path),
+    );
+    renderPage('/stats?ledger=daily&month=2026-10&personIds=user-me&categoryIds=stale');
+    await user.click(await screen.findByRole('button', { name: '清除失效條件' }));
+    expect(urlFilters().get('personIds')).toBe('user-me');
+    expect(urlFilters().has('categoryIds')).toBe(false);
+  });
+
+  it.each(['family', 'daily'])('replaces the old tab and perspective in %s', async (ledger) => {
+    const user = userEvent.setup();
+    const previous = familyUrl.replace('2026-10', '2026-09');
+    const legacy = `/stats?tab=member&ledger=${ledger}&month=2026-10&perspective=MINE&chart=bar`;
+    renderPage(legacy, { initialEntries: [previous, legacy], initialIndex: 1 });
+    await screen.findByRole('list', { name: '支出分類清單' });
+    expect(urlFilters().get('tab')).toBe('cat');
+    expect(urlFilters().has('perspective')).toBe(false);
+    expect(urlFilters().has('chart')).toBe(false);
+    expect(urlFilters().get('personIds')).toBe(ledger === 'family' ? 'me' : null);
+    if (ledger === 'family') {
+      expect(screen.getByRole('definition', { name: '支出 $450' })).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(previous);
+  });
+
+  it.each(['personIds=me', 'accountIds=cash', 'includeOtherAccounts=true'])(
+    'keeps categories on the stats page with %s',
+    async (filter) => {
+      const user = userEvent.setup();
+      renderPage(familyUrl + '&' + filter);
+      const list = within(await screen.findByRole('list', { name: '支出分類清單' }));
+      expect(list.queryByRole('button')).not.toBeInTheDocument();
+      await user.click(list.getByText('晚餐'));
+      expect(screen.queryByText('交易頁')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps the category transaction link when only categories are filtered', async () => {
+    const user = userEvent.setup();
+    renderPage(familyUrl + '&categoryIds=dinner');
+    const list = within(await screen.findByRole('list', { name: '支出分類清單' }));
+    await user.click(list.getByRole('button', { name: /晚餐/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('categoryId=dinner');
+    expect(screen.getByText('交易頁')).toBeInTheDocument();
   });
 
   it('keeps summary and category data visible when trend fails, and hides zero totals when statistics fail', async () => {

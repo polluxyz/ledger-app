@@ -5,6 +5,7 @@ import type {
   StatisticsPerspective,
 } from '@ledger/shared';
 import { apiRequest } from '../../lib/api-client';
+import { appendStatsFilters } from './statistics-filters';
 
 /**
  * 某帳本、期間與視角的收支摘要。這支 hook 同時供首頁與統計頁使用，因此期間與視角
@@ -13,13 +14,25 @@ import { apiRequest } from '../../lib/api-client';
 export function useLedgerStatistics(ledgerId: string | null, query: GetLedgerStatisticsQuery) {
   const perspective: StatisticsPerspective = query.perspective ?? 'LEDGER';
 
+  const filters = new URLSearchParams();
+  appendStatsFilters(filters, query);
+  const filterKey = filters.toString();
+
   return useQuery({
-    queryKey: ['ledger-statistics', ledgerId, query.from, query.to, perspective] as const,
+    queryKey: [
+      'ledger-statistics',
+      ledgerId,
+      query.from,
+      query.to,
+      perspective,
+      ...(filterKey ? [filterKey] : []),
+    ] as const,
     queryFn: () => {
       const params = new URLSearchParams({ from: query.from, to: query.to });
       if (query.perspective !== undefined) {
         params.set('perspective', query.perspective);
       }
+      for (const [key, value] of filters) params.append(key, value);
       return apiRequest<LedgerStatistics>(
         `/ledgers/${ledgerId as string}/statistics?${params.toString()}`,
       );
