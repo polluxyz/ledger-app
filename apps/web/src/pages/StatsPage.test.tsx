@@ -118,12 +118,15 @@ function statsFor(ledgerId: string, perspective: StatisticsPerspective): LedgerS
         { kind: 'DIFFERENCE', category: null, amount: 300, percentageBps: 43 },
       ];
 
+  const ledger = shared ? totals(20_000, 120_000, -100_000) : totals(0, 70_300, -70_300);
+  const mine = shared ? totals(20_000, 45_000, -25_000) : totals(0, 70_300, -70_300);
   return {
     ledgerId,
     from: '2026-10-01',
     to: '2026-10-31',
-    ledger: shared ? totals(20_000, 120_000, -100_000) : totals(0, 70_300, -70_300),
-    mine: shared ? totals(20_000, 45_000, -25_000) : totals(0, 70_300, -70_300),
+    ledger,
+    mine,
+    totals: perspective === 'MINE' ? mine : ledger,
     expenseGroups,
     incomeGroups: [],
     people: shared
@@ -155,6 +158,9 @@ describe('StatsPage', () => {
       const monthCount = Number(url.searchParams.get('months') ?? 12);
       return Promise.resolve({
         ledgerId: familyLedger.id,
+        averageIncome: null,
+        averageExpense: null,
+        averageMonthCount: 0,
         months: Array.from({ length: monthCount }, (_, index) => {
           const [year, month] = endMonth.split('-').map(Number);
           const date = new Date(Date.UTC(year ?? 2026, (month ?? 10) - monthCount + index, 1));

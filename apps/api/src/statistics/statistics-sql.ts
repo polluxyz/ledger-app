@@ -1,4 +1,9 @@
-import type { StatisticsGroupKind, StatisticsPerspective, StatisticsTotals } from '@ledger/shared';
+import type {
+  StatisticsFilters,
+  StatisticsGroupKind,
+  StatisticsPerspective,
+  StatisticsTotals,
+} from '@ledger/shared';
 import { Prisma } from '../generated/prisma/client';
 import { statisticsGroupKindSql } from './statistics-groups';
 import type { TaipeiPeriod } from './taipei-period';
@@ -59,12 +64,28 @@ export function statisticsTotalsFromRow(row: StatisticsTotalsRow): StatisticsTot
  * 先按交易彙總份額成單一陣列才 JOIN，再刻意展開每人一列；後續只能加總 amount，
  * 不把原交易金額重複帶入。沒有 LedgerPerson 的私人帳本，以 creatorId 作內部歸屬鍵。
  */
-export function statisticsAttributionCte(scope: StatisticsScope): Prisma.Sql {
+export function statisticsAttributionCte(
+  scope: StatisticsScope,
+  filters: StatisticsFilters = {},
+): Prisma.Sql {
+  const { accountIds, includeOtherAccounts } = filters;
+  const filterAccounts = Boolean(accountIds?.length || includeOtherAccounts);
+  // 只有本人帳戶能連接成功，所以 NULL 同時涵蓋別人的帳戶與不經帳戶的交易。
+  const accountJoin = filterAccounts
+    ? Prisma.sql`LEFT JOIN "Account" a ON a."id" = t."accountId" AND a."userId" = ${scope.userId}`
+    : Prisma.empty;
+  const accountFilter = filterAccounts
+    ? Prisma.sql`AND (
+        ${accountIds?.length ? Prisma.sql`a."id" IN (${Prisma.join(accountIds)})` : Prisma.sql`false`}
+        OR (${Boolean(includeOtherAccounts)} AND a."id" IS NULL)
+      )`
+    : Prisma.empty;
   return Prisma.sql`WITH filtered_transactions AS (
-    SELECT * FROM "Transaction"
-    WHERE "ledgerId" = ${scope.ledgerId} AND "deletedAt" IS NULL
-      AND "type" IN ('INCOME', 'EXPENSE')
-      AND "date" >= ${scope.start}::timestamp AND "date" < ${scope.end}::timestamp
+    SELECT t.* FROM "Transaction" t ${accountJoin}
+    WHERE t."ledgerId" = ${scope.ledgerId} AND t."deletedAt" IS NULL
+      AND t."type" IN ('INCOME', 'EXPENSE')
+      AND t."date" >= ${scope.start}::timestamp AND t."date" < ${scope.end}::timestamp
+      ${accountFilter}
   ), split_allocations AS (
     SELECT ls."transactionId",
       jsonb_agg(jsonb_build_object('personId', s."personId", 'amount', s."share")) AS allocations
@@ -115,19 +136,33 @@ export function statisticsTotalsSql(scope: StatisticsScope): Prisma.Sql {
     GROUP BY perspective ORDER BY perspective`;
 }
 
-function perspectiveFilter(perspective: StatisticsPerspective): Prisma.Sql {
-  return perspective === 'MINE' ? Prisma.sql`AND "isMe"` : Prisma.empty;
+/** 選人的條件套在展開後的份額；分類沿用呼叫者可見的分組，保護他人的往來。 */
+function attributionFilters(
+  perspective: StatisticsPerspective,
+  { personIds, categoryIds, includeUncategorized }: StatisticsFilters,
+): Prisma.Sql {
+  const people = personIds?.length
+    ? Prisma.sql`AND "personId" IN (${Prisma.join(personIds)})`
+    : perspective === 'MINE'
+      ? Prisma.sql`AND "isMe"`
+      : Prisma.empty;
+  if (!categoryIds?.length && !includeUncategorized) return people;
+  const categories = categoryIds?.length
+    ? Prisma.sql`(kind = 'CATEGORY' AND "categoryId" IN (${Prisma.join(categoryIds)}))`
+    : Prisma.sql`false`;
+  return Prisma.sql`${people} AND (${categories} OR (${Boolean(includeUncategorized)} AND kind = 'UNCATEGORIZED'))`;
 }
 
 /** 分類金額大於 0 才回傳；順序固定為方向、金額遞減、分組鍵。百分比交給最大餘數法。 */
 export function statisticsGroupsSql(
   scope: StatisticsScope,
   perspective: StatisticsPerspective = 'LEDGER',
+  filters: StatisticsFilters = {},
 ): Prisma.Sql {
-  return Prisma.sql`${statisticsAttributionCte(scope)}
+  return Prisma.sql`${statisticsAttributionCte(scope, filters)}
     SELECT direction, kind, "categoryId", "categoryName", "categoryIcon", key,
       SUM(amount)::bigint AS amount
-    FROM attribution WHERE true ${perspectiveFilter(perspective)}
+    FROM attribution WHERE true ${attributionFilters(perspective, filters)}
     GROUP BY direction, kind, "categoryId", "categoryName", "categoryIcon", key
     HAVING SUM(amount) > 0
     ORDER BY direction, amount DESC, key COLLATE "C"`;
@@ -148,11 +183,12 @@ export function statisticsPeopleSql(scope: StatisticsScope): Prisma.Sql {
 export function statisticsTrendSql(
   scope: StatisticsScope,
   perspective: StatisticsPerspective = 'LEDGER',
+  filters: StatisticsFilters = {},
 ): Prisma.Sql {
-  return Prisma.sql`${statisticsAttributionCte(scope)}
+  return Prisma.sql`${statisticsAttributionCte(scope, filters)}
     SELECT to_char(("date" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') AS month,
       COALESCE(SUM(amount) FILTER (WHERE direction = 'INCOME'), 0)::bigint AS income,
       COALESCE(SUM(amount) FILTER (WHERE direction = 'EXPENSE'), 0)::bigint AS expense
-    FROM attribution WHERE true ${perspectiveFilter(perspective)}
+    FROM attribution WHERE true ${attributionFilters(perspective, filters)}
     GROUP BY month ORDER BY month`;
 }

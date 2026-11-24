@@ -84,6 +84,9 @@ export class LedgerStatisticsResponseDto implements LedgerStatistics {
   @ApiProperty({ type: StatisticsTotalsDto })
   mine!: StatisticsTotalsDto;
 
+  @ApiProperty({ type: StatisticsTotalsDto })
+  totals!: StatisticsTotalsDto;
+
   @ApiProperty({ type: [StatisticsGroupDto] })
   expenseGroups!: StatisticsGroupDto[];
 
@@ -107,4 +110,13 @@ export class StatisticsTrendResponseDto implements StatisticsTrend {
 
   @ApiProperty({ type: [StatisticsTrendMonthDto] })
   months!: StatisticsTrendMonthDto[];
+
+  @ApiProperty({ type: 'integer', minimum: 0, nullable: true })
+  averageIncome!: number | null;
+
+  @ApiProperty({ type: 'integer', minimum: 0, nullable: true })
+  averageExpense!: number | null;
+
+  @ApiProperty({ type: 'integer', minimum: 0, maximum: 24 })
+  averageMonthCount!: number;
 }
