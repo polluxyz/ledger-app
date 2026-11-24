@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { StatisticsGroup, StatisticsPerson, StatisticsPerspective } from '@ledger/shared';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PageContent } from '../components/PageContent';
@@ -16,9 +23,7 @@ import {
 } from '../features/statistics/charts/ChartTypeSwitch';
 import { DonutChart } from '../features/statistics/charts/DonutChart';
 import { HorizontalBarChart } from '../features/statistics/charts/HorizontalBarChart';
-import { TrendBarChart } from '../features/statistics/charts/TrendBarChart';
-import { TrendLineChart } from '../features/statistics/charts/TrendLineChart';
-import { TrendTable } from '../features/statistics/charts/TrendTable';
+import { StatisticsTrendChart } from '../features/statistics/charts/StatisticsTrendChart';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
 import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
 import type { ChartType } from '../features/statistics/charts/chart-types';
@@ -47,15 +52,10 @@ const TAB_LABELS: Record<StatsTab, string> = {
   member: '成員',
 };
 
-const CHART_OPTIONS: Record<StatsTab, readonly ChartTypeOption[]> = {
+const CHART_OPTIONS: Record<Exclude<StatsTab, 'trend'>, readonly ChartTypeOption[]> = {
   cat: [
     { value: 'donut', label: '圓餅' },
     { value: 'bar', label: '長條' },
-  ],
-  trend: [
-    { value: 'bar', label: '長條' },
-    { value: 'line', label: '折線' },
-    { value: 'table', label: '表格' },
   ],
   member: [
     { value: 'bar', label: '長條' },
@@ -146,11 +146,12 @@ export default function StatsPage() {
       ...state,
       tab,
       perspective: tab === 'member' ? 'LEDGER' : state.perspective,
-      chart: preferences[tab],
+      chart: tab === 'trend' ? null : preferences[tab],
     });
   }
 
   function changeChart(chart: ChartType) {
+    if (state.tab === 'trend') return;
     saveStatsChartPreference(state.tab, chart);
     updateUrl({ ...state, chart }, true);
   }
@@ -302,7 +303,7 @@ export default function StatsPage() {
                   {formatMoney(totals.expense)}
                 </dd>
               </div>
-              <div>
+              <div className={styles.net}>
                 <dt>結餘</dt>
                 <dd aria-label={`結餘 ${formatMoney(totals.net)}`}>{formatMoney(totals.net)}</dd>
               </div>
@@ -350,7 +351,7 @@ export default function StatsPage() {
               <ChartTypeSwitch
                 label="分類圖型"
                 options={CHART_OPTIONS.cat}
-                value={state.chart}
+                value={state.chart ?? 'donut'}
                 onChange={changeChart}
               />
             </div>
@@ -363,38 +364,42 @@ export default function StatsPage() {
                 載入中…
               </p>
             ) : (
-              <div className={styles.categoryLayout}>
-                {state.chart === 'donut' ? (
-                  <DonutChart
+              <ChartAndList
+                chart={
+                  state.chart === 'donut' ? (
+                    <DonutChart
+                      direction={direction}
+                      totalAmount={selectedAmount ?? 0}
+                      title={direction === 'expense' ? '支出分類圓餅圖' : '收入分類圓餅圖'}
+                      theme={chartTheme}
+                      data={{
+                        kind: 'groups',
+                        items: groups,
+                        onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
+                      }}
+                    />
+                  ) : (
+                    <HorizontalBarChart
+                      direction={direction}
+                      title={direction === 'expense' ? '支出分類長條圖' : '收入分類長條圖'}
+                      theme={chartTheme}
+                      data={{
+                        kind: 'groups',
+                        items: groups,
+                        onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
+                      }}
+                    />
+                  )
+                }
+                list={
+                  <CategoryLegendList
+                    items={groups}
                     direction={direction}
-                    totalAmount={selectedAmount ?? 0}
-                    title={direction === 'expense' ? '支出分類圓餅圖' : '收入分類圓餅圖'}
                     theme={chartTheme}
-                    data={{
-                      kind: 'groups',
-                      items: groups,
-                      onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
-                    }}
+                    onSelect={effectivePerspective === 'LEDGER' ? selectCategory : undefined}
                   />
-                ) : (
-                  <HorizontalBarChart
-                    direction={direction}
-                    title={direction === 'expense' ? '支出分類長條圖' : '收入分類長條圖'}
-                    theme={chartTheme}
-                    data={{
-                      kind: 'groups',
-                      items: groups,
-                      onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
-                    }}
-                  />
-                )}
-                <CategoryLegendList
-                  items={groups}
-                  direction={direction}
-                  theme={chartTheme}
-                  onSelect={effectivePerspective === 'LEDGER' ? selectCategory : undefined}
-                />
-              </div>
+                }
+              />
             )}
           </>
         )}
@@ -405,12 +410,6 @@ export default function StatsPage() {
               <p className={styles.monthRange}>
                 {formatMonth(shiftMonth(endMonth, -11))} – {formatMonth(endMonth)}
               </p>
-              <ChartTypeSwitch
-                label="趨勢圖型"
-                options={CHART_OPTIONS.trend}
-                value={state.chart}
-                onChange={changeChart}
-              />
             </div>
             {trend.error ? (
               <p className={styles.status} role="alert">
@@ -420,20 +419,14 @@ export default function StatsPage() {
               <p className={styles.status} role="status">
                 載入中…
               </p>
-            ) : state.chart === 'bar' ? (
-              <TrendBarChart
-                months={trend.data.months}
-                selectedMonth={endMonth}
-                onSelectMonth={selectTrendMonth}
-              />
-            ) : state.chart === 'line' ? (
-              <TrendLineChart
-                months={trend.data.months}
-                selectedMonth={endMonth}
-                onSelectMonth={selectTrendMonth}
-              />
             ) : (
-              <TrendTable months={trend.data.months} />
+              <StatisticsTrendChart
+                key={periodKey}
+                months={trend.data.months}
+                selectedMonth={endMonth}
+                showSelectedDetails={state.period.mode !== 'month'}
+                onSelectMonth={selectTrendMonth}
+              />
             )}
           </>
         )}
@@ -460,7 +453,7 @@ export default function StatsPage() {
               <ChartTypeSwitch
                 label="成員圖型"
                 options={CHART_OPTIONS.member}
-                value={state.chart}
+                value={state.chart ?? 'bar'}
                 onChange={changeChart}
               />
             </div>
@@ -473,9 +466,9 @@ export default function StatsPage() {
                 載入中…
               </p>
             ) : (
-              <>
-                <div className={styles.categoryLayout}>
-                  {state.chart === 'donut' ? (
+              <ChartAndList
+                chart={
+                  state.chart === 'donut' ? (
                     <DonutChart
                       direction={direction}
                       totalAmount={
@@ -501,15 +494,39 @@ export default function StatsPage() {
                       theme={chartTheme}
                       data={{ kind: 'people', items: people }}
                     />
-                  )}
-                </div>
-                <MemberTotals people={people} theme={chartTheme} />
-              </>
+                  )
+                }
+                list={<MemberTotals people={people} theme={chartTheme} direction={direction} />}
+              />
             )}
           </>
         )}
       </section>
     </PageContent>
+  );
+}
+
+/** 依畫面重新排列元件，讓鍵盤順序跟著欄位位置。 */
+function ChartAndList({ chart, list }: { chart: ReactNode; list: ReactNode }) {
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia?.('(max-width: 900px)').matches ?? false,
+  );
+
+  useEffect(() => {
+    const viewport = window.matchMedia?.('(max-width: 900px)');
+    if (!viewport) return;
+    const sync = () => setNarrow(viewport.matches);
+    viewport.addEventListener('change', sync);
+    sync();
+    return () => viewport.removeEventListener('change', sync);
+  }, []);
+
+  const chartColumn = <div key="chart">{chart}</div>;
+  const listColumn = <div key="list">{list}</div>;
+  return (
+    <div className={styles.categoryLayout}>
+      {narrow ? [chartColumn, listColumn] : [listColumn, chartColumn]}
+    </div>
   );
 }
 
@@ -642,9 +659,11 @@ function PeriodControls({
 function MemberTotals({
   people,
   theme,
+  direction,
 }: {
   people: readonly StatisticsPerson[];
   theme: ChartTheme;
+  direction: Direction;
 }) {
   return (
     <ul className={styles.memberTotals} aria-label="成員收支">
@@ -660,9 +679,15 @@ function MemberTotals({
               style={{ '--swatch-color': color } as CSSProperties}
               aria-hidden="true"
             />
-            <strong>{person.name}</strong>
-            <span>支出 {formatMoney(person.expense)}</span>
-            <span>收入 {formatMoney(person.income)}</span>
+            <span>{person.name}</span>
+            <div className={styles.memberAmounts}>
+              <strong>{formatMoney(person[direction])}</strong>
+              <small>
+                {direction === 'expense'
+                  ? '收入 ' + formatMoney(person.income)
+                  : '支出 ' + formatMoney(person.expense)}
+              </small>
+            </div>
           </li>
         );
       })}

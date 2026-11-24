@@ -285,16 +285,10 @@ describe('StatsPage', () => {
     const trendTab = screen.getByRole('button', { name: '趨勢' });
     await focusWithTab(user, trendTab);
     await user.keyboard('{Enter}');
-    await screen.findByRole('list', { name: '每月收支' });
+    await screen.findByRole('region', { name: '收支趨勢圖' });
 
-    const lineChartButton = within(screen.getByRole('group', { name: '趨勢圖型' })).getByRole(
-      'button',
-      { name: '折線' },
-    );
-    await focusWithTab(user, lineChartButton);
-    await user.keyboard('{Enter}');
-    await screen.findByRole('region', { name: '趨勢折線圖' });
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('chart=line'));
+    expect(screen.queryByRole('group', { name: '趨勢圖型' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('chart='));
 
     const septemberButton = screen.getByRole('button', {
       name: /2026年9月：收入/,
@@ -427,14 +421,14 @@ describe('StatsPage', () => {
     expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
     expect(setItem).toHaveBeenCalledWith(
       'stats.chart',
-      JSON.stringify({ cat: 'donut', trend: 'line', member: 'donut' }),
+      JSON.stringify({ cat: 'donut', member: 'donut' }),
     );
     expect(screen.getByRole('button', { name: /晚餐，\$900，75%/ })).toBeInTheDocument();
   });
 
   it('normalizes invalid URL chart values with replace', async () => {
     const user = userEvent.setup();
-    const previous = '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER&chart=bar';
+    const previous = '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER';
     const invalid = '/stats?tab=cat&ledger=family&month=2026-10&chart=line';
     const firstRender = renderPage(invalid, {
       initialEntries: [previous, invalid],
@@ -449,6 +443,69 @@ describe('StatsPage', () => {
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(previous));
     firstRender.unmount();
+  });
+
+  it('replaces an old trend URL while keeping both other chart preferences', async () => {
+    const user = userEvent.setup();
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER&chart=bar';
+    const legacy = '/stats?tab=trend&ledger=family&month=2026-10&chart=table';
+    localStorage.setItem(
+      'stats.chart',
+      JSON.stringify({ cat: 'bar', trend: 'table', member: 'donut' }),
+    );
+    renderPage(legacy, { initialEntries: [previous, legacy], initialIndex: 1 });
+    await screen.findByRole('region', { name: '收支趨勢圖' });
+    expect(screen.getByTestId('location')).not.toHaveTextContent('chart=');
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    expect(screen.getByTestId('location')).toHaveTextContent(previous);
+    await user.click(screen.getByRole('button', { name: '成員' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('chart=donut');
+  });
+
+  it.each([false, true])(
+    'renders categories and members in viewport reading order (narrow: %s)',
+    async (matches) => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi
+          .fn()
+          .mockReturnValue({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+      );
+      try {
+        const user = userEvent.setup();
+        renderPage('/stats?tab=cat&ledger=family&month=2026-10');
+        for (const [tab, listLabel, chartLabel] of [
+          ['分類', '支出分類清單', '支出分類圓餅圖'],
+          ['成員', '成員收支', '成員支出長條圖'],
+        ] as const) {
+          await user.click(screen.getByRole('button', { name: tab }));
+          const list = await screen.findByRole('list', { name: listLabel });
+          const chart = screen.getByRole('region', { name: chartLabel });
+          const position = list.compareDocumentPosition(chart);
+          expect(position).toBe(
+            matches ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING,
+          );
+        }
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it('changes which member amount is primary and keeps zero values visible', async () => {
+    const user = userEvent.setup();
+    renderPage('/stats?tab=member&ledger=family&month=2026-10');
+    const members = await screen.findByRole('list', { name: '成員收支' });
+    const member = within(members).getByRole('listitem', { name: '小美，支出 $750，收入 $0' });
+    expect(member.querySelector('strong')).toHaveTextContent('$750');
+    expect(member.querySelector('small')).toHaveTextContent('收入 $0');
+    await user.click(
+      within(screen.getByRole('group', { name: '成員收支方向' })).getByRole('button', {
+        name: '收入',
+      }),
+    );
+    expect(member.querySelector('strong')).toHaveTextContent('$0');
+    expect(member.querySelector('small')).toHaveTextContent('支出 $750');
   });
 
   it('works when localStorage read and write throw', async () => {
@@ -485,20 +542,20 @@ describe('StatsPage', () => {
     await user.click(september);
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER&chart=bar',
+        '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER',
       ),
     );
     expect(await screen.findByText('2025 年 10 月 – 2026 年 9 月')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '返回' }));
     expect(await screen.findByTestId('location')).toHaveTextContent(
-      '/stats?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=LEDGER&chart=bar',
+      '/stats?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=LEDGER',
     );
   });
 
   it('uses the selected month, year end, and custom end month for trend requests', async () => {
     const user = userEvent.setup();
     renderPage('/stats?tab=trend&ledger=family&month=2026-07');
-    await screen.findByRole('list', { name: '每月收支' });
+    await screen.findByRole('region', { name: '收支趨勢圖' });
 
     await user.click(screen.getByRole('button', { name: '年' }));
     await waitFor(() =>
@@ -540,9 +597,9 @@ describe('StatsPage', () => {
         name: '我，支出 $450，收入 $200',
       }),
     ).toBeInTheDocument();
-    expect(within(memberList).getByText('支出 $450')).toBeInTheDocument();
+    expect(within(memberList).getByText('$450')).toBeInTheDocument();
     expect(within(memberList).getByText('收入 $200')).toBeInTheDocument();
-    expect(within(memberList).getByText('支出 $750')).toBeInTheDocument();
+    expect(within(memberList).getByText('$750')).toBeInTheDocument();
     expect(within(memberList).getByText('收入 $0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '帳本' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '我' })).toBeDisabled();

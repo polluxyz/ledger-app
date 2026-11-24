@@ -93,8 +93,11 @@ describe('stats-url', () => {
 
   it('accepts chart types only for the current tab and canonicalizes invalid values', () => {
     expect(parseStatsUrl('?tab=cat&chart=bar', shared).state.chart).toBe('bar');
-    expect(parseStatsUrl('?tab=trend&chart=line', shared).state.chart).toBe('line');
-    expect(parseStatsUrl('?tab=trend&chart=donut', shared).state.chart).toBe('bar');
+    for (const chart of ['bar', 'line', 'table', 'donut']) {
+      const parsed = parseStatsUrl('?tab=trend&chart=' + chart, shared);
+      expect(parsed.state.chart).toBeNull();
+      expect(parsed.search).not.toContain('chart=');
+    }
     expect(parseStatsUrl('?tab=member&chart=donut', shared).state.chart).toBe('donut');
     expect(parseStatsUrl('?tab=cat&chart=line', shared).state.chart).toBe('donut');
     expect(parseStatsUrl('?tab=cat&chart=line', shared).search).toContain('chart=donut');
@@ -104,25 +107,18 @@ describe('stats-url', () => {
     const storage = memoryStorage(JSON.stringify({ cat: 'bar', trend: 'line', member: 'donut' }));
     expect(parseStatsUrl('?tab=cat&chart=donut', { ...shared, storage }).state.chart).toBe('donut');
     expect(parseStatsUrl('?tab=cat', { ...shared, storage }).state.chart).toBe('bar');
-    expect(parseStatsUrl('?tab=trend', { ...shared, storage }).state.chart).toBe('line');
+    expect(parseStatsUrl('?tab=trend', { ...shared, storage }).state.chart).toBeNull();
     expect(parseStatsUrl('?tab=member', { ...shared, storage }).state.chart).toBe('donut');
     expect(parseStatsUrl('?tab=cat', shared).state.chart).toBe(DEFAULT_STATS_CHARTS.cat);
   });
 
-  it('stores only the three legal chart choices and ignores storage failures or invalid content', () => {
-    const storage = memoryStorage(null);
-    saveStatsChartPreference('trend', 'table', storage);
-    expect(storage.value).toBe(JSON.stringify({ cat: 'donut', trend: 'table', member: 'bar' }));
-    expect(readStatsChartPreferences(storage)).toEqual({
-      cat: 'donut',
-      trend: 'table',
-      member: 'bar',
-    });
-    expect(JSON.parse(storage.value ?? '{}')).toEqual({
-      cat: 'donut',
-      trend: 'table',
-      member: 'bar',
-    });
+  it('stores only the category and member choices and handles invalid storage', () => {
+    const storage = memoryStorage('{"cat":"donut","trend":"table","member":"bar"}');
+    expect(readStatsChartPreferences(storage)).toEqual({ cat: 'donut', member: 'bar' });
+    saveStatsChartPreference('trend', 'bar', storage);
+    expect(storage.value).toContain('"trend":"table"');
+    saveStatsChartPreference('cat', 'bar', storage);
+    expect(JSON.parse(storage.value ?? '{}')).toEqual({ cat: 'bar', member: 'bar' });
     expect(STATS_CHART_STORAGE_KEY).toBe('stats.chart');
 
     expect(readStatsChartPreferences(memoryStorage('{'))).toEqual(DEFAULT_STATS_CHARTS);
@@ -149,7 +145,6 @@ describe('stats-url', () => {
     };
     expect(parseStatsUrl('?tab=cat', { ...shared, storage: getThrows }).state.chart).toBe('donut');
     expect(() => saveStatsChartPreference('cat', 'bar', setThrows)).not.toThrow();
-    expect(() => saveStatsChartPreference('cat', 'line', storage)).not.toThrow();
   });
 
   it('serializes normalized state in a stable shape and derives endpoint ranges', () => {
@@ -158,7 +153,7 @@ describe('stats-url', () => {
       shared,
     ).state;
     expect(serializeStatsUrl(state)).toBe(
-      '?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=MINE&chart=line',
+      '?tab=trend&ledger=family&from=2026-10-05&to=2026-10-20&perspective=MINE',
     );
     expect(getStatsPeriodRange({ mode: 'year', year: '2024' })).toEqual({
       from: '2024-01-01',

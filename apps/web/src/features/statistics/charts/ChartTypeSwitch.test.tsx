@@ -10,23 +10,22 @@ describe('ChartTypeSwitch', () => {
     const onChange = vi.fn();
     render(
       <ChartTypeSwitch
-        label="趨勢圖型"
+        label="分類圖型"
         value="bar"
         onChange={onChange}
         options={[
           { value: 'bar', label: '長條' },
-          { value: 'line', label: '折線' },
-          { value: 'table', label: '表格' },
+          { value: 'donut', label: '圓餅' },
         ]}
       />,
     );
 
     const barButton = screen.getByRole('button', { name: '長條' });
     expect(barButton).toHaveAttribute('aria-pressed', 'true');
-    const lineButton = screen.getByRole('button', { name: '折線' });
-    expect(lineButton).toHaveAttribute('aria-pressed', 'false');
-    lineButton.focus();
+    const donutButton = screen.getByRole('button', { name: '圓餅' });
+    expect(donutButton).toHaveAttribute('aria-pressed', 'false');
+    donutButton.focus();
     await user.keyboard(' ');
-    expect(onChange).toHaveBeenCalledWith('line');
+    expect(onChange).toHaveBeenCalledWith('donut');
   });
 });

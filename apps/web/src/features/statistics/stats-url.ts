@@ -14,12 +14,11 @@ export interface StatsUrlState {
   ledgerId: string | null;
   period: StatsPeriod;
   perspective: StatisticsPerspective;
-  chart: ChartType;
+  chart: ChartType | null;
 }
 
 export interface StatsChartPreferences {
   cat: 'donut' | 'bar';
-  trend: 'bar' | 'line' | 'table';
   member: 'bar' | 'donut';
 }
 
@@ -43,7 +42,6 @@ export const STATS_CHART_STORAGE_KEY = 'stats.chart';
 
 export const DEFAULT_STATS_CHARTS: StatsChartPreferences = {
   cat: 'donut',
-  trend: 'bar',
   member: 'bar',
 };
 
@@ -77,11 +75,13 @@ export function parseStatsUrl(
   const requestedChart = params.get('chart');
   const charts = readStatsChartPreferences(options.storage);
   const chart =
-    requestedChart === null
-      ? charts[tab]
-      : isChartTypeForTab(tab, requestedChart)
-        ? requestedChart
-        : DEFAULT_STATS_CHARTS[tab];
+    tab === 'trend'
+      ? null
+      : requestedChart === null
+        ? charts[tab]
+        : isChartType(requestedChart)
+          ? requestedChart
+          : DEFAULT_STATS_CHARTS[tab];
 
   const state: StatsUrlState = { tab, ledgerId, period, perspective, chart };
   return { state, search: serializeStatsUrl(state) };
@@ -103,7 +103,7 @@ export function serializeStatsUrl(state: StatsUrlState): string {
     params.set('to', state.period.to);
   }
   params.set('perspective', state.perspective);
-  params.set('chart', state.chart);
+  if (state.tab !== 'trend' && state.chart !== null) params.set('chart', state.chart);
   return `?${params.toString()}`;
 }
 
@@ -154,7 +154,7 @@ export function saveStatsChartPreference(
   chart: ChartType,
   storage?: StatsStorage | null,
 ): void {
-  if (!isChartTypeForTab(tab, chart)) {
+  if (tab === 'trend' || !isChartType(chart)) {
     return;
   }
   const resolvedStorage = getStorage(storage);
@@ -164,20 +164,14 @@ export function saveStatsChartPreference(
 
   try {
     const preferences = readStatsChartPreferences(resolvedStorage);
-    if (tab === 'cat') {
-      preferences.cat = chart as StatsChartPreferences['cat'];
-    } else if (tab === 'trend') {
-      preferences.trend = chart as StatsChartPreferences['trend'];
-    } else {
-      preferences.member = chart as StatsChartPreferences['member'];
-    }
+    preferences[tab] = chart;
     resolvedStorage.setItem(STATS_CHART_STORAGE_KEY, JSON.stringify(preferences));
   } catch {
     // 隱私模式或受限瀏覽器可能拒絕 storage；頁面狀態仍由網址與 React 管理。
   }
 }
 
-/** 讀取三個分頁的圖型；格式不符時整筆視為沒有儲存過。 */
+/** 讀取分類與成員圖型，略過舊版趨勢值。 */
 export function readStatsChartPreferences(storage?: StatsStorage | null): StatsChartPreferences {
   const resolvedStorage = getStorage(storage);
   if (!resolvedStorage) {
@@ -193,7 +187,7 @@ export function readStatsChartPreferences(storage?: StatsStorage | null): StatsC
     if (!isStatsChartPreferences(value)) {
       return { ...DEFAULT_STATS_CHARTS };
     }
-    return { ...value };
+    return { cat: value.cat, member: value.member };
   } catch {
     return { ...DEFAULT_STATS_CHARTS };
   }
@@ -288,15 +282,8 @@ function isStatsTab(value: string | null): value is StatsTab {
   return value === 'cat' || value === 'trend' || value === 'member';
 }
 
-function isChartTypeForTab(tab: StatsTab, value: string): value is ChartType {
-  switch (tab) {
-    case 'cat':
-      return value === 'donut' || value === 'bar';
-    case 'trend':
-      return value === 'bar' || value === 'line' || value === 'table';
-    case 'member':
-      return value === 'bar' || value === 'donut';
-  }
+function isChartType(value: unknown): value is ChartType {
+  return value === 'donut' || value === 'bar';
 }
 
 function isStatsChartPreferences(value: unknown): value is StatsChartPreferences {
@@ -305,10 +292,9 @@ function isStatsChartPreferences(value: unknown): value is StatsChartPreferences
   }
   const preferences = value as Record<string, unknown>;
   return (
-    Object.keys(preferences).length === 3 &&
-    isChartTypeForTab('cat', String(preferences.cat)) &&
-    isChartTypeForTab('trend', String(preferences.trend)) &&
-    isChartTypeForTab('member', String(preferences.member))
+    Object.keys(preferences).every((key) => key === 'cat' || key === 'member' || key === 'trend') &&
+    isChartType(preferences.cat) &&
+    isChartType(preferences.member)
   );
 }
 

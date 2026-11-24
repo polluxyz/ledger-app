@@ -6,12 +6,18 @@
  *
  * 首頁與交易頁把 AI 入口 portal 到裡層；錯誤浮層也不撐高橫條，其他頁面保持空白。
  */
+:global(:root) {
+  --page-toolbar-inner-height: 3.5rem;
+  --page-toolbar-border-width: 1px;
+  --page-toolbar-height: calc(var(--page-toolbar-inner-height) + var(--page-toolbar-border-width));
+}
+
 .bar {
   position: sticky;
   top: 0;
   z-index: 10;
   padding: 0 var(--space-xl);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: var(--page-toolbar-border-width) solid var(--color-border);
   background-color: color-mix(in srgb, var(--color-bg) 88%, transparent);
   backdrop-filter: blur(8px);
 }
@@ -20,7 +26,7 @@
   display: flex;
   align-items: center;
   max-width: var(--content-max);
-  min-height: 3.5rem;
+  min-height: var(--page-toolbar-inner-height);
   margin-inline: auto;
   overflow: visible;
 }
