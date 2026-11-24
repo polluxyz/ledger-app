@@ -40,8 +40,8 @@
 - [x] **T8 全套驗證**：`pnpm format:check`（只看本次檔案）、`lint`、`typecheck`、`test`、build、web e2e；前後截圖（深淺 × 1280／390 × 登入、註冊、個人資料、統計三分頁）；3 組 commit 各自單獨 revert 後 typecheck 與 test 通過。
   - 驗收：SC-O11、SC-O12；結果與截圖路徑填進 plan「執行紀錄」。
   - 實測：2,713 項單元、145／145 項 Web 端對端通過。3 組分別回退均通過型別與單元測試。兩組截圖各 30 張，完整證據見計畫。
-- [ ] **T9 協調者驗收**：讀完整 diff；重跑 typecheck、test、`stats.spec.ts` 與身份相關 e2e；逐張核對截圖；開 PR，等 CI 全綠。
+- [x] **T9 協調者驗收**：讀完整 diff；重跑 typecheck、test、`stats.spec.ts` 與身份相關 e2e；逐張核對截圖；開 PR，等 CI 全綠。
   - 驗收：plan「驗證結果」填好；PR 未合併。
-  - 實測：diff 讀完，分頁外框對齊另修（`d1f0462`）。typecheck、2,713 項單元、48／48 項 e2e 通過。
+  - 實測：diff 讀完，分頁外框對齊另修（`d1f0462`）。typecheck、2,713 項單元、48／48 項 e2e 通過。PR #251 CI 於 `3cd34aa` 全綠。
 - [ ] **T10 demo**：照 plan「demo 方式」並排跑現版與新版，給開發者網址。
   - 驗收：SC-O13；開發者回覆前不合併。
