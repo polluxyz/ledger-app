@@ -238,3 +238,5 @@
 - T15（`1b671e6`）：`HomePage.test.tsx` 的假資料補上必填的 `totals` 並標型別，在 Target 外，協調者核可。面板用原生 `<dialog>`，沒有重用既有元件。
 - T16（`d57dd65`）後補 `0d93305`：T15 的舊網址轉換測試在清單出現後立刻斷言網址，平行跑時曾得到 `tab=member`。改成等待轉換完成，只改測試。
 - 待追蹤（範圍外）：全套並行時 `TransactionWorkbench.test.tsx` 曾有 1 項失敗（該檔耗時 5,346ms），單獨連跑 5 次全過。本分支只改過交易表單樣式，研判是既有的負載逾時，不在 #251 處理。
+- T19（`a64ddfe`）：Target 擴大到 `AiEntry`、`CounterpartyDetail`、`DebtEntryForm`、`SettlementForm`、`SettlementView`、`DebtHistoryView`，協調者核可。內嵌結清表單需要次要送出鈕，`DebtEntryForm` 與 `SettlementForm` 加 `submitVariant`，預設維持主要樣式。
+- T19 驗收時，本機全套 web 測試兩次各有 12～13 項 5 秒逾時。撤銷 T19 後同樣 12 項逾時；限制 8 個 worker 時 1,343 項全過。原因是 24 核機器預設 worker 太多互搶資源，與 T19 無關。上一條 `TransactionWorkbench` 失敗也是同一原因。CI 機器核數少，不受影響；本機驗收改用 `vitest run --maxWorkers=8`。
