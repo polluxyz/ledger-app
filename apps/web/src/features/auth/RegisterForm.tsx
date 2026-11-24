@@ -5,6 +5,8 @@ import { EmailField } from '../../components/EmailField';
 import { TextField } from '../../components/TextField';
 import { useAuth } from './use-auth';
 
+import styles from './AuthForm.module.css';
+
 interface RegisterFormProps {
   /** 註冊（並自動登入）成功後要做什麼，由容器決定。 */
   onSuccess: () => void | Promise<void>;
@@ -45,7 +47,7 @@ export function RegisterForm({ onSuccess, footer }: RegisterFormProps) {
     <>
       <FormError error={error} />
 
-      <form onSubmit={(event) => void handleSubmit(event)} noValidate>
+      <form className={styles.form} onSubmit={(event) => void handleSubmit(event)} noValidate>
         <TextField
           label="名稱"
           value={name}

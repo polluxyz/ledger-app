@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LoginForm } from '../features/auth/LoginForm';
 import { toSafeRedirect } from '../lib/safe-redirect';
-import styles from './AuthPage.module.css';
+import formStyles from '../features/auth/AuthForm.module.css';
+import { AuthPageLayout } from './AuthPageLayout';
 
 /**
  * 登入的「整頁」版本。首頁的主要入口是彈窗，這個路由仍保留給直接連結，
@@ -17,17 +18,15 @@ export default function LoginPage() {
   const from = toSafeRedirect((location.state as { from?: unknown } | null)?.from);
 
   return (
-    <section className={styles.page}>
-      {/* h2：站名在 AppTopBar 已經是 h1。 */}
-      <h2 className={styles.title}>登入</h2>
+    <AuthPageLayout title="登入">
       <LoginForm
         onSuccess={() => navigate(from, { replace: true })}
         footer={
-          <p className={styles.switch}>
-            還沒有帳號？<Link to="/register">註冊</Link>
+          <p className={formStyles.switch}>
+            還沒有帳號？ <Link to="/register">註冊</Link>
           </p>
         }
       />
-    </section>
+    </AuthPageLayout>
   );
 }

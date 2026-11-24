@@ -46,6 +46,7 @@ describe('AuthDialog on the home page', () => {
 
     expect(dialog().getByLabelText('Email')).toBeInTheDocument();
     expect(dialog().getByLabelText('密碼')).toBeInTheDocument();
+    expect(dialog().queryByText('記帳系統')).not.toBeInTheDocument();
     // 關鍵：仍停在首頁，沒有轉址。
     expect(window.location.pathname).toBe('/');
   });

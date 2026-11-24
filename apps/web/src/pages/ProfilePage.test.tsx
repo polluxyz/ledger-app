@@ -95,6 +95,9 @@ describe('ProfilePage', () => {
       // 只送 name——多送任何欄位都會被後端的白名單退成 400。
       expect(JSON.parse(typeof body === 'string' ? body : '{}')).toEqual({ name: '愛麗絲' });
     });
+    expect(await screen.findByText('已儲存')).toBeVisible();
+    await user.type(nameField, '甲');
+    expect(screen.queryByText('已儲存')).not.toBeInTheDocument();
   });
 
   it('keeps the typed name and shows the backend error on a 400', async () => {
@@ -119,6 +122,7 @@ describe('ProfilePage', () => {
 
     // VALIDATION_FAILED 有對照到中文，FormError 顯示對照表的句子。
     expect(await screen.findByRole('alert')).toHaveTextContent('有欄位不符合要求');
+    expect(screen.queryByText('已儲存')).not.toBeInTheDocument();
     // 使用者剛打的字不能消失。
     expect(screen.getByLabelText('顯示名稱')).toHaveValue('愛麗絲');
   });
