@@ -6,7 +6,7 @@
 
 - 分支 `feature/web-unslop-pages`。PR #251 OPEN，**未合併**。開發者 demo 後明確核可才可合併。
 - 開發者 2026-11-24 核可 spec §9、plan「第 2 輪修訂」、todo T12～T21。T12 已提交並併入 main（#250）。未追蹤的 `.agents/skills/unslop/` 不提交。
-- 第 1 輪與 advisor 的 Orca Run `run_c12ee42f7028` 已全部 succeeded（綁舊對話）。第 2 輪 Run `run_2cc1c21e985d`：T13（`1f077b5`）、T14（`0e69f58`）、T15（`1b671e6`）、T16（`d57dd65`）、T17（`0c45893`）、T18（`b70956d`）、T19（`a64ddfe`、補修 `a781c12`）、T20 已驗收，demo 種子已在 T14 後重跑，API 3200 已換成含 T14 的版本；測試穩定性另補 `0d93305`；下一步 T21 協調者驗收、push、更新 PR 說明、等 CI。本機跑 web 測試用 `vitest run --maxWorkers=8`，預設 worker 數會逾時（見 plan 執行紀錄）。
+- 第 1 輪與 advisor 的 Orca Run `run_c12ee42f7028` 已全部 succeeded（綁舊對話）。第 2 輪 Run `run_2cc1c21e985d`：T13（`1f077b5`）、T14（`0e69f58`）、T15（`1b671e6`）、T16（`d57dd65`）、T17（`0c45893`）、T18（`b70956d`）、T19（`a64ddfe`、補修 `a781c12`）、T20、T21 已驗收，CI 於 `dfcaab1` 全綠，demo 種子已在 T14 後重跑，API 3200 已換成含 T14 的版本；測試穩定性另補 `0d93305`；下一步 T10 demo，開發者挑點綴組，核可前不合併。本機跑 web 測試用 `vitest run --maxWorkers=8`，預設 worker 數會逾時（見 plan 執行紀錄）。
 
 ### 開發者決定（2026-11-24 看 demo 後）
 
