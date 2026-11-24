@@ -13,3 +13,9 @@
   font-size: var(--text-sm);
   cursor: pointer;
 }
+
+@media (max-width: 900px) {
+  .toggle {
+    min-height: var(--control-height);
+  }
+}

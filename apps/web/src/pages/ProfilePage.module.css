@@ -7,22 +7,17 @@
 
 /* 唯讀資訊（載入中、載入失敗）的共用樣式。 */
 .status {
+  composes: surface from '../components/CardSurface.module.css';
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
 
 /* 標準卡片寫法，與帳本明細的基本資訊卡同款。 */
 .card {
+  composes: surface from '../components/CardSurface.module.css';
   min-width: 0;
   padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
 }
 
 .emailLabel {
@@ -53,6 +48,8 @@
 }
 
 .actions {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-md);
   display: flex;
   align-items: center;
   gap: var(--space-md);

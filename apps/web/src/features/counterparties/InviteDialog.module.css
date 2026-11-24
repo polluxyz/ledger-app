@@ -50,3 +50,9 @@
   justify-content: flex-end;
   margin-top: var(--space-lg);
 }
+
+@media (max-width: 900px) {
+  .copyButton {
+    min-height: var(--control-height);
+  }
+}

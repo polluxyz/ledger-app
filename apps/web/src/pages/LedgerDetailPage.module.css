@@ -1,6 +1,6 @@
 /*
  * 帳本明細頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。內容由上到下是頁首、基本資訊卡、
- * 成員區塊、危險操作區——三張卡片用同一套寫法，看起來屬於同一個 app。
+ * 成員區塊、危險操作區。三個區塊沿用首頁卡片外觀。
  */
 .page {
   composes: content from '../components/PageContent.module.css';
@@ -8,27 +8,24 @@
 
 /* 唯讀狀態（載入中）的提示。 */
 .status {
+  composes: surface from '../components/CardSurface.module.css';
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
 
-/* ---- 基本資訊卡 ----
-   四欄（窄時自動換行）：標籤小字 muted、值粗體、註記再小一級，
-   層級靠字級與顏色拉開，不靠多餘的框線。 */
+/* 基本資訊的欄數隨寬度調整。 */
+.ledgerOverview {
+  composes: surface from '../components/CardSurface.module.css';
+}
+
 .facts {
+  overflow-wrap: anywhere;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: var(--space-md);
   margin: 0;
   padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
 }
 
 .fact {
@@ -54,11 +51,11 @@
   font-weight: 400;
 }
 
-/* ---- 前往分類頁的連結 ----
-   夾在基本資訊與成員之間，與兩者都拉開一點距離。強調色、不帶底線，
-   滑過才出現——與側欄導覽的視覺語彙一致。 */
+/* 分類連結是基本資訊卡的下一段。 */
 .categoriesLink {
-  margin: var(--space-md) 0 0;
+  margin: 0;
+  padding: var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--color-border);
 }
 
 .categoriesAnchor {
@@ -75,13 +72,19 @@
 }
 
 /* ---- 成員區塊 ---- */
+.membersCard {
+  composes: surface from '../components/CardSurface.module.css';
+  margin-top: var(--space-lg);
+}
+
 .membersHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: wrap;
-  margin-top: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* 區塊標題（成員、危險操作共用）。間距交給各自的容器，這裡只管字級。 */
@@ -93,31 +96,30 @@
 
 /* 封存帳本的成員區塊整個唯讀。說明為什麼沒有任何按鈕，不要讓人以為壞了。 */
 .readonly {
-  margin: var(--space-md) 0;
+  margin: 0;
+  border-bottom: 1px solid var(--color-border);
   padding: var(--space-sm) var(--space-md);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
 
-/* ---- 危險操作區 ----
-   卡片，但框用半透明的 danger：一眼知道「這裡的按鈕要想清楚」，
-   又不至於紅到像出錯。 */
+/* 危險操作沿用卡片外觀，按鈕保留危險樣式。 */
 .danger {
+  composes: surface from '../components/CardSurface.module.css';
   margin-top: var(--space-xl);
   padding: var(--space-lg);
-  border: 1px solid var(--color-danger-soft);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
 }
 
 .dangerActions {
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+}
+
+.danger > .dangerActions {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
 }
 
 .confirmActions {
@@ -160,4 +162,11 @@ button.deleteButton:hover:not(:disabled) {
 
 .back:hover {
   color: var(--color-accent);
+}
+
+@media (max-width: 900px) {
+  .back,
+  .categoriesAnchor {
+    min-height: var(--control-height);
+  }
 }

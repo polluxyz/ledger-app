@@ -3,15 +3,11 @@
  * 餘額相關（.balance／.negative）在分類沒有對應物，不帶過來。
  */
 
-/* 標準卡片寫法（spec §4.3）。overflow hidden 讓最後一列的底色不超出圓角。 */
+/* 清單置於支出或收入卡片的標題下方。 */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -94,9 +90,13 @@
 .status {
   margin: 0;
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
+}
+
+@media (max-width: 900px) {
+  .action {
+    width: var(--control-height);
+    height: var(--control-height);
+  }
 }
