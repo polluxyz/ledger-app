@@ -1,7 +1,0 @@
-/* 圖型使用與其他分段控制相同的外觀。 */
-.switch {
-  composes: group from '../../../components/SegmentedControl.module.css';
-  display: flex;
-  max-width: 100%;
-  flex-wrap: wrap;
-}

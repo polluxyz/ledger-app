@@ -3,6 +3,7 @@ import type { StatisticsGroup } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import { getStatisticsGroupColor, type ChartTheme } from './chart-colors';
 import { fixedGroupLabel, formatPercentageBps } from './chart-format';
+import { StatisticsListBar } from './StatisticsListBar';
 import styles from './CategoryLegendList.module.css';
 
 /** 分類清單保留後端順序，使用 percentageBps 原值格式化百分比，不自行重算。 */
@@ -19,6 +20,7 @@ export function CategoryLegendList({
   theme = 'dark',
   onSelect,
 }: CategoryLegendListProps) {
+  const maximumAmount = items.reduce((maximum, group) => Math.max(maximum, group.amount), 0);
   return (
     <ul className={styles.list} aria-label={`${direction === 'expense' ? '支出' : '收入'}分類清單`}>
       {items.map((group) => {
@@ -30,6 +32,7 @@ export function CategoryLegendList({
             <span className={styles.name}>{name}</span>
             <span className={styles.amount}>{formatMoney(group.amount)}</span>
             <span className={styles.percentage}>{formatPercentageBps(group.percentageBps)}</span>
+            <StatisticsListBar amount={group.amount} maximumAmount={maximumAmount} color={color} />
           </>
         );
 

@@ -211,7 +211,7 @@ describe('StatsPage', () => {
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut',
+        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER',
       ),
     );
 
@@ -234,7 +234,7 @@ describe('StatsPage', () => {
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut',
+        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER',
       ),
     );
     expect(await screen.findByRole('heading', { name: '統計' })).toBeInTheDocument();
@@ -242,8 +242,8 @@ describe('StatsPage', () => {
 
   it('pushes ledger changes and restores the previous ledger and summary on browser back', async () => {
     const user = userEvent.setup();
-    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER&chart=donut';
-    const current = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut';
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER';
+    const current = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER';
     renderPage(current, {
       initialLedgerId: familyLedger.id,
       initialEntries: [previous, current],
@@ -256,7 +256,7 @@ describe('StatsPage', () => {
     await user.click(screen.getByRole('option', { name: /日常/ }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER&chart=donut',
+        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER',
       ),
     );
     expect(screen.getByRole('region', { name: '收支摘要' })).toHaveTextContent('-$703');
@@ -269,9 +269,9 @@ describe('StatsPage', () => {
     expect(summary.getByRole('definition', { name: '結餘 -$1,000' })).toBeInTheDocument();
   });
 
-  it('supports tab, chart, month, and category controls by keyboard and exposes precise amounts', async () => {
+  it('supports tab, month, and category controls by keyboard and exposes precise amounts', async () => {
     const user = userEvent.setup();
-    const initial = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=bar';
+    const initial = '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER';
     renderPage(initial, { initialLedgerId: familyLedger.id });
 
     const firstCategoryList = await screen.findByRole('list', { name: '支出分類清單' });
@@ -395,7 +395,7 @@ describe('StatsPage', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER&chart=donut',
+        '/stats?tab=cat&ledger=daily&month=2026-10&perspective=LEDGER',
       ),
     );
     expect(
@@ -403,63 +403,57 @@ describe('StatsPage', () => {
     ).toHaveTextContent('日常');
   });
 
-  it('keeps the API response stable when chart type changes and only stores a user choice', async () => {
+  it('ignores the old stored chart preference when switching directions and tabs', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(
-      'stats.chart',
-      JSON.stringify({ cat: 'bar', trend: 'line', member: 'donut' }),
-    );
+    localStorage.setItem('stats.chart', '{invalid');
+    const getItem = vi.spyOn(Storage.prototype, 'getItem');
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    renderPage('/stats?tab=cat&ledger=family&month=2026-10&chart=bar');
+    renderPage('/stats?tab=cat&ledger=family&month=2026-10');
 
-    await screen.findByRole('button', { name: '晚餐 $900' });
-    expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
-    expect(setItem).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: '圓餅' }));
-    await screen.findByRole('list', { name: '支出分類清單' });
-    expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
-    expect(setItem).toHaveBeenCalledWith(
-      'stats.chart',
-      JSON.stringify({ cat: 'donut', member: 'donut' }),
+    const expenses = await screen.findByRole('list', { name: '支出分類清單' });
+    const categoryBars = within(expenses).getAllByTestId('statistics-list-bar');
+    expect(categoryBars).toHaveLength(2);
+    expect(categoryBars[0]).toHaveStyle({ width: '100%' });
+    expect(categoryBars[1]).toHaveStyle({ width: `${(300 / 900) * 100}%` });
+    const donut = screen.getByRole('region', { name: '支出分類圓餅圖' });
+    const slices = donut.querySelectorAll('path');
+    expect(categoryBars.map((bar) => bar.style.getPropertyValue('--bar-color'))).toEqual(
+      [...slices].map((slice) => slice.getAttribute('stroke')),
     );
-    expect(screen.getByRole('button', { name: /晚餐，\$900，75%/ })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '分類圖型' })).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('group', { name: '收支方向' })).getByRole('button', { name: '收入' }),
+    );
+    expect(screen.getByRole('region', { name: '收入分類圓餅圖' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '成員' }));
+    const members = await screen.findByRole('list', { name: '成員收支' });
+    expect(within(members).getAllByTestId('statistics-list-bar')).toHaveLength(2);
+    expect(screen.queryByRole('group', { name: '成員圖型' })).not.toBeInTheDocument();
+    expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
+    expect(getItem).not.toHaveBeenCalledWith('stats.chart');
+    expect(setItem).not.toHaveBeenCalledWith('stats.chart', expect.anything());
   });
 
-  it('normalizes invalid URL chart values with replace', async () => {
+  it.each([
+    ['cat', 'bar'],
+    ['member', 'bar'],
+    ['trend', 'table'],
+  ])('replaces the old chart URL on %s', async (tab, chart) => {
     const user = userEvent.setup();
-    const previous = '/stats?tab=trend&ledger=family&month=2026-09&perspective=LEDGER';
-    const invalid = '/stats?tab=cat&ledger=family&month=2026-10&chart=line';
-    const firstRender = renderPage(invalid, {
-      initialEntries: [previous, invalid],
+    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER';
+    const legacy = '/stats?tab=' + tab + '&chart=' + chart;
+    renderPage(legacy, {
+      initialLedgerId: familyLedger.id,
+      initialEntries: [previous, legacy],
       initialIndex: 1,
     });
-    await screen.findByRole('list', { name: '支出分類清單' });
-    await waitFor(() =>
-      expect(screen.getByTestId('location')).toHaveTextContent(
-        '/stats?tab=cat&ledger=family&month=2026-10&perspective=LEDGER&chart=donut',
-      ),
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('tab=' + tab);
+      expect(screen.getByTestId('location')).not.toHaveTextContent('chart=');
+    });
     await user.click(screen.getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(previous));
-    firstRender.unmount();
-  });
-
-  it('replaces an old trend URL while keeping both other chart preferences', async () => {
-    const user = userEvent.setup();
-    const previous = '/stats?tab=cat&ledger=family&month=2026-09&perspective=LEDGER&chart=bar';
-    const legacy = '/stats?tab=trend&ledger=family&month=2026-10&chart=table';
-    localStorage.setItem(
-      'stats.chart',
-      JSON.stringify({ cat: 'bar', trend: 'table', member: 'donut' }),
-    );
-    renderPage(legacy, { initialEntries: [previous, legacy], initialIndex: 1 });
-    await screen.findByRole('region', { name: '收支趨勢圖' });
-    expect(screen.getByTestId('location')).not.toHaveTextContent('chart=');
-    await user.click(screen.getByRole('button', { name: '返回' }));
-    expect(screen.getByTestId('location')).toHaveTextContent(previous);
-    await user.click(screen.getByRole('button', { name: '成員' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('chart=donut');
   });
 
   it.each([false, true])(
@@ -476,7 +470,7 @@ describe('StatsPage', () => {
         renderPage('/stats?tab=cat&ledger=family&month=2026-10');
         for (const [tab, listLabel, chartLabel] of [
           ['分類', '支出分類清單', '支出分類圓餅圖'],
-          ['成員', '成員收支', '成員支出長條圖'],
+          ['成員', '成員收支', '成員支出圓餅圖'],
         ] as const) {
           await user.click(screen.getByRole('button', { name: tab }));
           const list = await screen.findByRole('list', { name: listLabel });
@@ -499,6 +493,7 @@ describe('StatsPage', () => {
     const member = within(members).getByRole('listitem', { name: '小美，支出 $750，收入 $0' });
     expect(member.querySelector('strong')).toHaveTextContent('$750');
     expect(member.querySelector('small')).toHaveTextContent('收入 $0');
+    expect(within(member).getByTestId('statistics-list-bar')).toHaveStyle({ width: '100%' });
     await user.click(
       within(screen.getByRole('group', { name: '成員收支方向' })).getByRole('button', {
         name: '收入',
@@ -506,22 +501,7 @@ describe('StatsPage', () => {
     );
     expect(member.querySelector('strong')).toHaveTextContent('$0');
     expect(member.querySelector('small')).toHaveTextContent('支出 $750');
-  });
-
-  it('works when localStorage read and write throw', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('storage denied');
-    });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('storage denied');
-    });
-    renderPage('/stats?tab=cat&ledger=family&month=2026-10');
-    await screen.findByRole('list', { name: '支出分類清單' });
-    const barButton = within(screen.getByRole('group', { name: '分類圖型' })).getByRole('button', {
-      name: '長條',
-    });
-    fireEvent.click(barButton);
-    expect(screen.getByRole('button', { name: '晚餐 $900' })).toBeInTheDocument();
+    expect(within(member).getByTestId('statistics-list-bar')).toHaveStyle({ width: '0%' });
   });
 
   it('requests twelve trend months, selects a month with browser history, and shows the range', async () => {
@@ -617,47 +597,25 @@ describe('StatsPage', () => {
     expect(screen.queryByRole('button', { name: '成員' })).not.toBeInTheDocument();
   });
 
-  it('matches member color swatches to both charts and updates them with the theme', async () => {
-    const user = userEvent.setup();
+  it('matches member bars to donut slices in both themes', async () => {
     document.documentElement.setAttribute('data-theme', 'dark');
-    renderPage('/stats?tab=member&ledger=family&month=2026-10&chart=bar');
+    renderPage('/stats?tab=member&ledger=family&month=2026-10');
 
-    const memberList = await screen.findByRole('list', { name: '成員收支' });
-    const me = within(memberList).getByRole('listitem', { name: '我，支出 $450，收入 $200' });
-    const swatch = me.querySelector('[aria-hidden="true"]');
-    if (!(swatch instanceof HTMLElement)) {
-      throw new Error('成員清單應有裝飾性色塊。');
-    }
-    const darkColor = getChartColorForId('me', 'dark');
-    expect(swatch.style.getPropertyValue('--swatch-color')).toBe(darkColor);
+    const members = await screen.findByRole('list', { name: '成員收支' });
+    const me = within(members).getByRole('listitem', { name: '我，支出 $450，收入 $200' });
+    const bar = within(me).getByTestId('statistics-list-bar');
+    const donut = screen.getByRole('img', { name: /成員支出圓餅圖/ });
+    const slice = donut.querySelector('path');
 
-    const barChart = screen.getByRole('region', { name: '成員支出長條圖' });
-    const barRow = within(barChart).getByText('我').closest('li');
-    const barTrack = barRow?.querySelector('[style*="--bar-color"]');
-    if (!(barTrack instanceof HTMLElement)) {
-      throw new Error('成員長條圖應有對應的色條。');
-    }
-    expect(barTrack.style.getPropertyValue('--bar-color')).toBe(darkColor);
+    expect(bar).toHaveStyle({ width: '60%' });
+    expect(bar.style.getPropertyValue('--bar-color')).toBe(getChartColorForId('me', 'dark'));
+    expect(slice).toHaveAttribute('stroke', getChartColorForId('me', 'dark'));
 
     document.documentElement.setAttribute('data-theme', 'light');
-    const lightColor = getChartColorForId('me', 'light');
     await waitFor(() => {
-      expect(swatch.style.getPropertyValue('--swatch-color')).toBe(lightColor);
-      expect(barTrack.style.getPropertyValue('--bar-color')).toBe(lightColor);
-    });
-
-    await user.click(
-      within(screen.getByRole('group', { name: '成員圖型' })).getByRole('button', { name: '圓餅' }),
-    );
-    const donutChart = await screen.findByRole('img', { name: /成員支出圓餅圖/ });
-    const donutSlice = donutChart.querySelector('path');
-    expect(donutSlice?.getAttribute('stroke')).toBe(lightColor);
-    expect(swatch.style.getPropertyValue('--swatch-color')).toBe(lightColor);
-
-    document.documentElement.setAttribute('data-theme', 'dark');
-    await waitFor(() => {
-      expect(swatch.style.getPropertyValue('--swatch-color')).toBe(darkColor);
-      expect(donutSlice?.getAttribute('stroke')).toBe(darkColor);
+      const color = getChartColorForId('me', 'light');
+      expect(bar.style.getPropertyValue('--bar-color')).toBe(color);
+      expect(slice).toHaveAttribute('stroke', color);
     });
   });
 

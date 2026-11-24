@@ -17,24 +17,17 @@ import {
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { CategoryLegendList } from '../features/statistics/charts/CategoryLegendList';
-import {
-  ChartTypeSwitch,
-  type ChartTypeOption,
-} from '../features/statistics/charts/ChartTypeSwitch';
 import { DonutChart } from '../features/statistics/charts/DonutChart';
-import { HorizontalBarChart } from '../features/statistics/charts/HorizontalBarChart';
+import { StatisticsListBar } from '../features/statistics/charts/StatisticsListBar';
 import { StatisticsTrendChart } from '../features/statistics/charts/StatisticsTrendChart';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
 import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
-import type { ChartType } from '../features/statistics/charts/chart-types';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import {
   getStatsPeriodEndMonth,
   getStatsPeriodRange,
   isValidCustomDateRange,
   parseStatsUrl,
-  readStatsChartPreferences,
-  saveStatsChartPreference,
   serializeStatsUrl,
   type StatsPeriod,
   type StatsTab,
@@ -52,20 +45,9 @@ const TAB_LABELS: Record<StatsTab, string> = {
   member: '成員',
 };
 
-const CHART_OPTIONS: Record<Exclude<StatsTab, 'trend'>, readonly ChartTypeOption[]> = {
-  cat: [
-    { value: 'donut', label: '圓餅' },
-    { value: 'bar', label: '長條' },
-  ],
-  member: [
-    { value: 'bar', label: '長條' },
-    { value: 'donut', label: '圓餅' },
-  ],
-};
-
 /**
  * 統計頁把網址當成可分享的頁面狀態，摘要、分類與成員共用一份後端回應；趨勢另用
- * 一份查詢。圖型與收支方向只改呈現，不加入 query key 或 localStorage 中的帳務資料。
+ * 一份查詢。收支方向只改呈現，舊網址的圖型參數會移除。
  */
 export default function StatsPage() {
   const {
@@ -123,37 +105,40 @@ export default function StatsPage() {
   }, [ledger?.id, ledgerLoading, setActiveLedgerId, urlLedger]);
 
   useEffect(() => {
-    if (ledgerLoading || !selectedLedger || location.search === canonicalSearch) {
-      return;
+    let search = canonicalSearch;
+    if (ledgerLoading || !selectedLedger) {
+      const params = new URLSearchParams(location.search);
+      if (!params.has('chart')) return;
+      params.delete('chart');
+      search = params.toString();
+      if (search) search = '?' + search;
     }
-    void navigate({ pathname: location.pathname, search: canonicalSearch }, { replace: true });
+    if (location.search !== search) {
+      void navigate(
+        { pathname: location.pathname, search, hash: location.hash },
+        { replace: true },
+      );
+    }
   }, [
     canonicalSearch,
     ledgerLoading,
+    location.hash,
     location.pathname,
     location.search,
     navigate,
     selectedLedger,
   ]);
 
-  function updateUrl(next: StatsUrlState, replace = false) {
-    void navigate({ pathname: location.pathname, search: serializeStatsUrl(next) }, { replace });
+  function updateUrl(next: StatsUrlState) {
+    void navigate({ pathname: location.pathname, search: serializeStatsUrl(next) });
   }
 
   function changeTab(tab: StatsTab) {
-    const preferences = readStatsChartPreferences();
     updateUrl({
       ...state,
       tab,
       perspective: tab === 'member' ? 'LEDGER' : state.perspective,
-      chart: tab === 'trend' ? null : preferences[tab],
     });
-  }
-
-  function changeChart(chart: ChartType) {
-    if (state.tab === 'trend') return;
-    saveStatsChartPreference(state.tab, chart);
-    updateUrl({ ...state, chart }, true);
   }
 
   function changePeriod(period: StatsPeriod) {
@@ -350,12 +335,6 @@ export default function StatsPage() {
                   收入
                 </button>
               </div>
-              <ChartTypeSwitch
-                label="分類圖型"
-                options={CHART_OPTIONS.cat}
-                value={state.chart ?? 'donut'}
-                onChange={changeChart}
-              />
             </div>
             {statistics.error ? (
               <p className={styles.status} role="alert">
@@ -368,30 +347,17 @@ export default function StatsPage() {
             ) : (
               <ChartAndList
                 chart={
-                  state.chart === 'donut' ? (
-                    <DonutChart
-                      direction={direction}
-                      totalAmount={selectedAmount ?? 0}
-                      title={direction === 'expense' ? '支出分類圓餅圖' : '收入分類圓餅圖'}
-                      theme={chartTheme}
-                      data={{
-                        kind: 'groups',
-                        items: groups,
-                        onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
-                      }}
-                    />
-                  ) : (
-                    <HorizontalBarChart
-                      direction={direction}
-                      title={direction === 'expense' ? '支出分類長條圖' : '收入分類長條圖'}
-                      theme={chartTheme}
-                      data={{
-                        kind: 'groups',
-                        items: groups,
-                        onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
-                      }}
-                    />
-                  )
+                  <DonutChart
+                    direction={direction}
+                    totalAmount={selectedAmount ?? 0}
+                    title={direction === 'expense' ? '支出分類圓餅圖' : '收入分類圓餅圖'}
+                    theme={chartTheme}
+                    data={{
+                      kind: 'groups',
+                      items: groups,
+                      onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
+                    }}
+                  />
                 }
                 list={
                   <CategoryLegendList
@@ -452,12 +418,6 @@ export default function StatsPage() {
                   收入
                 </button>
               </div>
-              <ChartTypeSwitch
-                label="成員圖型"
-                options={CHART_OPTIONS.member}
-                value={state.chart ?? 'bar'}
-                onChange={changeChart}
-              />
             </div>
             {statistics.error ? (
               <p className={styles.status} role="alert">
@@ -470,33 +430,24 @@ export default function StatsPage() {
             ) : (
               <ChartAndList
                 chart={
-                  state.chart === 'donut' ? (
-                    <DonutChart
-                      direction={direction}
-                      totalAmount={
+                  <DonutChart
+                    direction={direction}
+                    totalAmount={
+                      direction === 'expense'
+                        ? statistics.data.ledger.expense
+                        : statistics.data.ledger.income
+                    }
+                    title={direction === 'expense' ? '成員支出圓餅圖' : '成員收入圓餅圖'}
+                    theme={chartTheme}
+                    data={{
+                      kind: 'people',
+                      items: people,
+                      denominator:
                         direction === 'expense'
                           ? statistics.data.ledger.expense
-                          : statistics.data.ledger.income
-                      }
-                      title={direction === 'expense' ? '成員支出圓餅圖' : '成員收入圓餅圖'}
-                      theme={chartTheme}
-                      data={{
-                        kind: 'people',
-                        items: people,
-                        denominator:
-                          direction === 'expense'
-                            ? statistics.data.ledger.expense
-                            : statistics.data.ledger.income,
-                      }}
-                    />
-                  ) : (
-                    <HorizontalBarChart
-                      direction={direction}
-                      title={direction === 'expense' ? '成員支出長條圖' : '成員收入長條圖'}
-                      theme={chartTheme}
-                      data={{ kind: 'people', items: people }}
-                    />
-                  )
+                          : statistics.data.ledger.income,
+                    }}
+                  />
                 }
                 list={<MemberTotals people={people} theme={chartTheme} direction={direction} />}
               />
@@ -667,6 +618,7 @@ function MemberTotals({
   theme: ChartTheme;
   direction: Direction;
 }) {
+  const maximumAmount = people.reduce((maximum, person) => Math.max(maximum, person[direction]), 0);
   return (
     <ul className={styles.memberTotals} aria-label="成員收支">
       {people.map((person) => {
@@ -690,6 +642,11 @@ function MemberTotals({
                   : '支出 ' + formatMoney(person.expense)}
               </small>
             </div>
+            <StatisticsListBar
+              amount={person[direction]}
+              maximumAmount={maximumAmount}
+              color={color}
+            />
           </li>
         );
       })}

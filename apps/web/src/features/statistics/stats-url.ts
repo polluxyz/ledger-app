@@ -1,7 +1,6 @@
 import type { StatisticsPerspective } from '@ledger/shared';
-import type { ChartType } from './charts/chart-types';
 
-/** 統計頁可分享的網址狀態；圖型是目前分頁的設定，其他兩頁只留在 localStorage。 */
+/** 統計頁可分享的網址狀態。 */
 export type StatsTab = 'cat' | 'trend' | 'member';
 
 export type StatsPeriod =
@@ -14,17 +13,6 @@ export interface StatsUrlState {
   ledgerId: string | null;
   period: StatsPeriod;
   perspective: StatisticsPerspective;
-  chart: ChartType | null;
-}
-
-export interface StatsChartPreferences {
-  cat: 'donut' | 'bar';
-  member: 'bar' | 'donut';
-}
-
-export interface StatsStorage {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
 }
 
 export interface ParseStatsUrlOptions {
@@ -34,16 +22,7 @@ export interface ParseStatsUrlOptions {
   defaultLedgerId?: string | null;
   /** 供純函式測試固定台灣月份；正式頁面省略時使用目前時間。 */
   now?: Date;
-  /** 可注入測試 storage；省略時安全地讀取瀏覽器 localStorage。 */
-  storage?: StatsStorage | null;
 }
-
-export const STATS_CHART_STORAGE_KEY = 'stats.chart';
-
-export const DEFAULT_STATS_CHARTS: StatsChartPreferences = {
-  cat: 'donut',
-  member: 'bar',
-};
 
 /**
  * 解析並正規化統計頁網址。參數順序固定，頁面可以把輸出的 search 以 replace 寫回，
@@ -72,18 +51,7 @@ export function parseStatsUrl(
         ? 'MINE'
         : 'LEDGER';
 
-  const requestedChart = params.get('chart');
-  const charts = readStatsChartPreferences(options.storage);
-  const chart =
-    tab === 'trend'
-      ? null
-      : requestedChart === null
-        ? charts[tab]
-        : isChartType(requestedChart)
-          ? requestedChart
-          : DEFAULT_STATS_CHARTS[tab];
-
-  const state: StatsUrlState = { tab, ledgerId, period, perspective, chart };
+  const state: StatsUrlState = { tab, ledgerId, period, perspective };
   return { state, search: serializeStatsUrl(state) };
 }
 
@@ -103,7 +71,6 @@ export function serializeStatsUrl(state: StatsUrlState): string {
     params.set('to', state.period.to);
   }
   params.set('perspective', state.perspective);
-  if (state.tab !== 'trend' && state.chart !== null) params.set('chart', state.chart);
   return `?${params.toString()}`;
 }
 
@@ -146,51 +113,6 @@ export function getStatsPeriodEndMonth(period: StatsPeriod): string {
     return `${period.year}-12`;
   }
   return period.to.slice(0, 7);
-}
-
-/** 使用者親自切換圖型時呼叫；讀取與寫入失敗都不影響畫面狀態。 */
-export function saveStatsChartPreference(
-  tab: StatsTab,
-  chart: ChartType,
-  storage?: StatsStorage | null,
-): void {
-  if (tab === 'trend' || !isChartType(chart)) {
-    return;
-  }
-  const resolvedStorage = getStorage(storage);
-  if (!resolvedStorage) {
-    return;
-  }
-
-  try {
-    const preferences = readStatsChartPreferences(resolvedStorage);
-    preferences[tab] = chart;
-    resolvedStorage.setItem(STATS_CHART_STORAGE_KEY, JSON.stringify(preferences));
-  } catch {
-    // 隱私模式或受限瀏覽器可能拒絕 storage；頁面狀態仍由網址與 React 管理。
-  }
-}
-
-/** 讀取分類與成員圖型，略過舊版趨勢值。 */
-export function readStatsChartPreferences(storage?: StatsStorage | null): StatsChartPreferences {
-  const resolvedStorage = getStorage(storage);
-  if (!resolvedStorage) {
-    return { ...DEFAULT_STATS_CHARTS };
-  }
-
-  try {
-    const stored = resolvedStorage.getItem(STATS_CHART_STORAGE_KEY);
-    if (stored === null) {
-      return { ...DEFAULT_STATS_CHARTS };
-    }
-    const value: unknown = JSON.parse(stored);
-    if (!isStatsChartPreferences(value)) {
-      return { ...DEFAULT_STATS_CHARTS };
-    }
-    return { cat: value.cat, member: value.member };
-  } catch {
-    return { ...DEFAULT_STATS_CHARTS };
-  }
 }
 
 /** 日期必須真實存在，且自訂期間最多包含 366 個台灣日。 */
@@ -280,31 +202,4 @@ function normalizeLedgerId(value: string | null): string | null {
 
 function isStatsTab(value: string | null): value is StatsTab {
   return value === 'cat' || value === 'trend' || value === 'member';
-}
-
-function isChartType(value: unknown): value is ChartType {
-  return value === 'donut' || value === 'bar';
-}
-
-function isStatsChartPreferences(value: unknown): value is StatsChartPreferences {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const preferences = value as Record<string, unknown>;
-  return (
-    Object.keys(preferences).every((key) => key === 'cat' || key === 'member' || key === 'trend') &&
-    isChartType(preferences.cat) &&
-    isChartType(preferences.member)
-  );
-}
-
-function getStorage(storage: StatsStorage | null | undefined): StatsStorage | null {
-  if (storage !== undefined) {
-    return storage;
-  }
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return null;
-  }
 }

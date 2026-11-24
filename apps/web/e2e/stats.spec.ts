@@ -18,7 +18,7 @@ import { expectHomeSectionOrder, switchLedger } from './ui';
 
 /**
  * 統計頁的端對端驗收：測試資料只透過正式 API 建立，首頁、統計頁與交易頁都用瀏覽器操作。
- * 日期以台灣時區動態計算；390px 情境逐一檢查各分頁、圖型、長文字與觸控區。
+ * 日期以台灣時區動態計算；390px 情境逐一檢查各分頁、長文字與觸控區。
  */
 
 const LONG_CATEGORY_NAME = '超長分類名稱驗證文字'.repeat(4);
@@ -101,7 +101,6 @@ function statsPath(ledgerId: string, month: string): string {
     ledger: ledgerId,
     month,
     perspective: 'LEDGER',
-    chart: 'donut',
   });
   return `/stats?${params.toString()}`;
 }
@@ -280,10 +279,6 @@ function statsTabs(page: Page) {
   return page.getByRole('navigation', { name: '統計分頁' });
 }
 
-function chartSwitch(page: Page, label: string) {
-  return page.getByRole('group', { name: label });
-}
-
 async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
   await expect
     .poll(async () => {
@@ -362,7 +357,7 @@ async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
   }
 }
 
-async function expectStatsTouchTargets(page: Page, hasChartSwitch = true): Promise<void> {
+async function expectStatsTouchTargets(page: Page): Promise<void> {
   const tabButtons = statsTabs(page).getByRole('button');
   const tabCount = await tabButtons.count();
   expect(tabCount).toBeGreaterThanOrEqual(2);
@@ -374,38 +369,23 @@ async function expectStatsTouchTargets(page: Page, hasChartSwitch = true): Promi
       .toBeGreaterThanOrEqual(44);
   }
 
-  const chartGroups = page.getByRole('group', { name: /圖型$/ });
-  if (!hasChartSwitch) {
-    await expect(chartGroups).toHaveCount(0);
-    return;
-  }
-
-  const chartGroupCount = await chartGroups.count();
-  expect(chartGroupCount).toBeGreaterThan(0);
-  const visibleChartGroups: Locator[] = [];
-  await expect
-    .poll(async () => {
-      visibleChartGroups.length = 0;
-      for (let index = 0; index < chartGroupCount; index += 1) {
-        const chartGroup = chartGroups.nth(index);
-        if (await chartGroup.isVisible()) {
-          visibleChartGroups.push(chartGroup);
-        }
-      }
-      return visibleChartGroups.length;
-    })
-    .toBe(1);
-  expect(visibleChartGroups).toHaveLength(1);
-
-  const chartButtons = visibleChartGroups[0]!.getByRole('button');
-  const chartButtonCount = await chartButtons.count();
-  expect(chartButtonCount).toBeGreaterThanOrEqual(2);
-  for (let index = 0; index < chartButtonCount; index += 1) {
+  await expect(page.getByRole('group', { name: /圖型$/ })).toHaveCount(0);
+  for (const button of await page
+    .getByRole('group', { name: /收支方向$/ })
+    .getByRole('button')
+    .all()) {
     await expect
-      .poll(() =>
-        chartButtons.nth(index).evaluate((element) => element.getBoundingClientRect().height),
-      )
+      .poll(() => button.evaluate((element) => element.getBoundingClientRect().height))
       .toBeGreaterThanOrEqual(44);
+  }
+}
+
+async function expectListBars(list: Locator): Promise<void> {
+  const rows = list.getByRole('listitem');
+  const count = await rows.count();
+  expect(count).toBeGreaterThan(0);
+  for (const row of await rows.all()) {
+    await expect(row.getByTestId('statistics-list-bar')).toHaveCount(1);
   }
 }
 
@@ -525,10 +505,10 @@ test.describe('2j 統計頁端對端', () => {
     await expectSummary(page, { income: '$200', expense: '$1,200', net: '-$1,000' });
 
     const categories = page.getByRole('list', { name: '支出分類清單' });
-    await expect(
-      chartSwitch(page, '分類圖型').getByRole('button', { name: '圓餅' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('group', { name: '分類圖型' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: '支出分類圓餅圖' })).toBeVisible();
     await expect(categories.getByRole('listitem')).toHaveCount(2);
+    await expectListBars(categories);
     await expect(categories.getByRole('button', { name: '晚餐，$900，75%' })).toBeVisible();
     await expect(categories.getByRole('button', { name: '日用品，$300，25%' })).toBeVisible();
 
@@ -541,13 +521,7 @@ test.describe('2j 統計頁端對端', () => {
     await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
       '100%',
     );
-    await chartSwitch(page, '分類圖型').getByRole('button', { name: '長條' }).click();
-    await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
-      '$450',
-    );
-    await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
-      '100%',
-    );
+    await expectListBars(categories);
     await expectSummary(page, { income: '$200', expense: '$450', net: '-$250' });
 
     await perspective.getByRole('button', { name: '帳本', exact: true }).click();
@@ -702,6 +676,13 @@ test.describe('2j 統計頁端對端', () => {
       await copiedPage.goto(legacyUrl.href);
       await expectSharedUrlState(copiedPage);
 
+      const normalizedTrendUrl = copiedPage.url();
+      await copiedPage.goto('/stats?tab=cat&chart=bar');
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBeNull();
+      await expect(copiedPage.getByRole('list', { name: '支出分類清單' })).toBeVisible();
+      await copiedPage.goBack();
+      await expect(copiedPage).toHaveURL(normalizedTrendUrl);
+
       await copiedPage.goto(
         `/stats?tab=xxx&ledger=${encodeURIComponent(ledgerAId)}&month=${month.value}&perspective=xxx&chart=xxx`,
       );
@@ -712,10 +693,7 @@ test.describe('2j 統計頁端對端', () => {
       await expect
         .poll(() => new URL(copiedPage.url()).searchParams.get('perspective'))
         .toBe('LEDGER');
-      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBe('donut');
-      await expect(
-        chartSwitch(copiedPage, '分類圖型').getByRole('button', { name: '圓餅' }),
-      ).toHaveAttribute('aria-pressed', 'true');
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBeNull();
     } finally {
       await copiedPage.close();
     }
@@ -739,7 +717,7 @@ test.describe('2j 統計頁端對端', () => {
     await expectSummary(page, { income: '$0', expense: '$1,000', net: '-$1,000' });
   });
 
-  test('SC-R21：390px 淺色與深色的每個分頁及圖型不橫向溢位', async ({
+  test('SC-R21：390px 淺色與深色的每個分頁都不橫向溢位', async ({
     signedInPage: page,
     userA,
     userB,
@@ -836,9 +814,7 @@ test.describe('2j 統計頁端對端', () => {
 
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
-      await chartSwitch(page, '分類圖型').getByRole('button', { name: '長條' }).click();
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
+      await expectListBars(page.getByRole('list', { name: '支出分類清單' }));
 
       await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
       const trendChart = page.getByRole('region', { name: '收支趨勢圖' });
@@ -853,7 +829,7 @@ test.describe('2j 統計頁端對端', () => {
       await expect(labels).toHaveCount(6);
       await expectMonthLabelGaps(labels);
       await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page, false);
+      await expectStatsTouchTargets(page);
       if (theme === 'light') {
         await page.setViewportSize({ width: 1280, height: 844 });
         await expect(labels).toHaveCount(12);
@@ -883,9 +859,8 @@ test.describe('2j 統計頁端對端', () => {
       }).toPass({ timeout: 5_000 });
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
-      await chartSwitch(page, '成員圖型').getByRole('button', { name: '圓餅' }).click();
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
+      await expect(page.getByRole('region', { name: '成員支出圓餅圖' })).toBeVisible();
+      await expectListBars(members);
     }
   });
 });
