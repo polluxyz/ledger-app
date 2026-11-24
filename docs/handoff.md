@@ -11,7 +11,7 @@ On takeover read your workspace handoff. Update it and its index row. Merge both
 
 ## 共用資源與操作限制
 
-- main 分配新編號。下一個決策號 415、W 號 W313。web-unslop 保留決策 407～414、W307～W312。R5 保留 385～394、W300～W306 與 `SC-BK`。
+- main 分配新編號。下一個決策號 424、W 號 W321。web-unslop 保留決策 407～423、W307～W320。R5 保留 385～394、W300～W306 與 `SC-BK`。
 - The workspace merging later resolves shared-file conflicts.
 - Before inviting external testers, complete the privacy policy and AI informed consent, and confirm the use case with the model provider. See [新分類規格 §8](specs/phase-4a-ai-new-category.md)。
 
