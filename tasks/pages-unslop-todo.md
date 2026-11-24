@@ -66,8 +66,9 @@
 - [x] **T17 第 9 組 點綴：卡片層次（W325）**
   - 驗收：SC-O21；單獨 revert 後 typecheck、test 通過。
   - 實測（`0c45893`）：協調者看過 14 個檔的 diff：JSX 只在帳本明細頁加兩層外框，文字、順序、可及名稱不變；危險操作區改用一般卡片外觀，按鈕保留危險樣式。worker 回報 6 頁 × 2 寬度 × 2 主題看過、390px `scrollWidth` 390、revert 檢查通過。協調者重跑 lint、typecheck、test（shared 161、API 1,269、web 1,337）全過。截圖留到 T20。
-- [ ] **T18 第 10 組 點綴：帳冊線稿（W326）**
+- [x] **T18 第 10 組 點綴：帳冊線稿（W326）**
   - 驗收：SC-O21；深淺主題線稿可讀；單獨 revert 通過。
+  - 實測（`b70956d`）：新增共用 `LineArt`（帳冊、錢包、標籤、人物 4 種，`aria-hidden`、用次要文字色），放在帳本與帳戶卡、4 個空白狀態、登入註冊品牌欄、個人資料 Email 卡。協調者看過 10 個檔的 diff，文字與可及名稱不變。worker 回報 7 頁 × 2 寬度 × 2 主題看過、390px `scrollWidth` 390；revert 本組、在本組上 revert 第 9 組都無衝突且通過。協調者重跑 lint、typecheck、test（shared 161、API 1,269、web 1,341）全過。截圖留到 T20。
 - [ ] **T19 第 11 組 點綴：金色引導（W327）**
   - 驗收：SC-O21；每頁一個金色主動作；減少動態設定下無動畫；單獨 revert 通過。
 - [ ] **T20 全套驗證**：`format:check`（本次檔案）、`lint`、`typecheck`、`test`、build、API e2e；淺深 × 1280／390 截圖；第 5、9、10、11 組單獨 revert、第 8→6 組倒序 revert 後 typecheck 與 test。
