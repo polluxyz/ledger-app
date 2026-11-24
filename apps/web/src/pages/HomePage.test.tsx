@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { CATEGORY_CHART_COLORS } from '../features/statistics/charts/chart-colors';
 import { resetHomeCategoryColorsForTests } from '../app/use-home-category-colors';
 
 /**
@@ -21,8 +22,8 @@ describe('Home dashboard', () => {
     role: 'OWNER',
   };
   const otherLedger = { ...ledger, id: 'ledger-2', name: '家用', kind: 'SHARED' };
-  const foodCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', icon: null };
-  const newCategory = { id: 'cat-new', name: '新增類', type: 'EXPENSE', icon: null };
+  const foodCategory = { id: 'cat-1', name: '餐飲', type: 'EXPENSE', sortOrder: 1, icon: null };
+  const newCategory = { id: 'cat-new', name: '新增類', type: 'EXPENSE', sortOrder: 0, icon: null };
   const account = {
     id: 'acc-1',
     name: '現金',
@@ -101,7 +102,7 @@ describe('Home dashboard', () => {
     };
   }
 
-  function countRequest(pathSuffix: string, params: Record<string, string> = {}) {
+  function countRequest(pathSuffix: string, params: Record<string, string | null> = {}) {
     return fetchMock.mock.calls.filter(([input]) => {
       const { url, path } = endpointOf(input);
       return (
@@ -122,7 +123,8 @@ describe('Home dashboard', () => {
       recent: countRequest(`/ledgers/${ledgerId}/transactions`, { page: '1', limit: '5' }),
       statistics: countRequest(`/ledgers/${ledgerId}/statistics`),
       monthlyTrend: countRequest(`/ledgers/${ledgerId}/statistics/trend`),
-      categories: countRequest(`/ledgers/${ledgerId}/categories`),
+      categories: countRequest(`/ledgers/${ledgerId}/categories`, { type: null }),
+      expenseCategories: countRequest(`/ledgers/${ledgerId}/categories`, { type: 'EXPENSE' }),
     };
   }
 
@@ -973,6 +975,7 @@ describe('Home dashboard', () => {
       expect(after.recent).toBe(before.recent + 1);
       expect(after.statistics).toBe(before.statistics + 1);
       expect(after.categories).toBe(before.categories + 1);
+      expect(after.expenseCategories).toBe(before.expenseCategories + 1);
     }, WAIT);
 
     expect(screen.getByRole('link', { name: /本月支出/ })).toHaveTextContent('$703');
@@ -982,8 +985,8 @@ describe('Home dashboard', () => {
     expect(screen.queryByRole('tab', { name: '標註 1' })).not.toBeInTheDocument();
 
     const delta = fetchMock.mock.calls.length - totalBefore;
-    // 新增月結餘趨勢後，POST 1 次、9 個首頁端點各 1 次、分類清單 1 次。
-    expect(delta).toBe(11);
+    // POST 1 次、9 個首頁端點各 1 次、全部分類和支出分類清單各 1 次。
+    expect(delta).toBe(12);
     releaseRefetches?.();
     holdRefetches = null;
 
@@ -1100,6 +1103,38 @@ describe('Home dashboard', () => {
     expect(within(marked).getAllByRole('listitem')).toHaveLength(10);
     await user.click(within(marked).getByRole('button', { name: '再 2 筆' }));
     await waitFor(() => expect(within(marked).getAllByRole('listitem')).toHaveLength(12), WAIT);
+  });
+
+  it('shares the ledger category order across the home card, statistics legend, and donut', async () => {
+    const user = userEvent.setup();
+    signIn();
+    render(<App />);
+
+    const card = within(await screen.findByRole('region', { name: '支出分類' }, WAIT));
+    const homeSwatch = (await card.findByRole('list')).querySelector<HTMLElement>(
+      '[style*="--group-color"]',
+    );
+    const color = CATEGORY_CHART_COLORS.light[1];
+    await waitFor(() => expect(homeSwatch?.style.getPropertyValue('--group-color')).toBe(color));
+    expect(countRequest(`/ledgers/${ledger.id}/categories`, { type: null })).toBe(1);
+
+    await user.click(card.getByRole('link', { name: '明細 →' }));
+    const list = await screen.findByRole('list', { name: '支出分類清單' }, WAIT);
+    const legend = within(list).getByRole('button', { name: /餐飲/ });
+    const slice = screen.getByRole('button', { name: /^餐飲 \$/ });
+
+    expect(
+      legend
+        .querySelector<HTMLElement>('[style*="--swatch-color"]')
+        ?.style.getPropertyValue('--swatch-color'),
+    ).toBe(color);
+    expect(
+      legend
+        .querySelector<HTMLElement>('[style*="--bar-color"]')
+        ?.style.getPropertyValue('--bar-color'),
+    ).toBe(color);
+    expect(slice).toHaveAttribute('stroke', color);
+    expect(countRequest(`/ledgers/${ledger.id}/categories`, { type: null })).toBe(2);
   });
 
   it('updates category colors immediately from settings without a request or ledger reset', async () => {

@@ -26,7 +26,7 @@ import {
 import { useHomeCategoryColors } from '../app/use-home-category-colors';
 import {
   getChartColorForId,
-  getStatisticsGroupColor,
+  CATEGORY_CHART_COLORS,
 } from '../features/statistics/charts/chart-colors';
 import StatsPage from './StatsPage';
 
@@ -45,6 +45,13 @@ vi.mock('../lib/api-client', async (importOriginal) => {
       }
       if (path.includes('/statistics?')) {
         return statisticsApi.getStatistics(path) as Promise<T>;
+      }
+      if (path.endsWith('/categories')) {
+        const ledgerId = path.split('/')[2];
+        const ids = ledgerId === 'family' ? ['supplies', 'dinner'] : ['lunch', 'breakfast'];
+        return Promise.resolve(
+          ids.map((id, sortOrder) => ({ id, sortOrder, type: 'EXPENSE' })),
+        ) as Promise<T>;
       }
       return actual.apiRequest<T>(path, options);
     },
@@ -352,10 +359,7 @@ describe('StatsPage', () => {
     }
 
     const colorMode = await readCategoryColors('color');
-    expect(colorMode).toEqual([
-      getStatisticsGroupColor(dinner, 'dark'),
-      getStatisticsGroupColor(supplies, 'dark'),
-    ]);
+    expect(colorMode).toEqual([CATEGORY_CHART_COLORS.dark[1], CATEGORY_CHART_COLORS.dark[0]]);
     expect(await readCategoryColors('gold')).toEqual(colorMode);
     expect(await readCategoryColors('gray')).toEqual(colorMode);
   });

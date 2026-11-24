@@ -16,12 +16,17 @@ import {
 } from '../features/ledgers/active-ledger-context';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { useCategories } from '../features/categories/use-categories';
 import { CategoryLegendList } from '../features/statistics/charts/CategoryLegendList';
 import { DonutChart } from '../features/statistics/charts/DonutChart';
 import { StatisticsListBar } from '../features/statistics/charts/StatisticsListBar';
 import { StatisticsTrendChart } from '../features/statistics/charts/StatisticsTrendChart';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
-import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
+import {
+  createCategoryGroupColor,
+  getChartColorForId,
+  type ChartTheme,
+} from '../features/statistics/charts/chart-colors';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import {
   getStatsPeriodEndMonth,
@@ -97,6 +102,7 @@ export default function StatsPage() {
     perspective: effectivePerspective,
   });
   const chartTheme = useChartTheme();
+  const categories = useCategories(state.tab === 'cat' ? state.ledgerId : null);
 
   useEffect(() => {
     if (!ledgerLoading && urlLedger && ledger?.id !== urlLedger.id) {
@@ -226,6 +232,12 @@ export default function StatsPage() {
     direction === 'expense'
       ? (statistics.data?.expenseGroups ?? [])
       : (statistics.data?.incomeGroups ?? []);
+  const categoryColorOf = createCategoryGroupColor(
+    categories.data,
+    direction === 'expense' ? 'EXPENSE' : 'INCOME',
+    groups,
+    chartTheme,
+  );
   const people = statistics.data?.people ?? [];
   const selectedAmount = direction === 'expense' ? totals?.expense : totals?.income;
 
@@ -355,6 +367,7 @@ export default function StatsPage() {
                     data={{
                       kind: 'groups',
                       items: groups,
+                      colorOf: categoryColorOf,
                       onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
                     }}
                   />
@@ -364,6 +377,7 @@ export default function StatsPage() {
                     items={groups}
                     direction={direction}
                     theme={chartTheme}
+                    colorOf={categoryColorOf}
                     onSelect={effectivePerspective === 'LEDGER' ? selectCategory : undefined}
                   />
                 }

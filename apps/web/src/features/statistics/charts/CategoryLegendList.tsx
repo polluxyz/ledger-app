@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { StatisticsGroup } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
-import { getStatisticsGroupColor, type ChartTheme } from './chart-colors';
+import { NEUTRAL_CHART_COLORS, type ChartTheme } from './chart-colors';
 import { fixedGroupLabel, formatPercentageBps } from './chart-format';
 import { StatisticsListBar } from './StatisticsListBar';
 import styles from './CategoryLegendList.module.css';
@@ -11,6 +11,7 @@ export interface CategoryLegendListProps {
   items: readonly StatisticsGroup[];
   direction: 'expense' | 'income';
   theme?: ChartTheme;
+  colorOf?: (group: StatisticsGroup) => string;
   onSelect?: (group: StatisticsGroup) => void;
 }
 
@@ -18,6 +19,7 @@ export function CategoryLegendList({
   items,
   direction,
   theme = 'dark',
+  colorOf,
   onSelect,
 }: CategoryLegendListProps) {
   const maximumAmount = items.reduce((maximum, group) => Math.max(maximum, group.amount), 0);
@@ -25,7 +27,7 @@ export function CategoryLegendList({
     <ul className={styles.list} aria-label={`${direction === 'expense' ? '支出' : '收入'}分類清單`}>
       {items.map((group) => {
         const name = group.category?.name ?? fixedGroupLabel(group.kind);
-        const color = getStatisticsGroupColor(group, theme);
+        const color = colorOf?.(group) ?? NEUTRAL_CHART_COLORS[theme];
         const content = (
           <>
             <span className={styles.swatch} style={{ '--swatch-color': color } as CSSProperties} />

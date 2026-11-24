@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { StatisticsGroup } from '@ledger/shared';
 import {
-  getStatisticsGroupColor,
+  getChartColorForId,
   NEUTRAL_CHART_COLORS,
   type ChartTheme,
 } from '../features/statistics/charts/chart-colors';
@@ -79,9 +79,11 @@ export function homeCategoryColor(
   mode: HomeCategoryColorMode,
   chartTheme: ChartTheme,
   isFirstExpenseGroup: boolean,
+  assignedColor?: string,
 ): string {
-  if (mode === 'color') {
-    return getStatisticsGroupColor(group, chartTheme);
+  if (mode === 'color' && group.kind === 'CATEGORY' && group.category !== null) {
+    // 設定彈窗的示意分類沒有帳本，沿用示意色。
+    return assignedColor ?? getChartColorForId(group.category.id, chartTheme);
   }
   if (
     mode === 'gold' &&

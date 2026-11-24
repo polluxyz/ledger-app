@@ -1,6 +1,6 @@
 import type { Cents, StatisticsGroup, StatisticsPerson } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
-import { getChartColorForId, getStatisticsGroupColor, type ChartTheme } from './chart-colors';
+import { getChartColorForId, NEUTRAL_CHART_COLORS, type ChartTheme } from './chart-colors';
 import { fixedGroupLabel } from './chart-format';
 import styles from './DonutChart.module.css';
 
@@ -14,6 +14,7 @@ export interface DonutChartProps {
     | {
         kind: 'groups';
         items: readonly StatisticsGroup[];
+        colorOf?: (group: StatisticsGroup) => string;
         onSelect?: (group: StatisticsGroup) => void;
       }
     | { kind: 'people'; items: readonly StatisticsPerson[]; denominator: Cents };
@@ -45,7 +46,7 @@ export function DonutChart({
           id: group.category?.id ?? group.kind,
           label: group.category?.name ?? fixedGroupLabel(group.kind),
           amount: group.amount,
-          color: getStatisticsGroupColor(group, theme),
+          color: data.colorOf?.(group) ?? NEUTRAL_CHART_COLORS[theme],
           percentageBps: group.percentageBps,
           group,
         }))
