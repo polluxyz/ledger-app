@@ -1,0 +1,7 @@
+/* 選定頁面沿用首頁卡片的表面。 */
+.surface {
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}

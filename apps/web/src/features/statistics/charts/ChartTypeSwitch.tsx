@@ -21,7 +21,6 @@ export function ChartTypeSwitch({ label, options, value, onChange }: ChartTypeSw
         <button
           key={option.value}
           type="button"
-          className={styles.option}
           aria-pressed={option.value === value}
           onClick={() => onChange(option.value)}
         >

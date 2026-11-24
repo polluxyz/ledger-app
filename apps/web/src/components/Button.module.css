@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  height: 2.25rem;
+  height: var(--control-height);
   padding: 0 var(--space-md);
   border: 1px solid transparent;
   border-radius: var(--radius);

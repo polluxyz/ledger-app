@@ -77,3 +77,10 @@
   background-color: var(--color-fill);
   color: var(--color-text);
 }
+
+@media (max-width: 900px) {
+  .close {
+    min-width: var(--control-height);
+    min-height: var(--control-height);
+  }
+}

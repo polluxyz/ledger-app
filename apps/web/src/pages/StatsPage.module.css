@@ -18,23 +18,32 @@
   flex-wrap: wrap;
 }
 
+.periodModes {
+  composes: group from '../components/SegmentedControl.module.css';
+}
+.switch {
+  composes: group from '../components/SegmentedControl.module.css';
+}
+.directionSwitch {
+  composes: group from '../components/SegmentedControl.module.css';
+}
 .periodModes,
-.periodStepper,
 .switch,
 .directionSwitch {
+  display: flex;
+  align-items: center;
+}
+
+.periodStepper {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
-.periodModes button,
 .periodStepper button,
-.switch button,
-.directionSwitch button,
-.tabs button,
 .customPeriod button {
-  min-width: 2.75rem;
-  min-height: 2.75rem;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
   padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -42,21 +51,6 @@
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
-}
-
-.periodModes button[aria-pressed='true'],
-.switch button[aria-pressed='true'],
-.directionSwitch button[aria-pressed='true'],
-.tabs button[aria-pressed='true'] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-text);
-  font-weight: 700;
-}
-
-.switch button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .periodStepper strong {
@@ -80,7 +74,7 @@
 }
 
 .customPeriod input {
-  min-height: 2.75rem;
+  min-height: var(--control-height);
   max-width: 100%;
   padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
@@ -96,10 +90,8 @@
 }
 
 .summary {
+  composes: surface from '../components/CardSurface.module.css';
   padding: var(--space-md);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
 .summary dl {
@@ -129,6 +121,7 @@
 }
 
 .tabs {
+  composes: group from '../components/SegmentedControl.module.css';
   position: sticky;
   top: 0;
   z-index: 4;
@@ -145,11 +138,9 @@
 }
 
 .panel {
+  composes: surface from '../components/CardSurface.module.css';
   min-width: 0;
   padding: var(--space-md);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
 .panelHeading {

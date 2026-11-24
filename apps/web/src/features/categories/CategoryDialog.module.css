@@ -14,31 +14,14 @@
 
 .iconGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.25rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--control-height), 1fr));
   gap: var(--space-xs);
 }
 
 .iconOption {
+  composes: option from '../../components/SegmentedControl.module.css';
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: var(--control-height);
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.iconOption:hover {
-  background-color: var(--color-fill);
-  color: var(--color-text);
-}
-
-.selected,
-.selected:hover {
-  border-color: var(--color-accent);
-  background-color: var(--color-primary-soft);
-  color: var(--color-text);
 }

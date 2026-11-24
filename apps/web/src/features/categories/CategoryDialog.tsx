@@ -111,7 +111,7 @@ function CategoryDialogForm({
           <div className={styles.iconGrid} role="group" aria-label="圖示">
             <button
               type="button"
-              className={`${styles.iconOption} ${icon === null ? styles.selected : ''}`}
+              className={styles.iconOption}
               aria-label="通用"
               aria-pressed={icon === null}
               onClick={() => setIcon(null)}
@@ -122,7 +122,7 @@ function CategoryDialogForm({
               <button
                 key={categoryIcon}
                 type="button"
-                className={`${styles.iconOption} ${icon === categoryIcon ? styles.selected : ''}`}
+                className={styles.iconOption}
                 aria-label={categoryIcon}
                 aria-pressed={icon === categoryIcon}
                 onClick={() => setIcon(categoryIcon)}
