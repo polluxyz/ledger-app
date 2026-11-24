@@ -60,11 +60,26 @@
 
 ## demo 方式
 
-1. API：協調者在本工作區用 `ledger_web_unslop_test` 的一份 demo 資料（虛構名字與金額）啟動 API，埠 3200。`CORS_ORIGIN` 同時允許 5180 與 5181。
+1. API：協調者在本工作區用 `ledger_web_unslop_test` 的一份 demo 資料（虛構名字與金額）啟動 API，埠 3200。`CORS_ORIGIN` 同時允許 5190 與 5181。
 2. 現版：main 工作區（`D:/Projects/ledger-app`，HEAD 是 PR base）只啟動 web dev server，埠 5181，`VITE_API_BASE_URL` 指向 3200。不改 main 工作區的任何檔案。
-3. 新版：本工作區啟動 web dev server，埠 5180，同一個 API。
+3. 新版：本工作區啟動 web dev server，埠 5190（5180 被其他專案占用），同一個 API。
 4. 給開發者兩個網址與一組 demo 帳號。開發者看完後協調者關掉 3 個 server。
 5. demo 資料、截圖、網址都不含真實 email、token 或連線字串。
+
+### demo 期間
+
+- 3 個 server 用獨立程序啟動，不受背景工作 2 小時上限影響；PID 記在本機暫存檔。
+- demo 期間 worker 不在本機跑 web e2e，因為 e2e 會清空 demo 共用的 `ledger_web_unslop_test`。e2e 由 CI 驗證。
+- 開發者問 7 月趨勢：demo 資料 7 月結餘 +$204（獎金抵掉筆電），柱高接近 0，不是負值。該圖是首頁 2m 趨勢圖，不在本次範圍。
+
+### demo 後修訂（開發者 2026-11-24）
+
+開發者看 demo 後要求：長條直接併進明細清單，圖那一欄只剩圓餅。spec 決策 416、W314、W315、SC-O3、SC-O7 與 §4 已先修訂；成員分頁比照分類一起改。
+
+1. 拿掉分類與成員的「圓餅／長條」切換；清單每列加橫條（顏色等於圓餅同一塊、長度是金額除以清單最大金額）；圖那一欄只有圓餅。
+2. 統計頁不再讀寫 `stats.chart`；任何分頁的網址 `chart` 用 replace 去掉。沒人用的圖型切換程式一起移除。
+3. 這次修訂另成 1 個 commit，放在第 3 組（統計頁）之後；要撤回時可以單獨 revert。
+4. 風險：e2e 的圖型切換斷言要改，只能靠 CI 驗；協調者在 CI 全綠前不給開發者看。
 
 ## 未處理（未選頁面的差異，之後再挑）
 

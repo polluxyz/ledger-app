@@ -43,5 +43,7 @@
 - [x] **T9 協調者驗收**：讀完整 diff；重跑 typecheck、test、`stats.spec.ts` 與身份相關 e2e；逐張核對截圖；開 PR，等 CI 全綠。
   - 驗收：plan「驗證結果」填好；PR 未合併。
   - 實測：diff 讀完，分頁外框對齊另修（`d1f0462`）。typecheck、2,713 項單元、48／48 項 e2e 通過。PR #251 CI 於 `3cd34aa` 全綠。
+- [ ] **T11 長條併入清單（demo 後修訂）**：分類、成員只剩「支出／收入」切換；清單每列含橫條；圖那一欄只有圓餅；不再讀寫 `stats.chart`，網址 `chart` 一律去掉。
+  - 驗收：SC-O2、SC-O3、SC-O4、SC-O7（修訂後）；元件測試與 `stats.spec.ts` 更新；CI 全綠；本機不跑 web e2e。
 - [ ] **T10 demo**：照 plan「demo 方式」並排跑現版與新版，給開發者網址。
   - 驗收：SC-O13；開發者回覆前不合併。
