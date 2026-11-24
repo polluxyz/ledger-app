@@ -719,16 +719,19 @@ describe('StatsPage', () => {
     const previous = familyUrl.replace('2026-10', '2026-09');
     const legacy = `/stats?tab=member&ledger=${ledger}&month=2026-10&perspective=MINE&chart=bar`;
     renderPage(legacy, { initialEntries: [previous, legacy], initialIndex: 1 });
+    await waitFor(() => {
+      const params = urlFilters();
+      expect(params.get('tab')).toBe('cat');
+      expect(params.has('perspective')).toBe(false);
+      expect(params.has('chart')).toBe(false);
+      expect(params.get('personIds')).toBe(ledger === 'family' ? 'me' : null);
+    });
     await screen.findByRole('list', { name: '支出分類清單' });
-    expect(urlFilters().get('tab')).toBe('cat');
-    expect(urlFilters().has('perspective')).toBe(false);
-    expect(urlFilters().has('chart')).toBe(false);
-    expect(urlFilters().get('personIds')).toBe(ledger === 'family' ? 'me' : null);
     if (ledger === 'family') {
-      expect(screen.getByRole('definition', { name: '支出 $450' })).toBeInTheDocument();
+      await screen.findByRole('definition', { name: '支出 $450' });
     }
     await user.click(screen.getByRole('button', { name: '返回' }));
-    expect(screen.getByTestId('location')).toHaveTextContent(previous);
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(previous));
   });
 
   it.each(['personIds=me', 'accountIds=cash', 'includeOtherAccounts=true'])(
