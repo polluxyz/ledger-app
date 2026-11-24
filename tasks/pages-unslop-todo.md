@@ -72,8 +72,9 @@
 - [x] **T19 第 11 組 點綴：金色引導（W327）**
   - 驗收：SC-O21；每頁一個金色主動作；減少動態設定下無動畫；單獨 revert 通過。
   - 實測（`a64ddfe`）：每頁 0 或 1 個金色主動作；首頁 0 個，其餘改次要樣式。側欄與登入品牌改金色外框，分段選中項金字金邊，「已儲存」「已複製」金字並以 `--motion-fade` 淡入。金字對比淺色 4.98:1、深色 8.43:1。協調者看過 19 個檔的 diff，文字、順序、可及名稱不變。三種 revert 檢查通過。協調者以 8 個 worker 重跑 web 1,343 項全過。截圖留到 T20。
-- [ ] **T20 全套驗證**：`format:check`（本次檔案）、`lint`、`typecheck`、`test`、build、API e2e；淺深 × 1280／390 截圖；第 5、9、10、11 組單獨 revert、第 8→6 組倒序 revert 後 typecheck 與 test。
+- [x] **T20 全套驗證**：`format:check`（本次檔案）、`lint`、`typecheck`、`test`、build、API e2e；淺深 × 1280／390 截圖；第 5、9、10、11 組單獨 revert、第 8→6 組倒序 revert 後 typecheck 與 test。
   - 驗收：SC-O21、SC-O22；結果填進 plan。
+  - 實測（驗證 `a64ddfe`，補修 `a781c12` 後重驗）：lint、typecheck、build、改動的 105 個檔案格式檢查通過；單元測試 shared 161、API 1,269、web 1,343；API e2e 68 組 771 項。52 張截圖，390px 的 26 個畫面 `scrollWidth` 皆 390，每畫面金色主動作 0 或 1；SC-O8～O10 量測不變。第 9、10、11 組各自撤回通過；第 8→6 組倒序撤回通過。第 5 組單獨撤回衝突，改驗第 8→5 組倒序撤回通過（見 plan）。
 - [ ] **T21 協調者驗收**：讀完整 diff；重跑 typecheck、test；逐張核對截圖；更新 PR 說明；CI 全綠（含 web e2e）。
   - 驗收：plan「驗證結果」補第 2 輪；PR 未合併。
 

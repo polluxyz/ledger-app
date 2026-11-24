@@ -240,3 +240,7 @@
 - 待追蹤（範圍外）：全套並行時 `TransactionWorkbench.test.tsx` 曾有 1 項失敗（該檔耗時 5,346ms），單獨連跑 5 次全過。本分支只改過交易表單樣式，研判是既有的負載逾時，不在 #251 處理。
 - T19（`a64ddfe`）：Target 擴大到 `AiEntry`、`CounterpartyDetail`、`DebtEntryForm`、`SettlementForm`、`SettlementView`、`DebtHistoryView`，協調者核可。內嵌結清表單需要次要送出鈕，`DebtEntryForm` 與 `SettlementForm` 加 `submitVariant`，預設維持主要樣式。
 - T19 驗收時，本機全套 web 測試兩次各有 12～13 項 5 秒逾時。撤銷 T19 後同樣 12 項逾時；限制 8 個 worker 時 1,343 項全過。原因是 24 核機器預設 worker 太多互搶資源，與 T19 無關。上一條 `TransactionWorkbench` 失敗也是同一原因。CI 機器核數少，不受影響；本機驗收改用 `vitest run --maxWorkers=8`。
+- T20 截圖發現頂列品牌標誌仍是實心金底，與側欄、登入品牌欄的金色外框不同。`a781c12` 只改 `AppTopBar.module.css` 2 行。第 11 組改為 `a64ddfe`、`a781c12` 一起撤回，worker 驗過一起撤回後 typecheck 與 web 1,341 項通過。
+- T20 偏離 plan：第 5 組（`1f077b5`）單獨撤回會在 `StatsPage.tsx`、`StatsPage.test.tsx` 衝突，因為第 7、8 組改過同幾行配色程式。協調者改驗第 8→5 組倒序撤回（`d57dd65 0d93305 1b671e6 0e69f58 1f077b5`）：無衝突，web 1,321 項通過；型別錯誤只來自未重建的 shared 產物，與第 8→6 組相同，重建後通過。不要新配色時，要連同統計篩選與每月收支一起撤回。點綴三組不受影響。
+- T20 API e2e 清空 demo 資料庫後，協調者重跑 demo 種子。
+- 範圍外、基線已有：首頁與交易頁帳本下拉 34px、首頁「總資產變化／每月結餘」切換 38px，≤900px 低於 44px；手機交易頁分段與「新增交易」高低不齊；手機每月收支支出柱在首屏下方。
