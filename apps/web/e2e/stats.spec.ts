@@ -528,12 +528,13 @@ test.describe('2j 統計頁端對端', () => {
     await expectSummary(page, { income: '$200', expense: '$450', net: '-$250' });
 
     await page.getByRole('button', { name: '移除我', exact: true }).click();
-    await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
-    const trendChart = page.getByRole('region', { name: '收支趨勢圖' });
+    await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
+    const trendChart = page.getByRole('region', { name: '每月收支圖' });
     await expect(trendChart.getByRole('button')).toHaveCount(12);
     const currentMonth = trendChart.getByRole('button', {
-      name: `${trendMonthLabel(month.value)}：收入 $200，支出 $1,200，結餘 -$1,000`,
+      name: `${trendMonthLabel(month.value)}：收入 $200，支出 $1,200，結餘 -$1,000，截至今天`,
     });
+    await expect(trendChart.getByText('截至今天')).toBeVisible();
     const previousMonth = shiftMonth(month.value, -1);
     await expect(
       trendChart.getByRole('button', {
@@ -554,9 +555,11 @@ test.describe('2j 統計頁端對端', () => {
     await expect(trendChart.locator('dl')).toContainText('$0');
     expect(Math.abs((await plot.boundingBox())!.y - topBefore)).toBeLessThanOrEqual(1);
     const zeroY = Number(await plot.locator('[data-trend-zero]').getAttribute('y1'));
-    expect(
-      Number(await currentMonth.locator('[data-series="net"]').getAttribute('cy')),
-    ).toBeGreaterThan(zeroY);
+    const income = currentMonth.locator('[data-series="income"]');
+    const expense = currentMonth.locator('[data-series="expense"]');
+    expect(Number(await income.getAttribute('y'))).toBeLessThan(zeroY);
+    expect(Number(await expense.getAttribute('y'))).toBe(zeroY);
+    expect(Number(await expense.getAttribute('height'))).toBeGreaterThan(0);
     await page.keyboard.press('Enter');
     await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBe(previousMonth);
     await page.goBack();
@@ -646,7 +649,7 @@ test.describe('2j 統計頁端對端', () => {
     await page.goto(statsPath(ledgerAId, month.value));
     await expect(page.getByRole('heading', { level: 2, name: '統計' })).toBeVisible();
 
-    await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
+    await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
     await page.getByRole('button', { name: '上一個月' }).click();
     await page.getByRole('button', { name: '篩選', exact: true }).click();
     const filter = page.getByRole('dialog', { name: '篩選' });
@@ -663,11 +666,11 @@ test.describe('2j 統計頁端對端', () => {
         .poll(() => new URL(target.url()).searchParams.getAll('personIds').length)
         .toBe(1);
       await expect.poll(() => new URL(target.url()).searchParams.get('chart')).toBeNull();
-      await expect(statsTabs(target).getByRole('button', { name: '趨勢' })).toHaveAttribute(
+      await expect(statsTabs(target).getByRole('button', { name: '每月收支' })).toHaveAttribute(
         'aria-pressed',
         'true',
       );
-      await expect(target.getByRole('region', { name: '收支趨勢圖' })).toBeVisible();
+      await expect(target.getByRole('region', { name: '每月收支圖' })).toBeVisible();
       await expect(target.getByRole('button', { name: '移除我', exact: true })).toBeVisible();
       await expect(target.getByText(periodLabel(previousMonth), { exact: true })).toBeVisible();
     }
@@ -815,15 +818,13 @@ test.describe('2j 統計頁端對端', () => {
       await expectStatsTouchTargets(page);
       await expectListBars(page.getByRole('list', { name: '支出分類清單' }));
 
-      await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
-      const trendChart = page.getByRole('region', { name: '收支趨勢圖' });
+      await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
+      const trendChart = page.getByRole('region', { name: '每月收支圖' });
       await expect(trendChart.getByRole('button')).toHaveCount(12);
-      for (const series of ['income', 'expense', 'net']) {
+      for (const series of ['income', 'expense']) {
         await expect(trendChart.locator('[data-series="' + series + '"]')).toHaveCount(12);
       }
-      const line = trendChart.locator('polyline');
-      await expect(line).toHaveCount(1);
-      await expect(line).toHaveCSS('fill', 'none');
+      await expect(trendChart.locator('polyline, [data-series="net"]')).toHaveCount(0);
       const labels = trendChart.locator('[data-month-label]');
       await expect(labels).toHaveCount(6);
       await expectMonthLabelGaps(labels);

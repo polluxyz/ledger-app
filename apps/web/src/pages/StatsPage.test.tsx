@@ -310,10 +310,10 @@ describe('StatsPage', () => {
       within(firstCategoryList).getByRole('button', { name: '晚餐，$900，75%' }),
     ).toBeInTheDocument();
 
-    const trendTab = screen.getByRole('button', { name: '趨勢' });
+    const trendTab = screen.getByRole('button', { name: '每月收支' });
     await focusWithTab(user, trendTab);
     await user.keyboard('{Enter}');
-    await screen.findByRole('region', { name: '收支趨勢圖' });
+    await screen.findByRole('region', { name: '每月收支圖' });
 
     expect(screen.queryByRole('group', { name: '趨勢圖型' })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('chart='));
@@ -451,8 +451,8 @@ describe('StatsPage', () => {
       within(screen.getByRole('group', { name: '收支方向' })).getByRole('button', { name: '收入' }),
     );
     expect(screen.getByRole('region', { name: '收入分類圓餅圖' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '趨勢' }));
-    await screen.findByRole('region', { name: '收支趨勢圖' });
+    await user.click(screen.getByRole('button', { name: '每月收支' }));
+    await screen.findByRole('region', { name: '每月收支圖' });
     expect(statisticsApi.getStatistics).toHaveBeenCalledTimes(1);
     expect(getItem).not.toHaveBeenCalledWith('stats.chart');
     expect(setItem).not.toHaveBeenCalledWith('stats.chart', expect.anything());
@@ -531,7 +531,7 @@ describe('StatsPage', () => {
   it('uses the selected month, year end, and custom end month for trend requests', async () => {
     const user = userEvent.setup();
     renderPage('/stats?tab=trend&ledger=family&month=2026-07');
-    await screen.findByRole('region', { name: '收支趨勢圖' });
+    await screen.findByRole('region', { name: '每月收支圖' });
 
     await user.click(screen.getByRole('button', { name: '年' }));
     await waitFor(() =>
@@ -560,6 +560,26 @@ describe('StatsPage', () => {
     expect(trendRequests).toContain('2026-12');
     expect(trendRequests).toContain('2026-10');
     expect(screen.getByTestId('location')).toHaveTextContent('from=2026-10-05&to=2026-10-20');
+  });
+
+  it('opens 每月收支 at tab=trend and passes the API averages to the chart', async () => {
+    statisticsApi.getTrend.mockResolvedValueOnce({
+      ledgerId: familyLedger.id,
+      averageIncome: 532700,
+      averageExpense: 234556,
+      averageMonthCount: 3,
+      months: [{ month: '2026-07', income: 120000, expense: 80000, net: 40000 }],
+    });
+    renderPage('/stats?tab=trend&ledger=family&month=2026-07');
+
+    const chart = within(await screen.findByRole('region', { name: '每月收支圖' }));
+    expect(screen.getByRole('button', { name: '每月收支' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByTestId('location')).toHaveTextContent('tab=trend');
+    expect(chart.getByText('收入月均 $5,327')).toBeVisible();
+    expect(chart.getByText('支出月均 $2,345.56')).toBeVisible();
   });
 
   const familyUrl = '/stats?tab=cat&ledger=family&month=2026-10';
@@ -736,7 +756,7 @@ describe('StatsPage', () => {
     statisticsApi.getTrend.mockRejectedValue(new Error('trend failed'));
     renderPage('/stats?tab=trend&ledger=family&month=2026-10');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('趨勢暫時無法載入');
+    expect(await screen.findByRole('alert')).toHaveTextContent('每月收支暫時無法載入');
     expect(screen.getByText('$1,200')).toBeInTheDocument();
 
     statisticsApi.getStatistics.mockRejectedValue(new Error('statistics failed'));

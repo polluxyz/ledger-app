@@ -2,26 +2,31 @@ import { useEffect, useRef, useState } from 'react';
 import type { StatisticsTrendMonth } from '@ledger/shared';
 import { formatMoney } from '../../../lib/format';
 import { getFinancialTrendLayout } from '../financial-trend-layout';
+import { currentTaiwanMonthRange } from '../stats-url';
 import styles from './StatisticsTrendChart.module.css';
 
 interface StatisticsTrendChartProps {
   months: readonly StatisticsTrendMonth[];
+  averageIncome: number | null;
+  averageExpense: number | null;
   selectedMonth: string;
   showSelectedDetails: boolean;
   onSelectMonth: (month: string) => void;
 }
 
-const TITLE = '收支趨勢圖';
+const TITLE = '每月收支圖';
 const HEIGHT = 240;
 const SERIES = [
   { field: 'income', label: '收入', className: styles.income },
   { field: 'expense', label: '支出', className: styles.expense },
-  { field: 'net', label: '結餘', className: styles.net },
 ] as const;
+const DETAILS = [...SERIES, { field: 'net', label: '結餘' }] as const;
 
-/** 收入、支出和後端結餘共用一組刻度。換算只用於圖表座標。 */
+/** 每月收入與支出以零線為界，與後端月平均共用刻度。 */
 export function StatisticsTrendChart({
   months,
+  averageIncome,
+  averageExpense,
   selectedMonth,
   showSelectedDetails,
   onSelectMonth,
@@ -42,25 +47,31 @@ export function StatisticsTrendChart({
     return () => observer.disconnect();
   }, [hasMonths]);
 
-  if (!hasMonths) return <p role="status">沒有趨勢資料</p>;
+  if (!hasMonths) return <p role="status">沒有每月收支資料</p>;
 
   const activeMonth = hoveredMonth ?? focusedMonth ?? selectedMonth;
   const detail =
     showSelectedDetails || activeMonth !== selectedMonth
       ? months.find((month) => month.month === activeMonth)
       : undefined;
+  const averages = SERIES.flatMap((series) => {
+    const amount = series.field === 'income' ? averageIncome : averageExpense;
+    return amount === null
+      ? []
+      : [{ ...series, amount, plottedAmount: series.field === 'expense' ? -amount : amount }];
+  });
+  const monthlyAmounts = months.flatMap((month) => [month.income, -month.expense]);
   const layout = getFinancialTrendLayout(
-    months.flatMap((month) => [month.income, month.expense, month.net]),
+    [...monthlyAmounts, ...averages.map(({ plottedAmount }) => plottedAmount)],
     width,
     HEIGHT,
   );
-  const slotWidth = layout.slotWidth * SERIES.length;
+  // 共用刻度，月份欄寬獨立計算，避免平均值占用月份欄位。
+  const slotWidth = (layout.right - layout.left) / months.length;
   const barWidth = Math.min(30, slotWidth * 0.28);
   const lastIndex = months.length - 1;
-  const netPoints = months.map((_, index) => ({
-    x: layout.bars[index * SERIES.length + 1]!.x,
-    y: layout.bars[index * SERIES.length + 2]!.end,
-  }));
+  const currentMonth = currentTaiwanMonthRange().from.slice(0, 7);
+  const endsThisMonth = months[lastIndex]?.month === currentMonth;
 
   return (
     <section className={styles.wrapper} aria-label={TITLE}>
@@ -71,11 +82,17 @@ export function StatisticsTrendChart({
             {label}
           </li>
         ))}
+        {averages.map(({ field, label, className, amount }) => (
+          <li key={`average-${field}`}>
+            <span className={`${className} ${styles.averageKey}`} aria-hidden="true" />
+            {`${label}月均 ${formatMoney(amount)}`}
+          </li>
+        ))}
       </ul>
       <div className={styles.detail} aria-live="polite">
         {detail && (
           <dl aria-label={formatMonth(detail.month)}>
-            {SERIES.map(({ field, label }) => (
+            {DETAILS.map(({ field, label }) => (
               <div key={field}>
                 <dt>{label}</dt>
                 <dd>{formatMoney(detail[field])}</dd>
@@ -111,8 +128,9 @@ export function StatisticsTrendChart({
           y2={layout.baseline}
         />
         {months.map((month, index) => {
-          const { x, y } = netPoints[index]!;
+          const x = layout.left + slotWidth * (index + 0.5);
           const firstBar = index * SERIES.length;
+          const isCurrentMonth = endsThisMonth && index === lastIndex;
           return (
             <g
               key={month.month}
@@ -120,7 +138,7 @@ export function StatisticsTrendChart({
               tabIndex={0}
               data-month={month.month}
               aria-pressed={month.month === selectedMonth}
-              aria-label={`${formatMonth(month.month)}：${SERIES.map(({ field, label }) => `${label} ${formatMoney(month[field])}`).join('，')}`}
+              aria-label={`${formatMonth(month.month)}：${DETAILS.map(({ field, label }) => `${label} ${formatMoney(month[field])}`).join('，')}${isCurrentMonth ? '，截至今天' : ''}`}
               onMouseEnter={() => setHoveredMonth(month.month)}
               onFocus={() => {
                 setFocusedMonth(month.month);
@@ -149,37 +167,53 @@ export function StatisticsTrendChart({
                 height={HEIGHT}
                 width={slotWidth}
               />
-              {SERIES.slice(0, 2).map(({ field, className }, offset) => {
+              {SERIES.map(({ field, className }, offset) => {
                 const bar = layout.bars[firstBar + offset]!;
+                // 非零小額至少顯示 1px，仍從零線向各自的方向延伸。
+                const height = month[field] === 0 ? 0 : Math.max(1, bar.height);
                 return (
                   <rect
                     key={field}
                     data-series={field}
                     className={className}
-                    x={x + (offset === 0 ? -barWidth - 1 : 1)}
-                    y={bar.y}
+                    x={x - barWidth / 2}
+                    y={field === 'income' ? layout.baseline - height : layout.baseline}
                     width={barWidth}
-                    height={bar.height}
+                    height={height}
                     rx={2}
                   />
                 );
               })}
-              <circle data-series="net" className={styles.net} cx={x} cy={y} r={3} />
               {(width > 440 ||
                 (index % 2 === 0 && index < lastIndex - 1) ||
                 index === lastIndex) && (
-                <text data-month-label="" x={x} y={HEIGHT - 9} textAnchor="middle">
+                <text data-month-label="" x={x} y={HEIGHT - 18} textAnchor="middle">
                   {Number(month.month.slice(5))}月
                 </text>
               )}
             </g>
           );
         })}
-        <polyline
-          className={styles.netLine}
-          points={netPoints.map(({ x, y }) => `${x},${y}`).join(' ')}
-          aria-hidden="true"
-        />
+        {endsThisMonth && (
+          <text x={layout.right} y={HEIGHT - 3} textAnchor="end" aria-hidden="true">
+            截至今天
+          </text>
+        )}
+        {averages.map(({ field, className }, index) => {
+          const y = layout.bars[monthlyAmounts.length + index]!.end;
+          return (
+            <line
+              key={field}
+              data-average={field}
+              className={`${className} ${styles.averageLine}`}
+              x1={layout.left}
+              x2={layout.right}
+              y1={y}
+              y2={y}
+              aria-hidden="true"
+            />
+          );
+        })}
       </svg>
     </section>
   );

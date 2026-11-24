@@ -47,7 +47,7 @@ type Direction = 'expense' | 'income';
 
 const TAB_LABELS: Record<StatsTab, string> = {
   cat: '分類',
-  trend: '趨勢',
+  trend: '每月收支',
 };
 
 /**
@@ -430,7 +430,7 @@ export default function StatsPage() {
           <>
             {trend.error ? (
               <p className={styles.status} role="alert">
-                趨勢暫時無法載入
+                每月收支暫時無法載入
               </p>
             ) : waitingForFilters || trend.isLoading || !trend.data ? (
               <p className={styles.status} role="status">
@@ -440,6 +440,8 @@ export default function StatsPage() {
               <StatisticsTrendChart
                 key={periodKey}
                 months={trend.data.months}
+                averageIncome={trend.data.averageIncome}
+                averageExpense={trend.data.averageExpense}
                 selectedMonth={endMonth}
                 showSelectedDetails={state.period.mode !== 'month'}
                 onSelectMonth={selectTrendMonth}
