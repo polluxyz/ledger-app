@@ -93,7 +93,9 @@ export default function HomePage() {
       <section className={`${styles.card} ${styles.guest}`}>
         <p className={styles.note}>登入後即可開始記帳，並在這裡看到你的收支。</p>
         <div className={styles.actions}>
-          <Button onClick={() => setAuthDialog('login')}>登入</Button>
+          <Button variant="secondary" onClick={() => setAuthDialog('login')}>
+            登入
+          </Button>
           <Button variant="secondary" onClick={() => setAuthDialog('register')}>
             註冊
           </Button>
@@ -499,7 +501,11 @@ function Dashboard({
                 <LedgerSwitcher />
                 {homeLayout.isEditing ? (
                   <>
-                    <Button disabled={homeLayout.isSaving} onClick={homeLayout.finishEditing}>
+                    <Button
+                      variant="secondary"
+                      disabled={homeLayout.isSaving}
+                      onClick={homeLayout.finishEditing}
+                    >
                       {homeLayout.isSaving ? '儲存中…' : '完成'}
                     </Button>
                     <Button
@@ -522,7 +528,7 @@ function Dashboard({
                     編輯
                   </Button>
                 ) : null}
-                <Button onClick={startAdding}>
+                <Button variant="secondary" onClick={startAdding}>
                   <Icon name="plus" />
                   新增交易
                 </Button>

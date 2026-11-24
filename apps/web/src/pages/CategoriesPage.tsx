@@ -269,7 +269,11 @@ function CategoryGroup({
           {label}（{categories.data?.length ?? 0}）
         </h3>
         {canEdit && (
-          <Button aria-expanded={creating} onClick={onToggleCreate}>
+          <Button
+            variant={type === 'EXPENSE' ? 'primary' : 'secondary'}
+            aria-expanded={creating}
+            onClick={onToggleCreate}
+          >
             <Icon name="plus" />
             {createLabel}
           </Button>

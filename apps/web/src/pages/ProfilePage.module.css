@@ -56,8 +56,18 @@
 }
 
 .saved {
-  color: var(--color-text-muted);
+  color: var(--color-accent);
   font-size: var(--text-sm);
+}
+
+.saved:not(:empty) {
+  animation: saved-fade-in var(--motion-fade) var(--motion-ease);
+}
+
+@keyframes saved-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
 @media (max-width: 900px) {

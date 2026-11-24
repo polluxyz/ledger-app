@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import type {
   CategoryType,
   Counterparty,
@@ -27,6 +34,7 @@ interface DebtEntryFormProps {
   ledger: LedgerSummary;
   amountFieldId?: string;
   initialCounterpartyName?: string;
+  submitVariant?: ComponentProps<typeof Button>['variant'];
   onSaved?: () => void;
   onCancel?: () => void;
 }
@@ -53,6 +61,7 @@ export function DebtEntryForm({
   ledger,
   amountFieldId,
   initialCounterpartyName = '',
+  submitVariant = 'primary',
   onSaved,
   onCancel,
 }: DebtEntryFormProps) {
@@ -402,7 +411,7 @@ export function DebtEntryForm({
       )}
 
       <div className={styles.actions}>
-        <Button type="submit" block={!onCancel} disabled={submitDisabled}>
+        <Button type="submit" variant={submitVariant} block={!onCancel} disabled={submitDisabled}>
           {createEntry.isPending ? '新增中…' : '新增'}
         </Button>
         {onCancel && (

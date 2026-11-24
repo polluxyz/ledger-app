@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 import type { LedgerSummary, LedgerPerson, Transaction } from '@ledger/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettlementForm } from './SettlementForm';
+import buttonStyles from '../../components/Button.module.css';
 
 vi.mock('../auth/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-hua' } }),
@@ -121,6 +122,19 @@ describe('SettlementForm', () => {
     }
     return JSON.parse(init.body) as unknown;
   }
+
+  it('uses the primary submit style by default and supports a secondary inline submit', async () => {
+    const primary = renderForm();
+    expect((await screen.findByRole('button', { name: '新增' })).classList).toContain(
+      buttonStyles.primary,
+    );
+    primary.unmount();
+
+    renderForm({ submitVariant: 'secondary' });
+    expect((await screen.findByRole('button', { name: '新增' })).classList).toContain(
+      buttonStyles.secondary,
+    );
+  });
 
   function findRequest(path: string, method: string): RequestInit {
     const request = requests.find(({ url, init }) => url.includes(path) && init?.method === method);

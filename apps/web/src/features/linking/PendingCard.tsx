@@ -262,6 +262,7 @@ function InviteRow({
             type="button"
             className={styles.smallButton}
             disabled={isSubmitting}
+            variant="secondary"
             onClick={() => void accept()}
           >
             接受
@@ -299,6 +300,7 @@ function MergePromptRow({
           <Button
             type="button"
             className={styles.smallButton}
+            variant="secondary"
             aria-expanded={false}
             onClick={onToggle}
           >
@@ -502,6 +504,7 @@ function ProposalRow({
                 <Button
                   type="button"
                   className={styles.smallButton}
+                  variant="secondary"
                   disabled={isSubmitting}
                   aria-expanded={false}
                   onClick={onToggle}
@@ -513,6 +516,7 @@ function ProposalRow({
               <Button
                 type="button"
                 className={styles.smallButton}
+                variant="secondary"
                 disabled={isSubmitting}
                 onClick={() => void handleAccept()}
               >
@@ -598,6 +602,7 @@ function ProposalRow({
               <Button
                 type="button"
                 className={styles.smallButton}
+                variant="secondary"
                 disabled={isSubmitting}
                 onClick={() => void handleDecline()}
               >
@@ -607,6 +612,7 @@ function ProposalRow({
               <Button
                 type="button"
                 className={styles.smallButton}
+                variant="secondary"
                 disabled={acceptDisabled}
                 onClick={acceptRecordProposal}
               >

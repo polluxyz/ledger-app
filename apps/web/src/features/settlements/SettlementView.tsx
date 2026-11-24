@@ -287,6 +287,7 @@ export function SettlementView({
                                 key={formInstance}
                                 ledger={ledger}
                                 prefill={externalPrefill ?? activeItem.defaultPrefill}
+                                submitVariant="secondary"
                                 onSaved={handleCloseForm}
                                 onDeleted={handleCloseForm}
                               />

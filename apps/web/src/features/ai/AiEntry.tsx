@@ -246,6 +246,7 @@ export function AiEntry({
         </div>
         <Button
           type="submit"
+          variant="secondary"
           aria-label={isParsing ? '處理中…' : undefined}
           aria-busy={isParsing}
           disabled={!isExpanded || !isWritable || isParsing || voice.isActive || text.trim() === ''}

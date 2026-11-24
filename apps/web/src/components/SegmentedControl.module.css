@@ -33,14 +33,16 @@
 
 .option[aria-pressed='true'],
 .group > button[aria-pressed='true'] {
-  color: var(--color-text);
+  color: var(--color-accent);
 }
 
 .option[aria-pressed='true'],
 .group:not(.sliding) > button[aria-pressed='true'],
 .thumb {
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    var(--shadow-sm);
 }
 
 .group > button:disabled {

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +15,13 @@ import ProfilePage from './ProfilePage';
  * 也就不需要 Router。
  */
 describe('ProfilePage', () => {
+  it('fades in the saved status using the site motion duration', () => {
+    const profileCss = readFileSync('src/pages/ProfilePage.module.css', 'utf8');
+    expect(profileCss).toMatch(
+      /\.saved:not\(:empty\)\s*\{[^}]*animation:[^;]*var\(--motion-fade\)/,
+    );
+  });
+
   const fetchMock = vi.fn();
 
   const alice = {

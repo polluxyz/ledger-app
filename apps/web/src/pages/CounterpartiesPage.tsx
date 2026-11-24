@@ -99,10 +99,10 @@ export default function CounterpartiesPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className={styles.actions}>
-            <Button variant="secondary" onClick={() => setAddOpen(true)}>
-              ＋ 新增
+            <Button onClick={() => setAddOpen(true)}>＋ 新增</Button>
+            <Button variant="secondary" onClick={() => setInviteOpen(true)}>
+              邀請連動
             </Button>
-            <Button onClick={() => setInviteOpen(true)}>邀請連動</Button>
           </div>
         </div>
 

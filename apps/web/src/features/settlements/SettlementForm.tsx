@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type ComponentProps, type FormEvent } from 'react';
 import {
   centsToInput,
   parseMoneyInput,
@@ -25,6 +25,8 @@ interface SettlementFormProps {
   ledger: LedgerSummary;
   transaction?: Transaction;
   prefill?: SettlementPrefill;
+  /** 列內表單可降低送出鈕的視覺強調，彈窗沿用主要樣式。 */
+  submitVariant?: ComponentProps<typeof Button>['variant'];
   /** 歷史列另有撤銷確認時，避免編輯表單再出現第二個刪除入口。 */
   showDeleteButton?: boolean;
   onSaved: () => void;
@@ -39,6 +41,7 @@ export function SettlementForm({
   ledger,
   transaction,
   prefill,
+  submitVariant = 'primary',
   showDeleteButton = true,
   onSaved,
   onDeleted,
@@ -241,7 +244,7 @@ export function SettlementForm({
           onChange={(event) => setNote(event.target.value)}
         />
         <div className={styles.actions}>
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" variant={submitVariant} disabled={!canSubmit}>
             {pending ? '儲存中…' : isEditing ? '儲存' : '新增'}
           </Button>
         </div>
