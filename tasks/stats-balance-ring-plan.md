@@ -36,6 +36,11 @@
 - 用 container query 依格子寬度切換：可處理桌機側欄擠窄，但範圍變大，本次不做。
 - 在 TSX 加 `<span aria-hidden>` 對齊首頁寫法：多改一個檔案；CSS 偽元素效果相同，且不動 DOM（W330）。
 
+## 實作紀錄
+
+- SC-Q2 的 601px 檢查：Windows Chromium 垂直捲軸占 15px，`scrollWidth` 不會等於視窗寬。e2e 改用檔內既有 `expectNoHorizontalPageScroll`（`scrollWidth - clientWidth <= 0`），同樣證明沒有橫向捲動，不算偏離 spec 意圖。
+- SC-Q3「外觀、高度與金額位置和修改前相同（±1px）」沒有自動量修改前後數值。≤600px 時 `::before` 為 `display: none`，結餘格新加的屬性不改變尺寸，390px 截圖也確認外觀相同。
+
 ## 未處理
 
 （實作中發現範圍外的可修處，記在這裡，不擴大本次改動。）

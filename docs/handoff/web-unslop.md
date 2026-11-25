@@ -1,20 +1,19 @@
 # web-unslop 工作區交接
 
-## 2026-11-25 協調者交接（2p 統計結餘小圓環：spec 待核可）
+## 2026-11-25 協調者交接（2p 統計結餘小圓環：PR #252 待開發者確認）
 
 ### 現況
 
 - PR #251（2o）已合併。plan 與 todo 已封存到 `tasks/archive/pages-unslop-*.md`。
-- 分支 `feature/web-stats-balance-ring`（從 main `a624686` 開），本工作區沿用。尚無 PR。
+- 分支 `feature/web-stats-balance-ring`（從 main `a624686` 開），本工作區沿用。[PR #252](https://github.com/polluxyz/ledger-app/pull/252)：實作 commit `f16f2b6`，協調者驗收與 CI 全綠。
 - 2p 文件已核可（11-25）：[spec](../specs/phase-2p-stats-balance-ring.md)、[plan](../../tasks/stats-balance-ring-plan.md)、[todo](../../tasks/stats-balance-ring-todo.md)。編號：決策 441～442、W330、SC-Q1～Q5。
 - 手機處理徵詢 Run `run_7dac744bf093`：Codex（`ctx_9b2ec55ee385`）與 Gemini（`ctx_a32283f56725`）都建議 ≤600px 隱藏，兩個 dispatch 都 succeeded。開發者 11-25 選隱藏。
 - 未追蹤的 `.agents/skills/unslop/` 不提交。`docs/artifacts/` 截圖不提交。
 
 ### 下一步
 
-1. 開發者 11-25 已核可。Codex `default` 做 todo T1～T3（同一個 Task，本工作區）；`ledger_web_unslop_test` 已重建。
-2. 驗收照 todo T4：讀完整 diff；自己重跑 typecheck、lint、web 單元測試、統計 e2e；逐張看 6 張截圖。
-3. e2e 需要 `ledger_web_unslop_test`（11-25 已刪，需重建，見 `docs/operations/test-environment.md`）。
+1. 開發者看 6 張截圖（本機 `docs/artifacts/stats-balance-ring/after/`）確認後，squash merge PR #252。
+2. 合併後做 todo T5：plan、todo 移到 `tasks/archive/`；spec 狀態改「已完成」；`docs/README.md` 2p 列改「已完成」；刪 `ledger_web_unslop_test`；確認 Codex dispatch 已收尾。
 
 ### 開發者決定紀錄
 

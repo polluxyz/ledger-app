@@ -2,12 +2,12 @@
 
 On takeover read your workspace handoff. Update it and its index row. Merge both with the final PR for that work.
 
-| 工作區                                  | 現況與下一步                      |
-| --------------------------------------- | --------------------------------- |
-| [main](handoff/main.md)                 | 11-22 補查保留 6 區。下次 11-29。 |
-| [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。    |
-| [review-specs](handoff/review-specs.md) | R5 選自管 Linux，待確認備份條件。 |
-| [web-unslop](handoff/web-unslop.md)     | 2p 已核可，Codex 實作中。         |
+| 工作區                                  | 現況與下一步                         |
+| --------------------------------------- | ------------------------------------ |
+| [main](handoff/main.md)                 | 11-22 補查保留 6 區。下次 11-29。    |
+| [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。       |
+| [review-specs](handoff/review-specs.md) | R5 選自管 Linux，待確認備份條件。    |
+| [web-unslop](handoff/web-unslop.md)     | 2p PR #252 CI 全綠，待開發者看截圖。 |
 
 ## 共用資源與操作限制
 
