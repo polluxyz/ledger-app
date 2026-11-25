@@ -1,6 +1,6 @@
 # 2p 統計頁結餘小圓環：計畫
 
-依據 [spec 2p](../docs/specs/phase-2p-stats-balance-ring.md)（待核可）。工作區 `web-unslop`，分支 `feature/web-stats-balance-ring`，一個 PR。
+依據 [spec 2p](../docs/specs/phase-2p-stats-balance-ring.md)（開發者 2026-11-25 核可）。工作區 `web-unslop`，分支 `feature/web-stats-balance-ring`，一個 PR。
 
 ## 分工
 

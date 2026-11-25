@@ -2,7 +2,7 @@
 
 依據 [spec 2p](../docs/specs/phase-2p-stats-balance-ring.md) 與 [plan](stats-balance-ring-plan.md)。每項完成後勾選並填驗收證據。
 
-- [ ] **T0 文件（協調者）**：spec、plan、todo；`docs/README.md` 規格表加 2p；2o 決策 440 加註；`docs/handoff.md` 登記決策 441～442、W330。
+- [x] **T0 文件（協調者）**：spec、plan、todo；`docs/README.md` 規格表加 2p；2o 決策 440 加註；`docs/handoff.md` 登記決策 441～442、W330。
   - 驗收：diff 只含 `docs/specs`、`docs/README.md`、`docs/handoff*`、`tasks`；本次檔案 `prettier --check` 通過。
 - [ ] **T1 圓環樣式（W330、決策 441、442）**：只改 `apps/web/src/pages/StatsPage.module.css`。結餘格 `::before` 畫 72px 圓環，>600px 顯示、≤600px 隱藏；文字在圓環上方；不吃點擊；不撐出橫向捲動。`StatsPage.tsx` 不改。
   - 驗收：diff 只動這個 CSS 檔；`StatsPage.test.tsx` 照樣通過。

@@ -6,13 +6,13 @@
 
 - PR #251（2o）已合併。plan 與 todo 已封存到 `tasks/archive/pages-unslop-*.md`。
 - 分支 `feature/web-stats-balance-ring`（從 main `a624686` 開），本工作區沿用。尚無 PR。
-- 2p 文件已寫好，待開發者核可：[spec](../specs/phase-2p-stats-balance-ring.md)、[plan](../../tasks/stats-balance-ring-plan.md)、[todo](../../tasks/stats-balance-ring-todo.md)。編號：決策 441～442、W330、SC-Q1～Q5。
+- 2p 文件已核可（11-25）：[spec](../specs/phase-2p-stats-balance-ring.md)、[plan](../../tasks/stats-balance-ring-plan.md)、[todo](../../tasks/stats-balance-ring-todo.md)。編號：決策 441～442、W330、SC-Q1～Q5。
 - 手機處理徵詢 Run `run_7dac744bf093`：Codex（`ctx_9b2ec55ee385`）與 Gemini（`ctx_a32283f56725`）都建議 ≤600px 隱藏，兩個 dispatch 都 succeeded。開發者 11-25 選隱藏。
 - 未追蹤的 `.agents/skills/unslop/` 不提交。`docs/artifacts/` 截圖不提交。
 
 ### 下一步
 
-1. 開發者核可後，在 spec §8 記核可、README 狀態改「進行中」，派 Codex `default` 做 todo T1～T3（同一個 Task，本工作區）。
+1. 開發者 11-25 已核可。Codex `default` 做 todo T1～T3（同一個 Task，本工作區）；`ledger_web_unslop_test` 已重建。
 2. 驗收照 todo T4：讀完整 diff；自己重跑 typecheck、lint、web 單元測試、統計 e2e；逐張看 6 張截圖。
 3. e2e 需要 `ledger_web_unslop_test`（11-25 已刪，需重建，見 `docs/operations/test-environment.md`）。
 
