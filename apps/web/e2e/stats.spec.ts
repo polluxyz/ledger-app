@@ -1,4 +1,5 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import { resolve } from 'node:path';
 import {
   addMember,
   createAccount,
@@ -425,6 +426,86 @@ async function seedTwoLedgersForHistory(
 
 /** SC-R15：以 API 建立正式資料，主流程從首頁開始並在統計與交易頁走完。 */
 test.describe('2j 統計頁端對端', () => {
+  test('SC-Q1、Q3：結餘圓環依主題與視窗寬度顯示', async ({
+    signedInPage: page,
+    userA,
+    request,
+  }) => {
+    const month = currentTaiwanMonth();
+    const ledger = await createLedger(request, userA.token, { name: '結餘圓環', kind: 'PERSONAL' });
+    const accountId = await cashAccountId(request, userA);
+    const category = await createCategory(request, userA.token, ledger.id, {
+      name: '大額支出',
+      type: 'EXPENSE',
+    });
+    // 遵守單筆金額上限，合計為 123,456,789 元。
+    for (const amount of [...Array<number>(6).fill(2_000_000_000), 345_678_900]) {
+      await createTransaction(request, userA.token, ledger.id, {
+        type: 'EXPENSE',
+        amount,
+        date: month.transactionDate,
+        categoryId: category.id,
+        accountId,
+        title: '大額支出',
+      });
+    }
+    const summary = page.getByRole('region', { name: '收支摘要' });
+    const net = summary
+      .locator('dl > div')
+      .filter({ has: page.getByText('結餘', { exact: true }) });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.setViewportSize({ width: 1280, height: 844 });
+      await page.evaluate((value) => window.localStorage.setItem('ledger.theme', value), theme);
+      await page.goto(statsPath(ledger.id, month.value));
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expectSummary(page, { income: '$0', expense: '$123,456,789', net: '-$123,456,789' });
+      const ring = await net.evaluate((element) => {
+        const style = getComputedStyle(element, '::before');
+        return {
+          width: style.width,
+          height: style.height,
+          right: style.right,
+          bottom: style.bottom,
+          pointerEvents: style.pointerEvents,
+          display: style.display,
+        };
+      });
+      expect(ring).toMatchObject({
+        width: '72px',
+        height: '72px',
+        right: '-16px',
+        bottom: '-30px',
+        pointerEvents: 'none',
+      });
+      expect(ring.display).not.toBe('none');
+      for (const label of ['收入', '支出']) {
+        const cell = summary
+          .locator('dl > div')
+          .filter({ has: page.getByText(label, { exact: true }) });
+        expect(['none', 'normal']).toContain(
+          await cell.evaluate((element) => getComputedStyle(element, '::before').content),
+        );
+      }
+      for (const width of [1280, 601, 600, 390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        if (width <= 600) {
+          await expect
+            .poll(() => net.evaluate((element) => getComputedStyle(element, '::before').display))
+            .toBe('none');
+        }
+        if (width === 601) {
+          // Windows 的垂直捲軸可能占 15px，沿用無橫向溢位的判斷。
+          await expectNoHorizontalPageScroll(page);
+        }
+        if ([1280, 601, 390].includes(width) && process.env.STATS_RING_SCREENSHOTS) {
+          await summary.screenshot({
+            path: resolve(process.env.STATS_RING_SCREENSHOTS, `${theme}-${width}.png`),
+          });
+        }
+      }
+    }
+  });
+
   test('首頁長金額在 390px 與 1280px 保持單行', async ({ signedInPage: page, userA, request }) => {
     const month = currentTaiwanMonth();
     const ledger = await createLedger(request, userA.token, {
