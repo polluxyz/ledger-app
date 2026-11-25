@@ -2,16 +2,16 @@
 
 On takeover read your workspace handoff. Update it and its index row. Merge both with the final PR for that work.
 
-| 工作區                                  | 現況與下一步                             |
-| --------------------------------------- | ---------------------------------------- |
-| [main](handoff/main.md)                 | 11-22 補查保留 6 區。下次 11-29。        |
-| [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。           |
-| [review-specs](handoff/review-specs.md) | R5 選自管 Linux，待確認備份條件。        |
-| [web-unslop](handoff/web-unslop.md)     | 結餘小圓環選 72px，待定手機處理與 spec。 |
+| 工作區                                  | 現況與下一步                       |
+| --------------------------------------- | ---------------------------------- |
+| [main](handoff/main.md)                 | 11-22 補查保留 6 區。下次 11-29。  |
+| [ai-4a](handoff/ai-4a.md)               | Haiku 已結案。語音待現場驗收。     |
+| [review-specs](handoff/review-specs.md) | R5 選自管 Linux，待確認備份條件。  |
+| [web-unslop](handoff/web-unslop.md)     | 2p spec、plan、todo 待開發者核可。 |
 
 ## 共用資源與操作限制
 
-- main 分配新編號。下一個決策號 441、W 號 W330。web-unslop 保留決策 407～440、W307～W329。R5 保留 385～394、W300～W306 與 `SC-BK`。
+- main 分配新編號。下一個決策號 443、W 號 W331。web-unslop 保留決策 407～442、W307～W330。R5 保留 385～394、W300～W306 與 `SC-BK`。
 - The workspace merging later resolves shared-file conflicts.
 - Before inviting external testers, complete the privacy policy and AI informed consent, and confirm the use case with the model provider. See [新分類規格 §8](specs/phase-4a-ai-new-category.md)。
 

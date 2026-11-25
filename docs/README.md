@@ -75,6 +75,7 @@ Do not implement later phases or create files for them early.
 | [`phase-2m-home-visual-refresh.md`](specs/phase-2m-home-visual-refresh.md)         | 2m 首頁風格、借還圖卡與雙指標柱狀圖動畫                 | 已完成             |
 | [`phase-2n-home-polish.md`](specs/phase-2n-home-polish.md)                         | 2n 首頁去除冗餘與窄寬修整                               | 已完成（#250）     |
 | [`phase-2o-pages-unslop.md`](specs/phase-2o-pages-unslop.md)                       | 2o 登入、註冊、個人資料與統計頁去除冗餘，全站風格一致   | 已完成（#251）     |
+| [`phase-2p-stats-balance-ring.md`](specs/phase-2p-stats-balance-ring.md)           | 2p 統計頁結餘小圓環                                     | 待核可             |
 | [`r1-idempotency.md`](specs/r1-idempotency.md)                                     | R1 防重複送出（Idempotency-Key）                        | 已完成（#223）     |
 | [`r6-token-revocation.md`](specs/r6-token-revocation.md)                           | R6 登出讓憑證失效（登入紀錄表）                         | 已完成（#227）     |
 | [`security-baseline.md`](specs/security-baseline.md)                               | 跨階段的安全基準                                        | 長期有效           |
