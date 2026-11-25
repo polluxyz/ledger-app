@@ -58,6 +58,8 @@ export function StatisticsFilter({
       const below = window.innerHeight - anchor.bottom;
       const above = below < 320 && anchor.top > below;
       panel.style.setProperty('--filter-left', `${anchor.left}px`);
+      // 桌機保留面板高度，空間不足時向上移動，但仍與漏斗水平對齊。
+      panel.style.setProperty('--filter-anchor-bottom', `${anchor.bottom + 8}px`);
       panel.style.setProperty('--filter-top', above ? 'auto' : `${anchor.bottom + 8}px`);
       panel.style.setProperty(
         '--filter-bottom',
@@ -125,27 +127,29 @@ export function StatisticsFilter({
                 return (
                   <fieldset key={key}>
                     <legend>{GROUP_LABELS[key]}</legend>
-                    {lists[key]?.map(({ id, name }) => (
-                      <label key={id}>
-                        <input
-                          type="checkbox"
-                          checked={draft[key].includes(id)}
-                          disabled={draft[key].length >= 50 && !draft[key].includes(id)}
-                          onChange={() => setDraft(toggleOption(draft, key, id))}
-                        />
-                        {name}
-                      </label>
-                    ))}
-                    {flag && (
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={draft[flag]}
-                          onChange={() => setDraft(toggleOption(draft, flag))}
-                        />
-                        {FLAG_LABELS[flag]}
-                      </label>
-                    )}
+                    <div className={styles.optionGrid}>
+                      {lists[key]?.map(({ id, name }) => (
+                        <label key={id}>
+                          <input
+                            type="checkbox"
+                            checked={draft[key].includes(id)}
+                            disabled={draft[key].length >= 50 && !draft[key].includes(id)}
+                            onChange={() => setDraft(toggleOption(draft, key, id))}
+                          />
+                          <span>{name}</span>
+                        </label>
+                      ))}
+                      {flag && (
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={draft[flag]}
+                            onChange={() => setDraft(toggleOption(draft, flag))}
+                          />
+                          <span>{FLAG_LABELS[flag]}</span>
+                        </label>
+                      )}
+                    </div>
                   </fieldset>
                 );
               })}

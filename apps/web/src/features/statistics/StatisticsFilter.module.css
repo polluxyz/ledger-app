@@ -33,8 +33,8 @@
 .dialog {
   position: fixed;
   inset: var(--filter-top) auto var(--filter-bottom)
-    min(var(--filter-left), calc(100% - 24rem - var(--space-md)));
-  width: min(24rem, calc(100vw - 2 * var(--space-md)));
+    clamp(var(--space-md), var(--filter-left), calc(100% - 36rem - var(--space-md)));
+  width: min(36rem, calc(100vw - 2 * var(--space-md)));
   max-height: none;
   margin: 0;
   padding: 0;
@@ -80,13 +80,24 @@
   font-weight: 600;
 }
 
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-sm);
+}
+
 .options label {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   min-height: var(--control-height);
   overflow-wrap: anywhere;
   cursor: pointer;
+}
+
+.options input {
+  flex-shrink: 0;
 }
 
 .actions,
@@ -115,7 +126,42 @@
   min-width: 0;
 }
 
+@media (min-width: 901px) {
+  .dialog {
+    --desktop-filter-width: 44rem;
+    --desktop-filter-height: min(75dvh, 36rem, calc(100dvh - 2 * var(--space-md)));
+    inset: clamp(
+        var(--space-md),
+        var(--filter-anchor-bottom),
+        calc(100dvh - var(--desktop-filter-height) - var(--space-md))
+      )
+      auto auto
+      clamp(
+        var(--space-md),
+        var(--filter-left),
+        calc(100% - var(--desktop-filter-width) - var(--space-md))
+      );
+    width: min(var(--desktop-filter-width), calc(100vw - 2 * var(--space-md)));
+  }
+
+  .content {
+    max-height: var(--desktop-filter-height);
+  }
+
+  .optionGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .options label {
+    min-height: 1.75rem;
+  }
+}
+
 @media (max-width: 600px) {
+  .optionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dialog {
     inset: auto 0 0;
     width: 100%;
