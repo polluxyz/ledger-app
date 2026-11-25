@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { LedgerStatistics } from '@ledger/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import buttonStyles from '../components/Button.module.css';
 import { CATEGORY_CHART_COLORS } from '../features/statistics/charts/chart-colors';
 import { resetHomeCategoryColorsForTests } from '../app/use-home-category-colors';
 
@@ -449,6 +450,7 @@ describe('Home dashboard', () => {
 
     expect(await screen.findAllByText('$0')).toHaveLength(3);
     expect(screen.getByText(/登入後即可開始記帳/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '登入' })).toHaveClass(buttonStyles.secondary!);
     expect(screen.queryByRole('region', { name: '最近交易' })).not.toBeInTheDocument();
     expect(countRequest('/accounts')).toBe(0);
     expect(countRequest('/accounts/balance-trend')).toBe(0);
@@ -641,6 +643,7 @@ describe('Home dashboard', () => {
     const header = heading.closest('header');
     const addButton = await screen.findByRole('button', { name: '新增交易' }, WAIT);
     const switcher = screen.getByRole('group', { name: '作用中帳本' });
+    expect(addButton).toHaveClass(buttonStyles.primary!);
     expect(addButton.closest('header')).toBe(header);
     expect(switcher.closest('header')).toBe(header);
     expect(heading.compareDocumentPosition(addButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(

@@ -528,7 +528,7 @@ function Dashboard({
                     編輯
                   </Button>
                 ) : null}
-                <Button variant="secondary" onClick={startAdding}>
+                <Button onClick={startAdding}>
                   <Icon name="plus" />
                   新增交易
                 </Button>
