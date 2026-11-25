@@ -1,5 +1,7 @@
 /* 「對象」面板分成名字、連動資料與管理按鈕；樣式沿用往來帳的寫法與設計 token。 */
 .profile {
+  composes: surface from '../../components/CardSurface.module.css';
+  padding: var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -29,6 +31,8 @@
 
 /* 帳號名稱與暱稱各一列：標籤淡色靠左、值靠齊，不另加說明文字（W44、W52）。 */
 .facts {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -50,6 +54,11 @@
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.profile > .actions {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-md);
 }
 
 .actions,

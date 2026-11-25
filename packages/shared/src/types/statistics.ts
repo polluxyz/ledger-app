@@ -79,6 +79,8 @@ export interface LedgerStatistics {
   /** 兩種數字都回，首頁卡片不用打兩次（決策 229）。 */
   ledger: StatisticsTotals;
   mine: StatisticsTotals;
+  /** 套用口徑與篩選後的收支。 */
+  totals: StatisticsTotals;
   /** 依 `amount` 由大到小，相同時依分組鍵；金額 0 的不列。 */
   expenseGroups: StatisticsGroup[];
   incomeGroups: StatisticsGroup[];
@@ -90,7 +92,7 @@ export interface LedgerStatistics {
 }
 
 /** `GET /ledgers/{ledgerId}/statistics` 的查詢參數。 */
-export interface GetLedgerStatisticsQuery {
+export interface GetLedgerStatisticsQuery extends StatisticsFilters {
   /** 起日，包含，台灣時間，`YYYY-MM-DD`。 */
   from: string;
   /** 迄日，包含，台灣時間，`YYYY-MM-DD`。早於 `from`、或含起訖日超過 366 個台灣日 → 400。 */
@@ -101,6 +103,12 @@ export interface GetLedgerStatisticsQuery {
 
 /** 趨勢的一個月。 */
 export interface StatisticsTrendMonth extends StatisticsTotals {
+  /** 近 6 個合格月平均收入（分），不合格月為 null。 */
+  movingAverageIncome: Cents | null;
+  /** 近 6 個合格月平均支出（分），不合格月為 null。 */
+  movingAverageExpense: Cents | null;
+  /** 窗口內合格月數，0～6。 */
+  movingAverageMonthCount: number;
   /** `YYYY-MM`，台灣時間的完整曆月（決策 264）。 */
   month: string;
 }
@@ -110,14 +118,27 @@ export interface StatisticsTrend {
   ledgerId: string;
   /** 由舊到新，每個月都有，沒有交易的月份是 0。 */
   months: StatisticsTrendMonth[];
+  /** 只計帳本有交易紀錄以來已結束的月份，含中途空白月。 */
+  averageIncome: Cents | null;
+  averageExpense: Cents | null;
+  averageMonthCount: number;
 }
 
 /** `GET /ledgers/{ledgerId}/statistics/trend` 的查詢參數。 */
-export interface GetStatisticsTrendQuery {
+export interface GetStatisticsTrendQuery extends StatisticsFilters {
   /** 最後一個月，`YYYY-MM`。 */
   endMonth: string;
   /** 往前幾個月（含 `endMonth`），1～24 的整數，預設 12。 */
   months?: number;
   /** 預設 `LEDGER`。 */
   perspective?: StatisticsPerspective;
+}
+
+/** 同欄條件取聯集，跨欄條件取交集。 */
+export interface StatisticsFilters {
+  personIds?: string[];
+  categoryIds?: string[];
+  accountIds?: string[];
+  includeUncategorized?: boolean;
+  includeOtherAccounts?: boolean;
 }

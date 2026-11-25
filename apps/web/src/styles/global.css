@@ -253,3 +253,14 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text);
 }
+
+/* 共用控制項在窄視窗保留觸控高度。 */
+:root {
+  --control-height: 2.25rem;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --control-height: 2.75rem;
+  }
+}

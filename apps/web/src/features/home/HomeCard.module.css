@@ -1,4 +1,5 @@
 .card {
+  composes: surface from '../../components/CardSurface.module.css';
   box-sizing: border-box;
   display: flex;
   width: 100%;
@@ -7,10 +8,6 @@
   flex-direction: column;
   padding: var(--space-md) var(--space-lg)
     calc(var(--space-lg) + var(--home-card-extra-height, 0px));
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
   color: var(--color-text);
   text-decoration: none;
 }

@@ -141,6 +141,7 @@ export function CounterpartyDetail({
         <div className={styles.actions}>
           <Button
             type="button"
+            variant="secondary"
             aria-expanded={entryFormOpen}
             aria-controls={entryFormId}
             onClick={() => setEntryFormOpen((open) => !open)}
@@ -170,6 +171,7 @@ export function CounterpartyDetail({
         >
           <DebtEntryForm
             ledger={ledger}
+            submitVariant="secondary"
             initialCounterpartyName={person.displayName}
             onCancel={() => setEntryFormOpen(false)}
             onSaved={() => setEntryFormOpen(false)}

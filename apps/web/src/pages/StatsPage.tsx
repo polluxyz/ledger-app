@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { StatisticsGroup, StatisticsPerson, StatisticsPerspective } from '@ledger/shared';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { StatisticsGroup } from '@ledger/shared';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAccounts } from '../features/accounts/use-accounts';
+import { useCurrentUser } from '../features/auth/use-current-user';
+import { useLedgerPeople } from '../features/ledger-people/use-ledger-people';
+import { ApiError } from '../lib/api-client';
+import { Button } from '../components/Button';
 import { PageContent } from '../components/PageContent';
 import { PageHeader } from '../components/PageHeader';
 import {
@@ -9,27 +14,26 @@ import {
 } from '../features/ledgers/active-ledger-context';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
+import { useCategories } from '../features/categories/use-categories';
 import { CategoryLegendList } from '../features/statistics/charts/CategoryLegendList';
-import {
-  ChartTypeSwitch,
-  type ChartTypeOption,
-} from '../features/statistics/charts/ChartTypeSwitch';
 import { DonutChart } from '../features/statistics/charts/DonutChart';
-import { HorizontalBarChart } from '../features/statistics/charts/HorizontalBarChart';
-import { TrendBarChart } from '../features/statistics/charts/TrendBarChart';
-import { TrendLineChart } from '../features/statistics/charts/TrendLineChart';
-import { TrendTable } from '../features/statistics/charts/TrendTable';
+import { StatisticsTrendChart } from '../features/statistics/charts/StatisticsTrendChart';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
-import { getChartColorForId, type ChartTheme } from '../features/statistics/charts/chart-colors';
-import type { ChartType } from '../features/statistics/charts/chart-types';
+import { createCategoryGroupColor } from '../features/statistics/charts/chart-colors';
+import { StatisticsFilter, StatisticsFilterTags } from '../features/statistics/StatisticsFilter';
+import {
+  clearInvalidStatsFilters,
+  countStatsFilters,
+  EMPTY_STATS_FILTERS,
+  type FilterLists,
+  type StatsFilters,
+} from '../features/statistics/statistics-filters';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
 import {
   getStatsPeriodEndMonth,
   getStatsPeriodRange,
   isValidCustomDateRange,
   parseStatsUrl,
-  readStatsChartPreferences,
-  saveStatsChartPreference,
   serializeStatsUrl,
   type StatsPeriod,
   type StatsTab,
@@ -43,29 +47,12 @@ type Direction = 'expense' | 'income';
 
 const TAB_LABELS: Record<StatsTab, string> = {
   cat: '分類',
-  trend: '趨勢',
-  member: '成員',
-};
-
-const CHART_OPTIONS: Record<StatsTab, readonly ChartTypeOption[]> = {
-  cat: [
-    { value: 'donut', label: '圓餅' },
-    { value: 'bar', label: '長條' },
-  ],
-  trend: [
-    { value: 'bar', label: '長條' },
-    { value: 'line', label: '折線' },
-    { value: 'table', label: '表格' },
-  ],
-  member: [
-    { value: 'bar', label: '長條' },
-    { value: 'donut', label: '圓餅' },
-  ],
+  trend: '每月收支',
 };
 
 /**
- * 統計頁把網址當成可分享的頁面狀態，摘要、分類與成員共用一份後端回應；趨勢另用
- * 一份查詢。圖型與收支方向只改呈現，不加入 query key 或 localStorage 中的帳務資料。
+ * 統計頁把網址當成可分享的頁面狀態，摘要與分類共用一份後端回應；趨勢另用
+ * 一份查詢。收支方向只改呈現，舊網址的圖型參數會移除。
  */
 export default function StatsPage() {
   const {
@@ -83,17 +70,41 @@ export default function StatsPage() {
   const urlLedger = urlLedgerId ? ledgers.find((item) => item.id === urlLedgerId) : undefined;
   const selectedLedger = urlLedger ?? ledger;
 
+  const ledgerId = selectedLedger?.id ?? null;
+  const shared = selectedLedger?.kind === 'SHARED';
+  const people = useLedgerPeople(ledgerId, shared);
+  const currentUser = useCurrentUser();
+  const categories = useCategories(ledgerId);
+  const accounts = useAccounts();
+  const legacyMine = shared && new URLSearchParams(location.search).get('perspective') === 'MINE';
+  const self =
+    currentUser.data && people.data?.find((person) => person.userId === currentUser.data.id);
+  const legacyUnavailable =
+    legacyMine &&
+    !self &&
+    (currentUser.isError || people.isError || (currentUser.isSuccess && people.isSuccess));
+
   const state = useMemo<StatsUrlState>(() => {
-    const parsed = parseStatsUrl(location.search, {
-      ledgerKind: selectedLedger?.kind ?? 'PERSONAL',
-      defaultLedgerId: selectedLedger?.id ?? ledger?.id ?? null,
-    });
+    const { state } = parseStatsUrl(location.search, { defaultLedgerId: ledgerId });
     return {
-      ...parsed.state,
-      ledgerId: selectedLedger?.id ?? null,
+      ...state,
+      ledgerId,
+      filters: legacyMine && self ? { ...state.filters, personIds: [self.id] } : state.filters,
     };
-  }, [ledger?.id, location.search, selectedLedger?.id, selectedLedger?.kind]);
+  }, [ledgerId, location.search, legacyMine, self]);
   const canonicalSearch = serializeStatsUrl(state);
+  const lists: FilterLists = {
+    personIds: shared ? people.data : currentUser.data ? [currentUser.data] : undefined,
+    categoryIds: categories.data
+      ?.slice()
+      .sort(
+        (left, right) =>
+          left.type.localeCompare(right.type) ||
+          left.sortOrder - right.sortOrder ||
+          left.id.localeCompare(right.id),
+      ),
+    accountIds: accounts.data,
+  };
   const periodRange = getStatsPeriodRange(state.period);
   const periodKey = statsPeriodKey(state.period);
   const [customRangeDraft, setCustomRangeDraft] = useState<{
@@ -103,17 +114,30 @@ export default function StatsPage() {
   const customRange =
     customRangeDraft?.periodKey === periodKey ? customRangeDraft.range : periodRange;
   const endMonth = getStatsPeriodEndMonth(state.period);
-  const effectivePerspective: StatisticsPerspective =
-    state.tab === 'member' ? 'LEDGER' : state.perspective;
-  const statistics = useLedgerStatistics(state.ledgerId, {
+  const queryLedgerId = ledgerLoading || (legacyMine && !self) ? null : ledgerId;
+  const hasFilters = countStatsFilters(state.filters) > 0;
+  const statistics = useLedgerStatistics(queryLedgerId, {
     ...periodRange,
-    perspective: effectivePerspective,
+    ...state.filters,
+    perspective: 'LEDGER',
   });
-  const trend = useStatisticsTrend(state.tab === 'trend' ? state.ledgerId : null, {
+  // 有篩選時一併驗證趨勢查詢，任一端點拒絕條件都要隱藏金額。
+  const trend = useStatisticsTrend(state.tab === 'trend' || hasFilters ? queryLedgerId : null, {
     endMonth,
     months: 12,
-    perspective: effectivePerspective,
+    ...state.filters,
+    perspective: 'LEDGER',
   });
+  const invalidFilters =
+    legacyUnavailable ||
+    (hasFilters && (isBadRequest(statistics.error) || isBadRequest(trend.error)));
+  const waitingForFilters =
+    (legacyMine && !self) || (hasFilters && (statistics.isLoading || trend.isLoading));
+  const categoryLinks = !(
+    state.filters.personIds.length ||
+    state.filters.accountIds.length ||
+    state.filters.includeOtherAccounts
+  );
   const chartTheme = useChartTheme();
 
   useEffect(() => {
@@ -123,13 +147,27 @@ export default function StatsPage() {
   }, [ledger?.id, ledgerLoading, setActiveLedgerId, urlLedger]);
 
   useEffect(() => {
-    if (ledgerLoading || !selectedLedger || location.search === canonicalSearch) {
-      return;
+    if (legacyMine && !self) return;
+    let search = canonicalSearch;
+    if (ledgerLoading || !selectedLedger) {
+      const params = new URLSearchParams(location.search);
+      if (!params.has('chart')) return;
+      params.delete('chart');
+      search = params.toString();
+      if (search) search = '?' + search;
     }
-    void navigate({ pathname: location.pathname, search: canonicalSearch }, { replace: true });
+    if (location.search !== search) {
+      void navigate(
+        { pathname: location.pathname, search, hash: location.hash },
+        { replace: true },
+      );
+    }
   }, [
     canonicalSearch,
     ledgerLoading,
+    legacyMine,
+    self,
+    location.hash,
     location.pathname,
     location.search,
     navigate,
@@ -137,30 +175,27 @@ export default function StatsPage() {
   ]);
 
   function updateUrl(next: StatsUrlState, replace = false) {
-    void navigate({ pathname: location.pathname, search: serializeStatsUrl(next) }, { replace });
+    void navigate(
+      { pathname: location.pathname, search: serializeStatsUrl(next), hash: location.hash },
+      { replace },
+    );
   }
 
-  function changeTab(tab: StatsTab) {
-    const preferences = readStatsChartPreferences();
-    updateUrl({
-      ...state,
-      tab,
-      perspective: tab === 'member' ? 'LEDGER' : state.perspective,
-      chart: preferences[tab],
-    });
+  function changeFilters(filters: StatsFilters) {
+    if (legacyMine && !self) return;
+    updateUrl({ ...state, filters });
   }
 
-  function changeChart(chart: ChartType) {
-    saveStatsChartPreference(state.tab, chart);
-    updateUrl({ ...state, chart }, true);
+  function removeInvalidFilters() {
+    const filters = legacyUnavailable
+      ? EMPTY_STATS_FILTERS
+      : clearInvalidStatsFilters(state.filters, lists);
+    updateUrl({ ...state, filters }, true);
   }
 
   function changePeriod(period: StatsPeriod) {
+    if (legacyMine && !self) return;
     updateUrl({ ...state, period });
-  }
-
-  function changeLedgerPerspective(perspective: StatisticsPerspective) {
-    updateUrl({ ...state, perspective });
   }
 
   function selectTrendMonth(month: string) {
@@ -168,7 +203,7 @@ export default function StatsPage() {
   }
 
   function selectCategory(group: StatisticsGroup) {
-    if (effectivePerspective !== 'LEDGER' || group.kind !== 'CATEGORY' || !group.category) {
+    if (!categoryLinks || group.kind !== 'CATEGORY' || !group.category) {
       return;
     }
     const params = new URLSearchParams({
@@ -231,17 +266,17 @@ export default function StatsPage() {
     );
   }
 
-  const totals = statistics.data
-    ? effectivePerspective === 'LEDGER'
-      ? statistics.data.ledger
-      : statistics.data.mine
-    : undefined;
   const groups =
     direction === 'expense'
       ? (statistics.data?.expenseGroups ?? [])
       : (statistics.data?.incomeGroups ?? []);
-  const people = statistics.data?.people ?? [];
-  const selectedAmount = direction === 'expense' ? totals?.expense : totals?.income;
+  const categoryColorOf = createCategoryGroupColor(
+    categories.data,
+    direction === 'expense' ? 'EXPENSE' : 'INCOME',
+    groups,
+    chartTheme,
+  );
+  const totals = statistics.data?.totals;
 
   return (
     <PageContent>
@@ -257,34 +292,23 @@ export default function StatsPage() {
             onCustomRangeChange={(range) => setCustomRangeDraft({ periodKey, range })}
             onChange={changePeriod}
           />
-          {selectedLedger.kind === 'SHARED' && (
-            <div className={styles.switch} role="group" aria-label="統計口徑">
-              <button
-                type="button"
-                aria-pressed={effectivePerspective === 'LEDGER'}
-                disabled={state.tab === 'member'}
-                onClick={() => changeLedgerPerspective('LEDGER')}
-              >
-                帳本
-              </button>
-              <button
-                type="button"
-                aria-pressed={effectivePerspective === 'MINE'}
-                disabled={state.tab === 'member'}
-                onClick={() => changeLedgerPerspective('MINE')}
-              >
-                我
-              </button>
-            </div>
-          )}
         </div>
 
         <section className={styles.summary} aria-label="收支摘要">
-          {statistics.error ? (
+          {invalidFilters ? (
+            <div>
+              <p className={styles.status} role="alert">
+                部分篩選條件已失效。
+              </p>
+              <Button type="button" variant="secondary" onClick={removeInvalidFilters}>
+                清除失效條件
+              </Button>
+            </div>
+          ) : statistics.error ? (
             <p className={styles.status} role="alert">
               統計暫時無法載入
             </p>
-          ) : statistics.isLoading || !totals ? (
+          ) : waitingForFilters || statistics.isLoading || !totals ? (
             <p className={styles.status} role="status">
               載入中…
             </p>
@@ -302,7 +326,7 @@ export default function StatsPage() {
                   {formatMoney(totals.expense)}
                 </dd>
               </div>
-              <div>
+              <div className={styles.net}>
                 <dt>結餘</dt>
                 <dd aria-label={`結餘 ${formatMoney(totals.net)}`}>{formatMoney(totals.net)}</dd>
               </div>
@@ -311,205 +335,144 @@ export default function StatsPage() {
         </section>
       </section>
 
-      <nav className={styles.tabs} aria-label="統計分頁">
-        {(selectedLedger.kind === 'SHARED'
-          ? (['cat', 'trend', 'member'] as const)
-          : (['cat', 'trend'] as const)
-        ).map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-pressed={state.tab === tab}
-            onClick={() => changeTab(tab)}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </nav>
+      <div className={styles.stickyTabs}>
+        <nav className={styles.tabs} aria-label="統計分頁">
+          {(['cat', 'trend'] as const).map((tab) => (
+            <button
+              type="button"
+              key={tab}
+              aria-pressed={state.tab === tab}
+              disabled={legacyMine && !self}
+              onClick={() => updateUrl({ ...state, tab })}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       <section className={styles.panel} aria-label={TAB_LABELS[state.tab]}>
-        {state.tab === 'cat' && (
-          <>
-            <div className={styles.panelHeading}>
-              <div className={styles.directionSwitch} role="group" aria-label="收支方向">
-                <button
-                  type="button"
-                  aria-pressed={direction === 'expense'}
-                  onClick={() => setDirection('expense')}
-                >
-                  支出
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={direction === 'income'}
-                  onClick={() => setDirection('income')}
-                >
-                  收入
-                </button>
-              </div>
-              <ChartTypeSwitch
-                label="分類圖型"
-                options={CHART_OPTIONS.cat}
-                value={state.chart}
-                onChange={changeChart}
-              />
+        <div className={styles.panelHeading}>
+          {state.tab === 'cat' ? (
+            <div className={styles.directionSwitch} role="group" aria-label="收支方向">
+              <button
+                type="button"
+                aria-pressed={direction === 'expense'}
+                onClick={() => setDirection('expense')}
+              >
+                支出
+              </button>
+              <button
+                type="button"
+                aria-pressed={direction === 'income'}
+                onClick={() => setDirection('income')}
+              >
+                收入
+              </button>
             </div>
+          ) : (
+            <p className={styles.monthRange}>
+              {formatMonth(shiftMonth(endMonth, -11))} – {formatMonth(endMonth)}
+            </p>
+          )}
+          {(!legacyMine || self) && (
+            <StatisticsFilter
+              key={ledgerId}
+              filters={state.filters}
+              showPeople={shared}
+              lists={lists}
+              onChange={changeFilters}
+            />
+          )}
+        </div>
+        <StatisticsFilterTags filters={state.filters} lists={lists} onChange={changeFilters} />
+        {!invalidFilters && state.tab === 'cat' && (
+          <>
             {statistics.error ? (
               <p className={styles.status} role="alert">
                 統計暫時無法載入
               </p>
-            ) : statistics.isLoading || !statistics.data ? (
+            ) : waitingForFilters || statistics.isLoading || !statistics.data ? (
               <p className={styles.status} role="status">
                 載入中…
               </p>
             ) : (
-              <div className={styles.categoryLayout}>
-                {state.chart === 'donut' ? (
+              <ChartAndList
+                chart={
                   <DonutChart
                     direction={direction}
-                    totalAmount={selectedAmount ?? 0}
+                    totalAmount={statistics.data.totals[direction]}
                     title={direction === 'expense' ? '支出分類圓餅圖' : '收入分類圓餅圖'}
                     theme={chartTheme}
                     data={{
                       kind: 'groups',
                       items: groups,
-                      onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
+                      colorOf: categoryColorOf,
+                      onSelect: categoryLinks ? selectCategory : undefined,
                     }}
                   />
-                ) : (
-                  <HorizontalBarChart
+                }
+                list={
+                  <CategoryLegendList
+                    items={groups}
                     direction={direction}
-                    title={direction === 'expense' ? '支出分類長條圖' : '收入分類長條圖'}
                     theme={chartTheme}
-                    data={{
-                      kind: 'groups',
-                      items: groups,
-                      onSelect: effectivePerspective === 'LEDGER' ? selectCategory : undefined,
-                    }}
+                    colorOf={categoryColorOf}
+                    onSelect={categoryLinks ? selectCategory : undefined}
                   />
-                )}
-                <CategoryLegendList
-                  items={groups}
-                  direction={direction}
-                  theme={chartTheme}
-                  onSelect={effectivePerspective === 'LEDGER' ? selectCategory : undefined}
-                />
-              </div>
+                }
+              />
             )}
           </>
         )}
 
-        {state.tab === 'trend' && (
+        {!invalidFilters && state.tab === 'trend' && (
           <>
-            <div className={styles.panelHeading}>
-              <p className={styles.monthRange}>
-                {formatMonth(shiftMonth(endMonth, -11))} – {formatMonth(endMonth)}
-              </p>
-              <ChartTypeSwitch
-                label="趨勢圖型"
-                options={CHART_OPTIONS.trend}
-                value={state.chart}
-                onChange={changeChart}
-              />
-            </div>
             {trend.error ? (
               <p className={styles.status} role="alert">
-                趨勢暫時無法載入
+                每月收支暫時無法載入
               </p>
-            ) : trend.isLoading || !trend.data ? (
-              <p className={styles.status} role="status">
-                載入中…
-              </p>
-            ) : state.chart === 'bar' ? (
-              <TrendBarChart
-                months={trend.data.months}
-                selectedMonth={endMonth}
-                onSelectMonth={selectTrendMonth}
-              />
-            ) : state.chart === 'line' ? (
-              <TrendLineChart
-                months={trend.data.months}
-                selectedMonth={endMonth}
-                onSelectMonth={selectTrendMonth}
-              />
-            ) : (
-              <TrendTable months={trend.data.months} />
-            )}
-          </>
-        )}
-
-        {state.tab === 'member' && (
-          <>
-            <div className={styles.panelHeading}>
-              <div className={styles.directionSwitch} role="group" aria-label="成員收支方向">
-                <button
-                  type="button"
-                  aria-pressed={direction === 'expense'}
-                  onClick={() => setDirection('expense')}
-                >
-                  支出
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={direction === 'income'}
-                  onClick={() => setDirection('income')}
-                >
-                  收入
-                </button>
-              </div>
-              <ChartTypeSwitch
-                label="成員圖型"
-                options={CHART_OPTIONS.member}
-                value={state.chart}
-                onChange={changeChart}
-              />
-            </div>
-            {statistics.error ? (
-              <p className={styles.status} role="alert">
-                統計暫時無法載入
-              </p>
-            ) : statistics.isLoading || !statistics.data ? (
+            ) : waitingForFilters || trend.isLoading || !trend.data ? (
               <p className={styles.status} role="status">
                 載入中…
               </p>
             ) : (
-              <>
-                <div className={styles.categoryLayout}>
-                  {state.chart === 'donut' ? (
-                    <DonutChart
-                      direction={direction}
-                      totalAmount={
-                        direction === 'expense'
-                          ? statistics.data.ledger.expense
-                          : statistics.data.ledger.income
-                      }
-                      title={direction === 'expense' ? '成員支出圓餅圖' : '成員收入圓餅圖'}
-                      theme={chartTheme}
-                      data={{
-                        kind: 'people',
-                        items: people,
-                        denominator:
-                          direction === 'expense'
-                            ? statistics.data.ledger.expense
-                            : statistics.data.ledger.income,
-                      }}
-                    />
-                  ) : (
-                    <HorizontalBarChart
-                      direction={direction}
-                      title={direction === 'expense' ? '成員支出長條圖' : '成員收入長條圖'}
-                      theme={chartTheme}
-                      data={{ kind: 'people', items: people }}
-                    />
-                  )}
-                </div>
-                <MemberTotals people={people} theme={chartTheme} />
-              </>
+              <StatisticsTrendChart
+                key={periodKey}
+                months={trend.data.months}
+                selectedMonth={endMonth}
+                showSelectedDetails={state.period.mode !== 'month'}
+                onSelectMonth={selectTrendMonth}
+              />
             )}
           </>
         )}
       </section>
     </PageContent>
+  );
+}
+
+/** 依畫面重新排列元件，讓鍵盤順序跟著欄位位置。 */
+function ChartAndList({ chart, list }: { chart: ReactNode; list: ReactNode }) {
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia?.('(max-width: 900px)').matches ?? false,
+  );
+
+  useEffect(() => {
+    const viewport = window.matchMedia?.('(max-width: 900px)');
+    if (!viewport) return;
+    const sync = () => setNarrow(viewport.matches);
+    viewport.addEventListener('change', sync);
+    sync();
+    return () => viewport.removeEventListener('change', sync);
+  }, []);
+
+  const chartColumn = <div key="chart">{chart}</div>;
+  const listColumn = <div key="list">{list}</div>;
+  return (
+    <div className={styles.categoryLayout}>
+      {narrow ? [chartColumn, listColumn] : [listColumn, chartColumn]}
+    </div>
   );
 }
 
@@ -639,36 +602,8 @@ function PeriodControls({
   );
 }
 
-function MemberTotals({
-  people,
-  theme,
-}: {
-  people: readonly StatisticsPerson[];
-  theme: ChartTheme;
-}) {
-  return (
-    <ul className={styles.memberTotals} aria-label="成員收支">
-      {people.map((person) => {
-        const color = getChartColorForId(person.personId, theme);
-        return (
-          <li
-            key={person.personId}
-            aria-label={`${person.name}，支出 ${formatMoney(person.expense)}，收入 ${formatMoney(person.income)}`}
-          >
-            <span
-              className={styles.memberSwatch}
-              style={{ '--swatch-color': color } as CSSProperties}
-              aria-hidden="true"
-            />
-            <strong>{person.name}</strong>
-            <span>支出 {formatMoney(person.expense)}</span>
-            <span>收入 {formatMoney(person.income)}</span>
-          </li>
-        );
-      })}
-      {people.length === 0 && <li className={styles.status}>沒有資料</li>}
-    </ul>
-  );
+function isBadRequest(error: unknown) {
+  return error instanceof ApiError && error.statusCode === 400;
 }
 
 function shiftMonth(month: string, amount: number): string {

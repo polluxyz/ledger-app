@@ -213,32 +213,34 @@ function LedgerDetailView({
         }
       />
 
-      <dl className={styles.facts}>
-        <Fact
-          label="帳本類型"
-          value={ledger.kind === 'SHARED' ? '共享' : '私人'}
-          note="建立後不可更改"
-        />
-        <Fact label="幣別" value={ledger.currency} />
-        <Fact label="我的角色" value={myRole ? ROLE_LABEL[myRole] : '—'} />
-        {ledger.archivedAt !== null && (
-          <Fact label="已封存" value={formatDate(ledger.archivedAt)} note="封存後僅可讀取" />
-        )}
-      </dl>
+      <div className={styles.ledgerOverview}>
+        <dl className={styles.facts}>
+          <Fact
+            label="帳本類型"
+            value={ledger.kind === 'SHARED' ? '共享' : '私人'}
+            note="建立後不可更改"
+          />
+          <Fact label="幣別" value={ledger.currency} />
+          <Fact label="我的角色" value={myRole ? ROLE_LABEL[myRole] : '—'} />
+          {ledger.archivedAt !== null && (
+            <Fact label="已封存" value={formatDate(ledger.archivedAt)} note="封存後僅可讀取" />
+          )}
+        </dl>
 
-      {/*
-        分類頁的帳本由 `?ledgerId=` 指定，所以這個連結只是「帶著這一本過去」，
-        **不會改動作用中帳本**——使用者為了看一眼分類，不該連記帳寫進哪一本都被改掉。
-        已封存的帳本不畫這個連結：分類頁的清單不含封存帳本，連過去也只會被退回。
-      */}
-      {!isArchived && (
-        <p className={styles.categoriesLink}>
-          <Link className={styles.categoriesAnchor} to={`/categories?ledgerId=${ledger.id}`}>
-            <Icon name="tag" size={16} />
-            管理這本帳本的分類
-          </Link>
-        </p>
-      )}
+        {/*
+          分類頁的帳本由 `?ledgerId=` 指定，所以這個連結只是「帶著這一本過去」，
+          **不會改動作用中帳本**——使用者為了看一眼分類，不該連記帳寫進哪一本都被改掉。
+          已封存的帳本不畫這個連結：分類頁的清單不含封存帳本，連過去也只會被退回。
+        */}
+        {!isArchived && (
+          <p className={styles.categoriesLink}>
+            <Link className={styles.categoriesAnchor} to={`/categories?ledgerId=${ledger.id}`}>
+              <Icon name="tag" size={16} />
+              管理這本帳本的分類
+            </Link>
+          </p>
+        )}
+      </div>
 
       <GuestList
         ledgerId={ledger.id}
@@ -246,7 +248,7 @@ function LedgerDetailView({
         canManage={(myRole === 'OWNER' || myRole === 'EDITOR') && !isArchived}
       >
         {({ virtualMembers, openCreate, openRename, openDelete }) => (
-          <>
+          <div className={styles.membersCard}>
             <div className={styles.membersHead}>
               <h3 className={styles.subtitle}>
                 成員（{ledger.members.length + virtualMembers.length}）
@@ -302,7 +304,7 @@ function LedgerDetailView({
                 onAddByEmail={openEmailAdd}
               />
             )}
-          </>
+          </div>
         )}
       </GuestList>
 

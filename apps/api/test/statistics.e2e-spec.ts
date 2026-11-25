@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
-import type { LedgerStatistics, StatisticsPerspective, StatisticsTrend } from '@ledger/shared';
+import type {
+  LedgerStatistics,
+  StatisticsFilters,
+  StatisticsPerspective,
+  StatisticsTrend,
+} from '@ledger/shared';
 import request from 'supertest';
 import type { PrismaService } from '../src/prisma/prisma.service';
-import { createE2EApp, httpServer, resetDb } from './e2e-utils';
+import { createE2EApp, createSharedLedger, httpServer, resetDb } from './e2e-utils';
 import { auth } from './linking-utils';
 import {
   createStatisticsAttributionShapes,
@@ -14,19 +20,21 @@ import type { StatisticsExamples } from './statistics-fixtures';
 const PERIOD = { from: '2026-10-01', to: '2026-10-31' };
 
 /** 每份 HTTP 回應都檢查 SC-R27 與決策 262；測試加總用 BigInt，避免測試本身捨入。 */
-function expectIdentities(body: LedgerStatistics, perspective: StatisticsPerspective) {
-  for (const totals of [body.ledger, body.mine]) {
+function expectIdentities(body: LedgerStatistics, unfilteredPerspective?: StatisticsPerspective) {
+  for (const totals of [body.ledger, body.mine, body.totals]) {
     expect(totals.income).toBeGreaterThanOrEqual(0);
     expect(totals.expense).toBeGreaterThanOrEqual(0);
     expect(BigInt(totals.net)).toBe(BigInt(totals.income) - BigInt(totals.expense));
   }
-  const selected = perspective === 'MINE' ? body.mine : body.ledger;
+  if (unfilteredPerspective) {
+    expect(body.totals).toEqual(unfilteredPerspective === 'MINE' ? body.mine : body.ledger);
+  }
   for (const [groups, field] of [
     [body.expenseGroups, 'expense'],
     [body.incomeGroups, 'income'],
   ] as const) {
     expect(groups.reduce((sum, group) => sum + BigInt(group.amount), 0n)).toBe(
-      BigInt(selected[field]),
+      BigInt(body.totals[field]),
     );
     expect(groups.reduce((sum, group) => sum + group.percentageBps, 0)).toBe(
       groups.length ? 10000 : 0,
@@ -69,14 +77,15 @@ describe('Statistics endpoints (e2e)', () => {
     ledgerId = examples.homeLedgerId,
     perspective: StatisticsPerspective = 'LEDGER',
     period = PERIOD,
+    filters?: StatisticsFilters,
   ) {
     const res = await request(httpServer(app))
       .get(`/api/ledgers/${ledgerId}/statistics`)
       .set(auth(examples.me.token))
-      .query({ ...period, perspective })
+      .query({ ...period, perspective, ...filters })
       .expect(200);
     const body = res.body as LedgerStatistics;
-    expectIdentities(body, perspective);
+    expectIdentities(body, filters ? undefined : perspective);
     return body;
   }
   async function trend(
@@ -84,11 +93,12 @@ describe('Statistics endpoints (e2e)', () => {
     perspective: StatisticsPerspective = 'LEDGER',
     endMonth = '2026-10',
     months?: number,
+    filters?: StatisticsFilters,
   ) {
     const res = await request(httpServer(app))
       .get(`/api/ledgers/${ledgerId}/statistics/trend`)
       .set(auth(examples.me.token))
-      .query({ endMonth, perspective, ...(months === undefined ? {} : { months }) })
+      .query({ endMonth, perspective, ...(months === undefined ? {} : { months }), ...filters })
       .expect(200);
     const body = res.body as StatisticsTrend;
     for (const month of body.months) {
@@ -192,6 +202,15 @@ describe('Statistics endpoints (e2e)', () => {
         for (const secret of secrets) expect(JSON.stringify(res.body)).not.toContain(secret);
       }
     }
+    const uncategorized = await statistics(examples.homeLedgerId, 'LEDGER', PERIOD, {
+      includeUncategorized: true,
+    });
+    expect(uncategorized.expenseGroups.map(({ kind, amount }) => [kind, amount])).toEqual([
+      ['UNCATEGORIZED', 1404],
+    ]);
+    expect(uncategorized.incomeGroups.map(({ kind, amount }) => [kind, amount])).toEqual([
+      ['UNCATEGORIZED', 1406],
+    ]);
     expect(await statistics()).toEqual(original);
   });
 
@@ -251,12 +270,14 @@ describe('Statistics endpoints (e2e)', () => {
     for (const perspective of ['LEDGER', 'MINE'] as const) {
       const t = await trend(examples.homeLedgerId, perspective);
       expect(t.months).toHaveLength(12);
-      expect(t.months[0]).toEqual({ month: '2025-11', income: 0, expense: 0, net: 0 });
-      expect(t.months.at(-1)).toEqual({
+      expect(t.months[0]).toMatchObject({ month: '2025-11', income: 0, expense: 0, net: 0 });
+      expect(t.months.at(-1)).toMatchObject({
         month: '2026-10',
         ...(perspective === 'LEDGER' ? october.ledger : october.mine),
       });
-      expect((await trend(examples.homeLedgerId, perspective, '2026-11', 1)).months[0]).toEqual({
+      expect(
+        (await trend(examples.homeLedgerId, perspective, '2026-11', 1)).months[0],
+      ).toMatchObject({
         month: '2026-11',
         ...(perspective === 'LEDGER' ? november.ledger : november.mine),
       });
@@ -321,7 +342,7 @@ describe('Statistics endpoints (e2e)', () => {
           from: '2027-01-01',
           to: '2027-01-31',
         });
-        expect((await trend(ledgerId, perspective, '2027-01', 1)).months[0]).toEqual({
+        expect((await trend(ledgerId, perspective, '2027-01', 1)).months[0]).toMatchObject({
           month: '2027-01',
           ...(perspective === 'LEDGER' ? body.ledger : body.mine),
         });
@@ -371,6 +392,227 @@ describe('Statistics endpoints (e2e)', () => {
       .query({ endMonth: '2026-10' })
       .expect(200);
     expect(t.body).toEqual(await trend());
+  });
+
+  it('SC-O14 applies member, category, account, and combined filters to both endpoints', async () => {
+    const { me, mei, homeLedgerId, mePersonId, meiPersonId, savingsId, categories } = examples;
+    const base = { ledgerId: homeLedgerId, type: 'EXPENSE' as const };
+    await createStatisticsTransaction(prisma, { ...base, creatorId: mei.userId, amount: 7 });
+    await createStatisticsTransaction(prisma, {
+      ...base,
+      creatorId: me.userId,
+      accountId: savingsId,
+      categoryId: categories.dinner,
+      amount: 101,
+    });
+    const split = await createStatisticsTransaction(prisma, {
+      ...base,
+      creatorId: mei.userId,
+      accountId: mei.cashId,
+      payerPersonId: meiPersonId,
+      categoryId: categories.daily,
+      amount: 23,
+    });
+    await prisma.ledgerSplit.create({
+      data: {
+        transactionId: split.id,
+        method: 'AMOUNT',
+        shares: {
+          create: [
+            { personId: mePersonId, share: 11, sortOrder: 0 },
+            { personId: meiPersonId, share: 12, sortOrder: 1 },
+          ],
+        },
+      },
+    });
+
+    const original = await statistics();
+    const mine = await statistics(homeLedgerId, 'MINE');
+    const cases: Array<[StatisticsFilters, number, number]> = [
+      [{ personIds: [mePersonId] }, 20000, 45112],
+      [{ personIds: [meiPersonId] }, 0, 75019],
+      [{ personIds: [mePersonId, meiPersonId] }, 20000, 120131],
+      [{ personIds: [mePersonId, mePersonId] }, 20000, 45112],
+      [{ categoryIds: [categories.dinner] }, 0, 90101],
+      [
+        { categoryIds: [categories.dinner, categories.daily], includeUncategorized: false },
+        0,
+        120124,
+      ],
+      [
+        { categoryIds: [categories.dinner, categories.daily], includeUncategorized: true },
+        0,
+        120131,
+      ],
+      [{ includeUncategorized: true }, 0, 7],
+      [{ accountIds: [me.cashId], includeOtherAccounts: false }, 20000, 90000],
+      [{ accountIds: [me.cashId, savingsId] }, 20000, 90101],
+      [{ includeOtherAccounts: true }, 0, 30030],
+      [{ accountIds: [me.cashId], includeOtherAccounts: true }, 20000, 120030],
+      [{ accountIds: [me.cashId], personIds: [meiPersonId] }, 0, 45000],
+      [
+        { includeOtherAccounts: true, personIds: [mePersonId], categoryIds: [categories.daily] },
+        0,
+        11,
+      ],
+    ];
+    for (const [filters, income, expense] of cases) {
+      const expected = { income, expense, net: income - expense };
+      const body = await statistics(homeLedgerId, 'LEDGER', PERIOD, filters);
+      expect({ filters, totals: body.totals }).toEqual({ filters, totals: expected });
+      expect(body).toMatchObject({
+        ledger: original.ledger,
+        mine: original.mine,
+        people: original.people,
+      });
+      expect((await trend(homeLedgerId, 'LEDGER', '2026-10', 1, filters)).months).toMatchObject([
+        { month: '2026-10', ...expected },
+      ]);
+    }
+    expect(await statistics(homeLedgerId, 'LEDGER', PERIOD, { personIds: [mePersonId] })).toEqual(
+      mine,
+    );
+    expect(await trend(homeLedgerId, 'LEDGER', '2026-10', 1, { personIds: [mePersonId] })).toEqual(
+      await trend(homeLedgerId, 'MINE', '2026-10', 1),
+    );
+    const mineOther = await statistics(homeLedgerId, 'MINE', PERIOD, {
+      includeOtherAccounts: true,
+    });
+    expect(mineOther.totals).toEqual({ income: 0, expense: 11, net: -11 });
+  });
+
+  it('SC-O14 excludes fixed groups from category selection and keeps false flags inactive', async () => {
+    const { dailyLedgerId, me, categories } = examples;
+    const original = await statistics(dailyLedgerId);
+    expect(
+      await statistics(dailyLedgerId, 'LEDGER', PERIOD, {
+        includeUncategorized: false,
+        includeOtherAccounts: false,
+      }),
+    ).toEqual(original);
+    const uncategorized = await statistics(dailyLedgerId, 'LEDGER', PERIOD, {
+      includeUncategorized: true,
+    });
+    expect(uncategorized.totals).toEqual({ income: 0, expense: 0, net: 0 });
+    expect(uncategorized.expenseGroups).toEqual([]);
+    const selected = await statistics(dailyLedgerId, 'LEDGER', PERIOD, {
+      categoryIds: [categories.breakfast, categories.lunch],
+      includeUncategorized: true,
+    });
+    expect(selected.expenseGroups.map(({ kind, amount }) => [kind, amount])).toEqual([
+      ['CATEGORY', 12000],
+      ['CATEGORY', 8000],
+    ]);
+    expect(await statistics(dailyLedgerId, 'LEDGER', PERIOD, { personIds: [me.userId] })).toEqual(
+      await statistics(dailyLedgerId, 'MINE'),
+    );
+  });
+
+  it.each([
+    ['', PERIOD],
+    ['/trend', { endMonth: '2026-10' }],
+  ] as const)(
+    'SC-O14 rejects foreign and missing ids uniformly on statistics%s',
+    async (path, query) => {
+      const { me, mei, mePersonId, homeLedgerId, categories } = examples;
+      const foreignLedger = await createSharedLedger(app, mei.token, '另一個帳本');
+      const foreign = await prisma.ledgerPerson.findUniqueOrThrow({
+        where: { ledgerId_userId: { ledgerId: foreignLedger, userId: mei.userId } },
+      });
+      const call = (ledgerId: string, token: string) =>
+        request(httpServer(app))
+          .get(`/api/ledgers/${ledgerId}/statistics${path}`)
+          .set(auth(token))
+          .query(query);
+      const badFilters = [
+        { categoryIds: categories.breakfast },
+        { personIds: foreign.id },
+        { accountIds: mei.cashId },
+        { categoryIds: randomUUID() },
+        { personIds: randomUUID() },
+        { accountIds: randomUUID() },
+        { personIds: mePersonId, perspective: 'MINE' },
+        { accountIds: 'bad' },
+        { personIds: Array<string>(51).fill(mePersonId) },
+        { includeOtherAccounts: 'no' },
+      ];
+      const baseline = (await call(homeLedgerId, me.token).query(badFilters[0]!).expect(400))
+        .body as unknown;
+      for (const filter of badFilters.slice(1)) {
+        expect((await call(homeLedgerId, me.token).query(filter).expect(400)).body).toEqual(
+          baseline,
+        );
+      }
+      await call(homeLedgerId, me.token).query({ personIds: mePersonId }).expect(200);
+      await call(mei.ledgerId, me.token).query({ personIds: mePersonId }).expect(404);
+      await call(mei.ledgerId, mei.token).query({ personIds: mePersonId }).expect(400);
+      const own = (await call(mei.ledgerId, mei.token).expect(200)).body as
+        LedgerStatistics | StatisticsTrend;
+      if ('totals' in own) expect(own.totals).toEqual({ income: 0, expense: 0, net: 0 });
+      else
+        expect(
+          own.months.every(
+            ({ net, income, expense }) => net === 0 && income === 0 && expense === 0,
+          ),
+        ).toBe(true);
+    },
+  );
+
+  it('SC-O15 bases the average on the earliest valid ledger transaction, independent of filters', async () => {
+    const { dailyLedgerId, me, savingsId } = examples;
+    const base = { ledgerId: dailyLedgerId, creatorId: me.userId };
+    await createStatisticsTransaction(prisma, {
+      ...base,
+      type: 'EXPENSE',
+      amount: 99,
+      accountId: me.cashId,
+      date: new Date('2023-12-01T00:00:00+08:00'),
+      deletedAt: new Date(),
+    });
+    await createStatisticsTransaction(prisma, {
+      ...base,
+      type: 'TRANSFER',
+      amount: 7,
+      accountId: me.cashId,
+      toAccountId: savingsId,
+      date: new Date('2024-01-01T00:00:00+08:00'),
+    });
+    for (const [type, amount] of [
+      ['INCOME', 3],
+      ['EXPENSE', 1],
+    ] as const) {
+      await createStatisticsTransaction(prisma, {
+        ...base,
+        type,
+        amount,
+        accountId: savingsId,
+        date: new Date('2024-02-01T00:00:00+08:00'),
+      });
+    }
+    const filter = { accountIds: [savingsId] };
+    expect(await trend(dailyLedgerId, 'LEDGER', '2024-02', 3, filter)).toMatchObject({
+      averageIncome: 2,
+      averageExpense: 1,
+      averageMonthCount: 2,
+      months: [
+        { month: '2023-12', income: 0, expense: 0, net: 0 },
+        { month: '2024-01', income: 0, expense: 0, net: 0 },
+        {
+          month: '2024-02',
+          income: 3,
+          expense: 1,
+          net: 2,
+          movingAverageIncome: 2,
+          movingAverageExpense: 1,
+          movingAverageMonthCount: 2,
+        },
+      ],
+    });
+    expect(await trend(dailyLedgerId, 'LEDGER', '2023-12', 1, filter)).toMatchObject({
+      averageIncome: null,
+      averageExpense: null,
+      averageMonthCount: 0,
+    });
   });
 
   const invalidStatistics = [

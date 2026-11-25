@@ -25,7 +25,6 @@ export function AddMemberMenu({ onAddCounterparty, onAddVirtualMember }: AddMemb
   return (
     <div className={styles.menu}>
       <Button
-        variant="secondary"
         aria-expanded={expanded}
         aria-controls={optionsId}
         onClick={() => setExpanded((isExpanded) => !isExpanded)}

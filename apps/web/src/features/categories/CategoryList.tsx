@@ -2,6 +2,7 @@ import type { Category } from '@ledger/shared';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { FormError } from '../../components/FormError';
 import { Icon } from '../../components/Icon';
+import { LineArt } from '../../components/LineArt';
 import styles from './CategoryList.module.css';
 
 interface CategoryListProps {
@@ -44,7 +45,12 @@ export function CategoryList({
     return <FormError error={error} />;
   }
   if (categories.length === 0) {
-    return <p className={styles.empty}>還沒有任何分類。</p>;
+    return (
+      <p className={styles.empty}>
+        <LineArt subject="tag" placement="empty" />
+        還沒有任何分類。
+      </p>
+    );
   }
 
   return (

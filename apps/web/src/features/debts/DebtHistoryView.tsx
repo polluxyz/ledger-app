@@ -404,6 +404,7 @@ function SettlementHistoryRow({
               ledger={ledger}
               transaction={transaction}
               showDeleteButton={false}
+              submitVariant="secondary"
               onSaved={onCancelEdit}
               onDeleted={onCancelEdit}
             />

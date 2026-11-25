@@ -5,6 +5,8 @@ import { EmailField } from '../../components/EmailField';
 import { TextField } from '../../components/TextField';
 import { useAuth } from './use-auth';
 
+import styles from './AuthForm.module.css';
+
 interface LoginFormProps {
   /** 登入成功後要做什麼：整頁版是導向頁面，彈窗版是關閉自己。 */
   onSuccess: () => void | Promise<void>;
@@ -42,7 +44,7 @@ export function LoginForm({ onSuccess, footer }: LoginFormProps) {
     <>
       <FormError error={error} />
 
-      <form onSubmit={(event) => void handleSubmit(event)} noValidate>
+      <form className={styles.form} onSubmit={(event) => void handleSubmit(event)} noValidate>
         <EmailField label="Email" value={email} autoComplete="email" required onChange={setEmail} />
         <TextField
           label="密碼"

@@ -1,0 +1,26 @@
+/* 固定線稿尺寸，並沿用深淺主題各自的次要文字色。 */
+.art {
+  flex: none;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.card {
+  width: 28px;
+  height: 28px;
+  margin-inline-end: var(--space-xs);
+  vertical-align: middle;
+}
+
+.empty {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-sm);
+}
+
+.brand {
+  display: block;
+  width: 64px;
+  height: 64px;
+}

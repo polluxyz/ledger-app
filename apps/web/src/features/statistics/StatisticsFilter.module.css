@@ -1,0 +1,180 @@
+/* 漏斗、錨點面板與已選標籤。 */
+.trigger,
+.tags button,
+.actions button {
+  min-height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-width: var(--control-height);
+  margin-inline-end: auto;
+}
+
+.trigger:hover,
+.tags button:hover,
+.actions button:hover {
+  background: var(--color-fill);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+.dialog {
+  position: fixed;
+  inset: var(--filter-top) auto var(--filter-bottom)
+    clamp(var(--space-md), var(--filter-left), calc(100% - 36rem - var(--space-md)));
+  width: min(36rem, calc(100vw - 2 * var(--space-md)));
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+}
+
+.dialog::backdrop {
+  background: transparent;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  max-height: min(var(--filter-space), 75dvh);
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.content h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.options {
+  display: grid;
+  gap: var(--space-md);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.options fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.options legend {
+  font-weight: 600;
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.options label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--control-height);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.options input {
+  flex-shrink: 0;
+}
+
+.actions,
+.tags {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.tags {
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-md);
+  padding: 0;
+  list-style: none;
+}
+
+.tags button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.tags li {
+  min-width: 0;
+}
+
+@media (min-width: 901px) {
+  .dialog {
+    --desktop-filter-width: 44rem;
+    --desktop-filter-height: min(75dvh, 36rem, calc(100dvh - 2 * var(--space-md)));
+    inset: clamp(
+        var(--space-md),
+        var(--filter-anchor-bottom),
+        calc(100dvh - var(--desktop-filter-height) - var(--space-md))
+      )
+      auto auto
+      clamp(
+        var(--space-md),
+        var(--filter-left),
+        calc(100% - var(--desktop-filter-width) - var(--space-md))
+      );
+    width: min(var(--desktop-filter-width), calc(100vw - 2 * var(--space-md)));
+  }
+
+  .content {
+    max-height: var(--desktop-filter-height);
+  }
+
+  .optionGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .options label {
+    min-height: 1.75rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .optionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialog {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .dialog::backdrop {
+    background: rgb(0 0 0 / 55%);
+  }
+
+  .content {
+    max-height: 80dvh;
+    padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+  }
+}

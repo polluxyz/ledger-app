@@ -5,13 +5,10 @@
 
 /* 標準卡片寫法（spec §4.3）。overflow hidden 讓最後一列的底色不超出圓角。 */
 .list {
+  composes: surface from '../../components/CardSurface.module.css';
   margin: 0;
   padding: 0;
   list-style: none;
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -92,13 +89,18 @@
   color: var(--color-danger);
 }
 
+.empty {
+  composes: surface from '../../components/CardSurface.module.css';
+}
+
+.status {
+  composes: surface from '../../components/CardSurface.module.css';
+}
+
 .empty,
 .status {
   margin: 0;
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -108,4 +110,11 @@
   margin-top: var(--space-xs);
   color: var(--color-text);
   font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .action {
+    width: var(--control-height);
+    height: var(--control-height);
+  }
 }

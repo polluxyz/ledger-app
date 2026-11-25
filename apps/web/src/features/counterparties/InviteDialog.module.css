@@ -45,8 +45,30 @@
   font-size: var(--text-xs);
 }
 
+.copied {
+  color: var(--color-accent);
+  animation: copied-fade-in var(--motion-fade) var(--motion-ease);
+}
+
+.copyButton:has(.copied):hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background-color: var(--color-surface);
+}
+
+@keyframes copied-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--space-lg);
+}
+
+@media (max-width: 900px) {
+  .copyButton {
+    min-height: var(--control-height);
+  }
 }

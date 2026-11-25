@@ -18,23 +18,32 @@
   flex-wrap: wrap;
 }
 
+.periodModes {
+  composes: group from '../components/SegmentedControl.module.css';
+}
+.switch {
+  composes: group from '../components/SegmentedControl.module.css';
+}
+.directionSwitch {
+  composes: group from '../components/SegmentedControl.module.css';
+}
 .periodModes,
-.periodStepper,
 .switch,
 .directionSwitch {
+  display: flex;
+  align-items: center;
+}
+
+.periodStepper {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
-.periodModes button,
 .periodStepper button,
-.switch button,
-.directionSwitch button,
-.tabs button,
 .customPeriod button {
-  min-width: 2.75rem;
-  min-height: 2.75rem;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
   padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -42,21 +51,6 @@
   color: var(--color-text);
   cursor: pointer;
   font: inherit;
-}
-
-.periodModes button[aria-pressed='true'],
-.switch button[aria-pressed='true'],
-.directionSwitch button[aria-pressed='true'],
-.tabs button[aria-pressed='true'] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-text);
-  font-weight: 700;
-}
-
-.switch button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 
 .periodStepper strong {
@@ -80,7 +74,7 @@
 }
 
 .customPeriod input {
-  min-height: 2.75rem;
+  min-height: var(--control-height);
   max-width: 100%;
   padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
@@ -96,10 +90,8 @@
 }
 
 .summary {
+  composes: surface from '../components/CardSurface.module.css';
   padding: var(--space-md);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
 .summary dl {
@@ -128,14 +120,22 @@
   font-weight: 700;
 }
 
-.tabs {
+.stickyTabs {
+  /* 頁面底色遮住從分頁外框兩側捲過的內容。 */
+  --sticky-tabs-gutter: var(--space-md);
   position: sticky;
-  top: 0;
+  top: var(--page-toolbar-height);
   z-index: 4;
+  margin: 0 calc(-1 * var(--sticky-tabs-gutter)) var(--space-md);
+  padding-inline: var(--sticky-tabs-gutter);
+  background: var(--color-bg);
+}
+
+.tabs {
+  composes: group from '../components/SegmentedControl.module.css';
   display: flex;
   gap: var(--space-sm);
-  margin: 0 calc(-1 * var(--space-md)) var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--sticky-tabs-gutter);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
@@ -145,11 +145,9 @@
 }
 
 .panel {
+  composes: surface from '../components/CardSurface.module.css';
   min-width: 0;
   padding: var(--space-md);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
 .panelHeading {
@@ -163,8 +161,8 @@
 
 .categoryLayout {
   display: grid;
-  grid-template-columns: minmax(13.75rem, 0.8fr) minmax(0, 1.2fr);
-  align-items: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--space-lg);
   min-width: 0;
 }
@@ -178,28 +176,34 @@
 .memberTotals {
   display: grid;
   gap: var(--space-sm);
-  margin: var(--space-md) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .memberTotals li {
   display: grid;
-  grid-template-columns: 0.75rem minmax(0, 1fr) repeat(2, minmax(0, auto));
+  grid-template-columns: 0.75rem minmax(0, 1fr) minmax(0, auto);
   align-items: start;
-  gap: var(--space-sm) var(--space-md);
+  gap: var(--space-sm);
   padding: var(--space-sm) 0;
-  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
 }
 
-.memberTotals li strong {
-  grid-column: 2;
+.memberTotals li > * {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.memberTotals li span {
-  overflow-wrap: anywhere;
+.memberAmounts {
+  display: grid;
+  gap: var(--space-xs);
+  text-align: right;
+}
+
+.memberAmounts small {
+  color: var(--color-text-muted);
 }
 
 .memberSwatch {
@@ -229,24 +233,36 @@
     gap: var(--space-sm);
   }
 
+  .stickyTabs {
+    --sticky-tabs-gutter: var(--space-sm);
+  }
+}
+
+.summary dl > div {
+  padding: var(--space-sm);
+  border-radius: var(--radius);
+}
+
+.summary dl > .net {
+  background-color: var(--color-primary-soft);
+}
+
+.filterRow button[data-switchable] {
+  min-height: 2.25rem;
+}
+
+@media (max-width: 900px) {
+  .filterRow button[data-switchable],
+  .filterRow [role='option'] {
+    min-height: 2.75rem;
+  }
+
+  .stickyTabs {
+    top: calc(var(--topbar-height) + var(--page-toolbar-height));
+  }
+
   .categoryLayout {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-md);
-  }
-
-  .memberTotals li {
-    grid-template-columns: 0.75rem minmax(0, 1fr);
-  }
-
-  .memberTotals li strong,
-  .memberTotals li span:not(.memberSwatch) {
-    grid-column: 2;
-  }
-
-  .tabs {
-    margin-right: calc(-1 * var(--space-sm));
-    margin-left: calc(-1 * var(--space-sm));
-    padding-right: var(--space-sm);
-    padding-left: var(--space-sm);
   }
 }

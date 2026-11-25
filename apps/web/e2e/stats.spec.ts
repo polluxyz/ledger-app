@@ -18,117 +18,11 @@ import { expectHomeSectionOrder, switchLedger } from './ui';
 
 /**
  * 統計頁的端對端驗收：測試資料只透過正式 API 建立，首頁、統計頁與交易頁都用瀏覽器操作。
- * 日期以台灣時區動態計算；390px 情境逐一檢查各分頁、圖型、長文字與觸控區。
+ * 日期以台灣時區動態計算；390px 情境逐一檢查各分頁、長文字與觸控區。
  */
 
 const LONG_CATEGORY_NAME = '超長分類名稱驗證文字'.repeat(4);
 const LONG_MEMBER_NAME = '測試共享帳本成員名稱完整顯示確認'.repeat(3);
-
-async function expectCompactMonthLabels(labels: Locator, controls: Locator) {
-  const count = await labels.count();
-  expect(count).toBe(12);
-  await expect(controls).toHaveCount(count);
-
-  for (let index = 0; index < count; index += 1) {
-    const label = labels.nth(index);
-    const accessibleName = await controls.nth(index).getAttribute('aria-label');
-    const monthMatch = accessibleName?.match(/^(\d{4})年(\d{1,2})月/);
-    expect(monthMatch).not.toBeNull();
-    if (!monthMatch) {
-      continue;
-    }
-
-    const [, year, monthNumber] = monthMatch;
-    const month = Number(monthNumber);
-    const expected = `${month}月${index === 0 || month === 1 ? year : ''}`;
-    await expect(async () => {
-      expect((await label.innerText()).replace(/\s/g, '')).toBe(expected);
-      expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe(
-        'nowrap',
-      );
-    }).toPass({ timeout: 5_000 });
-  }
-}
-
-async function expectResponsiveLineMonthLabels(
-  labels: Locator,
-  controls: Locator,
-  expectedVisibleCount: number,
-): Promise<void> {
-  const count = await labels.count();
-  expect(count).toBe(12);
-  await expect(controls).toHaveCount(count);
-
-  const visibleIndices: number[] = [];
-  await expect
-    .poll(async () => {
-      visibleIndices.length = 0;
-      for (let index = 0; index < count; index += 1) {
-        if (await labels.nth(index).isVisible()) {
-          visibleIndices.push(index);
-        }
-      }
-      return visibleIndices.length;
-    })
-    .toBe(expectedVisibleCount);
-  expect(visibleIndices.length).toBeGreaterThan(0);
-  expect(visibleIndices.length).toBe(expectedVisibleCount);
-
-  let previousVisibleYear: string | null = null;
-  for (const index of visibleIndices) {
-    const accessibleName = await controls.nth(index).getAttribute('aria-label');
-    const monthMatch = accessibleName?.match(/^(\d{4})\D+(\d{1,2})\D/);
-    expect(monthMatch).not.toBeNull();
-    if (!monthMatch) {
-      continue;
-    }
-
-    const [, year, monthNumber] = monthMatch;
-    const showYear = previousVisibleYear === null || previousVisibleYear !== year;
-    const expectedDigits = [Number(monthNumber), ...(showYear ? [Number(year)] : [])];
-    const label = labels.nth(index);
-    await expect(async () => {
-      const labelDigits = (await label.innerText()).match(/\d+/g) ?? [];
-      expect(labelDigits.map(Number)).toEqual(expectedDigits);
-      expect(await label.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe(
-        'nowrap',
-      );
-      expect(await label.evaluate((element) => element.children.length)).toBe(2);
-    }).toPass({ timeout: 5_000 });
-    previousVisibleYear = year!;
-  }
-}
-
-async function expectResponsiveLineMonthPositions(labels: Locator, points: Locator): Promise<void> {
-  const count = await labels.count();
-  await expect(points).toHaveCount(count * 2);
-
-  for (let index = 0; index < count; index += 1) {
-    const label = labels.nth(index);
-    if (!(await label.isVisible())) {
-      continue;
-    }
-
-    await expect(async () => {
-      const labelRect = await label.evaluate((element) => {
-        const { left, right } = element.getBoundingClientRect();
-        return { left, right };
-      });
-      const pointRect = await points.nth(index * 2).evaluate((element) => {
-        const { left, right } = element.getBoundingClientRect();
-        return { left, right };
-      });
-      const alignedLabelX =
-        index === 0
-          ? labelRect.left
-          : index === count - 1
-            ? labelRect.right
-            : (labelRect.left + labelRect.right) / 2;
-      const incomePointX = (pointRect.left + pointRect.right) / 2;
-      expect(Math.abs(alignedLabelX - incomePointX)).toBeLessThanOrEqual(6);
-    }).toPass({ timeout: 5_000 });
-  }
-}
 
 async function expectMonthLabelGaps(labels: Locator): Promise<void> {
   const visibleLabels = labels.filter({ visible: true });
@@ -207,7 +101,6 @@ function statsPath(ledgerId: string, month: string): string {
     ledger: ledgerId,
     month,
     perspective: 'LEDGER',
-    chart: 'donut',
   });
   return `/stats?${params.toString()}`;
 }
@@ -386,10 +279,6 @@ function statsTabs(page: Page) {
   return page.getByRole('navigation', { name: '統計分頁' });
 }
 
-function chartSwitch(page: Page, label: string) {
-  return page.getByRole('group', { name: label });
-}
-
 async function expectNoHorizontalPageScroll(page: Page): Promise<void> {
   await expect
     .poll(async () => {
@@ -468,59 +357,6 @@ async function expectHomeAmountsOnOneLine(page: Page): Promise<void> {
   }
 }
 
-async function expectTrendMonthRows(monthCells: Locator, singleLine: boolean): Promise<void> {
-  await expect(async () => {
-    const layouts = await monthCells.evaluateAll((cells) =>
-      cells.map((cell) => {
-        const parts = Array.from(cell.children);
-        const year = parts[0];
-        const month = parts[1];
-        if (!year || !month) {
-          return null;
-        }
-
-        const yearRect = year.getBoundingClientRect();
-        const monthRect = month.getBoundingClientRect();
-        const yearRange = document.createRange();
-        yearRange.selectNodeContents(year);
-        const monthRange = document.createRange();
-        monthRange.selectNodeContents(month);
-        const distinctLineCount = (range: Range) =>
-          new Set(Array.from(range.getClientRects(), (rect) => rect.top)).size;
-        return {
-          yearText: year.textContent?.trim(),
-          monthText: month.textContent?.trim(),
-          yearTop: yearRect.top,
-          monthTop: monthRect.top,
-          yearLineCount: distinctLineCount(yearRange),
-          monthLineCount: distinctLineCount(monthRange),
-          yearWhiteSpace: getComputedStyle(year).whiteSpace,
-          monthWhiteSpace: getComputedStyle(month).whiteSpace,
-        };
-      }),
-    );
-
-    expect(layouts).toHaveLength(12);
-    for (const layout of layouts) {
-      expect(layout).not.toBeNull();
-      if (!layout) {
-        continue;
-      }
-
-      expect(layout.yearText).toMatch(/^\d{4}年$/);
-      expect(layout.monthText).toMatch(/^\d{1,2}月$/);
-      expect(layout.yearLineCount).toBe(1);
-      expect(layout.monthLineCount).toBe(1);
-      expect(layout.yearWhiteSpace).toBe('nowrap');
-      expect(layout.monthWhiteSpace).toBe('nowrap');
-      expect(layout.monthTop).toBeGreaterThanOrEqual(layout.yearTop);
-      if (singleLine) {
-        expect(Math.abs(layout.monthTop - layout.yearTop)).toBeLessThanOrEqual(1);
-      }
-    }
-  }).toPass({ timeout: 5_000 });
-}
-
 async function expectStatsTouchTargets(page: Page): Promise<void> {
   const tabButtons = statsTabs(page).getByRole('button');
   const tabCount = await tabButtons.count();
@@ -533,33 +369,23 @@ async function expectStatsTouchTargets(page: Page): Promise<void> {
       .toBeGreaterThanOrEqual(44);
   }
 
-  const chartGroups = page.getByRole('group', { name: /圖型$/ });
-  const chartGroupCount = await chartGroups.count();
-  expect(chartGroupCount).toBeGreaterThan(0);
-  const visibleChartGroups: Locator[] = [];
-  await expect
-    .poll(async () => {
-      visibleChartGroups.length = 0;
-      for (let index = 0; index < chartGroupCount; index += 1) {
-        const chartGroup = chartGroups.nth(index);
-        if (await chartGroup.isVisible()) {
-          visibleChartGroups.push(chartGroup);
-        }
-      }
-      return visibleChartGroups.length;
-    })
-    .toBe(1);
-  expect(visibleChartGroups).toHaveLength(1);
-
-  const chartButtons = visibleChartGroups[0]!.getByRole('button');
-  const chartButtonCount = await chartButtons.count();
-  expect(chartButtonCount).toBeGreaterThanOrEqual(2);
-  for (let index = 0; index < chartButtonCount; index += 1) {
+  await expect(page.getByRole('group', { name: /圖型$/ })).toHaveCount(0);
+  for (const button of await page
+    .getByRole('group', { name: /收支方向$/ })
+    .getByRole('button')
+    .all()) {
     await expect
-      .poll(() =>
-        chartButtons.nth(index).evaluate((element) => element.getBoundingClientRect().height),
-      )
+      .poll(() => button.evaluate((element) => element.getBoundingClientRect().height))
       .toBeGreaterThanOrEqual(44);
+  }
+}
+
+async function expectListBars(list: Locator): Promise<void> {
+  const rows = list.getByRole('listitem');
+  const count = await rows.count();
+  expect(count).toBeGreaterThan(0);
+  for (const row of await rows.all()) {
+    await expect(row.getByTestId('statistics-list-bar')).toHaveCount(1);
   }
 }
 
@@ -652,7 +478,7 @@ test.describe('2j 統計頁端對端', () => {
     }
   });
 
-  test('SC-R15：家用首頁、分類、趨勢、成員與相關交易', async ({
+  test('SC-R15：家用首頁、分類、趨勢、成員篩選與相關交易', async ({
     signedInPage: page,
     userA,
     userB,
@@ -679,15 +505,18 @@ test.describe('2j 統計頁端對端', () => {
     await expectSummary(page, { income: '$200', expense: '$1,200', net: '-$1,000' });
 
     const categories = page.getByRole('list', { name: '支出分類清單' });
-    await expect(
-      chartSwitch(page, '分類圖型').getByRole('button', { name: '圓餅' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('group', { name: '分類圖型' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: '支出分類圓餅圖' })).toBeVisible();
     await expect(categories.getByRole('listitem')).toHaveCount(2);
+    await expectListBars(categories);
     await expect(categories.getByRole('button', { name: '晚餐，$900，75%' })).toBeVisible();
     await expect(categories.getByRole('button', { name: '日用品，$300，25%' })).toBeVisible();
 
-    const perspective = page.getByRole('group', { name: '統計口徑' });
-    await perspective.getByRole('button', { name: '我', exact: true }).click();
+    await expect(page.getByRole('group', { name: '統計口徑' })).toHaveCount(0);
+    await page.getByRole('button', { name: '篩選', exact: true }).click();
+    const filter = page.getByRole('dialog', { name: '篩選' });
+    await filter.getByRole('checkbox', { name: '我', exact: true }).check();
+    await filter.getByRole('button', { name: '套用' }).click();
     await expect(categories.getByRole('listitem')).toHaveCount(1);
     await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
       '$450',
@@ -695,53 +524,49 @@ test.describe('2j 統計頁端對端', () => {
     await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
       '100%',
     );
-    await chartSwitch(page, '分類圖型').getByRole('button', { name: '長條' }).click();
-    await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
-      '$450',
-    );
-    await expect(categories.getByRole('listitem').filter({ hasText: '晚餐' })).toContainText(
-      '100%',
-    );
+    await expectListBars(categories);
     await expectSummary(page, { income: '$200', expense: '$450', net: '-$250' });
 
-    await perspective.getByRole('button', { name: '帳本', exact: true }).click();
-    await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
-    const trendList = page.getByRole('list', { name: '每月收支' });
-    await expect(trendList.getByRole('listitem')).toHaveCount(12);
-    await expect(
-      trendList.getByRole('button', {
-        name: `${trendMonthLabel(month.value)}，收入 $200，支出 $1,200，結餘 -$1,000`,
-      }),
-    ).toBeVisible();
+    await page.getByRole('button', { name: '移除我', exact: true }).click();
+    await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
+    const trendChart = page.getByRole('region', { name: '每月收支圖' });
+    await expect(trendChart.getByRole('button')).toHaveCount(12);
+    const currentMonth = trendChart.getByRole('button', {
+      name: `${trendMonthLabel(month.value)}：收入 $200，支出 $1,200，結餘 -$1,000，截至今天`,
+    });
+    await expect(trendChart.getByText('截至今天')).toBeVisible();
     const previousMonth = shiftMonth(month.value, -1);
     await expect(
-      trendList.getByRole('button', {
-        name: `${trendMonthLabel(previousMonth)}，收入 $0，支出 $0，結餘 $0`,
+      trendChart.getByRole('button', {
+        name: `${trendMonthLabel(previousMonth)}：收入 $0，支出 $0，結餘 $0`,
       }),
     ).toBeVisible();
-    await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
-    await expect(page.getByRole('region', { name: '趨勢折線圖' })).toBeVisible();
+    await expect(page.getByRole('group', { name: '趨勢圖型' })).toHaveCount(0);
+    await expect(page.getByRole('table', { name: '趨勢表格' })).toHaveCount(0);
+    const plot = trendChart.locator('svg');
+    await plot.scrollIntoViewIfNeeded();
+    await currentMonth.focus();
+    await expect(trendChart.locator('dl')).toHaveCount(0);
+    const topBefore = (await plot.boundingBox())!.y;
+    await currentMonth.press('ArrowLeft');
     await expect(
-      page.getByRole('button', {
-        name: `${trendMonthLabel(month.value)}：收入 $200，支出 $1,200，結餘 -$1,000`,
-      }),
-    ).toBeVisible();
-    await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();
-    const trendTable = page.getByRole('table', { name: '趨勢表格' });
-    await expect(trendTable).toBeVisible();
-    await expect(trendTable.getByRole('row')).toHaveCount(13);
-    const currentMonthRow = trendTable.getByRole('row', {
-      name: new RegExp(trendMonthLabel(month.value)),
-    });
-    await expect(currentMonthRow).toContainText('$200');
-    await expect(currentMonthRow).toContainText('$1,200');
-    await expect(currentMonthRow).toContainText('-$1,000');
+      trendChart.getByRole('button', { name: new RegExp(trendMonthLabel(previousMonth)) }),
+    ).toBeFocused();
+    await expect(trendChart.locator('dl')).toContainText('$0');
+    expect(Math.abs((await plot.boundingBox())!.y - topBefore)).toBeLessThanOrEqual(1);
+    const zeroY = Number(await plot.locator('[data-trend-zero]').getAttribute('y1'));
+    const income = currentMonth.locator('[data-series="income"]');
+    const expense = currentMonth.locator('[data-series="expense"]');
+    expect(Number(await income.getAttribute('y'))).toBeLessThan(zeroY);
+    expect(Number(await expense.getAttribute('y'))).toBe(zeroY);
+    expect(Number(await expense.getAttribute('height'))).toBeGreaterThan(0);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBe(previousMonth);
+    await page.goBack();
+    await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBe(month.value);
 
-    await statsTabs(page).getByRole('button', { name: '成員' }).click();
-    const members = page.getByRole('list', { name: '成員收支' });
-    await expect(members.getByRole('listitem', { name: '我，支出 $450，收入 $200' })).toBeVisible();
-    await expect(members.getByRole('listitem', { name: '小美，支出 $750，收入 $0' })).toBeVisible();
-    await expect.poll(() => new URL(page.url()).searchParams.get('perspective')).toBe('LEDGER');
+    await expect(statsTabs(page).getByRole('button', { name: '成員' })).toHaveCount(0);
+    await expect.poll(() => new URL(page.url()).searchParams.get('perspective')).toBeNull();
 
     await statsTabs(page).getByRole('button', { name: '分類' }).click();
     const dinnerRequestPromise = page.waitForRequest((candidate) => {
@@ -824,36 +649,46 @@ test.describe('2j 統計頁端對端', () => {
     await page.goto(statsPath(ledgerAId, month.value));
     await expect(page.getByRole('heading', { level: 2, name: '統計' })).toBeVisible();
 
-    await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
+    await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
     await page.getByRole('button', { name: '上一個月' }).click();
-    await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
-    await page.getByRole('group', { name: '統計口徑' }).getByRole('button', { name: '我' }).click();
+    await page.getByRole('button', { name: '篩選', exact: true }).click();
+    const filter = page.getByRole('dialog', { name: '篩選' });
+    await filter.getByRole('checkbox', { name: '我', exact: true }).check();
+    await filter.getByRole('button', { name: '套用' }).click();
     await page.reload();
 
     async function expectSharedUrlState(target: Page): Promise<void> {
       await expect.poll(() => new URL(target.url()).searchParams.get('tab')).toBe('trend');
       await expect.poll(() => new URL(target.url()).searchParams.get('ledger')).toBe(ledgerAId);
       await expect.poll(() => new URL(target.url()).searchParams.get('month')).toBe(previousMonth);
-      await expect.poll(() => new URL(target.url()).searchParams.get('perspective')).toBe('MINE');
-      await expect.poll(() => new URL(target.url()).searchParams.get('chart')).toBe('line');
-      await expect(statsTabs(target).getByRole('button', { name: '趨勢' })).toHaveAttribute(
+      await expect.poll(() => new URL(target.url()).searchParams.get('perspective')).toBeNull();
+      await expect
+        .poll(() => new URL(target.url()).searchParams.getAll('personIds').length)
+        .toBe(1);
+      await expect.poll(() => new URL(target.url()).searchParams.get('chart')).toBeNull();
+      await expect(statsTabs(target).getByRole('button', { name: '每月收支' })).toHaveAttribute(
         'aria-pressed',
         'true',
       );
-      await expect(
-        chartSwitch(target, '趨勢圖型').getByRole('button', { name: '折線' }),
-      ).toHaveAttribute('aria-pressed', 'true');
-      await expect(
-        target.getByRole('group', { name: '統計口徑' }).getByRole('button', { name: '我' }),
-      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(target.getByRole('region', { name: '每月收支圖' })).toBeVisible();
+      await expect(target.getByRole('button', { name: '移除我', exact: true })).toBeVisible();
       await expect(target.getByText(periodLabel(previousMonth), { exact: true })).toBeVisible();
     }
 
     await expectSharedUrlState(page);
     const copiedPage = await page.context().newPage();
     try {
-      await copiedPage.goto(page.url());
+      const legacyUrl = new URL(page.url());
+      legacyUrl.searchParams.set('chart', 'table');
+      await copiedPage.goto(legacyUrl.href);
       await expectSharedUrlState(copiedPage);
+
+      const normalizedTrendUrl = copiedPage.url();
+      await copiedPage.goto('/stats?tab=cat&chart=bar');
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBeNull();
+      await expect(copiedPage.getByRole('list', { name: '支出分類清單' })).toBeVisible();
+      await copiedPage.goBack();
+      await expect(copiedPage).toHaveURL(normalizedTrendUrl);
 
       await copiedPage.goto(
         `/stats?tab=xxx&ledger=${encodeURIComponent(ledgerAId)}&month=${month.value}&perspective=xxx&chart=xxx`,
@@ -862,23 +697,15 @@ test.describe('2j 統計頁端對端', () => {
       await expect
         .poll(() => new URL(copiedPage.url()).searchParams.get('month'))
         .toBe(month.value);
-      await expect
-        .poll(() => new URL(copiedPage.url()).searchParams.get('perspective'))
-        .toBe('LEDGER');
-      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBe('donut');
-      await expect(
-        chartSwitch(copiedPage, '分類圖型').getByRole('button', { name: '圓餅' }),
-      ).toHaveAttribute('aria-pressed', 'true');
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('perspective')).toBeNull();
+      await expect.poll(() => new URL(copiedPage.url()).searchParams.get('chart')).toBeNull();
     } finally {
       await copiedPage.close();
     }
 
     await statsTabs(page).getByRole('button', { name: '分類' }).click();
     await page.getByRole('button', { name: '下一個月' }).click();
-    await page
-      .getByRole('group', { name: '統計口徑' })
-      .getByRole('button', { name: '帳本' })
-      .click();
+    await page.getByRole('button', { name: '移除我', exact: true }).click();
     await expectSummary(page, { income: '$0', expense: '$1,000', net: '-$1,000' });
 
     const ledgerSwitcher = page.getByRole('group', { name: '作用中帳本' });
@@ -892,7 +719,7 @@ test.describe('2j 統計頁端對端', () => {
     await expectSummary(page, { income: '$0', expense: '$1,000', net: '-$1,000' });
   });
 
-  test('SC-R21：390px 淺色與深色的每個分頁及圖型不橫向溢位', async ({
+  test('SC-R21：390px 淺色與深色的每個分頁都不橫向溢位', async ({
     signedInPage: page,
     userA,
     userB,
@@ -956,6 +783,14 @@ test.describe('2j 統計頁端對端', () => {
 
       const categoryList = page.getByRole('list', { name: '支出分類清單' });
       await expect(categoryList.getByRole('listitem')).toHaveCount(15);
+      const tabs = await statsTabs(page).boundingBox();
+      expect(tabs).not.toBeNull();
+      for (const name of ['收支摘要', '分類']) {
+        const card = await page.getByRole('region', { name, exact: true }).boundingBox();
+        expect(card).not.toBeNull();
+        expect(Math.abs(tabs!.x - card!.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(tabs!.x + tabs!.width - (card!.x + card!.width))).toBeLessThanOrEqual(1);
+      }
       const longCategoryButton = categoryList.getByRole('button', {
         name: new RegExp(`^${LONG_CATEGORY_NAME}，\\$123,456,789，`),
       });
@@ -981,100 +816,37 @@ test.describe('2j 統計頁端對端', () => {
 
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
-      await chartSwitch(page, '分類圖型').getByRole('button', { name: '長條' }).click();
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
+      await expectListBars(page.getByRole('list', { name: '支出分類清單' }));
 
-      await statsTabs(page).getByRole('button', { name: '趨勢' }).click();
-      await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '長條' }).click();
-      const trendBarMonths = page.getByRole('list', { name: '每月收支' });
-      await expect(trendBarMonths.getByRole('listitem')).toHaveCount(12);
-      await expectCompactMonthLabels(
-        trendBarMonths.locator('button > span:nth-of-type(2)'),
-        trendBarMonths.getByRole('button'),
-      );
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
-      await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '折線' }).click();
-      const lineChart = page.getByRole('region', { name: '趨勢折線圖' });
-      await expect(lineChart).toBeVisible();
-      const polylines = lineChart.locator('svg polyline');
-      await expect(polylines).toHaveCount(2);
-      await expect(async () => {
-        expect(
-          await polylines.evaluateAll((elements) =>
-            elements.map((element) => getComputedStyle(element).fill),
-          ),
-        ).toEqual(['none', 'none']);
-      }).toPass({ timeout: 5_000 });
-      await expect(async () => {
-        const pointFills = await lineChart
-          .locator('svg circle')
-          .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill));
-        expect(pointFills.length).toBeGreaterThan(0);
-        expect(pointFills).not.toContain('none');
-      }).toPass({ timeout: 5_000 });
-      const lineLabels = lineChart.locator('ol[aria-hidden="true"] > li');
-      const linePoints = lineChart.locator('svg circle');
-      await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 6);
-      await expectResponsiveLineMonthPositions(lineLabels, linePoints);
-      await expectMonthLabelGaps(lineLabels);
+      await statsTabs(page).getByRole('button', { name: '每月收支' }).click();
+      const trendChart = page.getByRole('region', { name: '每月收支圖' });
+      await expect(trendChart.getByRole('button')).toHaveCount(12);
+      for (const series of ['income', 'expense']) {
+        await expect(trendChart.locator('[data-series="' + series + '"]')).toHaveCount(12);
+      }
+      await expect(trendChart.locator('polyline, [data-series="net"]')).toHaveCount(0);
+      const labels = trendChart.locator('[data-month-label]');
+      await expect(labels).toHaveCount(6);
+      await expectMonthLabelGaps(labels);
       await expectNoHorizontalPageScroll(page);
       await expectStatsTouchTargets(page);
       if (theme === 'light') {
         await page.setViewportSize({ width: 1280, height: 844 });
-        await expectResponsiveLineMonthLabels(lineLabels, lineChart.locator('button'), 12);
-        await expectResponsiveLineMonthPositions(lineLabels, linePoints);
-        await page.setViewportSize({ width: 390, height: 844 });
-      }
-      await chartSwitch(page, '趨勢圖型').getByRole('button', { name: '表格' }).click();
-      const trendTable = page.getByRole('table', { name: '趨勢表格' });
-      await expect(trendTable).toBeVisible();
-      const monthCells = trendTable.getByRole('rowheader');
-      await expect(monthCells).toHaveCount(12);
-      for (const cell of await monthCells.all()) {
-        const parts = await cell.evaluate((element) =>
-          Array.from(element.children, (child) => child.textContent?.trim() ?? ''),
-        );
-        expect(parts).toHaveLength(2);
-        expect(parts[0]).toMatch(/^\d{4}年$/);
-        expect(parts[1]).toMatch(/^\d{1,2}月$/);
-        expect((await cell.innerText()).replace(/\s/g, '')).toBe(`${parts[0]}${parts[1]}`);
-      }
-      await expectTrendMonthRows(monthCells, false);
-      if (theme === 'light') {
-        await page.setViewportSize({ width: 1280, height: 844 });
-        await expectTrendMonthRows(monthCells, true);
+        await expect(labels).toHaveCount(12);
+        await expectMonthLabelGaps(labels);
         await expectNoHorizontalPageScroll(page);
         await page.setViewportSize({ width: 390, height: 844 });
       }
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
 
-      await statsTabs(page).getByRole('button', { name: '成員' }).click();
-      const members = page.getByRole('list', { name: '成員收支' });
-      const longMember = members.getByRole('listitem', {
-        name: new RegExp(`^${LONG_MEMBER_NAME}，`),
-      });
+      await expect(statsTabs(page).getByRole('button', { name: '成員' })).toHaveCount(0);
+      await page.getByRole('button', { name: '篩選', exact: true }).click();
+      const filter = page.getByRole('dialog', { name: '篩選' });
+      const longMember = filter.getByRole('checkbox', { name: LONG_MEMBER_NAME, exact: true });
       await expect(longMember).toBeVisible();
-      const longMemberText = longMember.getByText(LONG_MEMBER_NAME, { exact: true });
-      await expect(longMemberText).toBeVisible();
-      await expect(async () => {
-        const memberTextMetrics = await longMemberText.evaluate((element) => ({
-          text: element.textContent?.trim(),
-          scrollWidth: element.scrollWidth,
-          clientWidth: element.clientWidth,
-          textOverflow: getComputedStyle(element).textOverflow,
-        }));
-        expect(memberTextMetrics.text).toBe(LONG_MEMBER_NAME);
-        expect(memberTextMetrics.scrollWidth).toBeLessThanOrEqual(memberTextMetrics.clientWidth);
-        expect(memberTextMetrics.textOverflow).not.toBe('ellipsis');
-      }).toPass({ timeout: 5_000 });
       await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
-      await chartSwitch(page, '成員圖型').getByRole('button', { name: '圓餅' }).click();
-      await expectNoHorizontalPageScroll(page);
-      await expectStatsTouchTargets(page);
+      await page.keyboard.press('Escape');
+      await expect(filter).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '篩選', exact: true })).toBeFocused();
     }
   });
 });

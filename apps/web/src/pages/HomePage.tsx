@@ -34,6 +34,7 @@ import { useLedgerGroups } from '../features/ledger-people/use-ledger-pointers';
 import { AuthDialog, type AuthDialogMode } from '../features/auth/AuthDialog';
 import { useAuth } from '../features/auth/use-auth';
 import { useCurrentUser } from '../features/auth/use-current-user';
+import { useCategories } from '../features/categories/use-categories';
 import { LedgerSwitcher } from '../features/ledgers/LedgerSwitcher';
 import { useActiveLedger } from '../features/ledgers/use-active-ledger';
 import { HomeLayoutRenderer, type HomeCardContents } from '../features/home/HomeLayoutRenderer';
@@ -44,6 +45,7 @@ import currencyStyles from '../features/home/HomeCurrency.module.css';
 import { HomeTrendHeader, type HomeTrendMetric } from '../features/statistics/HomeTrendHeader';
 import { HomeCategorySection } from '../features/statistics/HomeCategorySection';
 import { useChartTheme } from '../features/statistics/charts/use-chart-theme';
+import { createCategoryGroupColor } from '../features/statistics/charts/chart-colors';
 import { currentTaiwanMonthRange } from '../features/statistics/stats-url';
 import { useBalanceTrend } from '../features/statistics/use-balance-trend';
 import { useLedgerStatistics } from '../features/statistics/use-ledger-statistics';
@@ -91,7 +93,9 @@ export default function HomePage() {
       <section className={`${styles.card} ${styles.guest}`}>
         <p className={styles.note}>登入後即可開始記帳，並在這裡看到你的收支。</p>
         <div className={styles.actions}>
-          <Button onClick={() => setAuthDialog('login')}>登入</Button>
+          <Button variant="secondary" onClick={() => setAuthDialog('login')}>
+            登入
+          </Button>
           <Button variant="secondary" onClick={() => setAuthDialog('register')}>
             註冊
           </Button>
@@ -244,6 +248,7 @@ function Dashboard({
   const statistics = useLedgerStatistics(ledger.id, { ...period, perspective: 'LEDGER' });
   const { mode } = useHomeCategoryColors();
   const chartTheme = useChartTheme();
+  const categories = useCategories(ledger.id);
   const [panelTargetState, setPanelTargetState] = useState(() => ({
     ledgerId: ledger.id,
     target: targetForPendingAction(pendingMarkedAction, ledger.id),
@@ -378,6 +383,12 @@ function Dashboard({
 
   const statisticsData = statistics.data;
   const statisticsHref = `/stats?tab=cat&ledger=${encodeURIComponent(ledger.id)}&month=${period.from.slice(0, 7)}`;
+  const categoryColorOf = createCategoryGroupColor(
+    categories.data,
+    'EXPENSE',
+    statisticsData?.expenseGroups ?? [],
+    chartTheme,
+  );
   const categoryContent =
     statistics.error || (statisticsData && (!statisticsData.ledger || !statisticsData.mine)) ? (
       <p className={styles.status} role="status">
@@ -391,7 +402,7 @@ function Dashboard({
       <HomeCategorySection
         expenseGroups={statisticsData.expenseGroups}
         colorOf={(group: StatisticsGroup, isFirstGroup: boolean) =>
-          homeCategoryColor(group, mode, chartTheme, isFirstGroup)
+          homeCategoryColor(group, mode, chartTheme, isFirstGroup, categoryColorOf(group))
         }
       />
     );
@@ -490,7 +501,11 @@ function Dashboard({
                 <LedgerSwitcher />
                 {homeLayout.isEditing ? (
                   <>
-                    <Button disabled={homeLayout.isSaving} onClick={homeLayout.finishEditing}>
+                    <Button
+                      variant="secondary"
+                      disabled={homeLayout.isSaving}
+                      onClick={homeLayout.finishEditing}
+                    >
                       {homeLayout.isSaving ? '儲存中…' : '完成'}
                     </Button>
                     <Button

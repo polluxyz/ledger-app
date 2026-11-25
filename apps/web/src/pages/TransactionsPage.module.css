@@ -9,37 +9,13 @@
  * 「同一條裡只能選一個」，長得一致才認得是同一種控制項。
  */
 .viewSwitch {
+  composes: group from '../components/SegmentedControl.module.css';
   display: inline-flex;
   margin-bottom: var(--space-md);
-  padding: 3px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background-color: var(--color-fill);
 }
 
 .viewSwitchButton {
-  height: 2rem;
-  padding: 0 var(--space-md);
-  border: none;
-  border-radius: calc(var(--radius) - 2px);
-  background: none;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--motion-fade) var(--motion-ease);
-}
-
-.viewSwitchButton:hover {
-  color: var(--color-text);
-}
-
-/* 選中的檢視站上主要色方塊，字色換成 primary 的對比色。 */
-.viewSwitchButton[aria-pressed='true'] {
-  background-color: var(--color-primary);
-  color: var(--color-on-primary);
+  min-width: 0;
 }
 
 /*

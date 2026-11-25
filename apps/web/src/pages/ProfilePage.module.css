@@ -1,6 +1,5 @@
 /*
  * 個人資料頁：管理頁，與所有頁面同一個內容寬度、置中（spec 2i §4.8）。
- * 內容只有一張窄卡片——這一頁只能改一個欄位，卡片再寬也只是拉長視線。
  */
 .page {
   composes: content from '../components/PageContent.module.css';
@@ -8,22 +7,17 @@
 
 /* 唯讀資訊（載入中、載入失敗）的共用樣式。 */
 .status {
+  composes: surface from '../components/CardSurface.module.css';
   padding: var(--space-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
 
 /* 標準卡片寫法，與帳本明細的基本資訊卡同款。 */
 .card {
-  max-width: 32rem;
+  composes: surface from '../components/CardSurface.module.css';
+  min-width: 0;
   padding: var(--space-lg);
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
 }
 
 .emailLabel {
@@ -34,6 +28,7 @@
 .emailValue {
   margin: var(--space-xs) 0 0;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 /* 「Email 不可變更」這類說明。放在值的下面，不與值混在同一行。 */
@@ -45,12 +40,43 @@
   font-weight: 400;
 }
 
-/*
- * 分隔線把「看的」與「改的」分成兩段。同一張卡片裡放兩種性質的內容，
- * 沒有這條線的話使用者會以為 Email 也是表單的一部分。
- */
-.form {
-  margin-top: var(--space-lg);
-  padding-top: var(--space-lg);
+.layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-md);
+}
+
+.actions {
   border-top: 1px solid var(--color-border);
+  padding-top: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.saved {
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+}
+
+.saved:not(:empty) {
+  animation: saved-fade-in var(--motion-fade) var(--motion-ease);
+}
+
+@keyframes saved-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.emailArt {
+  float: inline-end;
+  margin-inline-start: var(--space-sm);
 }

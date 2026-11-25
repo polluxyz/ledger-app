@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
-import styles from './AuthDialog.module.css';
+import styles from './AuthForm.module.css';
 
 export type AuthDialogMode = 'login' | 'register';
 

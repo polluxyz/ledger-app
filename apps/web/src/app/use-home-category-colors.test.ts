@@ -1,7 +1,8 @@
 import type { StatisticsGroup } from '@ledger/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getStatisticsGroupColor,
+  CATEGORY_CHART_COLORS,
+  getChartColorForId,
   NEUTRAL_CHART_COLORS,
 } from '../features/statistics/charts/chart-colors';
 import {
@@ -120,7 +121,7 @@ describe('home category colors', () => {
     const neutral = NEUTRAL_CHART_COLORS[theme];
     const expectedCategory =
       mode === 'color'
-        ? getStatisticsGroupColor(category, theme)
+        ? getChartColorForId(category.category!.id, theme)
         : mode === 'gold'
           ? 'var(--color-accent)'
           : neutral;
@@ -128,6 +129,15 @@ describe('home category colors', () => {
     expect(homeCategoryColor(category, mode, theme, true)).toBe(expectedCategory);
     expect(homeCategoryColor(fixedGroup, mode, theme, true)).toBe(neutral);
     expect(homeCategoryColor(uncategorized, mode, theme, true)).toBe(neutral);
+  });
+
+  it('uses the assigned ledger color, including neutral gray while categories are loading', () => {
+    const color = CATEGORY_CHART_COLORS.dark[0]!;
+    const neutral = NEUTRAL_CHART_COLORS.dark;
+
+    expect(homeCategoryColor(category, 'color', 'dark', true, color)).toBe(color);
+    expect(homeCategoryColor(category, 'color', 'dark', true, neutral)).toBe(neutral);
+    expect(homeCategoryColor(category, 'gray', 'dark', true, color)).toBe(neutral);
   });
 
   it.each(['light', 'dark'] as const)(

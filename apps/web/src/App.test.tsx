@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 /**
@@ -10,7 +10,11 @@ describe('App', () => {
   beforeEach(() => {
     localStorage.clear();
     window.history.pushState({}, '', '/');
+    // 單元測試使用假 token，避免本機後端回 401 使登入狀態失效。
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('測試不連線')));
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('shows the signed-out preview on the public home page', async () => {
     render(<App />);

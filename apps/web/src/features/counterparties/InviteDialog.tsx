@@ -134,7 +134,7 @@ function InviteDialogForm({ onClose }: Pick<InviteDialogProps, 'onClose'>) {
               className={styles.copyButton}
               onClick={() => void copyInviteLink()}
             >
-              {copied ? '已複製' : '複製'}
+              {copied ? <span className={styles.copied}>已複製</span> : '複製'}
             </Button>
           </div>
         </div>

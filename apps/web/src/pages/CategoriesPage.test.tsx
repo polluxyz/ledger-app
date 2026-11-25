@@ -9,6 +9,7 @@ import { RightPanelProvider } from '../app/RightPanelProvider';
 import { AuthProvider } from '../features/auth/AuthProvider';
 import { ActiveLedgerProvider } from '../features/ledgers/ActiveLedgerProvider';
 import CategoriesPage from './CategoriesPage';
+import buttonStyles from '../components/Button.module.css';
 
 /**
  * 分類管理頁的行為：兩組清單、新增／改名／刪除的資料流、帳本選擇與網址的同步、
@@ -307,6 +308,8 @@ describe('Categories page', () => {
 
     const expense = await screen.findByRole('button', { name: '新增支出分類' });
     const income = screen.getByRole('button', { name: '新增收入分類' });
+    expect(expense).toHaveClass(buttonStyles.primary!);
+    expect(income).toHaveClass(buttonStyles.primary!);
 
     await user.click(expense);
     await user.click(income);

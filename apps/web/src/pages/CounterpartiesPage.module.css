@@ -11,7 +11,7 @@
   min-width: 0;
   max-width: 32rem;
   box-sizing: border-box;
-  height: 2.25rem;
+  height: var(--control-height);
   padding: 0 var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -37,6 +37,7 @@
   }
 
   .search {
+    flex: none;
     max-width: none;
   }
 

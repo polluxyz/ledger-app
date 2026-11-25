@@ -23,6 +23,9 @@ describe('CategoryLegendList', () => {
     render(<CategoryLegendList direction="expense" items={items} />);
 
     expect(screen.getAllByRole('listitem')).toHaveLength(17);
+    const bars = screen.getAllByTestId('statistics-list-bar');
+    expect(bars).toHaveLength(17);
+    expect(bars[0]).toHaveStyle({ width: '100%' });
     expect(
       screen.getByText('這是一個很長的分類名稱，必須完整換行顯示而不能使用省略號'),
     ).toBeInTheDocument();

@@ -1,15 +1,10 @@
 /*
- * 成員清單：一張卡片、一列一人。左邊是名字、虛擬成員標籤與指向，右邊是角色或管理操作。
+ * 成員清單：一列一人。左邊是名字、虛擬成員標籤與指向，右邊是角色或管理操作。
  */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: var(--card-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
 }
 
 .item + .item {
@@ -122,7 +117,8 @@
 .footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
 }
 
 /* 移除／退出是危險方向：文字用 danger，框用半透明的 danger 軟化。 */
@@ -137,4 +133,11 @@
   padding: 0 var(--space-md) var(--space-md);
   color: var(--color-danger);
   font-size: var(--text-sm);
+}
+
+@media (max-width: 900px) {
+  .role,
+  .action {
+    min-height: var(--control-height);
+  }
 }

@@ -5,6 +5,7 @@ import { FormError } from '../components/FormError';
 import { PageHeader } from '../components/PageHeader';
 import { TextField } from '../components/TextField';
 import { useCurrentUser, useUpdateProfile } from '../features/auth/use-current-user';
+import { LineArt } from '../components/LineArt';
 import styles from './ProfilePage.module.css';
 
 /**
@@ -47,28 +48,32 @@ export default function ProfilePage() {
 function ProfileForm({ user }: { user: AuthUser }) {
   const updateProfile = useUpdateProfile();
   const [name, setName] = useState(user.name);
+  const [savedName, setSavedName] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     // 只送 name——多送任何欄位都會被後端退成 400（見 useUpdateProfile 的說明）。
-    updateProfile.mutate({ name });
+    setSavedName(null);
+    updateProfile.mutate({ name }, { onSuccess: () => setSavedName(name) });
   }
 
   return (
     <section className={styles.page}>
       <PageHeader title="個人資料" />
 
-      {/* 一張卡片裝完這一頁：上半是看的（Email），分隔線以下是改的（顯示名稱）。 */}
-      <div className={styles.card}>
-        <div>
+      <div className={styles.layout}>
+        <section className={styles.card} aria-label="Email">
+          <span className={styles.emailArt}>
+            <LineArt subject="ledger" placement="card" />
+          </span>
           <span className={styles.emailLabel}>Email</span>
           <p className={styles.emailValue}>
             {user.email}
             <span className={styles.emailNote}>Email 不可變更</span>
           </p>
-        </div>
+        </section>
 
-        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+        <form className={styles.card} onSubmit={handleSubmit} noValidate>
           <FormError error={updateProfile.error} />
 
           <TextField
@@ -76,13 +81,21 @@ function ProfileForm({ user }: { user: AuthUser }) {
             value={name}
             required
             maxLength={100}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value);
+              setSavedName(null);
+            }}
           />
 
           {/* 失敗時什麼都不清、不重設——使用者剛打的字不能消失。 */}
-          <Button type="submit" disabled={updateProfile.isPending}>
-            {updateProfile.isPending ? '儲存中…' : '儲存'}
-          </Button>
+          <div className={styles.actions}>
+            <Button type="submit" disabled={updateProfile.isPending}>
+              {updateProfile.isPending ? '儲存中…' : '儲存'}
+            </Button>
+            <span className={styles.saved} role="status">
+              {savedName === name && '已儲存'}
+            </span>
+          </div>
         </form>
       </div>
     </section>

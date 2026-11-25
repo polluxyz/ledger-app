@@ -9,6 +9,7 @@ import { useLedgerGroups } from '../ledger-people/use-ledger-pointers';
 import { useCancelLinkInvite, useOutgoingInvites } from '../linking/use-linking';
 import { LedgerGroupSection } from './LedgerGroupSection';
 import { PointerDialog, type PointerDialogTarget } from './PointerDialog';
+import { LineArt } from '../../components/LineArt';
 import styles from './CounterpartyDirectory.module.css';
 
 const COUNTERPARTY_PAGE_SIZE = 100;
@@ -113,7 +114,12 @@ export function CounterpartyDirectory({ q, onSelectCounterparty }: CounterpartyD
         !counterparties.error &&
         items.length === 0 &&
         !ledgerGroups.isLoading &&
-        (ledgerGroups.data?.length ?? 0) === 0 && <p className={styles.empty}>還沒有對象</p>}
+        (ledgerGroups.data?.length ?? 0) === 0 && (
+          <p className={styles.empty}>
+            <LineArt subject="person" placement="empty" />
+            還沒有對象
+          </p>
+        )}
 
       {(outgoingInvites.data?.length ?? 0) > 0 && (
         <section className={styles.invites} aria-labelledby="outgoing-invites-title">

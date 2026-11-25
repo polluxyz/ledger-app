@@ -43,6 +43,54 @@ describe('Statistics SQL boundaries', () => {
     expect(statisticsPeopleSql(scope).text).not.toContain('WHERE true AND "isMe"');
   });
 
+  it.each([statisticsGroupsSql, statisticsTrendSql])(
+    'unions repeated filters and intersects accounts, attributed members, and categories (%p)',
+    (build) => {
+      const personIds = ['me', 'guest'];
+      const categoryIds = ['food', 'travel'];
+      const accountIds = ['cash', 'card'];
+      const query = build(scope, 'LEDGER', {
+        personIds,
+        categoryIds,
+        accountIds,
+        includeUncategorized: true,
+        includeOtherAccounts: true,
+      });
+      expect(query.sql).toContain('a."userId" = ?');
+      expect(query.sql).toContain('a."id" IN (?,?)');
+      expect(query.sql).toContain('OR (? AND a."id" IS NULL)');
+      expect(query.sql).toContain('FROM attribution WHERE true AND "personId" IN (?,?) AND (');
+      expect(query.sql).toContain(
+        `(kind = 'CATEGORY' AND "categoryId" IN (?,?)) OR (? AND kind = 'UNCATEGORIZED')`,
+      );
+      expect(query.values).toEqual(
+        expect.arrayContaining([...personIds, ...categoryIds, ...accountIds, true]),
+      );
+    },
+  );
+
+  it.each([statisticsGroupsSql, statisticsTrendSql])(
+    'limits active filters to the chosen values and leaves disabled fields unchanged (%p)',
+    (build) => {
+      const disabled = build(scope, 'LEDGER', {
+        includeUncategorized: false,
+        includeOtherAccounts: false,
+      });
+      expect(disabled).toEqual(build(scope));
+      const single = build(scope, 'MINE', { categoryIds: ['food'], accountIds: ['cash'] });
+      expect(single.sql).toContain('a."id" IN (?)');
+      expect(single.sql).toContain('AND "isMe" AND (');
+      expect(single.sql).toContain(`kind = 'CATEGORY' AND "categoryId" IN (?)`);
+      expect(single.values.filter((value) => value === false)).toHaveLength(2);
+      const special = build(scope, 'LEDGER', {
+        includeUncategorized: true,
+        includeOtherAccounts: true,
+      });
+      expect(special.sql).toContain("false OR (? AND kind = 'UNCATEGORIZED')");
+      expect(special.sql).toMatch(/false\s+OR \(\? AND a\."id" IS NULL\)/);
+    },
+  );
+
   it('preserves safe limits and computes a negative net exactly', () => {
     expect(safeStatisticsInteger(BigInt(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
     expect(safeStatisticsInteger(BigInt(Number.MIN_SAFE_INTEGER))).toBe(Number.MIN_SAFE_INTEGER);
