@@ -9,6 +9,7 @@ interface StatisticsTrendChartProps {
   months: readonly StatisticsTrendMonth[];
   averageIncome: number | null;
   averageExpense: number | null;
+  averageMonthCount: number;
   selectedMonth: string;
   showSelectedDetails: boolean;
   onSelectMonth: (month: string) => void;
@@ -27,6 +28,7 @@ export function StatisticsTrendChart({
   months,
   averageIncome,
   averageExpense,
+  averageMonthCount,
   selectedMonth,
   showSelectedDetails,
   onSelectMonth,
@@ -85,7 +87,7 @@ export function StatisticsTrendChart({
         {averages.map(({ field, label, className, amount }) => (
           <li key={`average-${field}`}>
             <span className={`${className} ${styles.averageKey}`} aria-hidden="true" />
-            {`${label}月均 ${formatMoney(amount)}`}
+            {`${label}已結 ${averageMonthCount} 月均 ${formatMoney(amount)}`}
           </li>
         ))}
       </ul>

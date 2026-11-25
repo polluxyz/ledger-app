@@ -578,8 +578,8 @@ describe('StatsPage', () => {
       'true',
     );
     expect(screen.getByTestId('location')).toHaveTextContent('tab=trend');
-    expect(chart.getByText('收入月均 $5,327')).toBeVisible();
-    expect(chart.getByText('支出月均 $2,345.56')).toBeVisible();
+    expect(chart.getByText('收入已結 3 月均 $5,327')).toBeVisible();
+    expect(chart.getByText('支出已結 3 月均 $2,345.56')).toBeVisible();
   });
 
   const familyUrl = '/stats?tab=cat&ledger=family&month=2026-10';

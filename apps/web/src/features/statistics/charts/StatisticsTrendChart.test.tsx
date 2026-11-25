@@ -17,6 +17,7 @@ describe('StatisticsTrendChart', () => {
     months,
     averageIncome: null,
     averageExpense: null,
+    averageMonthCount: 0,
     selectedMonth: '2026-12',
     showSelectedDetails: false,
     onSelectMonth: vi.fn(),
@@ -40,7 +41,12 @@ describe('StatisticsTrendChart', () => {
 
   it('依後端金額繪製兩條月平均線，並讀出金額', () => {
     const { container } = render(
-      <StatisticsTrendChart {...props} averageIncome={6000} averageExpense={20000} />,
+      <StatisticsTrendChart
+        {...props}
+        averageIncome={6000}
+        averageExpense={20000}
+        averageMonthCount={3}
+      />,
     );
     const zero = coordinate(container, '[data-trend-zero]', 'y1');
     const incomeY = coordinate(container, '[data-series="income"]', 'y');
@@ -51,8 +57,8 @@ describe('StatisticsTrendChart', () => {
     expect(coordinate(container, '[data-average="expense"]', 'y1')).toBeCloseTo(
       zero + expenseHeight / 2,
     );
-    expect(screen.getByText('收入月均 $60')).toBeVisible();
-    expect(screen.getByText('支出月均 $200')).toBeVisible();
+    expect(screen.getByText('收入已結 3 月均 $60')).toBeVisible();
+    expect(screen.getByText('支出已結 3 月均 $200')).toBeVisible();
   });
 
   it('兩個月平均為 null 時，只列收入與支出', () => {
@@ -67,14 +73,15 @@ describe('StatisticsTrendChart', () => {
   });
 
   it.each([
-    [null, 40000, 'expense', '支出月均 $400'],
-    [0, null, 'income', '收入月均 $0'],
+    [null, 40000, 'expense', '支出已結 2 月均 $400'],
+    [0, null, 'income', '收入已結 2 月均 $0'],
   ] as const)('只畫有值的月平均線（%s、%s）', (averageIncome, averageExpense, field, label) => {
     const { container } = render(
       <StatisticsTrendChart
         {...props}
         averageIncome={averageIncome}
         averageExpense={averageExpense}
+        averageMonthCount={2}
       />,
     );
     expect(container.querySelectorAll('[data-average]')).toHaveLength(1);

@@ -78,6 +78,9 @@
 - [x] **T21 協調者驗收**：讀完整 diff；重跑 typecheck、test；逐張核對截圖；更新 PR 說明；CI 全綠（含 web e2e）。
   - 實測：重讀 API 與 shared 全部改動；lint、typecheck 通過；shared 161、API 1,269、web 1,343 全過；106 個檔案格式檢查通過。暫時 worktree 實測第 8→5 組倒序撤回通過。PR #251 標題與說明已更新；CI 於 `dfcaab1` 全綠（單元、API E2E、Web E2E）。
   - 驗收：plan「驗證結果」補第 2 輪；PR 未合併。
+- [x] **T22 平均線標示**（demo 回饋，決策 433）：每月收支圖例改「收入／支出已結 N 月均 $X」，N 取後端 `averageMonthCount`；只改網頁。
+  - 驗收：SC-O20；typecheck、lint、web 單元、改動檔格式檢查。
+  - 實測：Codex worker 改 4 個網頁檔；協調者重跑 typecheck、lint 通過，web 141 檔 1,343 項全過，改動檔格式檢查通過。
 
 ## demo
 
