@@ -440,9 +440,6 @@ export default function StatsPage() {
               <StatisticsTrendChart
                 key={periodKey}
                 months={trend.data.months}
-                averageIncome={trend.data.averageIncome}
-                averageExpense={trend.data.averageExpense}
-                averageMonthCount={trend.data.averageMonthCount}
                 selectedMonth={endMonth}
                 showSelectedDetails={state.period.mode !== 'month'}
                 onSelectMonth={selectTrendMonth}

@@ -270,12 +270,14 @@ describe('Statistics endpoints (e2e)', () => {
     for (const perspective of ['LEDGER', 'MINE'] as const) {
       const t = await trend(examples.homeLedgerId, perspective);
       expect(t.months).toHaveLength(12);
-      expect(t.months[0]).toEqual({ month: '2025-11', income: 0, expense: 0, net: 0 });
-      expect(t.months.at(-1)).toEqual({
+      expect(t.months[0]).toMatchObject({ month: '2025-11', income: 0, expense: 0, net: 0 });
+      expect(t.months.at(-1)).toMatchObject({
         month: '2026-10',
         ...(perspective === 'LEDGER' ? october.ledger : october.mine),
       });
-      expect((await trend(examples.homeLedgerId, perspective, '2026-11', 1)).months[0]).toEqual({
+      expect(
+        (await trend(examples.homeLedgerId, perspective, '2026-11', 1)).months[0],
+      ).toMatchObject({
         month: '2026-11',
         ...(perspective === 'LEDGER' ? november.ledger : november.mine),
       });
@@ -340,7 +342,7 @@ describe('Statistics endpoints (e2e)', () => {
           from: '2027-01-01',
           to: '2027-01-31',
         });
-        expect((await trend(ledgerId, perspective, '2027-01', 1)).months[0]).toEqual({
+        expect((await trend(ledgerId, perspective, '2027-01', 1)).months[0]).toMatchObject({
           month: '2027-01',
           ...(perspective === 'LEDGER' ? body.ledger : body.mine),
         });
@@ -463,7 +465,7 @@ describe('Statistics endpoints (e2e)', () => {
         mine: original.mine,
         people: original.people,
       });
-      expect((await trend(homeLedgerId, 'LEDGER', '2026-10', 1, filters)).months).toEqual([
+      expect((await trend(homeLedgerId, 'LEDGER', '2026-10', 1, filters)).months).toMatchObject([
         { month: '2026-10', ...expected },
       ]);
     }
@@ -595,7 +597,15 @@ describe('Statistics endpoints (e2e)', () => {
       months: [
         { month: '2023-12', income: 0, expense: 0, net: 0 },
         { month: '2024-01', income: 0, expense: 0, net: 0 },
-        { month: '2024-02', income: 3, expense: 1, net: 2 },
+        {
+          month: '2024-02',
+          income: 3,
+          expense: 1,
+          net: 2,
+          movingAverageIncome: 2,
+          movingAverageExpense: 1,
+          movingAverageMonthCount: 2,
+        },
       ],
     });
     expect(await trend(dailyLedgerId, 'LEDGER', '2023-12', 1, filter)).toMatchObject({

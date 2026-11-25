@@ -41,19 +41,31 @@
   width: 1rem;
   height: 0;
   background: transparent;
-  border-top: 2px dashed currentColor;
+  border-top: 2px solid currentColor;
   border-radius: 0;
+}
+
+.averageOutline {
+  fill: none;
+  stroke: var(--color-surface);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .averageLine {
   pointer-events: none;
   stroke: currentColor;
   stroke-width: 2;
-  stroke-dasharray: 5 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
 }
 
-.averageLine.expense {
-  stroke-dashoffset: 7;
+.averagePoint {
+  stroke: var(--color-surface);
+  stroke-width: 1;
+  fill: currentColor;
 }
 
 .detail {

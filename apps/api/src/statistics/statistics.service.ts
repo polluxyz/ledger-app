@@ -118,7 +118,10 @@ export class StatisticsService {
     query: GetStatisticsTrendDto,
   ): Promise<StatisticsTrend> {
     const months = this.validatePeriod(() => taipeiMonths(query.endMonth, query.months));
-    const start = taipeiMonthPeriod(months[0]!).start;
+    const [year, monthNumber] = months[0]!.split('-').map(Number) as [number, number];
+    const precedingCount = Math.min(5, (year - 1) * 12 + monthNumber - 1);
+    const windowMonths = [...taipeiMonths(months[0]!, precedingCount + 1).slice(0, -1), ...months];
+    const start = taipeiMonthPeriod(windowMonths[0]!).start;
     const end = taipeiMonthPeriod(query.endMonth).end;
     return this.withSafeAmounts(() =>
       this.prisma.$transaction(
@@ -136,10 +139,11 @@ export class StatisticsService {
           });
           const byMonth = new Map(rows.map((row) => [row.month, row]));
           const now = Date.now();
-          const eligible = months.filter((month) => {
+          const isEligible = (month: string) => {
             const monthEnd = taipeiMonthPeriod(month).end.getTime();
             return first !== null && first.date.getTime() < monthEnd && monthEnd <= now;
-          });
+          };
+          const eligible = months.filter(isEligible);
           let income = 0n;
           let expense = 0n;
           for (const month of eligible) {
@@ -149,14 +153,30 @@ export class StatisticsService {
           }
           const count = BigInt(eligible.length);
           // 非負整數以加半個分母再整除，恰好半分時進位。
-          const average = (sum: bigint) =>
-            count === 0n ? null : safeStatisticsInteger((sum + count / 2n) / count);
+          const average = (sum: bigint, denominator = count) =>
+            denominator === 0n
+              ? null
+              : safeStatisticsInteger((sum + denominator / 2n) / denominator);
           return {
             ledgerId,
-            months: months.map((month) => ({
-              month,
-              ...statisticsTotalsFromRow(byMonth.get(month) ?? EMPTY_TOTALS),
-            })),
+            months: months.map((month, index) => {
+              const endIndex = index + precedingCount;
+              const window = isEligible(month)
+                ? windowMonths.slice(Math.max(0, endIndex - 5), endIndex + 1).filter(isEligible)
+                : [];
+              const total = window.reduce((sum, key) => {
+                const row = byMonth.get(key) ?? EMPTY_TOTALS;
+                return { income: sum.income + row.income, expense: sum.expense + row.expense };
+              }, EMPTY_TOTALS);
+              const denominator = BigInt(window.length);
+              return {
+                month,
+                ...statisticsTotalsFromRow(byMonth.get(month) ?? EMPTY_TOTALS),
+                movingAverageIncome: average(total.income, denominator),
+                movingAverageExpense: average(total.expense, denominator),
+                movingAverageMonthCount: window.length,
+              };
+            }),
             averageIncome: average(income),
             averageExpense: average(expense),
             averageMonthCount: eligible.length,

@@ -103,6 +103,12 @@ export interface GetLedgerStatisticsQuery extends StatisticsFilters {
 
 /** 趨勢的一個月。 */
 export interface StatisticsTrendMonth extends StatisticsTotals {
+  /** 近 6 個合格月平均收入（分），不合格月為 null。 */
+  movingAverageIncome: Cents | null;
+  /** 近 6 個合格月平均支出（分），不合格月為 null。 */
+  movingAverageExpense: Cents | null;
+  /** 窗口內合格月數，0～6。 */
+  movingAverageMonthCount: number;
   /** `YYYY-MM`，台灣時間的完整曆月（決策 264）。 */
   month: string;
 }

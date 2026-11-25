@@ -192,6 +192,9 @@ describe('StatsPage', () => {
             income: 0,
             expense: 0,
             net: 0,
+            movingAverageIncome: null,
+            movingAverageExpense: null,
+            movingAverageMonthCount: 0,
           };
         }),
       } satisfies StatisticsTrend);
@@ -568,7 +571,17 @@ describe('StatsPage', () => {
       averageIncome: 532700,
       averageExpense: 234556,
       averageMonthCount: 3,
-      months: [{ month: '2026-07', income: 120000, expense: 80000, net: 40000 }],
+      months: [
+        {
+          month: '2026-07',
+          income: 120000,
+          expense: 80000,
+          net: 40000,
+          movingAverageIncome: 532700,
+          movingAverageExpense: 234556,
+          movingAverageMonthCount: 3,
+        },
+      ],
     });
     renderPage('/stats?tab=trend&ledger=family&month=2026-07');
 
@@ -578,8 +591,8 @@ describe('StatsPage', () => {
       'true',
     );
     expect(screen.getByTestId('location')).toHaveTextContent('tab=trend');
-    expect(chart.getByText('收入已結 3 月均 $5,327')).toBeVisible();
-    expect(chart.getByText('支出已結 3 月均 $2,345.56')).toBeVisible();
+    expect(chart.getByText('收入近 6 月均')).toBeVisible();
+    expect(chart.getByText('支出近 6 月均')).toBeVisible();
   });
 
   const familyUrl = '/stats?tab=cat&ledger=family&month=2026-10';

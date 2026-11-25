@@ -194,6 +194,20 @@ describe('StatisticsService', () => {
       const query = Object.assign(trendQuery(), { months: 4, accountIds: ['cash'] });
       const result = await service.getTrend('me', 'ledger', query);
       expect(result).toMatchObject({ averageIncome: 2, averageExpense: 1, averageMonthCount: 2 });
+      expect(
+        result.months.map(
+          ({ movingAverageIncome, movingAverageExpense, movingAverageMonthCount }) => [
+            movingAverageIncome,
+            movingAverageExpense,
+            movingAverageMonthCount,
+          ],
+        ),
+      ).toEqual([
+        [null, null, 0],
+        [3, 1, 1],
+        [2, 1, 2],
+        [null, null, 0],
+      ]);
       expect(result.months.map(({ income, expense }) => [income, expense])).toEqual([
         [0, 0],
         [3, 1],
@@ -211,6 +225,59 @@ describe('StatisticsService', () => {
         averageExpense: 67,
         averageMonthCount: 3,
       });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('使用回應起點之前的月份，窗口逐步長到 6 個月後滑動', async () => {
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-01T00:00:00Z'));
+    tx.transaction.findFirst.mockResolvedValue({ date: new Date('2026-03-01T00:00:00Z') });
+    tx.$queryRaw.mockResolvedValue([
+      { month: '2026-03', income: 12n, expense: 6n },
+      { month: '2026-09', income: 30n, expense: 18n },
+    ]);
+    try {
+      const result = await service.getTrend(
+        'me',
+        'ledger',
+        Object.assign(trendQuery(), { months: 7 }),
+      );
+      expect(
+        result.months.map(
+          ({ movingAverageIncome, movingAverageExpense, movingAverageMonthCount }) => [
+            movingAverageIncome,
+            movingAverageExpense,
+            movingAverageMonthCount,
+          ],
+        ),
+      ).toEqual([
+        [6, 3, 2],
+        [4, 2, 3],
+        [3, 2, 4],
+        [2, 1, 5],
+        [2, 1, 6],
+        [5, 3, 6],
+        [5, 3, 6],
+      ]);
+      expect(result).toMatchObject({ averageIncome: 4, averageExpense: 3, averageMonthCount: 7 });
+      const [[sql]] = tx.$queryRaw.mock.calls as [[Prisma.Sql]];
+      expect(sql.values).toContainEqual(new Date('2025-10-31T16:00:00Z'));
+      tx.account.count.mockResolvedValue(1);
+      tx.$queryRaw.mockResolvedValue([{ month: '2026-03', income: 6n, expense: 3n }]);
+      const filtered = await service.getTrend(
+        'me',
+        'ledger',
+        Object.assign(trendQuery(), { months: 7, accountIds: ['cash'] }),
+      );
+      expect(filtered.months[0]).toMatchObject({
+        movingAverageIncome: 3,
+        movingAverageExpense: 2,
+        movingAverageMonthCount: 2,
+      });
+      expect(filtered.months.map((month) => month.movingAverageMonthCount)).toEqual([
+        2, 3, 4, 5, 6, 6, 6,
+      ]);
     } finally {
       clock.mockRestore();
     }

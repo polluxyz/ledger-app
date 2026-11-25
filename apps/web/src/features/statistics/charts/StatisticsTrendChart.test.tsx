@@ -9,15 +9,15 @@ const months = Array.from({ length: 12 }, (_, index) => ({
   income: 12000,
   expense: 40000,
   net: -31050,
+  movingAverageIncome: null as number | null,
+  movingAverageExpense: null as number | null,
+  movingAverageMonthCount: 0,
 }));
 
 /** 用固定金額核對柱子與平均線位置，再模擬鍵盤與滑鼠操作月份。 */
 describe('StatisticsTrendChart', () => {
   const props = {
     months,
-    averageIncome: null,
-    averageExpense: null,
-    averageMonthCount: 0,
     selectedMonth: '2026-12',
     showSelectedDetails: false,
     onSelectMonth: vi.fn(),
@@ -39,29 +39,43 @@ describe('StatisticsTrendChart', () => {
     expect(container.querySelector('polyline, [data-series="net"]')).toBeNull();
   });
 
-  it('依後端金額繪製兩條月平均線，並讀出金額', () => {
+  it('依後端金額繪製折線點，空白月斷開，並讀出實際月數', () => {
     const { container } = render(
       <StatisticsTrendChart
         {...props}
-        averageIncome={6000}
-        averageExpense={20000}
-        averageMonthCount={3}
+        showSelectedDetails
+        months={months.map((month, index) => ({
+          ...month,
+          movingAverageIncome: index === 5 ? null : 6000,
+          movingAverageExpense: index === 5 ? null : 20000,
+          movingAverageMonthCount: index === 5 ? 0 : 3,
+        }))}
       />,
     );
     const zero = coordinate(container, '[data-trend-zero]', 'y1');
     const incomeY = coordinate(container, '[data-series="income"]', 'y');
     const expenseHeight = coordinate(container, '[data-series="expense"]', 'height');
-    expect(coordinate(container, '[data-average="income"]', 'y1')).toBeCloseTo(
+    expect(coordinate(container, '[data-average="income"] circle', 'cy')).toBeCloseTo(
       (zero + incomeY) / 2,
     );
-    expect(coordinate(container, '[data-average="expense"]', 'y1')).toBeCloseTo(
+    expect(coordinate(container, '[data-average="expense"] circle', 'cy')).toBeCloseTo(
       zero + expenseHeight / 2,
     );
-    expect(screen.getByText('收入已結 3 月均 $60')).toBeVisible();
-    expect(screen.getByText('支出已結 3 月均 $200')).toBeVisible();
+    expect(container.querySelectorAll('[data-average-point]')).toHaveLength(22);
+    expect(
+      container.querySelector('[data-average="income"] path')?.getAttribute('d')?.match(/M/g),
+    ).toHaveLength(2);
+    expect(screen.getByText('收入近 6 月均')).toBeVisible();
+    expect(screen.getByText('支出近 6 月均')).toBeVisible();
+    expect(screen.getByText('收入近 3 月均')).toBeVisible();
+    expect(screen.getByText('$60')).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: /2026年12月：.*收入近 3 月均 .*支出近 3 月均/ }),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: /2026年6月：/ })).not.toHaveAccessibleName(/月均/);
   });
 
-  it('兩個月平均為 null 時，只列收入與支出', () => {
+  it('兩條移動平均全為 null 時，只列收入與支出', () => {
     const { container } = render(<StatisticsTrendChart {...props} />);
     expect(container.querySelector('[data-average]')).toBeNull();
     const legend = screen.getByRole('list', { name: '圖例' });
@@ -72,22 +86,21 @@ describe('StatisticsTrendChart', () => {
     ).toEqual(['收入', '支出']);
   });
 
-  it.each([
-    [null, 40000, 'expense', '支出已結 2 月均 $400'],
-    [0, null, 'income', '收入已結 2 月均 $0'],
-  ] as const)('只畫有值的月平均線（%s、%s）', (averageIncome, averageExpense, field, label) => {
+  it('只畫有值的折線，零仍為有效點', () => {
     const { container } = render(
       <StatisticsTrendChart
         {...props}
-        averageIncome={averageIncome}
-        averageExpense={averageExpense}
-        averageMonthCount={2}
+        months={months.map((month) => ({
+          ...month,
+          movingAverageIncome: 0,
+          movingAverageMonthCount: 2,
+        }))}
       />,
     );
     expect(container.querySelectorAll('[data-average]')).toHaveLength(1);
-    expect(container.querySelector('[data-average]')).toHaveAttribute('data-average', field);
-    expect(screen.getByText(label)).toBeVisible();
-    expect(screen.getAllByText(/月均/)).toHaveLength(1);
+    expect(container.querySelectorAll('[data-average-point]')).toHaveLength(12);
+    expect(screen.getByText('收入近 6 月均')).toBeVisible();
+    expect(screen.queryByText('支出近 6 月均')).not.toBeInTheDocument();
   });
 
   it('全零時保留零線，所有柱高都是 0', () => {
@@ -107,9 +120,13 @@ describe('StatisticsTrendChart', () => {
     const { container } = render(
       <StatisticsTrendChart
         {...props}
-        months={[{ ...months[0]!, income: 1_000_000_000_000 }, ...months.slice(1)]}
-        averageIncome={2_000_000_000_000}
-        averageExpense={80000}
+        months={months.map((month, index) => ({
+          ...month,
+          income: index === 0 ? 1_000_000_000_000 : month.income,
+          movingAverageIncome: 2_000_000_000_000,
+          movingAverageExpense: 80000,
+          movingAverageMonthCount: 6,
+        }))}
       />,
     );
     container.querySelectorAll('[data-series]').forEach((bar) => {
@@ -119,8 +136,8 @@ describe('StatisticsTrendChart', () => {
       Number(line.getAttribute('y1')),
     );
     const zero = coordinate(container, '[data-trend-zero]', 'y1');
-    const incomeAverage = coordinate(container, '[data-average="income"]', 'y1');
-    const expenseAverage = coordinate(container, '[data-average="expense"]', 'y1');
+    const incomeAverage = coordinate(container, '[data-average="income"] circle', 'cy');
+    const expenseAverage = coordinate(container, '[data-average="expense"] circle', 'cy');
     expect(incomeAverage).toBeGreaterThanOrEqual(Math.min(...tickYs));
     expect(incomeAverage).toBeLessThan(zero);
     expect(expenseAverage).toBeGreaterThan(zero);

@@ -101,6 +101,33 @@ export class LedgerStatisticsResponseDto implements LedgerStatistics {
 class StatisticsTrendMonthDto extends StatisticsTotalsDto implements StatisticsTrendMonth {
   @ApiProperty({ example: '2026-10' })
   month!: string;
+
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    nullable: true,
+    description: '近 6 個合格月平均收入（分）',
+    example: 12000,
+  })
+  movingAverageIncome!: number | null;
+
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    nullable: true,
+    description: '近 6 個合格月平均支出（分）',
+    example: 8000,
+  })
+  movingAverageExpense!: number | null;
+
+  @ApiProperty({
+    type: 'integer',
+    minimum: 0,
+    maximum: 6,
+    description: '窗口內合格月數',
+    example: 4,
+  })
+  movingAverageMonthCount!: number;
 }
 
 /** 趨勢資料依月份由舊到新排列。 */
