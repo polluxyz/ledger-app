@@ -1,22 +1,23 @@
 # web-unslop 工作區交接
 
-## 2026-11-25 協調者交接（2p 統計結餘小圓環：PR #252 待開發者確認）
+## 2026-11-26 協調者交接（2p 統計結餘小圓環：PR #252 合併）
 
 ### 現況
 
 - PR #251（2o）已合併。plan 與 todo 已封存到 `tasks/archive/pages-unslop-*.md`。
-- 分支 `feature/web-stats-balance-ring`（從 main `a624686` 開），本工作區沿用。[PR #252](https://github.com/polluxyz/ledger-app/pull/252)：實作 commit `f16f2b6`，協調者驗收與 CI 全綠。
-- 2p 文件已核可（11-25）：[spec](../specs/phase-2p-stats-balance-ring.md)、[plan](../../tasks/stats-balance-ring-plan.md)、[todo](../../tasks/stats-balance-ring-todo.md)。編號：決策 441～442、W330、SC-Q1～Q5。
+- PR #252（2p）已合併。plan 與 todo 已封存到 `tasks/archive/stats-balance-ring-*.md`。分支 `feature/web-stats-balance-ring` 合併後刪除。
+- 2p 已完成：[spec](../specs/phase-2p-stats-balance-ring.md)。編號：決策 441～442、W330、SC-Q1～Q5。
 - 手機處理徵詢 Run `run_7dac744bf093`：Codex（`ctx_9b2ec55ee385`）與 Gemini（`ctx_a32283f56725`）都建議 ≤600px 隱藏，兩個 dispatch 都 succeeded。開發者 11-25 選隱藏。
 - 未追蹤的 `.agents/skills/unslop/` 不提交。`docs/artifacts/` 截圖不提交。
 
 ### 下一步
 
-1. 開發者看 6 張截圖（本機 `docs/artifacts/stats-balance-ring/after/`）確認後，squash merge PR #252。
-2. 合併後做 todo T5：plan、todo 移到 `tasks/archive/`；spec 狀態改「已完成」；`docs/README.md` 2p 列改「已完成」；刪 `ledger_web_unslop_test`；確認 Codex dispatch 已收尾。
+1. 目前沒有進行中的工作。新工作從 main 開新分支。
+2. 手機版面（≤600px）在網頁介面定案後大改。屆時重看決策 442 的圓環隱藏與各頁手機排法。
 
 ### 開發者決定紀錄
 
+- 11-26：看 2p 截圖後同意合併。手機介面開發者還沒看過，≤600px 的處理都算暫定；網頁介面定案後手機會大改。
 - 11-25 2p：桌機 72px 圓環（決策 441）；手機 ≤600px 隱藏（決策 442）。
 - 11-24：修同色分類；「趨勢」改「每月收支」；拿掉成員分頁與帳本／我切換，改漏斗篩選；全站點綴三種方向都做，demo 時挑；同意改 API；全部留在 #251（決策 424～432）。
 - 11-24 demo：先標明「已結 N 月均」（決策 433）。
@@ -24,7 +25,11 @@
 - 11-25 點綴：第 9～11 組都留；首頁「＋ 新增交易」、分類頁「新增收入分類」維持金色主動作；危險區補回淡紅外框（決策 438、439，第 15 組 T26）；統計結餘小圓環另開 PR（決策 440）。
 - 開發者偏好：先讓開發者看到比對畫面，並直接說明每組改了畫面哪裡，再請開發者選。
 
-### 已清理（11-25 經開發者同意）
+### 已清理
+
+- 11-26：2p 收尾刪除 `ledger_web_unslop_test`；Codex dispatch `ctx_3bb63f349f23` succeeded，終端機已釋放。
+
+11-25 經開發者同意：
 
 - 測試資料庫 `ledger_web_unslop_test`、`ledger_web_unslop_demo_test` 已刪；demo 伺服器 3200、5190、5181 已停；舊分支 `feature/web-unslop-pages` 本機與遠端都已刪。
 - 新 PR 若需資料庫測試，重建 `ledger_web_unslop_test`（見 `docs/operations/test-environment.md`）。

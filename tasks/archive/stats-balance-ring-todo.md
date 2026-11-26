@@ -1,6 +1,6 @@
 # 2p 統計頁結餘小圓環：todo
 
-依據 [spec 2p](../docs/specs/phase-2p-stats-balance-ring.md) 與 [plan](stats-balance-ring-plan.md)。每項完成後勾選並填驗收證據。
+依據 [spec 2p](../../docs/specs/phase-2p-stats-balance-ring.md) 與 [plan](stats-balance-ring-plan.md)。每項完成後勾選並填驗收證據。
 
 - [x] **T0 文件（協調者）**：spec、plan、todo；`docs/README.md` 規格表加 2p；2o 決策 440 加註；`docs/handoff.md` 登記決策 441～442、W330。
   - 驗收：diff 只含 `docs/specs`、`docs/README.md`、`docs/handoff*`、`tasks`；本次檔案 `prettier --check` 通過。
@@ -13,5 +13,5 @@
   - 截圖：`docs/artifacts/stats-balance-ring/after/` 的 `light-1280.png`、`light-601.png`、`light-390.png`、`dark-1280.png`、`dark-601.png`、`dark-390.png`。逐張確認 1280／601px 的結餘標籤與金額皆在圓環上方，390px 無圓環。
 - [x] **T4 協調者驗收與 PR**：讀完整 `git status`、`git diff`；自己重跑 typecheck、lint、web 單元測試、統計 e2e；逐張看截圖確認 SC-Q2；開 PR、CI 全綠。
   - 驗收：[PR #252](https://github.com/polluxyz/ledger-app/pull/252)。協調者在 `f16f2b6` 重跑：typecheck、lint exit 0；Web 單元測試 1343/1343；`stats.spec.ts` 6/6；本次檔案 `prettier --check` 通過。CI run 45638732854 在 `f16f2b6` 全綠（含 API E2E、Web E2E）。6 張截圖逐張看過：1280、601 的「結餘」與 `-$123,456,789` 筆畫都在圓環上方；390 無圓環。
-- [ ] **T5 收尾**：開發者看截圖確認後 squash merge；plan、todo 移到 `tasks/archive/`；spec 狀態改「已完成」；交接檔更新；清 worker 與測試資料庫。
-  - 驗收：main 上的合併 commit；`tasks/archive/` 有兩個檔案。
+- [x] **T5 收尾**：開發者看截圖確認後 squash merge；plan、todo 移到 `tasks/archive/`；spec 狀態改「已完成」；交接檔更新；清 worker 與測試資料庫。
+  - 驗收：開發者 2026-11-26 看 6 張截圖後同意合併，並表示手機版面暫定（記在 spec 決策 442）。本 PR 內完成封存、spec 與 `docs/README.md` 改「已完成（#252）」、交接檔更新。Codex dispatch `ctx_3bb63f349f23` succeeded，終端機已釋放。已刪除 `ledger_web_unslop_test`。squash merge 在 CI 全綠後執行。
