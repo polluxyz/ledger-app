@@ -1,29 +1,35 @@
 # web-unslop 工作區交接
 
-## 2026-11-25 協調者交接（2o 已合併，下一步統計結餘小圓環）
+## 2026-11-26 協調者交接（2p 統計結餘小圓環：PR #252 合併）
 
 ### 現況
 
-- PR #251（2o 第 1～15 組）squash merge 進 main。plan 與 todo 已封存到 `tasks/archive/pages-unslop-plan.md`、`tasks/archive/pages-unslop-todo.md`。
-- 第 2 輪 Run `run_2cc1c21e985d`：所有 task completed，所有 dispatch 已 release。
+- PR #251（2o）已合併。plan 與 todo 已封存到 `tasks/archive/pages-unslop-*.md`。
+- PR #252（2p）已合併。plan 與 todo 已封存到 `tasks/archive/stats-balance-ring-*.md`。分支 `feature/web-stats-balance-ring` 合併後刪除。
+- 2p 已完成：[spec](../specs/phase-2p-stats-balance-ring.md)。編號：決策 441～442、W330、SC-Q1～Q5。
+- 手機處理徵詢 Run `run_7dac744bf093`：Codex（`ctx_9b2ec55ee385`）與 Gemini（`ctx_a32283f56725`）都建議 ≤600px 隱藏，兩個 dispatch 都 succeeded。開發者 11-25 選隱藏。
 - 未追蹤的 `.agents/skills/unslop/` 不提交。`docs/artifacts/` 截圖不提交。
 
-### 下一步：統計結餘小圓環（決策 440）
+### 下一步
 
-- 開發者 11-25 選：把首頁結餘卡的金色圓環（`apps/web/src/features/home/HomeCard.module.css` 的 `.summaryDecoration::after`，150px）縮小後放到統計頁摘要的結餘格。
-- 另開 spec 與 PR。照流程：從新 main 開分支 → spec 寫目標、尺寸、深淺主題、390px 不擋數字、減少動態 → 經開發者核可 → 派 Codex。
-- 用新編號：決策從 441 起、W 從 W330 起，向 main 登記。
+1. 目前沒有進行中的工作。新工作從 main 開新分支。
+2. 手機版面（≤600px）在網頁介面定案後大改。屆時重看決策 442 的圓環隱藏與各頁手機排法。
 
 ### 開發者決定紀錄
 
+- 11-26：看 2p 截圖後同意合併。手機介面開發者還沒看過，≤600px 的處理都算暫定；網頁介面定案後手機會大改。
+- 11-25 2p：桌機 72px 圓環（決策 441）；手機 ≤600px 隱藏（決策 442）。
 - 11-24：修同色分類；「趨勢」改「每月收支」；拿掉成員分頁與帳本／我切換，改漏斗篩選；全站點綴三種方向都做，demo 時挑；同意改 API；全部留在 #251（決策 424～432）。
 - 11-24 demo：先標明「已結 N 月均」（決策 433）。
 - 11-25 demo：移動平均直接放 #251、窗口 6 個月、開帳後前 5 個月依實際月數；篩選面板改多欄；demo 資料要多、要多樣（決策 435～437）。
 - 11-25 點綴：第 9～11 組都留；首頁「＋ 新增交易」、分類頁「新增收入分類」維持金色主動作；危險區補回淡紅外框（決策 438、439，第 15 組 T26）；統計結餘小圓環另開 PR（決策 440）。
 - 開發者偏好：先讓開發者看到比對畫面，並直接說明每組改了畫面哪裡，再請開發者選。
 
-### 待清理（需開發者同意）
+### 已清理
 
-- 測試資料庫 `ledger_web_unslop_test`、`ledger_web_unslop_demo_test`。
-- demo 伺服器：API 3200、新版 web 5190、現版 web 5181。PID 在 `$env:TEMP\unslop\demo-pids.txt`。勿動 5180。
-- 本工作區與分支 `feature/web-unslop-pages`。若下一個 PR 沿用本工作區，先切到新分支再清舊分支。
+- 11-26：2p 收尾刪除 `ledger_web_unslop_test`；Codex dispatch `ctx_3bb63f349f23` succeeded，終端機已釋放。
+
+11-25 經開發者同意：
+
+- 測試資料庫 `ledger_web_unslop_test`、`ledger_web_unslop_demo_test` 已刪；demo 伺服器 3200、5190、5181 已停；舊分支 `feature/web-unslop-pages` 本機與遠端都已刪。
+- 新 PR 若需資料庫測試，重建 `ledger_web_unslop_test`（見 `docs/operations/test-environment.md`）。

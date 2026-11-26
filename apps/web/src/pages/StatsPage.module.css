@@ -245,6 +245,30 @@
 
 .summary dl > .net {
   background-color: var(--color-primary-soft);
+  position: relative;
+  overflow: hidden;
+  /* 建立獨立堆疊，讓圓環位於底色上方、文字下方。 */
+  isolation: isolate;
+}
+
+.summary dl > .net::before {
+  content: '';
+  position: absolute;
+  right: -16px;
+  bottom: -30px;
+  width: 72px;
+  height: 72px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-accent) 4%, transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+@media (max-width: 600px) {
+  .summary dl > .net::before {
+    display: none;
+  }
 }
 
 .filterRow button[data-switchable] {
